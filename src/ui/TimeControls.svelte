@@ -37,6 +37,10 @@
 <svelte:window {onkeydown} {onkeyup} />
 
 <div class="panel" data-testid="time-controls">
+  <span data-testid="time-controls-realm">
+    {view.current.state.factions[view.current.state.player]?.name} ·
+    {Object.keys(view.current.state.provinces).length} provinces
+  </span>
   <span data-testid="time-controls-day">Day {view.current.state.day}</span>
   <span data-testid="time-controls-speed">
     Speed {view.current.speed}{view.current.paused ? ' · paused' : ''}

@@ -6,7 +6,10 @@ export default defineScenario({
   async run({ page, shot }) {
     await page.goto('/');
     await page.getByTestId('time-controls').waitFor({ state: 'visible' });
-    await shot('start', 'On load: the time panel shows Day 1 at speed 1, running');
+    await shot(
+      'start',
+      'On load: the game runs from the real map, so the panel reads Rome · 80 provinces, Day 1, speed 1',
+    );
 
     await page.waitForTimeout(2500);
     await shot('running', 'After 2.5 seconds at speed 1: the day counter has advanced');
