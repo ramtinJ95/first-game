@@ -105,6 +105,11 @@
     "kind": "screenshot"
   },
   {
+    "file": "roman-italy-middle.png",
+    "title": "Roman Italy, the player's own land, at a middle zoom, 1.17 px per km",
+    "kind": "screenshot"
+  },
+  {
     "file": "persia.png",
     "title": "Persia and the Iranian plateau at 0.64 px per km",
     "kind": "screenshot"
@@ -121,7 +126,7 @@
   },
   {
     "file": "pan-frame-time.png",
-    "title": "widest pan at 0.16 px per km: 447 frames, main thread busy 5.8 ms per frame, frame interval median 416.6 ms, p95 850.0 ms; middle pan at 0.96 px per km: 335 frames, main thread busy 7.7 ms per frame, frame interval median 300.0 ms, p95 850.0 ms; closest pan at 3.88 px per km: 339 frames, main thread busy 8.8 ms per frame, frame interval median 300.0 ms, p95 733.3 ms",
+    "title": "widest pan, day 300 of an AI game, at 0.16 px per km: 979 frames, main thread busy 42.7 ms per frame, frame interval median 50.0 ms, p95 83.5 ms; middle pan, day 300 of an AI game, at 0.96 px per km: 1001 frames, main thread busy 40.7 ms per frame, frame interval median 49.9 ms, p95 100.0 ms; closest pan, day 300 of an AI game, at 3.88 px per km: 1020 frames, main thread busy 33.3 ms per frame, frame interval median 33.3 ms, p95 100.0 ms",
     "kind": "screenshot"
   },
   {
