@@ -4,3 +4,4 @@ playwright-report
 test-results
 package-lock.json
 docs/design.md
+data/map/map.json
