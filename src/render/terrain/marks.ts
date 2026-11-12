@@ -45,10 +45,11 @@ export type Tier = 'wide' | 'middle' | 'close';
 
 /** Spacing of each kind of drawing in km, and the side of a chunk, per tier. */
 export const TIERS = {
-  wide: { chunk: 2048, mountain: 26, ridge: 0, hill: 62, tree: 0, dune: 0, stipple: 0 },
+  wide: { chunk: 2048, mountain: 34, ridge: 0, hill: 70, tree: 8.5, dune: 30, stipple: 16 },
+  texture: { chunk: 1024 },
   middle: { chunk: 256, mountain: 9, ridge: 24, hill: 22, tree: 4.6, dune: 13, stipple: 7 },
   close: { chunk: 64, mountain: 4.6, ridge: 13, hill: 9, tree: 1.7, dune: 5.5, stipple: 2.8 },
-} as const satisfies Record<Tier, Record<string, number>>;
+} as const;
 
 /** A great power's capital, a city, a town, and a village keep this much land clear, in km. */
 const CLEARING: Record<PlaceRank, number> = { capital: 7, city: 5.5, town: 2.8, village: 1.8 };
@@ -67,6 +68,17 @@ const FIELD_SIZE: Record<PlaceRank, readonly [number, number]> = {
   village: [0.9, 1.6],
 };
 const TRACK_REACH = 34;
+/**
+ * A river counts as a desert valley where desert lies within `desertReach` km of it,
+ * and its watered strip reaches `width` km to each side. The map keeps the desert
+ * about 15 km back from every river.
+ */
+export const VALLEY = { desertReach: 30, width: 13 } as const;
+/**
+ * A delta fans out from a river's end 25 to 220 km from the coast, over about 70
+ * degrees. A river that ends in a lake, as the Jordan in the Dead Sea, has none.
+ */
+const DELTA = { inland: 25, reach: 220, spread: 0.62, lake: 10 } as const;
 const WOOD_SPACING = { edge: 62, middle: 30 } as const;
 /** A wood's pale rim reaches this far beyond its lobes. */
 export const WOOD_RIM = 1.18;
@@ -118,6 +130,15 @@ export class Land {
   readonly peaks: readonly Peak[];
   readonly places: readonly Place[];
   readonly woods: readonly Wood[];
+  /**
+   * The stretches of river that run through desert, where the river waters a green
+   * strip of fields between the sands, as the Nile, the Tigris, and the Euphrates do.
+   */
+  readonly valleys: readonly (readonly (readonly [number, number])[])[];
+  /** Fans of watered land where a desert river ends short of the sea, as the Nile's delta. */
+  readonly deltas: readonly [number, number][][];
+  readonly cultivated: AreaIndex;
+  readonly #valleyGrid = new Map<number, (readonly [number, number, number, number])[]>();
   readonly #placeGrid = new Map<number, Place[]>();
   readonly #woodGrid = new Map<number, Wood['lobes'][number][]>();
 
@@ -126,10 +147,10 @@ export class Land {
       map.provinces.map((p) => p.outline),
       COAST_REACH,
     );
-    this.lakes = new AreaIndex(kindOutlines(map, 'lake'));
+    this.lakes = new AreaIndex(kindOutlines(map, 'lake'), DELTA.lake);
     this.mountains = new AreaIndex(kindOutlines(map, 'mountains'), DEPTH_FULL.mountains);
     this.hills = new AreaIndex(kindOutlines(map, 'hills'));
-    this.desert = new AreaIndex(kindOutlines(map, 'desert'));
+    this.desert = new AreaIndex(kindOutlines(map, 'desert'), VALLEY.desertReach);
     this.sand = new AreaIndex(
       map.terrain.filter((a) => a.kind === 'desert' && SAND_SEA.test(a.name)).map((a) => a.outline),
     );
@@ -158,6 +179,24 @@ export class Land {
       this.#placeGrid.set(key, list);
     }
     this.woods = this.#placeWoods(map);
+    this.valleys = this.#traceValleys(map);
+    for (const line of this.valleys) {
+      for (let i = 1; i < line.length; i++) {
+        const [ax, ay] = line[i - 1] as readonly [number, number];
+        const [bx, by] = line[i] as readonly [number, number];
+        const steps = Math.ceil(Math.hypot(bx - ax, by - ay) / (GRID / 2)) + 1;
+        for (let n = 0; n <= steps; n++) {
+          const key = gridKey(ax + ((bx - ax) * n) / steps, ay + ((by - ay) * n) / steps);
+          const list = this.#valleyGrid.get(key) ?? [];
+          if (!list.some(([cx, cy, dx, dy]) => cx === ax && cy === ay && dx === bx && dy === by)) {
+            list.push([ax, ay, bx, by]);
+          }
+          this.#valleyGrid.set(key, list);
+        }
+      }
+    }
+    this.deltas = this.#traceDeltas(map);
+    this.cultivated = new AreaIndex(this.deltas.map((ring) => [[ring]]));
     for (const wood of this.woods) {
       for (const lobe of wood.lobes) {
         const key = gridKey(lobe.x, lobe.y);
@@ -242,6 +281,82 @@ export class Land {
     return seed < 0.12 ? 'conifer' : 'broadleaf';
   }
 
+  /** The nearest watered valley within its width: how far, and which way the river runs. */
+  valleyAt(x: number, y: number): { distance: number; angle: number } | undefined {
+    let best: { distance: number; angle: number } | undefined;
+    const cx = Math.floor(x / GRID);
+    const cy = Math.floor(y / GRID);
+    for (let j = cy - 1; j <= cy + 1; j++) {
+      for (let i = cx - 1; i <= cx + 1; i++) {
+        for (const [ax, ay, bx, by] of this.#valleyGrid.get(i * GRID_ROW + j) ?? []) {
+          const dx = bx - ax;
+          const dy = by - ay;
+          const t = Math.max(
+            0,
+            Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)),
+          );
+          const distance = Math.hypot(ax + t * dx - x, ay + t * dy - y);
+          if (distance < VALLEY.width && (!best || distance < best.distance)) {
+            best = { distance, angle: Math.atan2(dy, dx) };
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  #traceValleys(map: GameMap): [number, number][][] {
+    const runs: [number, number][][] = [];
+    for (const { line } of map.rivers) {
+      let run: [number, number][] = [];
+      for (const [x, y] of line) {
+        if (this.desert.distance(x, y) < VALLEY.desertReach) run.push([x, y]);
+        else {
+          if (run.length > 1) runs.push(run);
+          run = [];
+        }
+      }
+      if (run.length > 1) runs.push(run);
+    }
+    return runs;
+  }
+
+  /**
+   * A valley whose river ends inland, short of the coast, fans out to the coast ahead
+   * of it. The fan runs from the river's end to the coastline points within
+   * `DELTA.spread` of the way the river runs there, in order round the end.
+   */
+  #traceDeltas(map: GameMap): [number, number][][] {
+    const coast = map.coastline.flat();
+    const deltas: [number, number][][] = [];
+    for (const { line } of map.rivers) {
+      const end = line[line.length - 1];
+      if (!end || this.desert.distance(end[0], end[1]) >= VALLEY.desertReach) continue;
+      if (this.lakes.distance(end[0], end[1]) < DELTA.lake) continue;
+      const before = line[Math.max(0, line.length - 6)] ?? end;
+      const toward = Math.atan2(end[1] - before[1], end[0] - before[0]);
+      let nearest = Infinity;
+      for (const [x, y] of coast) {
+        const angle = Math.atan2(y - end[1], x - end[0]);
+        if (Math.abs(Math.atan2(Math.sin(angle - toward), Math.cos(angle - toward))) > DELTA.spread)
+          continue;
+        nearest = Math.min(nearest, Math.hypot(x - end[0], y - end[1]));
+      }
+      if (nearest < DELTA.inland || nearest > DELTA.reach) continue;
+      const fan = coast
+        .map(([x, y]) => {
+          const angle = Math.atan2(y - end[1], x - end[0]);
+          const off = Math.atan2(Math.sin(angle - toward), Math.cos(angle - toward));
+          return { x, y, off, d: Math.hypot(x - end[0], y - end[1]) };
+        })
+        .filter((p) => Math.abs(p.off) < DELTA.spread && p.d < nearest * 1.5)
+        .sort((a, b) => a.off - b.off);
+      if (fan.length < 3) continue;
+      deltas.push([[end[0], end[1]], ...fan.map((p): [number, number] => [p.x, p.y])]);
+    }
+    return deltas;
+  }
+
   #placeWoods(map: GameMap): Wood[] {
     const rect = { left: 0, top: 0, right: map.width, bottom: map.height };
     const points = scatter(
@@ -314,7 +429,12 @@ function relief(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
       if (nearPeak(x, y, spacing.mountain * 1.3)) return undefined;
       if (tier !== 'wide' && land.rivers.distance(x, y) < spacing.mountain * 0.9) return undefined;
       const high = land.height(x, y);
-      if (spacing.ridge > 0 && ridge(land, x, y, spacing.ridge, salt + 5) < 0.66 - 0.4 * high) {
+      const deep = land.mountains.depth(x, y) > spacing.ridge * 0.5;
+      if (
+        spacing.ridge > 0 &&
+        deep &&
+        ridge(land, x, y, spacing.ridge, salt + 5) < 0.66 - 0.4 * high
+      ) {
         return undefined;
       }
       if (high < 0.15 && hash01(Math.floor(x * 7), Math.floor(y * 7), salt + 6) < 0.5)
@@ -325,7 +445,8 @@ function relief(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
   )) {
     const high = land.height(x, y);
     const random = stream(seed);
-    const width = spacing.mountain * (0.95 + 1.25 * high) * (0.8 + 0.4 * random());
+    const grow = tier === 'wide' ? 1.25 : 0.95;
+    const width = spacing.mountain * (grow + 1.25 * high) * (0.8 + 0.4 * random());
     const height = width * (0.42 + 0.3 * high + 0.1 * random());
     marks.push({ kind: 'mountain', x, y, width: Math.max(width, radius), height, high, seed });
   }
@@ -351,7 +472,6 @@ function relief(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
 
 function trees(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
   const spacing = TIERS[tier].tree;
-  if (spacing === 0) return [];
   return scatter(
     rect,
     spacing / 2,
@@ -383,7 +503,6 @@ const DUNE_ANGLE = -0.35;
 
 function desert(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
   const { dune, stipple } = TIERS[tier];
-  if (dune === 0) return [];
   const marks: Mark[] = [];
   for (const { x, y, radius, seed } of scatter(
     rect,
@@ -426,6 +545,41 @@ function onOpenLand(land: Land, x: number, y: number): boolean {
 }
 
 const CROPS: readonly Crop[] = ['grain', 'grain', 'stubble', 'green', 'fallow'];
+
+const VALLEY_CROPS: readonly Crop[] = ['green', 'green', 'grain', 'grain', 'stubble'];
+
+/**
+ * Strips of field along a desert river and across its delta, laid across the river's
+ * way like the plots of the Nile, with a few palm groves among them.
+ */
+function valleyFields(land: Land, rect: Rect): Mark[] {
+  const marks: Mark[] = [];
+  for (const { x, y, seed } of scatter(
+    rect,
+    0.9,
+    707,
+    (x, y) => {
+      if (!land.open(x, y) || land.desert.inside(x, y) || land.cleared(x, y, 'close'))
+        return undefined;
+      const valley = land.valleyAt(x, y);
+      if (!valley && !land.cultivated.inside(x, y)) return undefined;
+      return 1.9;
+    },
+    1.9,
+  )) {
+    const random = stream(seed);
+    const valley = land.valleyAt(x, y);
+    const angle = (valley?.angle ?? 0.4) + Math.PI / 2 + (random() - 0.5) * 0.2;
+    const width = 1.3 + random() * 0.9;
+    const depth = 0.55 + random() * 0.35;
+    if (random() < 0.12) marks.push({ kind: 'orchard', x, y, width, depth: depth * 1.4, angle });
+    else {
+      const crop = VALLEY_CROPS[Math.floor(random() * VALLEY_CROPS.length)] ?? 'green';
+      marks.push({ kind: 'field', x, y, width, depth, angle, crop });
+    }
+  }
+  return marks;
+}
 
 function fields(land: Land, rect: Rect): Mark[] {
   const marks: Mark[] = [];
@@ -501,6 +655,7 @@ function fields(land: Land, rect: Rect): Mark[] {
       if (track) marks.push(track);
     }
   }
+  marks.push(...valleyFields(land, rect));
   return marks;
 }
 
@@ -548,10 +703,21 @@ export function placeRelief(land: Land, rect: Rect, tier: Tier): Mark[] {
   const salt = tier === 'wide' ? 100 : tier === 'middle' ? 200 : 300;
   const marks = [
     ...relief(land, rect, tier, salt),
-    ...trees(land, rect, tier, salt),
-    ...desert(land, rect, tier, salt),
+    ...(tier === 'wide'
+      ? []
+      : [...trees(land, rect, tier, salt), ...desert(land, rect, tier, salt)]),
   ];
   return marks.sort((a, b) => footOf(a) - footOf(b));
+}
+
+/**
+ * The small tree marks, dunes, and stipple of the regional zoom, which give the woods
+ * and the deserts a texture once the whole map no longer fills the view.
+ */
+export function placeTexture(land: Land, rect: Rect): Mark[] {
+  return [...trees(land, rect, 'wide', 150), ...desert(land, rect, 'wide', 150)].sort(
+    (a, b) => footOf(a) - footOf(b),
+  );
 }
 
 /** The fields, orchards, and tracks of the places that stand in `rect`. */

@@ -8,8 +8,11 @@ import { mix } from './draw.ts';
 import type { Land } from './marks.ts';
 import { hash01 } from './random.ts';
 
-const SMOKE = mix(PAPER, 0x5a4e40, 0.7);
+const SMOKE = mix(PAPER, 0x5a4e40, 0.55);
+const SMOKE_SHADE = mix(PAPER, 0x3e352c, 0.75);
+const SAIL_SHADE = mix(PAPER, 0x8a6a44, 0.35);
 const HULL = mix(INK, 0x6b4423, 0.3);
+const WAKE = 0x3f6b78;
 /** Seconds a puff of smoke takes to rise and fade, and how many rise from one hearth at once. */
 const PUFF_SECONDS = 7;
 const PUFFS = 5;
@@ -137,9 +140,12 @@ export function createLife(map: GameMap, land: Land, parent: Container): Life {
           const t = (seconds / PUFF_SECONDS + hearth.phase + n / PUFFS) % 1;
           const px = at.x + 2 * grow + Math.sin(t * 5 + hearth.phase * 9) * 1.6 + t * 9;
           const py = top - t * 26;
+          const r = 1.2 + t * 3.4;
+          const a = alpha * 0.6 * (1 - t) * Math.min(1, t * 6);
           graphics
-            .circle(px, py, 1.2 + t * 3.4)
-            .fill({ color: SMOKE, alpha: alpha * 0.6 * (1 - t) * Math.min(1, t * 6) });
+            .circle(px + r * 0.25, py + r * 0.2, r)
+            .fill({ color: SMOKE_SHADE, alpha: a * 0.7 });
+          graphics.circle(px, py, r * 0.85).fill({ color: SMOKE, alpha: a });
         }
       }
       for (const boat of boats) {
@@ -160,15 +166,37 @@ export function createLife(map: GameMap, land: Land, parent: Container): Life {
         const y = at.y + bob;
         graphics
           .poly([x - 6 * s, y, x + 6 * s, y, x + 4 * s, y + 2.4 * s, x - 4 * s, y + 2.4 * s])
-          .fill({ color: HULL, alpha });
+          .fill({ color: HULL, alpha })
+          .stroke({ width: 0.7, color: INK, alpha, join: 'round' });
+        graphics
+          .moveTo(x - 5.4 * s, y + 0.7 * s)
+          .lineTo(x + 5.4 * s, y + 0.7 * s)
+          .stroke({ width: 0.6, color: PAPER, alpha: alpha * 0.6 });
         graphics
           .moveTo(x, y)
           .lineTo(x, y - 9 * s)
           .stroke({ width: 1, color: INK, alpha });
+        const tip = x + 0.6 + 5 * s * facing;
         graphics
-          .poly([x + 0.6, y - 8.5 * s, x + 0.6 + 5 * s * facing, y - 1.5 * s, x + 0.6, y - 1.5 * s])
-          .fill({ color: PAPER, alpha })
+          .poly([x + 0.6, y - 8.5 * s, tip, y - 1.5 * s, x + 0.6, y - 1.5 * s])
+          .fill({ color: PAPER, alpha });
+        graphics
+          .poly([
+            x + 0.6,
+            y - 8.5 * s,
+            x + 0.6 + 2.2 * s * facing,
+            y - 1.5 * s,
+            x + 0.6,
+            y - 1.5 * s,
+          ])
+          .fill({ color: SAIL_SHADE, alpha });
+        graphics
+          .poly([x + 0.6, y - 8.5 * s, tip, y - 1.5 * s, x + 0.6, y - 1.5 * s])
           .stroke({ width: 0.8, color: INK, alpha, join: 'round' });
+        graphics
+          .moveTo(x - 9 * s, y + 3.2 * s)
+          .quadraticCurveTo(x, y + 2.4 * s, x + 9 * s, y + 3.2 * s)
+          .stroke({ width: 0.7, color: WAKE, alpha: alpha * 0.7 });
       }
       return true;
     },

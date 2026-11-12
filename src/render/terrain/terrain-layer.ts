@@ -4,8 +4,16 @@ import { visibleRect, type Camera, type Size } from '../camera.ts';
 import { toPixels } from '../lines.ts';
 import { INK, SEA, WATER_LINE } from '../palette.ts';
 import { DETAIL, detailAlpha, type Band } from './detail.ts';
-import { drawDesert, drawMarks, drawPeaks, drawWoods, mix } from './draw.ts';
-import { Land, peaksIn, placeFields, placeRelief, TIERS, type Tier } from './marks.ts';
+import { drawDesert, drawMarks, drawPeaks, drawValleys, drawWoods, mix } from './draw.ts';
+import {
+  Land,
+  peaksIn,
+  placeFields,
+  placeRelief,
+  placeTexture,
+  TIERS,
+  type Tier,
+} from './marks.ts';
 import type { Rect } from './scatter.ts';
 
 /** Pixels of terrain drawn beyond each edge of the view, so a pan can slide the drawing. */
@@ -13,11 +21,13 @@ const CACHE_MARGIN = 256;
 /** A chunk fades in over this long once it is built, so a late chunk does not pop. */
 const CHUNK_FADE_MS = 260;
 /**
- * One chunk is built a frame at most. Once the camera has rested this long, the chunks
+ * Chunks are built until BUILD_BUDGET_MS of a frame has gone, and always at least one,
+ * so a slow chunk delays one frame and never stalls a pan. Once the camera has rested this long, the chunks
  * around the view, and those of a tier that is within this zoom factor of fading in, are
  * built ahead, so a pan or a zoom finds most of its chunks ready.
  */
 const PREFETCH_AFTER_MS = 250;
+const BUILD_BUDGET_MS = 8;
 const PREFETCH_ZOOM = 1.6;
 /** Lake water lines in screen pixels from the shore, like the sea's but closer. */
 const LAKE_LINES = [
@@ -68,6 +78,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   const ground = new Container({ label: 'ground' });
   ground.addChild(
     new Graphics(drawDesert(map.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline))),
+    new Graphics(drawValleys(land.valleys, land.deltas)),
     new Graphics(drawWoods(land.woods)),
   );
 
@@ -96,8 +107,21 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       return chunk;
     },
   };
+  const textureLayer: Layer = {
+    name: 'texture',
+    band: DETAIL.textureWide,
+    size: TIERS.texture.chunk,
+    container: new Container({ label: 'texture' }),
+    chunks: new Map(),
+    build(rect) {
+      const chunk = new Container();
+      chunk.addChild(new Graphics(drawMarks(placeTexture(land, rect), 'wide')));
+      return chunk;
+    },
+  };
   const layers = [
     fields,
+    textureLayer,
     tier('wide', DETAIL.reliefWide),
     tier('middle', DETAIL.reliefMiddle),
     tier('close', DETAIL.reliefClose),
@@ -148,7 +172,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
     return g;
   }
 
-  const [, wide] = layers;
+  const [, , wide] = layers;
   if (wide) {
     for (let j = 0; j * wide.size < map.height; j++) {
       for (let i = 0; i * wide.size < map.width; i++) {
@@ -195,7 +219,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       const still = now - stillSince > PREFETCH_AFTER_MS;
       let fading = false;
       let changed = false;
-      let next: { layer: Layer; key: number; distance: number; needed: boolean } | undefined;
+      const missing: { layer: Layer; key: number; distance: number; needed: boolean }[] = [];
       for (const layer of layers) {
         const alpha = detailAlpha(layer.band, camera.scale);
         if (shownAlpha.get(layer) !== alpha) changed = true;
@@ -233,13 +257,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
               (rect.left + rect.right) / 2 - centre.x,
               (rect.top + rect.bottom) / 2 - centre.y,
             );
-            if (
-              !next ||
-              (inView && !next.needed) ||
-              (inView === next.needed && distance < next.distance)
-            ) {
-              next = { layer, key, distance, needed: inView };
-            }
+            missing.push({ layer, key, distance, needed: inView });
           }
         }
         for (const [key, chunk] of layer.chunks) {
@@ -253,17 +271,19 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
           if (age < 1) fading = true;
         }
       }
-      if (next) {
-        const { layer, key } = next;
+      missing.sort((a, b) => Number(b.needed) - Number(a.needed) || a.distance - b.distance);
+      const started = performance.now();
+      for (const { layer, key, needed } of missing) {
+        if (performance.now() - started > BUILD_BUDGET_MS) break;
         const graphics = layer.build(rectOf(layer.size, key));
         graphics.alpha = 0;
-        graphics.visible = next.needed;
+        graphics.visible = needed;
         layer.chunks.set(key, { graphics, bornAt: now });
         const row = key % 4096;
         let before = 0;
         for (const other of layer.chunks.keys()) if (other !== key && other % 4096 <= row) before++;
         layer.container.addChildAt(graphics, Math.min(before, layer.container.children.length));
-        fading = true;
+        if (needed) fading = true;
       }
       const x = viewport.width / 2 - camera.centre.x * camera.scale;
       const y = viewport.height / 2 - camera.centre.y * camera.scale;

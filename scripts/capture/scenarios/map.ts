@@ -25,6 +25,16 @@ const CLIP_MS = 12_000;
 const NOTCH = Math.log(wheelFactor(-100));
 const CLOSEST = 4.2;
 
+/** The part of the view that no panel covers, where the mouse can always reach the map. */
+const SAFE = { left: 40, top: 90, right: 900, bottom: 690 } as const;
+
+function safe({ x, y }: MapPoint): MapPoint {
+  return {
+    x: Math.min(SAFE.right, Math.max(SAFE.left, x)),
+    y: Math.min(SAFE.bottom, Math.max(SAFE.top, y)),
+  };
+}
+
 function cityPoint(id: string): MapPoint {
   const province = map.provinces.find((p) => p.id === id);
   if (!province) throw new Error(`no province ${id}`);
@@ -64,13 +74,29 @@ function controls(page: Page) {
     async bringToCentre(point: MapPoint) {
       await this.drag(this.screen(point), centre);
     },
-    /** Zooms out to the whole map, then in on `point` to about `scale`, and centres it. */
+    /**
+     * Zooms out to the whole map, then in on `point` to about `scale`, and centres it.
+     * The wheel and the drags stay inside `SAFE`, clear of the top bar and the side
+     * panels, so every step reaches the map. The point is pulled to the centre between
+     * steps, so it stays on screen.
+     */
     async goTo(point: MapPoint, scale: number, pauseMs = 25) {
       const out = Math.ceil(Math.log(camera.scale / fitCamera(viewport, map).scale) / NOTCH);
       if (out > 0) await this.zoom(centre, -out, pauseMs);
-      const notches = scale > camera.scale ? Math.round(Math.log(scale / camera.scale) / NOTCH) : 0;
-      await this.zoom(this.screen(point), notches, pauseMs);
-      await this.bringToCentre(point);
+      let notches = scale > camera.scale ? Math.round(Math.log(scale / camera.scale) / NOTCH) : 0;
+      while (notches > 0) {
+        const step = Math.min(3, notches);
+        await this.zoom(safe(this.screen(point)), step, pauseMs);
+        notches -= step;
+        await this.pull(point);
+      }
+      await this.pull(point);
+    },
+    /** Drags so that `point` comes to the centre, starting from inside `SAFE`. */
+    async pull(point: MapPoint) {
+      const at = this.screen(point);
+      const from = safe(at);
+      await this.drag(from, { x: from.x + centre.x - at.x, y: from.y + centre.y - at.y });
     },
   };
 }
@@ -184,7 +210,13 @@ export default defineScenario({
   title:
     'The atlas map: zoom from the whole map into Italy, down to a town in the Apennines, hold while the smoke and the sea move, then pan along the range',
   viewport,
-  async run({ page, shot }) {
+  async run({ page, shot: take }) {
+    /** Takes a shot once every chunk of terrain in view is built and has faded in. */
+    const shot = async (name: string, title: string) => {
+      await frames(page);
+      await page.locator('canvas[data-terrain="ready"]').waitFor({ timeout: 60_000 });
+      await take(name, title);
+    };
     const started = Date.now();
     await page.goto('/');
     await page.getByTestId('time-controls').waitFor({ state: 'visible' });
@@ -204,7 +236,7 @@ export default defineScenario({
 
     const town = nearestTown({ x: 2585, y: 2300 });
     await camera.zoom(camera.screen(town), 10, 70);
-    await camera.bringToCentre(town);
+    await camera.pull(town);
     await page.waitForTimeout(3000);
     await shot('closest-town', `The closest zoom on ${town.name}, a town in the Apennines`);
     for (let n = 0; n < 3; n++) {
@@ -248,6 +280,13 @@ export default defineScenario({
         );
       }
     }
+
+    await camera.goTo({ x: 2560, y: 2350 }, 1.25);
+    await page.waitForTimeout(700);
+    await shot(
+      'roman-italy-middle',
+      `Roman Italy, the player's own land, at a middle zoom, ${camera.scale.toFixed(2)} px per km`,
+    );
 
     await camera.goTo({ x: 6150, y: 3150 }, 0.62);
     await page.waitForTimeout(500);

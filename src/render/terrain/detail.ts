@@ -13,6 +13,8 @@ export const DETAIL = {
   ground: { in: [0, 0] },
   /** Large mountains and hills that make each range read as a range. */
   reliefWide: { in: [0, 0], out: [0.66, 0.92] },
+  /** Small tree marks in the woods, and dunes and stipple in the deserts, at the regional zoom. */
+  textureWide: { in: [0.26, 0.4], out: [0.66, 0.92] },
   /** Single mountains and hills of the middle zoom, with trees, dunes, stipple, and the named peaks. */
   reliefMiddle: { in: [0.66, 0.92], out: [1.75, 2.4] },
   /** Small mountains and hills of the close zoom, with hatched shading. */

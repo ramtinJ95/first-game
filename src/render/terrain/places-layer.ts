@@ -23,28 +23,34 @@ const SERIF = [
   'serif',
 ];
 const ROOF = mix(INK, 0x8a3b22, 0.35);
+const ROOF_LIT = mix(PAPER, 0xa2482a, 0.75);
+const WALL_SHADE = mix(PAPER, 0x6b4a2a, 0.32);
 
+/** A house with a lit and a shaded side to its wall and roof, inked round. */
 function house(g: GraphicsContext, x: number, base: number, width: number, height: number) {
-  g.rect(x - width / 2, base - height, width, height)
-    .fill(PAPER)
-    .stroke({ color: INK, width: 0.9, join: 'miter' });
-  g.poly([
-    x - width / 2 - 0.6,
-    base - height,
-    x,
-    base - height - width * 0.55,
-    x + width / 2 + 0.6,
-    base - height,
-  ])
-    .fill(ROOF)
-    .stroke({ color: INK, width: 0.7, join: 'miter' });
+  const left = x - width / 2;
+  const top = base - height;
+  const peak = top - width * 0.55;
+  g.rect(left, top, width, height).fill(PAPER);
+  g.rect(x + width * 0.15, top, width * 0.35, height).fill(WALL_SHADE);
+  g.rect(left, top, width, height).stroke({ color: INK, width: 0.8, join: 'miter' });
+  g.rect(x - width * 0.12, base - height * 0.55, width * 0.24, height * 0.55).fill(INK);
+  g.poly([left - 0.6, top, x, peak, x, top]).fill(ROOF_LIT);
+  g.poly([x, peak, x + width / 2 + 0.6, top, x, top]).fill(ROOF);
+  g.poly([left - 0.6, top, x, peak, x + width / 2 + 0.6, top]).stroke({
+    color: INK,
+    width: 0.7,
+    join: 'miter',
+  });
 }
 
 /** A town is a few roofs and a small tower, a village one or two roofs: both less than a walled city. */
 function settlementSymbols(): Record<Rank, GraphicsContext> {
   const town = new GraphicsContext();
   house(town, -3.2, 3, 3.6, 2.8);
-  town.rect(-0.9, -3.2, 2.4, 6.2).fill(PAPER).stroke({ color: INK, width: 0.9 });
+  town.rect(-0.9, -3.2, 2.4, 6.2).fill(PAPER);
+  town.rect(0.5, -3.2, 1, 6.2).fill(WALL_SHADE);
+  town.rect(-0.9, -3.2, 2.4, 6.2).stroke({ color: INK, width: 0.9 });
   town.rect(-0.9, -4.2, 0.8, 1).fill(INK);
   town.rect(0.7, -4.2, 0.8, 1).fill(INK);
   house(town, 3.4, 3, 3.4, 2.4);

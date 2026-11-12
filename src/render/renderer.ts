@@ -131,8 +131,11 @@ const SERIF = [
   'Times New Roman',
   'serif',
 ];
-/** Light enough that terrain drawn under the wash still shows. */
-const WASH_ALPHA = 0.3;
+/**
+ * A wash multiplies the drawing under it, so it tints the paper and leaves the ink of
+ * the terrain as dark under every owner's colour as on unowned land.
+ */
+const WASH_ALPHA = 0.42;
 const DRAG_THRESHOLD = 4;
 /**
  * Lines keep a fixed width on screen. Rebuilding their geometry costs a few
@@ -375,6 +378,7 @@ export async function createRenderer({
   for (const province of map.provinces) {
     const wash = fillOutline(new Graphics(), province.outline, 0xffffff);
     wash.alpha = WASH_ALPHA;
+    wash.blendMode = 'multiply';
     washes.set(province.id, wash);
     layers.washes.addChild(wash);
   }
@@ -840,7 +844,9 @@ export async function createRenderer({
         dirty = true;
       }
       if (cameraMoved) applyCamera();
-      if (terrain.update(camera, viewport(), now)) dirty = true;
+      const terrainBusy = terrain.update(camera, viewport(), now);
+      if (terrainBusy) dirty = true;
+      canvas.dataset['terrain'] = terrainBusy ? 'busy' : 'ready';
       if (dirty) layoutCities(current);
       if (
         !highlighted ||
