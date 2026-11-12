@@ -349,11 +349,15 @@ function enter(state: GameState, { pause, focus }: { pause: boolean; focus: bool
   clock.load(state);
   alerts = [];
   menu = undefined;
-  modals = [];
   stopAsked = false;
-  resumeOnClose = false;
-  announced = outcomeOf(state, world, state.player).kind === 'won';
-  if (pause) clock.pause();
+  const outcome = outcomeOf(state, world, state.player);
+  announced = outcome.kind === 'won';
+  modals =
+    outcome.kind === 'lost'
+      ? [{ kind: 'lost', on: outcome.on, city: undefined, by: undefined }]
+      : [];
+  resumeOnClose = outcome.kind === 'lost' && !pause && !clock.paused;
+  if (pause || outcome.kind === 'lost') clock.pause();
   const home = focus ? homeOf(state) : undefined;
   if (home) renderer.focus(home);
   view.refresh();
@@ -446,8 +450,15 @@ const frame: FrameActions = {
   },
 };
 
+/** A fate to choose, a loss, or a win holds the game until the player answers it. */
+function held(): boolean {
+  const kind = modals[0]?.kind;
+  return kind === 'fate' || kind === 'lost' || kind === 'won';
+}
+
 const actions: Actions = {
   togglePause() {
+    if (held()) return;
     clock.togglePause();
     view.refresh();
   },

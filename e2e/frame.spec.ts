@@ -160,6 +160,18 @@ test.describe('the frame round the game', () => {
     await expect(page.getByTestId('start-screen')).toBeVisible();
   });
 
+  test('a save of a game already lost opens on the defeat screen', async ({ page }) => {
+    const lost = nextDay(romaFallsTomorrow());
+    expect(outcomeOf(lost, world, rome).kind).toBe('lost');
+    await openGame(page);
+    await dropSave(page, lost);
+    const defeat = page.getByTestId('defeat');
+    await expect(defeat.getByTestId('defeat-text')).toContainText('Your last city has fallen.');
+    await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
+    await defeat.getByRole('button', { name: 'Watch on' }).click();
+    await untilDay(page, lost.day + 1);
+  });
+
   test('meeting the victory rule announces the win once, and the game plays on', async ({
     page,
   }) => {
@@ -312,6 +324,8 @@ test.describe('the frame round the game', () => {
 
       const prompt = page.getByTestId('fate-prompt');
       await expect(prompt).toContainText('Mediolanum has fallen to you');
+      await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
+      await page.keyboard.press('Space');
       await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
       const choice = prompt.getByTestId(`fate-${fate}`);
       const unrest = Number(/Unrest for (\d+) days/.exec((await choice.textContent()) ?? '')?.[1]);
