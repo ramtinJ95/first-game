@@ -1,12 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { beforeAll, expect, test } from 'vitest';
-import {
-  parseMap,
-  POWERS,
-  type GameMap,
-  type MultiPolygon,
-  type ProvinceId,
-} from '../../src/sim/map.ts';
+import { parseMap, POWERS, type GameMap, type MultiPolygon } from '../../src/sim/map.ts';
+import type { ProvinceId } from '../../src/sim/ids.ts';
 import { buildMap, landInExtent, MAP_FILE, MAX_CITY_MOVE_KM, serializeMap } from './build-map.ts';
 import { readCities, type City } from './cities.ts';
 import { COASTAL_MIN_SEA_KM, NEIGHBOUR_MIN_BORDER_KM } from './provinces.ts';
@@ -43,6 +38,13 @@ test(
   },
   BUILD_TIMEOUT_MS,
 );
+
+test('the map has exactly one province for each city in the list', () => {
+  const cityIds = readCities()
+    .map((city) => city.id)
+    .sort();
+  expect(map.provinces.map((province) => province.id).sort()).toEqual(cityIds);
+});
 
 test('every city lies inside its own province, in no other, and on the land (exact test, no tolerance)', () => {
   const misplaced = map.provinces.flatMap((province) => {
@@ -95,7 +97,7 @@ test('neighbouring outlines touch: they share at least one vertex on the 0.1 km 
 });
 
 test(
-  'provinces overlap by less than 0.1 % of the land area (bbox-overlapping pairs)',
+  'provinces overlap by less than 0.01 % of the land area (bbox-overlapping pairs)',
   () => {
     const boxes = map.provinces.map((province) => boxOf(province.outline));
     let overlap = 0;
@@ -107,16 +109,16 @@ test(
         }
       });
     });
-    expect(overlap / landArea).toBeLessThan(0.001);
+    expect(overlap / landArea).toBeLessThan(0.0001);
   },
   BUILD_TIMEOUT_MS,
 );
 
 test(
-  'provinces cover the land inside the extent: symmetric difference below 0.5 % of its area',
+  'provinces cover the land inside the extent: symmetric difference below 0.02 % of its area, less than any island province',
   () => {
     const covered = union(...map.provinces.map((province) => province.outline));
-    expect(area(xor(covered, land)) / landArea).toBeLessThan(0.005);
+    expect(area(xor(covered, land)) / landArea).toBeLessThan(0.0002);
   },
   BUILD_TIMEOUT_MS,
 );

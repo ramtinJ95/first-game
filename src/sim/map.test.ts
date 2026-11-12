@@ -45,6 +45,11 @@ test.each<[string, (map: GameMap) => void, RegExp]>([
     /^map\.provinces\[0\]\.outline: expected an array/,
   ],
   [
+    'a province without an area',
+    (map) => Reflect.deleteProperty(first(map), 'area'),
+    /^map\.provinces\[0\]\.area: Invalid key/,
+  ],
+  [
     'a duplicate province id',
     (map) => map.provinces.push(structuredClone(first(map))),
     /duplicate id/,

@@ -6,10 +6,10 @@ import {
   type MultiPolygon,
   type Point,
   type Province,
-  type ProvinceId,
   type River,
   type Ring,
 } from '../../src/sim/map.ts';
+import type { ProvinceId } from '../../src/sim/ids.ts';
 import type { City } from './cities.ts';
 import { area, clipLine, closestOnBoundary, contains, distance, intersection } from './geometry.ts';
 import { EXTENT_CORNERS, mapPlane, round, type Plane } from './projection.ts';
