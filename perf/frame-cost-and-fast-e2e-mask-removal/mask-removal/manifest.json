@@ -1,0 +1,32 @@
+[
+  {
+    "file": "wide-before.png",
+    "title": "Before: the whole map, with the stencil mask on rivers and coast",
+    "kind": "screenshot"
+  },
+  {
+    "file": "wide-after.png",
+    "title": "After: the whole map, without the mask (0 map pixels differ)",
+    "kind": "screenshot"
+  },
+  {
+    "file": "italy-before.png",
+    "title": "Before: Italy, six notches in, with the stencil mask on rivers and coast",
+    "kind": "screenshot"
+  },
+  {
+    "file": "italy-after.png",
+    "title": "After: Italy, six notches in, without the mask (0 map pixels differ)",
+    "kind": "screenshot"
+  },
+  {
+    "file": "edge-before.png",
+    "title": "Before: the west edge of the map, fourteen notches in, where the coastline meets the extent, with the stencil mask on rivers and coast",
+    "kind": "screenshot"
+  },
+  {
+    "file": "edge-after.png",
+    "title": "After: the west edge of the map, fourteen notches in, where the coastline meets the extent, without the mask (0 map pixels differ)",
+    "kind": "screenshot"
+  }
+]
