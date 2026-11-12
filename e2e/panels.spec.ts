@@ -190,6 +190,7 @@ test.describe('the panels', () => {
     await expect(war.getByRole('button', { name: 'Confirm war' })).toHaveCount(0);
     await war.getByRole('button', { name: 'Declare war on Carthage' }).click();
     await war.getByRole('button', { name: 'Confirm war' }).click();
+    await resume(page);
     await expect(war).toHaveText(/At war with Carthage since day \d+/);
   });
 
