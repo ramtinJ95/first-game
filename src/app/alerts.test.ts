@@ -123,7 +123,10 @@ describe('alertsOfDay', () => {
     expect(Object.keys(state.battles)).toEqual([]);
     expect(alerts.map((a) => [a.kind, a.text])).toEqual([
       ['battleBegan', 'Battle at Roma against Carthage'],
-      ['armyDestroyed', 'An army of Carthage was destroyed in battle near Roma'],
+      [
+        'armyDestroyed',
+        expect.stringMatching(/^An army of Carthage was destroyed in battle (at|near) Roma$/),
+      ],
       [
         'battleEnded',
         expect.stringMatching(

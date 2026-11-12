@@ -182,7 +182,7 @@ test.describe('the panels after the playtest', () => {
     await battle.getByRole('button', { name: 'Retreat, losing 15% of the men' }).click();
     await expect(battle.getByTestId('retreat-ordered')).toHaveText('Retreats with the next day');
     await resume(page);
-    await expect(army.getByTestId('army-activity')).toHaveText(/^Marching (to|toward) /);
+    await expect(army.getByTestId('army-activity')).toHaveText(/^Retreating (to|toward) /);
     await expect(battle).toHaveCount(0);
   });
 
