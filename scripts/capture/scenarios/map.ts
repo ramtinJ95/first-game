@@ -234,6 +234,8 @@ export default defineScenario({
       'owner-changed',
       'After a save in which Rome holds Syracusae is dropped on the page, Sicily takes the Roman wash',
     );
+    await page.keyboard.press('Escape');
+    await page.getByTestId('city-name').waitFor({ state: 'hidden' });
 
     for (const region of REGIONS) {
       for (const [index, view] of region.views.entries()) {
