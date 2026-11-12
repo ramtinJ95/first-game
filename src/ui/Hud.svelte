@@ -45,10 +45,7 @@
 
 <svelte:window {onkeydown} />
 
-<!--
-  One grid holds the top bar, the overview, the alerts, and the side column, so none
-  covers another. The grid lets clicks through to the map; only the panels take them.
--->
+<!-- The grid spans the map, so it lets clicks through and only the panels take them. -->
 <div class="hud">
   <div class="slot top">
     <TopBar {view} {actions} {overview} toggleOverview={() => (overview = !overview)} />
@@ -80,9 +77,6 @@
 
 <style>
   .hud {
-    --gutter: 12px;
-    --side-width: 320px;
-
     position: fixed;
     inset: 0;
     display: grid;
@@ -91,9 +85,9 @@
       'main side'
       'alerts side';
     grid-template-rows: auto minmax(0, 1fr) auto;
-    grid-template-columns: minmax(0, 1fr) var(--side-width);
+    grid-template-columns: minmax(0, 1fr) 320px;
     gap: 8px;
-    padding: var(--gutter);
+    padding: 12px;
     pointer-events: none;
   }
 
@@ -132,8 +126,7 @@
 
   @media (max-width: 719px) {
     .hud {
-      --gutter: 8px;
-
+      padding: 8px;
       grid-template-areas:
         'top'
         'main'
