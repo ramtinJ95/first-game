@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { changeCityOwner } from '../src/sim/cities.ts';
 import type { CityId, FactionId } from '../src/sim/ids.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import {
@@ -149,6 +150,8 @@ test.describe('the panels', () => {
     const salona = cityPoint('salona');
     armyOf(state, carthage).activity = { kind: 'idle', position: salona };
     armyOf(state, macedon).activity = { kind: 'idle', position: { x: salona.x, y: salona.y } };
+    // Rome sees a foreign battle only in its sight, so Salona is Roman here.
+    changeCityOwner(state, 'salona' as CityId, rome);
     await load(page, state);
     await page.getByTestId('time-controls-day').and(page.locator('[data-day="2"]')).waitFor();
     await pause(page);
