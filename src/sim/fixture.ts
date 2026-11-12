@@ -1,7 +1,18 @@
+import mapData from '../../data/map/map.json' with { type: 'json' };
 import type { ArmyId, CityId, FactionId, FormationId, ProvinceId } from './ids.ts';
+import { parseMap } from './map.ts';
 import { seedRng } from './rng.ts';
 import type { Day } from './state/day.ts';
 import type { GameState } from './state/game-state.ts';
+import { buildWorld, type World } from './world/world.ts';
+
+let world: World | undefined;
+
+/** The world built from the committed map, built once per test file. */
+export function fixtureWorld(): World {
+  world ??= buildWorld(parseMap(mapData));
+  return world;
+}
 
 /** The ids in the fixture, so tests can name its records. */
 export const FIXTURE = {
@@ -10,9 +21,12 @@ export const FIXTURE = {
   latium: 'latium' as ProvinceId,
   campania: 'campania' as ProvinceId,
   africa: 'africa' as ProvinceId,
+  sicilia: 'sicilia' as ProvinceId,
+  syracusaeFaction: 'syracusae' as FactionId,
   roma: 'roma' as CityId,
   capua: 'capua' as CityId,
   carthago: 'carthago' as CityId,
+  syracusae: 'syracusae' as CityId,
   romanArmy: 'army-roman' as ArmyId,
   punicArmy: 'army-punic' as ArmyId,
   hastati: 'formation-hastati' as FormationId,
@@ -21,8 +35,10 @@ export const FIXTURE = {
 } as const;
 
 /**
- * A tiny valid game: Rome holds Latium and Campania, Carthage holds Africa, and each
- * side has one idle army. The two are at peace. Every call returns a fresh copy.
+ * A tiny valid game on the committed map: Rome holds Latium and Campania, Carthage
+ * holds Africa, the minor Syracusae holds Sicily, and Rome and Carthage each have one
+ * idle army beside their capital. The cities stand where the map puts them. Nobody
+ * is at war. Every call returns a fresh copy.
  */
 export function buildFixture(seed = 1): GameState {
   const f = FIXTURE;
@@ -44,11 +60,18 @@ export function buildFixture(seed = 1): GameState {
         kind: 'greatPower',
         stores: { gold: 3000, food: 1000, manpower: 1000 },
       },
+      [f.syracusaeFaction]: {
+        id: f.syracusaeFaction,
+        name: 'Syracusae',
+        kind: 'minor',
+        stores: { gold: 100, food: 100, manpower: 100 },
+      },
     },
     provinces: {
       [f.latium]: { id: f.latium, name: 'Latium', city: f.roma },
       [f.campania]: { id: f.campania, name: 'Campania', city: f.capua },
       [f.africa]: { id: f.africa, name: 'Africa', city: f.carthago },
+      [f.sicilia]: { id: f.sicilia, name: 'Sicilia', city: f.syracusae },
     },
     cities: {
       [f.roma]: {
@@ -56,7 +79,7 @@ export function buildFixture(seed = 1): GameState {
         name: 'Roma',
         province: f.latium,
         owner: f.rome,
-        position: { x: 1240, y: 610 },
+        position: { x: 2511.3, y: 2335.8 },
         population: 40_000,
         unrestDays: 0,
         recruits: [],
@@ -66,7 +89,7 @@ export function buildFixture(seed = 1): GameState {
         name: 'Capua',
         province: f.campania,
         owner: f.rome,
-        position: { x: 1300, y: 660 },
+        position: { x: 2638.8, y: 2448.3 },
         population: 18_000,
         unrestDays: 0,
         recruits: [],
@@ -76,8 +99,18 @@ export function buildFixture(seed = 1): GameState {
         name: 'Carthago',
         province: f.africa,
         owner: f.carthage,
-        position: { x: 1150, y: 900 },
+        position: { x: 2229.9, y: 2865.1 },
         population: 50_000,
+        unrestDays: 0,
+        recruits: [],
+      },
+      [f.syracusae]: {
+        id: f.syracusae,
+        name: 'Syracusae',
+        province: f.sicilia,
+        owner: f.syracusaeFaction,
+        position: { x: 2661.2, y: 2911.3 },
+        population: 8_000,
         unrestDays: 0,
         recruits: [],
       },
@@ -89,7 +122,7 @@ export function buildFixture(seed = 1): GameState {
         formations: [f.hastati, f.equites],
         stance: 'holdTheLine',
         generalSkill: 3,
-        activity: { kind: 'idle', position: { x: 1245, y: 615 } },
+        activity: { kind: 'idle', position: { x: 2516.3, y: 2340.8 } },
       },
       [f.punicArmy]: {
         id: f.punicArmy,
@@ -97,7 +130,7 @@ export function buildFixture(seed = 1): GameState {
         formations: [f.citizenSpears],
         stance: 'holdTheLine',
         generalSkill: 3,
-        activity: { kind: 'idle', position: { x: 1155, y: 895 } },
+        activity: { kind: 'idle', position: { x: 2224.9, y: 2870.1 } },
       },
     },
     formations: {

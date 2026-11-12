@@ -1,12 +1,14 @@
 import { describe, expect, test } from 'vitest';
-import { buildFixture, FIXTURE } from '../fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { RefugeeColumnId } from '../ids.ts';
 import { expectConsistent } from '../references.ts';
 import type { GameState } from '../state/game-state.ts';
 import { tick } from '../tick.ts';
 
+const world = fixtureWorld();
+
 function play(state: GameState, days: number): GameState {
-  for (let day = 0; day < days; day += 1) state = tick(state, []).state;
+  for (let day = 0; day < days; day += 1) state = tick(state, [], world).state;
   return state;
 }
 
@@ -38,9 +40,10 @@ describe('population', () => {
       people: 500,
       from: FIXTURE.capua,
       to: FIXTURE.roma,
-      position: { x: 1270, y: 640 },
+      position: { x: 2541.3, y: 2365.8 },
+      waypoints: [{ x: 2511.3, y: 2335.8 }],
     };
-    const walking = tick(state, []).state;
+    const walking = tick(state, [], world).state;
     expect(Object.keys(walking.refugeeColumns)).toEqual([id]);
     expectConsistent(walking);
   });

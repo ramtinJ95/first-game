@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildFixture, FIXTURE } from './fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld } from './fixture.ts';
 import type { Order } from './orders/orders.ts';
 import { expectConsistent } from './references.ts';
 import { nextInt } from './rng.ts';
@@ -8,6 +8,9 @@ import type { GameState } from './state/game-state.ts';
 import { SYSTEMS, type System } from './systems.ts';
 import { tick } from './tick.ts';
 
+const world = fixtureWorld();
+const ROMA = { x: 2511.3, y: 2335.8 };
+const CAPUA = { x: 2638.8, y: 2448.3 };
 const STANCES = ['holdTheLine', 'allOutAssault', 'skirmishAndWithdraw'] as const;
 
 function ordersForDay(day: number): Order[] {
@@ -17,7 +20,7 @@ function ordersForDay(day: number): Order[] {
       kind: 'moveArmy',
       faction: FIXTURE.rome,
       army: FIXTURE.romanArmy,
-      to: { x: day, y: day * 2 },
+      to: day % 14 === 0 ? CAPUA : ROMA,
     });
   }
   if (day % 11 === 0) {
@@ -39,7 +42,7 @@ const systemsWithRandomness = [growRomeAtRandom, ...SYSTEMS];
 
 function play(state: GameState, days: number): GameState {
   for (let i = 0; i < days; i += 1) {
-    state = tick(state, ordersForDay(state.day), systemsWithRandomness).state;
+    state = tick(state, ordersForDay(state.day), world, systemsWithRandomness).state;
   }
   return state;
 }
@@ -67,7 +70,7 @@ describe('determinism', () => {
 
 describe('tick', () => {
   test('advances the day by one', () => {
-    const { state } = tick(buildFixture(), []);
+    const { state } = tick(buildFixture(), [], world);
     expect(state.day).toBe(2);
     expectConsistent(state);
   });
@@ -75,14 +78,18 @@ describe('tick', () => {
   test('leaves its input state unchanged and returns a new one', () => {
     const before = buildFixture();
     const snapshot = structuredClone(before);
-    const { state } = tick(before, [
-      {
-        kind: 'setStance',
-        faction: FIXTURE.rome,
-        army: FIXTURE.romanArmy,
-        stance: 'allOutAssault',
-      },
-    ]);
+    const { state } = tick(
+      before,
+      [
+        {
+          kind: 'setStance',
+          faction: FIXTURE.rome,
+          army: FIXTURE.romanArmy,
+          stance: 'allOutAssault',
+        },
+      ],
+      world,
+    );
     expect(before).toEqual(snapshot);
     expect(state).not.toBe(before);
     expect(state.armies[FIXTURE.romanArmy]?.stance).toBe('allOutAssault');
@@ -96,8 +103,8 @@ describe('tick', () => {
       army: FIXTURE.romanArmy,
       to: { x: 0, y: 0 },
     };
-    const withOrder = tick(buildFixture(), [order]);
-    const withoutOrder = tick(buildFixture(), []);
+    const withOrder = tick(buildFixture(), [order], world);
+    const withoutOrder = tick(buildFixture(), [], world);
     expect(withOrder.rejected).toEqual([
       { order, reason: 'army army-roman belongs to rome, not carthage' },
     ]);
@@ -126,6 +133,7 @@ describe('tick', () => {
           stance: 'skirmishAndWithdraw',
         },
       ],
+      world,
       [recordStance],
     );
     expect(seen).toEqual(['skirmishAndWithdraw']);

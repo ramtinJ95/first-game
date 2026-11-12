@@ -8,11 +8,11 @@ test('the fixture is a valid state', () => {
   expect(loadGame(saveGame(buildFixture())).ok).toBe(true);
 });
 
-test('the fixture has two factions, three provinces with cities, and two armies', () => {
+test('the fixture has three factions, four provinces with cities, and two armies', () => {
   const state = buildFixture();
-  expect(Object.keys(state.factions)).toHaveLength(2);
-  expect(Object.keys(state.provinces)).toHaveLength(3);
-  expect(Object.keys(state.cities)).toHaveLength(3);
+  expect(Object.keys(state.factions)).toHaveLength(3);
+  expect(Object.keys(state.provinces)).toHaveLength(4);
+  expect(Object.keys(state.cities)).toHaveLength(4);
   expect(Object.keys(state.armies)).toHaveLength(2);
 });
 

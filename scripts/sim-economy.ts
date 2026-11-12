@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { UNREST_DAYS } from '../src/sim/cities.ts';
 import type { FactionId } from '../src/sim/ids.ts';
 import { parseMap, POWERS } from '../src/sim/map.ts';
+import { buildWorld } from '../src/sim/world/world.ts';
 import { newGame, STARTING_FORMATIONS } from '../src/sim/new-game.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { dailyBalances, menOf, UPKEEP_PER_MAN } from '../src/sim/systems/economy.ts';
@@ -13,6 +14,7 @@ const SEED = 1;
 const map = parseMap(
   JSON.parse(readFileSync(new URL('../data/map/map.json', import.meta.url), 'utf8')),
 );
+const world = buildWorld(map);
 
 const round = (n: number) => Math.round(n).toLocaleString('en-US');
 const signed = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(1);
@@ -58,7 +60,7 @@ function table(header: string[], body: string[][]): string {
 let state = newGame(map, { seed: SEED, player: 'rome' });
 const body = rows(state, 'start');
 for (let year = 1; year <= YEARS; year += 1) {
-  for (let day = 0; day < 365; day += 1) state = tick(state, []).state;
+  for (let day = 0; day < 365; day += 1) state = tick(state, [], world).state;
   body.push(...rows(state, `year ${year}`));
 }
 

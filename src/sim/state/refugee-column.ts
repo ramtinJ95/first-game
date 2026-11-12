@@ -10,6 +10,8 @@ export const RefugeeColumnSchema = v.object({
   from: CityIdSchema,
   to: CityIdSchema,
   position: MapPointSchema,
+  /** The points still ahead on its land path. Empty once the column stands at its destination. */
+  waypoints: v.array(MapPointSchema),
 });
 
 export type RefugeeColumn = v.InferOutput<typeof RefugeeColumnSchema>;

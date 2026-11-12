@@ -4,12 +4,14 @@ import { findBrokenReferences } from '../sim/references.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { System } from '../sim/systems.ts';
 import { tick } from '../sim/tick.ts';
+import type { World } from '../sim/world/world.ts';
 
 export const DAYS_PER_SECOND = { 1: 1, 2: 2, 3: 5 } as const;
 export type Speed = keyof typeof DAYS_PER_SECOND;
 
 export interface ClockOptions {
   state: GameState;
+  world: World;
   now: () => number;
   maxTicksPerFrame?: number;
   onRejected?: (rejected: RejectedOrder[]) => void;
@@ -33,6 +35,7 @@ export interface Clock {
 
 export function createClock({
   state: initial,
+  world,
   now,
   maxTicksPerFrame = 4,
   onRejected,
@@ -47,7 +50,7 @@ export function createClock({
   let pending: Order[] = [];
 
   function runTick() {
-    const result = tick(state, pending, systems);
+    const result = tick(state, pending, world, systems);
     pending = [];
     previous = state;
     state = result.state;

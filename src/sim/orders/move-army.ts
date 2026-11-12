@@ -1,6 +1,8 @@
 import type { ArmyId, FactionId } from '../ids.ts';
+import { busyReason, startMarch } from '../march.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
+import type { World } from '../world/world.ts';
 import { ownedArmy } from './owned-army.ts';
 
 export interface MoveArmyOrder {
@@ -10,28 +12,14 @@ export interface MoveArmyOrder {
   to: MapPoint;
 }
 
-/** Sets the army marching towards the point. The movement system walks it there. */
-export function moveArmy(state: GameState, order: MoveArmyOrder): string | undefined {
+/** Sets the army marching along a land path to the point, in place of any march it was on. */
+export function moveArmy(state: GameState, order: MoveArmyOrder, world: World): string | undefined {
   const army = ownedArmy(state, order.faction, order.army);
   if (typeof army === 'string') return army;
   if (!Number.isFinite(order.to.x) || !Number.isFinite(order.to.y)) {
     return `destination ${order.to.x}, ${order.to.y} is not a point on the map`;
   }
   const { activity } = army;
-  switch (activity.kind) {
-    case 'idle':
-    case 'marching':
-      army.activity = {
-        kind: 'marching',
-        position: activity.position,
-        destination: { x: order.to.x, y: order.to.y },
-      };
-      return undefined;
-    case 'inBattle':
-      return `army ${army.id} is in battle ${activity.battle} and must retreat first`;
-    case 'besieging':
-      return `army ${army.id} is besieging and must lift siege ${activity.siege} first`;
-    case 'embarked':
-      return `army ${army.id} is at sea in convoy ${activity.convoy}`;
-  }
+  if (activity.kind !== 'idle' && activity.kind !== 'marching') return busyReason(army);
+  return startMarch(world, army, activity.position, order.to);
 }

@@ -3,6 +3,7 @@ import mapUrl from '../../data/map/map.json?url';
 import { createRenderer } from '../render/renderer.ts';
 import { parseMap, type GameMap } from '../sim/map.ts';
 import { newGame } from '../sim/new-game.ts';
+import { buildWorld } from '../sim/world/world.ts';
 import TimeControls from '../ui/TimeControls.svelte';
 import { createClock } from './clock.ts';
 import { createView } from './view.svelte.ts';
@@ -31,6 +32,7 @@ await createRenderer(host);
 
 const clock = createClock({
   state: newGame(map, { seed: Date.now(), player: 'rome' }),
+  world: buildWorld(map),
   now: () => performance.now(),
   onRejected: (rejected) => console.warn('orders rejected', rejected),
 });
