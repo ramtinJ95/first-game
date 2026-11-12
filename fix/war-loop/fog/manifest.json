@@ -6,12 +6,12 @@
   },
   {
     "file": "whole-map.png",
-    "title": "The whole map as Rome, with the fog marking where Roman sight ends. Wash brightness, 0 to 255: persia 153 clear and 150 fogged, 2.0 % darker; egypt 168 clear and 163 fogged, 2.7 % darker",
+    "title": "The whole map as Rome, with the fog marking where Roman sight ends. Wash brightness, 0 to 255: persia 142 clear and 139 fogged, 1.7 % darker; egypt 157 clear and 153 fogged, 2.5 % darker",
     "kind": "screenshot"
   },
   {
     "file": "army-in-sight.png",
-    "title": "Day 11: the Punic army has just come into Roman sight north of Arretium, and the Roman army's sight reaches past the Alps toward Carnuntum",
+    "title": "Day 18: the Punic army has just come into Roman sight north of Arretium, and the Roman army's sight reaches past the Alps toward Carnuntum",
     "kind": "screenshot"
   },
   {
@@ -21,7 +21,7 @@
   },
   {
     "file": "pan-frame-time.png",
-    "title": "Pan with the fog on while both armies march at speed 3, 1.2 px per km: 176 frames, frame interval median 300.0 ms, p95 566.7 ms, main thread busy 20.1 ms per frame",
+    "title": "Pan with the fog on while both armies march at speed 3, 1.2 px per km: 165 frames, frame interval median 550.1 ms, p95 1216.6 ms, main thread busy 35.9 ms per frame",
     "kind": "screenshot"
   },
   {
