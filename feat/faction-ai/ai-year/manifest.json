@@ -1,12 +1,12 @@
 [
   {
     "file": "start.png",
-    "title": "Day 1: every power stands at its capital and the minor cities are free",
+    "title": "Day 1: every power holds its homeland, the minor cities are free, and the fog hides what Rome cannot see",
     "kind": "screenshot"
   },
   {
     "file": "day-30.png",
-    "title": "Day 30: the AI powers have declared war on minor neighbours and their armies march",
+    "title": "Day 30: Rome's army marches north, and the AI powers have declared war on minor neighbours",
     "kind": "screenshot"
   },
   {
@@ -16,7 +16,7 @@
   },
   {
     "file": "day-180.png",
-    "title": "Day 180: half a year in, every AI power has grown, while Rome, the player, waits",
+    "title": "Day 180: half a year in, every AI power has grown into the land between them",
     "kind": "screenshot"
   },
   {
@@ -26,17 +26,17 @@
   },
   {
     "file": "clip.gif",
-    "title": "Faction AI: a year at the highest speed on the whole map, with armies marching and cities changing owner",
+    "title": "Faction AI: a year at the highest speed on the whole map, as Rome sees it. The other powers take the minor cities, which change colour, and armies march in Roman sight",
     "kind": "clip"
   },
   {
     "file": "video.webm",
-    "title": "Faction AI: a year at the highest speed on the whole map, with armies marching and cities changing owner (video)",
+    "title": "Faction AI: a year at the highest speed on the whole map, as Rome sees it. The other powers take the minor cities, which change colour, and armies march in Roman sight (video)",
     "kind": "video"
   },
   {
     "file": "trace.zip",
-    "title": "Faction AI: a year at the highest speed on the whole map, with armies marching and cities changing owner (Playwright trace)",
+    "title": "Faction AI: a year at the highest speed on the whole map, as Rome sees it. The other powers take the minor cities, which change colour, and armies march in Roman sight (Playwright trace)",
     "kind": "trace"
   }
 ]

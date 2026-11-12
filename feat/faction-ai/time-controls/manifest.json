@@ -1,7 +1,7 @@
 [
   {
     "file": "start.png",
-    "title": "On load: the game runs from the real map, so the panel reads Rome · 80 provinces, Day 1, speed 1",
+    "title": "On load: the top bar reads Rome, its gold, food, and manpower with their daily change, Year 1, day 1, and speed 1",
     "kind": "screenshot"
   },
   {
@@ -11,7 +11,7 @@
   },
   {
     "file": "paused.png",
-    "title": "Space pressed: the panel reads paused and the button offers Resume",
+    "title": "Space pressed: the top bar reads Paused and the button offers Resume",
     "kind": "screenshot"
   },
   {
