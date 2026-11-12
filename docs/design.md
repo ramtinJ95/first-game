@@ -53,7 +53,7 @@ The game is original. Civilization 5, Knights of Honor 2, and Rome: Total War 2 
 
 ### Look
 
-A flat, top-down map in the style of an old atlas. The base is parchment-toned with soft shaded relief. Coasts and rivers are inked lines. Each faction's land carries a translucent colour wash. Cities, armies, refugee columns, caravans, and ships are icons with banners.
+A flat, top-down map in the style of an old atlas. The base is parchment-toned with soft shaded relief. Coasts and rivers are inked lines. Each faction's land carries a translucent colour wash. Cities are inked symbols, and an army is a banner at the widest zooms. Closer in, armies, battles, siege camps, transport ships, and refugee columns are drawn as small figures in the map's ink and wash, in the owner's colour, that march, fight, fall, and run as the rules play the days.
 
 The map shows mountains, hills, forests, deserts, lakes, towns, and villages as ink drawings that gain detail as you zoom in, from whole ranges and woods on the full map to single peaks, trees, and the fields around each village up close. At a close zoom a little ambient movement, such as smoke over the cities and boats off the ports, makes the world feel inhabited.
 

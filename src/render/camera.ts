@@ -100,3 +100,15 @@ export function zoomAt(
 export function wheelFactor(deltaY: number): number {
   return Math.exp(-deltaY * 0.002);
 }
+
+/**
+ * City symbols grow from the base size at 0.6 px per km to at most this factor at
+ * the closest zoom, so a close view shows a town and not a speck.
+ */
+const SYMBOL_GROWTH = { from: 0.6, perDoubling: 0.35, most: 1.8 } as const;
+
+/** How much a city symbol is enlarged at a zoom. */
+export function symbolGrowth(scale: number): number {
+  const { from, perDoubling, most } = SYMBOL_GROWTH;
+  return Math.min(most, Math.max(1, 1 + perDoubling * Math.log2(scale / from)));
+}
