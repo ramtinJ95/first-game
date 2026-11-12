@@ -1,5 +1,5 @@
 import type { GameMap, Peak, TerrainArea } from '../../sim/map.ts';
-import { AreaIndex } from './area-index.ts';
+import { AreaIndex, DISTANCE_ERROR } from './area-index.ts';
 import { hash01, stream, valueNoise } from './random.ts';
 import { scatter, type Rect } from './scatter.ts';
 
@@ -84,8 +84,8 @@ const WOOD_SPACING = { edge: 62, middle: 30 } as const;
 export const WOOD_RIM = 1.18;
 const DEPTH_FULL = { mountains: 45, forest: 90 } as const;
 const PEAK_REACH = 45;
-/** How far from the coast the land index measures, so a wood can keep off the sea. */
-const COAST_REACH = 40;
+/** How far from the coast the coast index measures, so a wood can keep off the sea. */
+const COAST_REACH = 56;
 
 /** Names of the deserts that are seas of dunes rather than stone and gravel. */
 const SAND_SEA = /erg|sand sea|nafud|rub' al khali|karakum|kyzyl|registan|calanshio|libyan/i;
@@ -118,6 +118,8 @@ function inRect(rect: Rect, x: number, y: number): boolean {
  */
 export class Land {
   readonly land: AreaIndex;
+  /** Distance to the coast or the map's frame, so a wood keeps off the sea and on the map. */
+  readonly coast: AreaIndex;
   readonly lakes: AreaIndex;
   readonly mountains: AreaIndex;
   readonly hills: AreaIndex;
@@ -145,7 +147,16 @@ export class Land {
   constructor(map: GameMap) {
     this.land = new AreaIndex(
       map.provinces.map((p) => p.outline),
+      0,
+      { seams: false },
+    );
+    this.coast = new AreaIndex(
+      [
+        ...map.coastline.map((line) => [[[...line, ...line.slice(1, -1).reverse()]]]),
+        [[map.extent]],
+      ],
       COAST_REACH,
+      { seams: false },
     );
     this.lakes = new AreaIndex(kindOutlines(map, 'lake'), DELTA.lake);
     this.mountains = new AreaIndex(kindOutlines(map, 'mountains'), DEPTH_FULL.mountains);
@@ -392,7 +403,7 @@ export class Land {
           r: Math.min(
             lobe.r,
             this.mountains.distance(lobe.x, lobe.y) - 2,
-            this.land.distance(lobe.x, lobe.y) / WOOD_RIM - 1,
+            (this.coast.distance(lobe.x, lobe.y) - DISTANCE_ERROR) / WOOD_RIM - 1,
           ),
         }))
         .filter((lobe) => lobe.r > size * 0.25 && !this.mountains.inside(lobe.x, lobe.y));

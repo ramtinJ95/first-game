@@ -8,6 +8,10 @@ const CELL = 4;
 const OUTSIDE = 0;
 const INSIDE = 1;
 const EDGE = 2;
+const DISTANCE_STEP = 2;
+const DISTANCE_CELL = CELL * DISTANCE_STEP;
+/** The most a distance can overstate, the diagonal of a distance cell. */
+export const DISTANCE_ERROR = DISTANCE_CELL * Math.SQRT2;
 
 /**
  * Answers "is this point inside?" and "how far is it from the edge?" for a set of
@@ -23,11 +27,17 @@ export class AreaIndex {
   readonly #columns: number;
   readonly #rows: number;
   readonly #cells: Uint8Array;
+  readonly #distanceColumns: number;
+  readonly #distanceRows: number;
   /** Distance from each cell's centre to the area's edge in km, up to the reach it was built for. */
   readonly #distance: Float32Array;
   readonly bounds: { left: number; top: number; right: number; bottom: number };
 
-  constructor(outlines: readonly MultiPolygon[], reach = 0) {
+  /**
+   * `seams: false` treats every edge as an edge and skips the costly test for edges two
+   * outlines share. Use it when only "inside?" is asked, as of the provinces' land.
+   */
+  constructor(outlines: readonly MultiPolygon[], reach = 0, { seams = true } = {}) {
     const edges: Edge[] = [];
     const bounds = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
     for (const outline of outlines) {
@@ -62,9 +72,11 @@ export class AreaIndex {
     this.#columns = Math.ceil((bounds.right - this.#left) / CELL) + 1;
     this.#rows = Math.ceil((bounds.bottom - this.#top) / CELL) + 1;
     this.#cells = new Uint8Array(this.#columns * this.#rows);
+    this.#distanceColumns = Math.ceil(this.#columns / DISTANCE_STEP);
+    this.#distanceRows = Math.ceil(this.#rows / DISTANCE_STEP);
     this.#fillRows();
     for (const edge of edges) {
-      if (this.#outer(edge)) this.#markEdge(edge);
+      if (!seams || this.#outer(edge)) this.#markEdge(edge);
     }
     this.#distance = this.#distanceField(reach);
   }
@@ -114,16 +126,25 @@ export class AreaIndex {
     }
   }
 
-  /** A two-pass chamfer distance from the edge cells, in km. */
+  /**
+   * A two-pass chamfer distance from the edge cells, in km, on a grid of DISTANCE_CELL
+   * cells. A distance only sizes a drawing or keeps it off an edge, so the coarser grid
+   * is enough and costs a quarter as much.
+   */
   #distanceField(reach: number): Float32Array {
     if (reach <= 0) return new Float32Array(0);
-    const { length } = this.#cells;
-    const field = new Float32Array(length);
-    for (let k = 0; k < length; k++) field[k] = this.#cells[k] === EDGE ? 0 : reach;
-    const w = this.#columns;
-    const h = this.#rows;
-    const straight = CELL;
-    const diagonal = CELL * Math.SQRT2;
+    const w = this.#distanceColumns;
+    const h = this.#distanceRows;
+    const field = new Float32Array(w * h).fill(reach);
+    for (let j = 0; j < this.#rows; j++) {
+      for (let i = 0; i < this.#columns; i++) {
+        if (this.#cells[j * this.#columns + i] === EDGE) {
+          field[Math.floor(j / DISTANCE_STEP) * w + Math.floor(i / DISTANCE_STEP)] = 0;
+        }
+      }
+    }
+    const straight = DISTANCE_CELL;
+    const diagonal = DISTANCE_CELL * Math.SQRT2;
     for (let j = 0; j < h; j++) {
       for (let i = 0; i < w; i++) {
         const k = j * w + i;
@@ -153,6 +174,13 @@ export class AreaIndex {
     return field;
   }
 
+  #distanceCell(x: number, y: number): number {
+    const i = Math.floor((x - this.#left) / DISTANCE_CELL);
+    const j = Math.floor((y - this.#top) / DISTANCE_CELL);
+    if (i < 0 || j < 0 || i >= this.#distanceColumns || j >= this.#distanceRows) return -1;
+    return j * this.#distanceColumns + i;
+  }
+
   #exact(x: number, y: number): boolean {
     const band = this.#bands.get(Math.floor(y / BAND));
     if (!band) return false;
@@ -179,9 +207,12 @@ export class AreaIndex {
     return this.#exact(x, y);
   }
 
-  /** Roughly how far the point lies from the area's edge on either side, up to the reach. */
+  /**
+   * Roughly how far the point lies from the area's edge on either side, up to the
+   * reach. It can be up to `DISTANCE_ERROR` km more than the true distance.
+   */
   distance(x: number, y: number): number {
-    const k = this.#cell(x, y);
+    const k = this.#distanceCell(x, y);
     if (k < 0) return this.#distance.length > 0 ? Infinity : 0;
     return this.#distance[k] ?? 0;
   }
@@ -191,7 +222,7 @@ export class AreaIndex {
    * index was built with. It is good to a cell, which is all a drawing's size needs.
    */
   depth(x: number, y: number): number {
-    const k = this.#cell(x, y);
+    const k = this.#distanceCell(x, y);
     if (k < 0 || !this.inside(x, y)) return 0;
     return this.#distance[k] ?? 0;
   }
