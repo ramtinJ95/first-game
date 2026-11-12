@@ -140,7 +140,11 @@ describe('cityAt', () => {
   });
 
   it('gives a click on overlapping symbols to the one centred nearer', () => {
-    const close: DrawnCity = { id: 'arelate' as CityId, symbol: box(104, 100, 5), label: undefined };
+    const close: DrawnCity = {
+      id: 'arelate' as CityId,
+      symbol: box(104, 100, 5),
+      label: undefined,
+    };
     expect(cityAt([massalia, close], { x: 101, y: 100 })).toBe('massalia');
     expect(cityAt([massalia, close], { x: 103, y: 100 })).toBe('arelate');
   });
