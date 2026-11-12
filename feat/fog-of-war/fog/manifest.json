@@ -1,0 +1,37 @@
+[
+  {
+    "file": "whole-map.png",
+    "title": "The whole map as Rome: everything beyond Roman sight lies under the fog",
+    "kind": "screenshot"
+  },
+  {
+    "file": "army-in-sight.png",
+    "title": "Day 10: the Punic army has just come into Roman sight north of Arretium, and the Roman army's sight reaches past the Alps toward Carnuntum",
+    "kind": "screenshot"
+  },
+  {
+    "file": "fog-edge.png",
+    "title": "The edge of the fog at 1.2 px per km: hatched, darker paper with a soft edge",
+    "kind": "screenshot"
+  },
+  {
+    "file": "pan-frame-time.png",
+    "title": "Pan with the fog on while both armies march at speed 3, 1.2 px per km: 189 frames, frame interval median 333.3 ms, p95 666.7 ms, main thread busy 6.8 ms per frame",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Fog of war as Rome: a Punic army marches on Roma out of the north-west and appears at the edge of sight, while a Roman army marches from Ariminum toward Carnuntum and the fog follows it",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Fog of war as Rome: a Punic army marches on Roma out of the north-west and appears at the edge of sight, while a Roman army marches from Ariminum toward Carnuntum and the fog follows it (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Fog of war as Rome: a Punic army marches on Roma out of the north-west and appears at the edge of sight, while a Roman army marches from Ariminum toward Carnuntum and the fog follows it (Playwright trace)",
+    "kind": "trace"
+  }
+]
