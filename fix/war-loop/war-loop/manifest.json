@@ -1,7 +1,17 @@
 [
   {
     "file": "war-loop-battle-began.png",
-    "title": "Day 2: the armies lock together beside Capua and the alert tells of the battle",
+    "title": "The first day: the armies lock together beside Capua and the alert tells of the battle",
+    "kind": "screenshot"
+  },
+  {
+    "file": "war-loop-battle-ended.png",
+    "title": "The last day: the alerts tell who held the field, after how many days, the losses of both sides, and where the beaten army falls back",
+    "kind": "screenshot"
+  },
+  {
+    "file": "war-loop-retreating.png",
+    "title": "A click on the retreat alert selects Rome's army, which is retreating to Roma, the nearest city of Rome that no enemy threatens",
     "kind": "screenshot"
   },
   {

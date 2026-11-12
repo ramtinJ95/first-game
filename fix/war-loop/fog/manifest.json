@@ -11,7 +11,7 @@
   },
   {
     "file": "army-in-sight.png",
-    "title": "Day 13: the Punic army has just come into Roman sight north of Arretium, and the Roman army's sight reaches past the Alps toward Carnuntum",
+    "title": "Day 16: the Punic army has just come into Roman sight north of Arretium, and the Roman army's sight reaches past the Alps toward Carnuntum",
     "kind": "screenshot"
   },
   {
@@ -21,7 +21,7 @@
   },
   {
     "file": "pan-frame-time.png",
-    "title": "Pan with the fog on while both armies march at speed 3, 1.2 px per km: 175 frames, frame interval median 416.7 ms, p95 800.1 ms, main thread busy 25.6 ms per frame",
+    "title": "Pan with the fog on while both armies march at speed 3, 1.2 px per km: 165 frames, frame interval median 683.4 ms, p95 1366.6 ms, main thread busy 41.3 ms per frame",
     "kind": "screenshot"
   },
   {
