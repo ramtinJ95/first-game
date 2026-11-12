@@ -9,13 +9,15 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:map": "node scripts/map/build.ts",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.sim.json --noEmit && eslint . && prettier --check .",
     "test": "vitest run",
     "e2e": "playwright test",
     "capture": "vite build && node scripts/capture/run.ts",
     "capture:publish": "node scripts/capture/publish.ts",
-    "capture:fetch": "node scripts/capture/fetch.ts"
+    "capture:fetch": "node scripts/capture/fetch.ts",
+    "map:cities": "node scripts/map/pleiades.ts"
   },
   "dependencies": {
     "pixi.js": "^8.23.0",
@@ -25,15 +27,20 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.65.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/d3-delaunay": "^6.0.4",
     "@types/node": "^26.6.6",
     "@types/pngjs": "^6.0.5",
+    "d3-delaunay": "^6.0.6",
+    "dejavu-fonts-ttf": "^2.37.3",
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-svelte": "^3.24.1",
     "gifenc": "^1.0.3",
     "globals": "^17.14.0",
     "pngjs": "^7.0.0",
+    "polygon-clipping": "^0.15.7",
     "prettier": "^3.10.1",
     "prettier-plugin-svelte": "^4.1.1",
     "svelte-check": "^4.7.8",

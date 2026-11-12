@@ -25,3 +25,7 @@ npm run capture   # screenshots and a GIF clip in captures/
 ```
 
 `CLAUDE.md` lists the conventions for contributors.
+
+## Map data
+
+`npm run build:map` builds `data/map/map.json` from the city list in `data/map/cities.json` and from Natural Earth. The map uses Natural Earth (public domain) and Pleiades (CC BY 3.0). [`data/map/ATTRIBUTION.md`](data/map/ATTRIBUTION.md) gives the credits and licences.

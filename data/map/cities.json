@@ -1,0 +1,802 @@
+[
+  {
+    "id": "olisipo",
+    "name": "Olisipo",
+    "pleiadesId": 256338,
+    "lon": -9.135507,
+    "lat": 38.707166,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "gades",
+    "name": "Gades",
+    "pleiadesId": 256177,
+    "lon": -6.293120666666667,
+    "lat": 36.529277666666665,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "carthago-nova",
+    "name": "Carthago Nova",
+    "pleiadesId": 265849,
+    "lon": -0.9879534999999999,
+    "lat": 37.602787,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "tarraco",
+    "name": "Tarraco",
+    "pleiadesId": 246349,
+    "lon": 1.2583375,
+    "lat": 41.116892,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "numantia",
+    "name": "Numantia",
+    "pleiadesId": 246523,
+    "lon": -2.44433338523561,
+    "lat": 41.80938824199685,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "massalia",
+    "name": "Massalia",
+    "pleiadesId": 148127,
+    "lon": 5.382499,
+    "lat": 43.296854,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "burdigala",
+    "name": "Burdigala",
+    "pleiadesId": 138248,
+    "lon": -0.576533,
+    "lat": 44.837205,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "lugdunum",
+    "name": "Lugdunum",
+    "pleiadesId": 167717,
+    "lon": 4.8194815,
+    "lat": 45.758866,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "lutetia",
+    "name": "Lutetia",
+    "pleiadesId": 109126,
+    "lon": 2.346168,
+    "lat": 48.8544055,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "colonia-agrippina",
+    "name": "Colonia Agrippina",
+    "pleiadesId": 108751,
+    "lon": 6.959906500000001,
+    "lat": 50.940662,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "londinium",
+    "name": "Londinium",
+    "pleiadesId": 79574,
+    "lon": -0.088949,
+    "lat": 51.513335,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "eburacum",
+    "name": "Eburacum",
+    "pleiadesId": 89175,
+    "lon": -1.082304,
+    "lat": 53.957672,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "deva",
+    "name": "Deva",
+    "pleiadesId": 79420,
+    "lon": -2.8939424999999996,
+    "lat": 53.1914685,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "mogontiacum",
+    "name": "Mogontiacum",
+    "pleiadesId": 109169,
+    "lon": 8.273869,
+    "lat": 49.998912,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "augusta-vindelicum",
+    "name": "Augusta Vindelicum",
+    "pleiadesId": 118580,
+    "lon": 10.894765,
+    "lat": 48.365463,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "carnuntum",
+    "name": "Carnuntum",
+    "pleiadesId": 128384,
+    "lon": 16.8631495,
+    "lat": 48.1147785,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "roma",
+    "name": "Roma",
+    "pleiadesId": 423025,
+    "lon": 12.491258174554883,
+    "lat": 41.8899769864849,
+    "owner": "rome",
+    "capital": true,
+    "port": true
+  },
+  {
+    "id": "arretium",
+    "name": "Arretium",
+    "pleiadesId": 413032,
+    "lon": 11.863048,
+    "lat": 43.471274,
+    "owner": "rome",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "capua",
+    "name": "Capua",
+    "pleiadesId": 432754,
+    "lon": 14.250207,
+    "lat": 41.0860925,
+    "owner": "rome",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "ariminum",
+    "name": "Ariminum",
+    "pleiadesId": 393379,
+    "lon": 12.5631945,
+    "lat": 44.0589565,
+    "owner": "rome",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "mediolanum",
+    "name": "Mediolanum",
+    "pleiadesId": 383706,
+    "lon": 9.18806,
+    "lat": 45.463746,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "syracusae",
+    "name": "Syracusae",
+    "pleiadesId": 462503,
+    "lon": 15.283335658142617,
+    "lat": 37.070078971013665,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "caralis",
+    "name": "Caralis",
+    "pleiadesId": 471899,
+    "lon": 9.109522,
+    "lat": 39.214886,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "carthago",
+    "name": "Carthago",
+    "pleiadesId": 314921,
+    "lon": 10.323056,
+    "lat": 36.853056,
+    "owner": "carthage",
+    "capital": true,
+    "port": true
+  },
+  {
+    "id": "hippo-regius",
+    "name": "Hippo Regius",
+    "pleiadesId": 305090,
+    "lon": 7.750145881225379,
+    "lat": 36.882539297027535,
+    "owner": "carthage",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "hadrumetum",
+    "name": "Hadrumetum",
+    "pleiadesId": 324716,
+    "lon": 10.63878,
+    "lat": 35.825866,
+    "owner": "carthage",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "tacape",
+    "name": "Tacape",
+    "pleiadesId": 344496,
+    "lon": 10.109445,
+    "lat": 33.88643,
+    "owner": "carthage",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "cirta",
+    "name": "Cirta",
+    "pleiadesId": 305064,
+    "lon": 6.613302666666667,
+    "lat": 36.36811466666666,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "iol-caesarea",
+    "name": "Iol Caesarea",
+    "pleiadesId": 295279,
+    "lon": 2.1918495,
+    "lat": 36.607057999999995,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "tingis",
+    "name": "Tingis",
+    "pleiadesId": 275736,
+    "lon": -5.8102335,
+    "lat": 35.787546,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "lepcis-magna",
+    "name": "Lepcis Magna",
+    "pleiadesId": 344448,
+    "lon": 14.297093517366152,
+    "lat": 32.636447832647285,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "cidamus",
+    "name": "Cidamus",
+    "pleiadesId": 344341,
+    "lon": 9.500314,
+    "lat": 30.136314,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "cyrene",
+    "name": "Cyrene",
+    "pleiadesId": 373778,
+    "lon": 21.856538513413255,
+    "lat": 32.82002662733894,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "alexandria",
+    "name": "Alexandria",
+    "pleiadesId": 727070,
+    "lon": 29.909773,
+    "lat": 31.201435,
+    "owner": "egypt",
+    "capital": true,
+    "port": true
+  },
+  {
+    "id": "pelusium",
+    "name": "Pelusium",
+    "pleiadesId": 727192,
+    "lon": 32.54710454970744,
+    "lat": 31.042627089650125,
+    "owner": "egypt",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "memphis",
+    "name": "Memphis",
+    "pleiadesId": 736963,
+    "lon": 31.255061,
+    "lat": 29.849491,
+    "owner": "egypt",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "thebai",
+    "name": "Thebai",
+    "pleiadesId": 786017,
+    "lon": 32.631884,
+    "lat": 25.664780999999998,
+    "owner": "egypt",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "syene",
+    "name": "Syene",
+    "pleiadesId": 786123,
+    "lon": 32.901491,
+    "lat": 24.0885745,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "ammon",
+    "name": "Ammon",
+    "pleiadesId": 716520,
+    "lon": 25.5435073558627,
+    "lat": 29.205173796098382,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "salona",
+    "name": "Salona",
+    "pleiadesId": 197488,
+    "lon": 16.483426,
+    "lat": 43.539561,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "epidamnos",
+    "name": "Epidamnos",
+    "pleiadesId": 481818,
+    "lon": 19.447355,
+    "lat": 41.3163425,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "sarmizegetusa",
+    "name": "Sarmizegetusa",
+    "pleiadesId": 207425,
+    "lon": 23.323961,
+    "lat": 45.669615,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "pella",
+    "name": "Pella",
+    "pleiadesId": 491687,
+    "lon": 22.518224765547643,
+    "lat": 40.75435964572732,
+    "owner": "macedon",
+    "capital": true,
+    "port": false
+  },
+  {
+    "id": "amphipolis",
+    "name": "Amphipolis",
+    "pleiadesId": 501347,
+    "lon": 23.841579432345075,
+    "lat": 40.82581148078865,
+    "owner": "macedon",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "herakleia",
+    "name": "Herakleia Lynkestis",
+    "pleiadesId": 481861,
+    "lon": 21.342,
+    "lat": 41.011,
+    "owner": "macedon",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "larisa",
+    "name": "Larisa",
+    "pleiadesId": 540905,
+    "lon": 22.42097025,
+    "lat": 39.634851,
+    "owner": "macedon",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "athenai",
+    "name": "Athenai",
+    "pleiadesId": 579885,
+    "lon": 23.723954796773654,
+    "lat": 37.97164747289856,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "ambrakia",
+    "name": "Ambrakia",
+    "pleiadesId": 530794,
+    "lon": 20.990092500000003,
+    "lat": 39.1549245,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "knosos",
+    "name": "Knosos",
+    "pleiadesId": 589872,
+    "lon": 25.163106,
+    "lat": 35.297847,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "salamis",
+    "name": "Salamis",
+    "pleiadesId": 707617,
+    "lon": 33.902856966815534,
+    "lat": 35.17958130195956,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "byzantion",
+    "name": "Byzantion",
+    "pleiadesId": 520985,
+    "lon": 28.973881499999997,
+    "lat": 41.005902,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "pergamon",
+    "name": "Pergamon",
+    "pleiadesId": 550812,
+    "lon": 27.184167,
+    "lat": 39.1325,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "ephesos",
+    "name": "Ephesos",
+    "pleiadesId": 599612,
+    "lon": 27.34240298195866,
+    "lat": 37.940164271971945,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "ankyra",
+    "name": "Ankyra",
+    "pleiadesId": 619103,
+    "lon": 32.859333,
+    "lat": 39.9437925,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "sinope",
+    "name": "Sinope",
+    "pleiadesId": 857321,
+    "lon": 35.143037,
+    "lat": 42.025776,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "mazaka",
+    "name": "Mazaka",
+    "pleiadesId": 629035,
+    "lon": 35.4743607,
+    "lat": 38.726400549999994,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "tarsos",
+    "name": "Tarsos",
+    "pleiadesId": 648789,
+    "lon": 34.89646665905669,
+    "lat": 36.914043133485954,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "phasis",
+    "name": "Phasis",
+    "pleiadesId": 857275,
+    "lon": 41.6923225,
+    "lat": 42.135867000000005,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "artaxata",
+    "name": "Artaxata",
+    "pleiadesId": 874361,
+    "lon": 44.5751884575075,
+    "lat": 39.88187553311266,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "olbia",
+    "name": "Olbia",
+    "pleiadesId": 226546,
+    "lon": 31.905856770389157,
+    "lat": 46.692385663937046,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "tanais",
+    "name": "Tanais",
+    "pleiadesId": 825397,
+    "lon": 39.33567056699745,
+    "lat": 47.26868779057921,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "antiocheia",
+    "name": "Antiocheia",
+    "pleiadesId": 658381,
+    "lon": 36.17684236666667,
+    "lat": 36.2158868,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "damaskos",
+    "name": "Damaskos",
+    "pleiadesId": 678106,
+    "lon": 36.309102,
+    "lat": 33.511612,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "hierosolyma",
+    "name": "Hierosolyma",
+    "pleiadesId": 687928,
+    "lon": 35.234978,
+    "lat": 31.7771895,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "petra",
+    "name": "Petra",
+    "pleiadesId": 697725,
+    "lon": 35.38268480053833,
+    "lat": 30.34503662467785,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "edessa",
+    "name": "Edessa",
+    "pleiadesId": 658457,
+    "lon": 38.786696,
+    "lat": 37.148633,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "ninos",
+    "name": "Ninos",
+    "pleiadesId": 874621,
+    "lon": 43.159936889690734,
+    "lat": 36.36076152375775,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "babylon",
+    "name": "Babylon",
+    "pleiadesId": 893951,
+    "lon": 44.42497815,
+    "lat": 32.53729695,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "dumatha",
+    "name": "Dumatha",
+    "pleiadesId": 29548,
+    "lon": 39.882216,
+    "lat": 29.803206,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "gerrha",
+    "name": "Gerrha",
+    "pleiadesId": 932483,
+    "lon": 48.726603,
+    "lat": 26.877823,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "persepolis",
+    "name": "Persepolis",
+    "pleiadesId": 922695,
+    "lon": 52.8904279399187,
+    "lat": 29.93519729783907,
+    "owner": "persia",
+    "capital": true,
+    "port": false
+  },
+  {
+    "id": "aspadana",
+    "name": "Aspadana",
+    "pleiadesId": 902990,
+    "lon": 51.678813000000005,
+    "lat": 32.651067,
+    "owner": "persia",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "ekbatana",
+    "name": "Ekbatana",
+    "pleiadesId": 903021,
+    "lon": 48.516405750000004,
+    "lat": 34.80555515,
+    "owner": "persia",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "susa",
+    "name": "Susa",
+    "pleiadesId": 912936,
+    "lon": 48.253537054323495,
+    "lat": 32.189934471571,
+    "owner": "persia",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "rhagai",
+    "name": "Rhagai",
+    "pleiadesId": 903104,
+    "lon": 51.44716300000001,
+    "lat": 35.594267,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "hekatompylos",
+    "name": "Hekatompylos",
+    "pleiadesId": 942276,
+    "lon": 54.038289500000005,
+    "lat": 35.961093500000004,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "alexandria-areion",
+    "name": "Alexandria Areion",
+    "pleiadesId": 961874,
+    "lon": 62.189142000000004,
+    "lat": 34.345566500000004,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "prophthasia",
+    "name": "Prophthasia",
+    "pleiadesId": 29718,
+    "lon": 62.111652874372794,
+    "lat": 32.382119010923255,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "alexandria-arachosion",
+    "name": "Alexandria Arachosion",
+    "pleiadesId": 630721027,
+    "lon": 65.65886893530356,
+    "lat": 31.602608558218453,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
+    "id": "karmana",
+    "name": "Karmana",
+    "pleiadesId": 29626,
+    "lon": 57.743416,
+    "lat": 28.665408,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  }
+]
