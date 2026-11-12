@@ -33,10 +33,12 @@ export default defineScenario({
     await resume(page);
 
     await untilDay(page, began);
+    await pause(page);
     await shot(
       'war-loop-battle-began',
       'The first day: the armies lock together beside Capua and the alert tells of the battle',
     );
+    await resume(page);
     for (let day = began + 1; day <= broke; day++) await untilDay(page, day);
     await pause(page);
     await shot(
