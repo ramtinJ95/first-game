@@ -172,8 +172,23 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   const lakeLines = new Graphics();
   lakeLines.mask = lakeMask;
   const lakeShore = new Graphics();
+  // The lakes sit above the washes, so they cannot share the terrain's texture, but
+  // they are cached the same way: the mask on their water lines costs only when the
+  // texture is drawn again, not every frame.
+  const lakeArt = new Container();
+  lakeArt.addChild(lakeFill, lakeLines, lakeMask, lakeShore);
+  const lakeRoot = new Container();
+  lakeRoot.addChild(lakeArt);
+  const lakeTexture = RenderTexture.create({
+    width: 1,
+    height: 1,
+    resolution: renderer.resolution,
+    antialias: true,
+  });
+  const lakeSprite = new Sprite(lakeTexture);
   const lakes = new Container({ label: 'lakes' });
-  lakes.addChild(lakeFill, lakeLines, lakeMask, lakeShore);
+  lakes.addChild(lakeSprite);
+  let lakesStale = true;
 
   function traceRings(g: Graphics, scale: number, step: number) {
     for (const ring of lakeRings) {
@@ -219,6 +234,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       lakeShore.clear();
       traceRings(lakeShore, scale, 0.75).stroke({ width: 1.2, color: INK, join: 'round' });
       for (const g of [lakeLines, lakeShore]) g.scale.set(1 / scale);
+      lakesStale = true;
     },
     update(camera, viewport, now) {
       const view = visibleRect(camera, viewport);
@@ -295,8 +311,12 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       const width = Math.ceil(viewport.width) + 2 * CACHE_MARGIN;
       const height = Math.ceil(viewport.height) + 2 * CACHE_MARGIN;
       const resized = texture.width !== width || texture.height !== height;
-      if (resized) texture.resize(width, height, renderer.resolution);
+      if (resized) {
+        texture.resize(width, height, renderer.resolution);
+        lakeTexture.resize(width, height, renderer.resolution);
+      }
       if (
+        lakesStale ||
         changed ||
         resized ||
         !drawn ||
@@ -310,6 +330,12 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
         drawn = { x, y, scale: camera.scale };
         sprite.scale.set(1 / camera.scale);
         sprite.position.set((-CACHE_MARGIN - x) / camera.scale, (-CACHE_MARGIN - y) / camera.scale);
+        lakeArt.scale.set(camera.scale);
+        lakeArt.position.set(x + CACHE_MARGIN, y + CACHE_MARGIN);
+        renderer.render({ container: lakeRoot, target: lakeTexture, clear: true });
+        lakeSprite.scale.set(1 / camera.scale);
+        lakeSprite.position.copyFrom(sprite.position);
+        lakesStale = false;
       }
       return fading;
     },
