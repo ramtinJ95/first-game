@@ -3,6 +3,7 @@ import {
   Container,
   DisplacementFilter,
   Graphics,
+  RenderTexture,
   Sprite,
   Text,
   TilingSprite,
@@ -17,7 +18,6 @@ import {
   fitCamera,
   mapToScreen,
   panBy,
-  screenToMap,
   wheelFactor,
   zoomAt,
   type Camera,
@@ -71,7 +71,7 @@ export interface Renderer {
  */
 const LAYERS = [
   { name: 'paper', world: true },
-  { name: 'sea', world: true },
+  { name: 'sea', world: false },
   { name: 'land', world: true },
   { name: 'terrain', world: true },
   { name: 'washes', world: true },
@@ -235,9 +235,22 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
 
   layers.paper.addChild(new Graphics().rect(0, 0, map.width, map.height).fill(MARGIN));
 
-  const swell = new Sprite(waterTexture());
+  // The sea's drawing is many wide strokes. It is drawn into a texture only when the
+  // camera moves, so the swell that runs every frame bends one sprite, not the strokes.
   const waterLines = new Graphics();
-  layers.sea.addChild(new Graphics().poly(map.extent.flat()).fill(SEA), waterLines, swell);
+  const seaArt = new Container();
+  seaArt.addChild(new Graphics().poly(map.extent.flat()).fill(SEA), waterLines);
+  const seaRoot = new Container();
+  seaRoot.addChild(seaArt);
+  const seaTexture = RenderTexture.create({
+    width: viewport().width,
+    height: viewport().height,
+    resolution: app.renderer.resolution,
+    antialias: true,
+  });
+  const swell = new Sprite(waterTexture());
+  swell.scale.set(SWELL.scale);
+  layers.sea.addChild(new Sprite(seaTexture), swell);
   layers.sea.filters = [new DisplacementFilter({ sprite: swell, scale: SWELL.bend })];
 
   const land = new Graphics();
@@ -476,13 +489,18 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
       layer.position.set(x, y);
     }
     highlight.position.set(x, y);
-    swell.scale.set(SWELL.scale / camera.scale);
     grain.width = width;
     grain.height = height;
     grain.tilePosition.set(x, y);
     if (Math.abs(Math.log(camera.scale / strokedAt)) > Math.log(RESTROKE_RATIO)) {
       restroke(camera.scale);
     }
+    seaArt.scale.set(camera.scale);
+    seaArt.position.set(x, y);
+    if (seaTexture.width !== width || seaTexture.height !== height) {
+      seaTexture.resize(width, height, app.renderer.resolution);
+    }
+    app.renderer.render({ container: seaRoot, target: seaTexture, clear: true });
   }
 
   function moveSwell(nowMs: number) {
@@ -492,8 +510,7 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
       x: (seconds * SWELL.pixelsPerSecond.x) % tile,
       y: (seconds * SWELL.pixelsPerSecond.y) % tile,
     };
-    const at = screenToMap(camera, viewport(), { x: -tile + drift.x, y: -tile + drift.y });
-    swell.position.set(at.x, at.y);
+    swell.position.set(-tile + drift.x, -tile + drift.y);
   }
 
   const listening = new AbortController();
@@ -600,6 +617,8 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
     destroy() {
       listening.abort();
       app.renderer.off('resize', onResize);
+      seaRoot.destroy({ children: true });
+      seaTexture.destroy(true);
       app.destroy(true, { children: true, texture: true });
     },
   };

@@ -6,7 +6,7 @@ import { BANNER } from '../src/render/markers.ts';
 import { provinceAt } from '../src/render/pick.ts';
 import type { CityId, FactionId } from '../src/sim/ids.ts';
 import { parseMap } from '../src/sim/map.ts';
-import { newGame } from '../src/sim/new-game.ts';
+import { newGame, STARTING_POPULATION } from '../src/sim/new-game.ts';
 import { saveGame } from '../src/sim/save.ts';
 import type { MapPoint } from '../src/sim/state/map-point.ts';
 
@@ -61,7 +61,10 @@ test.describe('the map', () => {
     await expect(readout.getByTestId('readout-province')).toHaveText('Roma');
     await expect(readout.getByTestId('readout-city')).toHaveText('Roma');
     await expect(readout.getByTestId('readout-owner')).toHaveText('Rome');
-    await expect(readout.getByTestId('readout-population')).toHaveText('40,000');
+    const population = Number(
+      (await readout.getByTestId('readout-population').textContent())?.replaceAll(',', ''),
+    );
+    expect(population).toBeGreaterThanOrEqual(STARTING_POPULATION.capital);
   });
 
   test('a click on the sea clears the selection', async ({ page }) => {

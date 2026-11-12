@@ -27,11 +27,8 @@ describe('reconcile', () => {
     const removed: Label[] = [];
     const first = buildFixture();
     labelCities(cache, Object.values(first.cities), removed);
-    expect([...cache.values()].map((label) => label.text).sort()).toEqual([
-      'Capua',
-      'Carthago',
-      'Roma',
-    ]);
+    const names = Object.values(first.cities).map((city) => city.name);
+    expect([...cache.values()].map((label) => label.text).sort()).toEqual(names.sort());
 
     const second = buildFixture();
     const roma = second.cities[FIXTURE.roma];
@@ -39,14 +36,15 @@ describe('reconcile', () => {
     roma.name = 'Roma Quadrata';
     const kept = Object.values(second.cities).filter((city) => city.id !== FIXTURE.capua);
     labelCities(cache, kept, removed);
-    expect([...cache.values()].map((label) => label.text).sort()).toEqual([
-      'Carthago',
-      'Roma Quadrata',
-    ]);
+    expect([...cache.values()].map((label) => label.text).sort()).toEqual(
+      kept.map((city) => city.name).sort(),
+    );
+    expect(cache.get(FIXTURE.roma)?.text).toBe('Roma Quadrata');
+    expect(cache.has(FIXTURE.capua)).toBe(false);
     expect(removed.map((label) => label.text)).toEqual(['Capua']);
 
     labelCities(cache, Object.values(first.cities), removed);
-    expect(cache.size).toBe(3);
+    expect(cache.size).toBe(names.length);
     expect(cache.get(FIXTURE.roma)?.text).toBe('Roma');
   });
 });
