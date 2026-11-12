@@ -1,0 +1,42 @@
+[
+  {
+    "file": "start.png",
+    "title": "Day 1: every power stands at its capital and the minor cities are free",
+    "kind": "screenshot"
+  },
+  {
+    "file": "day-30.png",
+    "title": "Day 30: the AI powers have declared war on minor neighbours and their armies march",
+    "kind": "screenshot"
+  },
+  {
+    "file": "day-90.png",
+    "title": "Day 90: the first minor cities have fallen and wear the colours of their conquerors",
+    "kind": "screenshot"
+  },
+  {
+    "file": "day-180.png",
+    "title": "Day 180: half a year in, every AI power has grown, while Rome, the player, waits",
+    "kind": "screenshot"
+  },
+  {
+    "file": "day-365.png",
+    "title": "Day 365: a year of conquest at the highest speed",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Faction AI: a year at the highest speed on the whole map, with armies marching and cities changing owner",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Faction AI: a year at the highest speed on the whole map, with armies marching and cities changing owner (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Faction AI: a year at the highest speed on the whole map, with armies marching and cities changing owner (Playwright trace)",
+    "kind": "trace"
+  }
+]
