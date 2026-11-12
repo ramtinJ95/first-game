@@ -90,8 +90,8 @@ export default defineScenario({
   async run({ page, shot }) {
     const started = Date.now();
     const state = romeWithPunicArmyAt(OUT_OF_SIGHT);
-    march(armyOf(state, carthage), OUT_OF_SIGHT, cityPoint('roma'));
-    march(armyOf(state, rome), cityPoint('ariminum'), cityPoint('carnuntum'));
+    march(state, armyOf(state, carthage), OUT_OF_SIGHT, cityPoint('roma'));
+    march(state, armyOf(state, rome), cityPoint('ariminum'), cityPoint('carnuntum'));
     if (romeSees(state, OUT_OF_SIGHT)) throw new Error('the Punic army starts in sight');
     const startDay = state.day;
     let camera = fitCamera(viewport, map);
