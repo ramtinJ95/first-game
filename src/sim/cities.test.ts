@@ -1,20 +1,24 @@
 import { expect, test } from 'vitest';
 import { changeCityOwner, UNREST_DAYS } from './cities.ts';
-import { buildFixture, FIXTURE } from './fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld } from './fixture.ts';
 import { expectConsistent } from './references.ts';
 import { dailyBalances } from './systems/economy.ts';
 import { tick } from './tick.ts';
 import type { GameState } from './state/game-state.ts';
 
+const world = fixtureWorld();
+
 function play(state: GameState, days: number): GameState {
-  for (let day = 0; day < days; day += 1) state = tick(state, []).state;
+  for (let day = 0; day < days; day += 1) state = tick(state, [], world).state;
   return state;
 }
 
 test('a city that changes owner loses the old owner recruits and pays off as its unrest fades', () => {
-  let state = tick(buildFixture(), [
-    { kind: 'recruit', faction: FIXTURE.rome, city: FIXTURE.capua, troop: 'spearmen' },
-  ]).state;
+  let state = tick(
+    buildFixture(),
+    [{ kind: 'recruit', faction: FIXTURE.rome, city: FIXTURE.capua, troop: 'spearmen' }],
+    world,
+  ).state;
   const romanGold = state.factions[FIXTURE.rome]?.stores.gold;
 
   changeCityOwner(state, FIXTURE.capua, FIXTURE.carthage);
@@ -41,9 +45,11 @@ test('a city that changes owner loses the old owner recruits and pays off as its
   const now = state.cities[FIXTURE.capua]?.population ?? 0;
   expect(carthaginian()).toBeCloseTo((carthago + now) * 0.00035 - 15, 9);
   expect(
-    tick(state, [
-      { kind: 'recruit', faction: FIXTURE.carthage, city: FIXTURE.capua, troop: 'spearmen' },
-    ]).rejected,
+    tick(
+      state,
+      [{ kind: 'recruit', faction: FIXTURE.carthage, city: FIXTURE.capua, troop: 'spearmen' }],
+      world,
+    ).rejected,
   ).toEqual([]);
   expectConsistent(state);
 });

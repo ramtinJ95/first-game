@@ -14,10 +14,12 @@ import { UNREST_DAYS } from './cities.ts';
 import { dailyBalances, menOf, UPKEEP_PER_MAN } from './systems/economy.ts';
 import { tick } from './tick.ts';
 import { TROOPS, type Troop } from './troops.ts';
+import { buildWorld } from './world/world.ts';
 
 const map = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../../data/map/map.json'), 'utf8')),
 );
+const world = buildWorld(map);
 const start = () => newGame(map, { seed: 7, player: 'rome' });
 
 const ownerOf = (state: GameState, province: string) =>
@@ -153,7 +155,7 @@ describe('newGame on the committed map', () => {
     punic.activity = { kind: 'idle', position: { ...roman.activity.position } };
     let battleDays = 0;
     for (let day = 0; day < 365; day++) {
-      state = tick(state, day === 0 ? declarations : []).state;
+      state = tick(state, day === 0 ? declarations : [], world).state;
       if (Object.keys(state.battles).length > 0) battleDays += 1;
       expectConsistent(state);
     }
@@ -197,7 +199,7 @@ describe('the economy of the new game meets its tuning targets', () => {
 
   test('after a year without recruiting a great power can pay for two to three formations', () => {
     let state = start();
-    for (let day = 0; day < 365; day++) state = tick(state, []).state;
+    for (let day = 0; day < 365; day++) state = tick(state, [], world).state;
     for (const power of POWERS) {
       const stores = state.factions[power as FactionId]?.stores;
       if (!stores) throw new Error(`${power} is missing`);

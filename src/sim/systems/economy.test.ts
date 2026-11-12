@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildFixture, FIXTURE } from '../fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { FormationId } from '../ids.ts';
 import { executeOrder } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
@@ -8,6 +8,8 @@ import type { GameState } from '../state/game-state.ts';
 import { tick } from '../tick.ts';
 import { TROOPS } from '../troops.ts';
 import { dailyBalances, menOf } from './economy.ts';
+
+const world = fixtureWorld();
 
 function stores(state: GameState, faction = FIXTURE.rome) {
   const found = state.factions[faction]?.stores;
@@ -22,13 +24,13 @@ function romanMen(state: GameState) {
 }
 
 function play(state: GameState, days: number): GameState {
-  for (let day = 0; day < days; day += 1) state = tick(state, []).state;
+  for (let day = 0; day < days; day += 1) state = tick(state, [], world).state;
   return state;
 }
 
 describe('production and upkeep', () => {
   test('one day adds each city output to its owner and takes each army upkeep', () => {
-    const next = tick(buildFixture(), []).state;
+    const next = tick(buildFixture(), [], world).state;
     // Rome: 58,000 people make 20.3 gold, 20.3 food, 4.64 manpower; 1,500 men eat 15 of each.
     expect(stores(next).gold).toBeCloseTo(5005.3, 9);
     expect(stores(next).food).toBeCloseTo(1005.3, 9);
@@ -55,12 +57,12 @@ describe('shortage', () => {
   test('armies desert while gold is in debt, and stop once income pays it back', () => {
     const state = buildFixture();
     stores(state).gold = -10;
-    const first = tick(state, []).state;
+    const first = tick(state, [], world).state;
     expect(stores(first).gold).toBeCloseTo(-4.7, 9);
     expect(first.formations[FIXTURE.hastati]?.men).toBe(1188);
     expect(first.formations[FIXTURE.equites]?.men).toBe(297);
 
-    const second = tick(first, []).state;
+    const second = tick(first, [], world).state;
     expect(stores(second).gold).toBeCloseTo(0.75, 1);
     expect(romanMen(second)).toBe(1485);
     expect(romanMen(play(second, 30))).toBe(1485);
@@ -70,12 +72,12 @@ describe('shortage', () => {
   test('a food shortage makes armies desert and cities shrink until food is back', () => {
     const state = buildFixture();
     stores(state).food = -10;
-    const first = tick(state, []).state;
+    const first = tick(state, [], world).state;
     expect(romanMen(first)).toBe(1485);
     const roma = first.cities[FIXTURE.roma]?.population ?? 0;
     expect(roma).toBeLessThan(40_000);
 
-    const second = tick(first, []).state;
+    const second = tick(first, [], world).state;
     expect(stores(second).food).toBeCloseTo(0.75, 1);
     expect(second.cities[FIXTURE.roma]?.population).toBeGreaterThan(roma);
     expect(romanMen(second)).toBe(1485);
@@ -88,7 +90,7 @@ describe('shortage', () => {
     if (!equites) throw new Error('the fixture lacks the equites');
     equites.men = 99;
     stores(state).gold = -1_000_000;
-    const first = tick(state, []).state;
+    const first = tick(state, [], world).state;
     expect(first.formations[FIXTURE.equites]?.men).toBe(98);
     const later = play(first, 365);
     expect(later.formations[FIXTURE.equites]?.men).toBe(1);
@@ -111,7 +113,7 @@ describe('shortage', () => {
     const state = buildFixture();
     stores(state).gold = -1000;
     stores(state).food = -1000;
-    const next = tick(state, []).state;
+    const next = tick(state, [], world).state;
     expect(next.formations[FIXTURE.hastati]?.men).toBe(1176);
     expectConsistent(next);
   });
@@ -136,9 +138,11 @@ describe('recruitment', () => {
   test('spearmen are paid on the order and join the idle army at the city on their day', () => {
     let state = buildFixture();
     const { days, gold, men } = TROOPS.spearmen.recruit;
-    const ordered = tick(state, [
-      { kind: 'recruit', faction: FIXTURE.rome, city: FIXTURE.roma, troop: 'spearmen' },
-    ]);
+    const ordered = tick(
+      state,
+      [{ kind: 'recruit', faction: FIXTURE.rome, city: FIXTURE.roma, troop: 'spearmen' }],
+      world,
+    );
     expect(ordered.rejected).toEqual([]);
     state = ordered.state;
     expect(stores(state).gold).toBeCloseTo(5000 - gold + 5.3, 9);
@@ -150,7 +154,7 @@ describe('recruitment', () => {
     state = play(state, days - 1);
     expect(state.armies[FIXTURE.romanArmy]?.formations).toHaveLength(2);
 
-    state = tick(state, []).state;
+    state = tick(state, [], world).state;
     const formations = state.armies[FIXTURE.romanArmy]?.formations ?? [];
     expect(formations).toHaveLength(3);
     const raised = state.formations[formations[2] as FormationId];
@@ -161,9 +165,11 @@ describe('recruitment', () => {
   });
 
   test('a recruit at a city with no idle army of its owner forms a new army there', () => {
-    let state = tick(buildFixture(), [
-      { kind: 'recruit', faction: FIXTURE.rome, city: FIXTURE.capua, troop: 'archers' },
-    ]).state;
+    let state = tick(
+      buildFixture(),
+      [{ kind: 'recruit', faction: FIXTURE.rome, city: FIXTURE.capua, troop: 'archers' }],
+      world,
+    ).state;
     state = play(state, TROOPS.archers.recruit.days);
     const raised = Object.values(state.armies).filter(
       (army) => army.id !== FIXTURE.romanArmy && army.owner === FIXTURE.rome,
@@ -171,16 +177,18 @@ describe('recruitment', () => {
     expect(raised).toHaveLength(1);
     expect(raised[0]).toMatchObject({
       generalSkill: 0,
-      activity: { kind: 'idle', position: { x: 1300, y: 660 } },
+      activity: { kind: 'idle', position: { x: 2638.8, y: 2448.3 } },
     });
     expect(raised[0] && menOf(state, raised[0])).toBe(TROOPS.archers.recruit.men);
     expectConsistent(state);
   });
 
   test('a save and load during training continues the recruitment unchanged', () => {
-    let state = tick(buildFixture(), [
-      { kind: 'recruit', faction: FIXTURE.rome, city: FIXTURE.roma, troop: 'heavyCavalry' },
-    ]).state;
+    let state = tick(
+      buildFixture(),
+      [{ kind: 'recruit', faction: FIXTURE.rome, city: FIXTURE.roma, troop: 'heavyCavalry' }],
+      world,
+    ).state;
     state = play(state, 10);
     const loaded = loadGame(saveGame(state));
     if (!loaded.ok) throw new Error(loaded.error);
@@ -194,22 +202,30 @@ describe('recruitment', () => {
   test('the same seed and orders give the same state', () => {
     const run = () => {
       let state = buildFixture(9);
-      executeOrder(state, {
-        kind: 'declareWar',
-        faction: FIXTURE.rome,
-        against: FIXTURE.carthage,
-      });
-      state = tick(state, [
-        { kind: 'recruit', faction: FIXTURE.rome, city: FIXTURE.capua, troop: 'swordsmen' },
-        { kind: 'recruit', faction: FIXTURE.carthage, city: FIXTURE.carthago, troop: 'spearmen' },
+      executeOrder(
+        state,
         {
-          kind: 'evacuate',
+          kind: 'declareWar',
           faction: FIXTURE.rome,
-          city: FIXTURE.capua,
-          to: FIXTURE.roma,
-          share: 0.3,
+          against: FIXTURE.carthage,
         },
-      ]).state;
+        world,
+      );
+      state = tick(
+        state,
+        [
+          { kind: 'recruit', faction: FIXTURE.rome, city: FIXTURE.capua, troop: 'swordsmen' },
+          { kind: 'recruit', faction: FIXTURE.carthage, city: FIXTURE.carthago, troop: 'spearmen' },
+          {
+            kind: 'evacuate',
+            faction: FIXTURE.rome,
+            city: FIXTURE.capua,
+            to: FIXTURE.roma,
+            share: 0.3,
+          },
+        ],
+        world,
+      ).state;
       return play(state, 60);
     };
     const state = run();

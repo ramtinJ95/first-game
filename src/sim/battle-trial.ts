@@ -1,4 +1,4 @@
-import { buildFixture, FIXTURE } from './fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld } from './fixture.ts';
 import { allocateId, type ArmyId, type FactionId } from './ids.ts';
 import type { Stance } from './state/army.ts';
 import type { GameState } from './state/game-state.ts';
@@ -44,8 +44,8 @@ export function buildTrial(matchup: Matchup, seed: number): GameState {
   state.armies = {};
   state.formations = {};
   state.wars = { [warKey(FIXTURE.rome, FIXTURE.carthage)]: { since: state.day } };
-  addArmy(state, TRIAL_ARMIES.a, FIXTURE.rome, matchup.a, { x: 1240, y: 625 });
-  addArmy(state, TRIAL_ARMIES.b, FIXTURE.carthage, matchup.b, { x: 1250, y: 625 });
+  addArmy(state, TRIAL_ARMIES.a, FIXTURE.rome, matchup.a, { x: 2511.3, y: 2350.8 });
+  addArmy(state, TRIAL_ARMIES.b, FIXTURE.carthage, matchup.b, { x: 2521.3, y: 2350.8 });
   return state;
 }
 
@@ -79,13 +79,14 @@ function addArmy(
 
 /** Plays the matchup through the real tick until its battle ends. */
 export function playTrial(matchup: Matchup, seed: number, maxDays = 200): TrialResult {
+  const world = fixtureWorld();
   let state = buildTrial(matchup, seed);
   const men = (s: GameState, id: ArmyId) =>
     (s.armies[id]?.formations ?? []).reduce((sum, f) => sum + (s.formations[f]?.men ?? 0), 0);
   const start = { a: men(state, TRIAL_ARMIES.a), b: men(state, TRIAL_ARMIES.b) };
   const log: FormationDay[][] = [];
   do {
-    state = tick(state, []).state;
+    state = tick(state, [], world).state;
     log.push(
       (['a', 'b'] as const).flatMap((side) =>
         (state.armies[TRIAL_ARMIES[side]]?.formations ?? []).flatMap((id) => {

@@ -19,7 +19,12 @@ export type Stance = v.InferOutput<typeof StanceSchema>;
  */
 export const ArmyActivitySchema = v.variant('kind', [
   v.object({ kind: v.literal('idle'), position: MapPointSchema }),
-  v.object({ kind: v.literal('marching'), position: MapPointSchema, destination: MapPointSchema }),
+  v.object({
+    kind: v.literal('marching'),
+    position: MapPointSchema,
+    /** The points still ahead on the path, in order. The last one is the destination. */
+    waypoints: v.pipe(v.array(MapPointSchema), v.nonEmpty()),
+  }),
   v.object({ kind: v.literal('inBattle'), position: MapPointSchema, battle: BattleIdSchema }),
   v.object({ kind: v.literal('besieging'), position: MapPointSchema, siege: SiegeIdSchema }),
   v.object({ kind: v.literal('embarked'), convoy: ConvoyIdSchema }),

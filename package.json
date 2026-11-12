@@ -18,6 +18,9 @@
     "capture:publish": "node scripts/capture/publish.ts",
     "capture:fetch": "node scripts/capture/fetch.ts",
     "map:cities": "node scripts/map/pleiades.ts",
+    "map:routes": "node scripts/movement/routes-picture.ts",
+    "sim:paths": "node scripts/movement/experiment.ts",
+    "sim:movement": "node scripts/movement/report.ts",
     "sim:battles": "node scripts/sim-battles.ts",
     "sim:economy": "node scripts/sim-economy.ts"
   },

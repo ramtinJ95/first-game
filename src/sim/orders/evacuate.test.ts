@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { buildFixture, FIXTURE } from '../fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import { expectConsistent } from '../references.ts';
 import { tick } from '../tick.ts';
 import { executeOrder, type Order } from './orders.ts';
+
+const world = fixtureWorld();
 
 const order = (changes: Partial<Extract<Order, { kind: 'evacuate' }>> = {}): Order => ({
   kind: 'evacuate',
@@ -16,35 +18,50 @@ const order = (changes: Partial<Extract<Order, { kind: 'evacuate' }>> = {}): Ord
 describe('evacuate', () => {
   test('people leave the city at once and join the destination when their column stands there', () => {
     const state = buildFixture();
-    expect(executeOrder(state, order())).toBeUndefined();
+    expect(executeOrder(state, order(), world)).toBeUndefined();
     expect(state.cities[FIXTURE.capua]?.population).toBe(13_500);
     const columns = Object.values(state.refugeeColumns);
-    expect(columns).toEqual([
+    expect(columns).toMatchObject([
       {
         id: 'refugeeColumn-1',
         owner: FIXTURE.rome,
         people: 4500,
         from: FIXTURE.capua,
         to: FIXTURE.roma,
-        position: { x: 1300, y: 660 },
+        position: { x: 2638.8, y: 2448.3 },
       },
     ]);
+    expect(columns[0]?.waypoints.at(-1)).toEqual({ x: 2511.3, y: 2335.8 });
     expectConsistent(state);
 
-    const walking = tick(state, []).state;
-    expect(Object.keys(walking.refugeeColumns)).toHaveLength(1);
-    const roma = walking.cities[FIXTURE.roma]?.population ?? 0;
+    let walking = state;
+    for (let day = 0; day < 60; day += 1) {
+      const next = tick(walking, [], world).state;
+      if (Object.keys(next.refugeeColumns).length === 0) {
+        const roma = walking.cities[FIXTURE.roma]?.population ?? 0;
+        expect(next.cities[FIXTURE.roma]?.population).toBeCloseTo(
+          roma * 1.02 ** (1 / 365) + 4500,
+          6,
+        );
+        expectConsistent(next);
+        return;
+      }
+      walking = next;
+    }
+    throw new Error('the column never arrived');
+  });
 
-    const column = Object.values(walking.refugeeColumns)[0];
-    if (!column) throw new Error('the column is missing');
-    column.position = { x: 1240, y: 610 };
-    const arrived = tick(walking, []).state;
-    expect(arrived.refugeeColumns).toEqual({});
-    expect(arrived.cities[FIXTURE.roma]?.population).toBeCloseTo(
-      roma * 1.02 ** (1 / 365) + 4500,
-      6,
+  test('is rejected when no land route leads to the other city', () => {
+    const state = buildFixture();
+    const syracusae = state.cities[FIXTURE.syracusae];
+    if (!syracusae) throw new Error('the fixture lacks Syracusae');
+    syracusae.owner = FIXTURE.rome;
+    const before = structuredClone(state);
+    expect(executeOrder(state, order({ to: FIXTURE.syracusae }), world)?.reason).toBe(
+      'no land route leads from capua to syracusae',
     );
-    expectConsistent(arrived);
+    expect(state).toEqual(before);
+    expectConsistent(state);
   });
 
   test.each([
@@ -57,7 +74,7 @@ describe('evacuate', () => {
     [order({ city: FIXTURE.carthago }), 'city carthago belongs to carthage, not rome'],
   ])('is rejected with a reason and changes nothing (%#)', (rejected, reason) => {
     const state = buildFixture();
-    expect(executeOrder(state, rejected)).toEqual({ order: rejected, reason });
+    expect(executeOrder(state, rejected, world)).toEqual({ order: rejected, reason });
     expect(state).toEqual(buildFixture());
     expectConsistent(state);
   });

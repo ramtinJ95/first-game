@@ -8,6 +8,8 @@ export const ConvoySchema = v.object({
   owner: FactionIdSchema,
   position: MapPointSchema,
   armies: v.array(ArmyIdSchema),
+  /** The points still ahead on its sea path. The last one is the harbour where it lands. */
+  waypoints: v.pipe(v.array(MapPointSchema), v.nonEmpty()),
 });
 
 export type Convoy = v.InferOutput<typeof ConvoySchema>;

@@ -30,11 +30,26 @@ Read `docs/design.md` before any work. It is the agreed design. When a task conf
 
 ### The tick contract
 
-`tick(state, orders)` in `src/sim/tick.ts` plays one day. It never changes its input. It copies the state, applies the orders in the given order, then runs `SYSTEMS` in list order on the copy, and returns `{ state, rejected }`. Inside a tick, orders and systems change that copy in place. Outside the rules, a state is frozen once a tick returns it. The clock, the panels, and the renderer can keep and compare references to it without copying, and the renderer can draw between the previous and the current day.
+`tick(state, orders, world)` in `src/sim/tick.ts` plays one day. It never changes its input. It copies the state, applies the orders in the given order, then runs `SYSTEMS` in list order on the copy, and returns `{ state, rejected }`. Every order handler and every system receives the same `world`. Inside a tick, orders and systems change that copy in place. Outside the rules, a state is frozen once a tick returns it. The clock, the panels, and the renderer can keep and compare references to it without copying, and the renderer can draw between the previous and the current day.
+
+### The world
+
+`buildWorld(map)` in `src/sim/world/world.ts` builds the `World` once from the parsed map: `{ map, mesh, harbours }`. It is never saved and never changes during play. The page builds it at start and hands it to the clock, and tests take `fixtureWorld()` from `src/sim/fixture.ts`, which is built from the committed `data/map/map.json`. A rule that needs geometry reads the world, never a copy of the map in the state.
+
+- `mesh` is a constrained Delaunay triangulation of the map extent, with the coastline and the map edge as walls, on the map's 0.1 km lattice so it is the same on every machine. Each triangle is land, sea, or off the map. Triangles that reach each other across open edges share a `component`.
+- `findPath(mesh, from, to, surface)` in `src/sim/world/find-path.ts` returns the waypoints of a short path on `'land'` or `'sea'`, or undefined. `surfaceAt` and `connected` answer cheaper questions.
+- `harbours` maps each port city to the sea point nearest it, where convoys leave and land.
+
+### Movement
+
+- `src/sim/march.ts` names the speeds `MARCH_KM_PER_DAY`, `CONVOY_KM_PER_DAY`, and `REFUGEE_KM_PER_DAY`. `startMarch` is the one way to set an army marching: it finds the land path, or returns why there is none. `nearestReachableCity` picks the nearest city of a faction by straight line among those a land route reaches.
+- A marching army, a convoy, and a refugee column hold the `waypoints` still ahead. The path is found once, when the march starts, and `src/sim/systems/movement.ts` follows it. Movement runs first in the day.
+- `moveArmy` replaces any march, `halt` stops one, and `embark` puts an army within 10 km of its faction's port city or that city's harbour aboard a convoy to another port. A convoy lands its armies idle at the destination harbour. `evacuate` gives a new refugee column its land path, and the column ends its walk at its destination with no waypoints, where `population` settles it.
+- `npm run sim:paths` reruns the path-finding experiment, `npm run sim:movement` prints the route table and the tick times, and `npm run map:routes` draws routes on the map preview into `captures/movement/`.
 
 ### Adding a system
 
-1. Write `src/sim/systems/<name>.ts`, which exports a `System`, `(state: GameState) => void`. It changes the state it is given.
+1. Write `src/sim/systems/<name>.ts`, which exports a `System`, `(state: GameState, world: World) => void`. A system that needs no geometry may leave out `world`. It changes the state it is given.
 2. Add it to `SYSTEMS` in `src/sim/systems.ts`, at its place in the day: movement, battles, sieges, economy, population. `advanceDay` stays last.
 3. Write `src/sim/systems/<name>.test.ts`, which starts from `buildFixture()` and ends each test with `expectConsistent(state)`.
 
@@ -44,7 +59,7 @@ A field that only your system needs goes into the kind's schema in `src/sim/stat
 
 ### Adding an order
 
-1. Write `src/sim/orders/<name>.ts`. It exports the order's interface, with `kind` and `faction`, and a handler `(state, order) => string | undefined`. The handler checks everything before it writes anything. It returns a reason to reject, or `undefined` after it has applied the order. `ownedArmy` in `orders/owned-army.ts` does the ownership check.
+1. Write `src/sim/orders/<name>.ts`. It exports the order's interface, with `kind` and `faction`, and a handler `(state, order, world) => string | undefined`. The handler checks everything before it writes anything. It returns a reason to reject, or `undefined` after it has applied the order. `ownedArmy` in `orders/owned-army.ts` does the ownership check.
 2. Add the handler to `ORDER_HANDLERS` in `src/sim/orders/orders.ts`. The `Order` union derives from that table.
 
 ### New game
@@ -56,14 +71,14 @@ A field that only your system needs goes into the kind's schema in `src/sim/stat
 - Armies and formations get their ids from `allocateId`.
 - Starting populations and the starting army are the tables `STARTING_POPULATION` and `STARTING_FORMATIONS` in `new-game.ts`.
 
-The map is static data outside the state. Outlines, neighbours, coastline, and rivers never go into the state. Code that needs geometry takes the `GameMap` as an argument.
+The map is static data outside the state. Outlines, neighbours, coastline, and rivers never go into the state. Rules code that needs geometry reads the `World`, which holds the map.
 
 ### Battles
 
 - `areAtWar(state, a, b)` in `src/sim/wars.ts` says whether two factions are at war. Every rule that asks uses it. `state.wars` maps `warKey(a, b)` to the war. The key is the JSON pair of the two faction ids in ascending order, so a pair is stored once and a faction is never at war with itself. Only orders such as `declareWar` change it.
 - `TROOPS` in `src/sim/troops.ts` holds every number a battle uses for a troop: category, attack, defence, discipline, and bonuses against categories. `formation.troop` accepts only its keys.
 - To add a troop type, add one row to `TROOPS` and nothing else. Add a matchup for it to `scripts/sim-battles.ts`, run `npm run sim:battles`, and put the table in the pull request. Renaming or removing a troop breaks old saves and needs a raise of `SAVE_FORMAT`.
-- `src/sim/systems/battles.ts` names `ENGAGEMENT_DISTANCE`, the stance effects, and the tuning numbers at its top. `retreatFromBattle` is the one way out of a battle, so a lane that pulls an army out calls it.
+- `src/sim/systems/battles.ts` names `ENGAGEMENT_DISTANCE`, the stance effects, and the tuning numbers at its top. `retreatFromBattle` is the one way out of a battle, so a lane that pulls an army out calls it. It marches the army to its nearest city that a land route reaches, and the army surrenders when there is none.
 - A beaten army marches home with every formation at morale 0. An army without an unbroken formation does not start or join a battle. Only idle armies regain morale.
 
 ### Cities
@@ -96,6 +111,9 @@ The map is static data outside the state. Outlines, neighbours, coastline, and r
 | `npm run e2e`                                 | Playwright tests against the built page, Chromium only                                                          |
 | `npm run sim:battles [-- --log <row> <seed>]` | Play the battle matchups over many seeds and print the tuning table, or one battle day by day                   |
 | `npm run sim:economy`                         | Play the new game for three years without orders and print each great power's economy at the end of each year   |
+| `npm run sim:paths`                           | Compare grid and navigation-mesh path finding with the exact shortest path                                      |
+| `npm run sim:movement`                        | Print long routes, their marching days and path times, and the tick time with every army marching               |
+| `npm run map:routes`                          | Draw long routes on the map preview into `captures/movement/`                                                   |
 | `npm run capture [-- <scenario>]`             | Build, then write screenshots, `clip.gif`, video, and trace to `captures/<scenario>/`                           |
 | `npm run capture:publish`                     | Push the PNG and GIF files to the `pr-assets` branch and print Markdown for the pull request                    |
 | `npm run capture:fetch`                       | Pull this branch's media from `pr-assets` into `captures/`, declare it as Nexus outputs, and print the Markdown |

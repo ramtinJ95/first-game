@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { changeCityOwner } from '../cities.ts';
-import { buildFixture, FIXTURE } from '../fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { CityId } from '../ids.ts';
 import { expectConsistent } from '../references.ts';
 import type { Troop } from '../troops.ts';
 import { executeOrder, type Order } from './orders.ts';
+
+const world = fixtureWorld();
 
 const order = (changes: Partial<Extract<Order, { kind: 'recruit' }>> = {}): Order => ({
   kind: 'recruit',
@@ -63,7 +65,7 @@ describe('recruit is rejected and changes nothing', () => {
     const state = buildFixture();
     setup(state);
     const before = structuredClone(state);
-    expect(executeOrder(state, order)).toEqual({ order, reason });
+    expect(executeOrder(state, order, world)).toEqual({ order, reason });
     expect(state).toEqual(before);
     expectConsistent(state);
   });
@@ -71,7 +73,7 @@ describe('recruit is rejected and changes nothing', () => {
 
 test('recruit takes gold and manpower at once and queues the formation', () => {
   const state = buildFixture();
-  expect(executeOrder(state, order({ troop: 'swordsmen' }))).toBeUndefined();
+  expect(executeOrder(state, order({ troop: 'swordsmen' }), world)).toBeUndefined();
   expect(state.factions[FIXTURE.rome]?.stores).toEqual({ gold: 1800, food: 1000, manpower: 1000 });
   expect(state.cities[FIXTURE.roma]?.recruits).toEqual([{ troop: 'swordsmen', readyOn: 21 }]);
   expectConsistent(state);

@@ -33,6 +33,7 @@ test('an embarked army and its convoy that list each other are valid', () => {
     owner: FIXTURE.rome,
     position: { x: 5, y: 5 },
     armies: [FIXTURE.romanArmy],
+    waypoints: [{ x: 6, y: 6 }],
   };
   const army = state.armies[FIXTURE.romanArmy];
   if (army) army.activity = { kind: 'embarked', convoy };
@@ -89,7 +90,13 @@ test('a formation listed twice in its army is reported', () => {
 test('an allocated id at or above nextSerial is reported', () => {
   const state = buildFixture();
   const convoy = 'convoy-1' as ConvoyId;
-  state.convoys[convoy] = { id: convoy, owner: FIXTURE.rome, position: { x: 0, y: 0 }, armies: [] };
+  state.convoys[convoy] = {
+    id: convoy,
+    owner: FIXTURE.rome,
+    position: { x: 0, y: 0 },
+    armies: [],
+    waypoints: [{ x: 1, y: 1 }],
+  };
   expect(findBrokenReferences(state)).toEqual([
     'convoys.convoy-1 is not below nextSerial 1, so a new id could repeat it',
   ]);

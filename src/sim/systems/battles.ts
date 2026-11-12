@@ -7,6 +7,8 @@ import type { Battle } from '../state/battle.ts';
 import type { Formation } from '../state/formation.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
+import { nearestReachableCity, startMarch } from '../march.ts';
+import type { World } from '../world/world.ts';
 import { TROOPS } from '../troops.ts';
 import { areAtWar } from '../wars.ts';
 
@@ -48,13 +50,13 @@ type Side = 'attackers' | 'defenders';
  * Adds armies that come up to a running battle, starts battles between armies at
  * war that meet, plays one day of every battle, and lets idle armies regain morale.
  */
-export function battles(state: GameState): void {
+export function battles(state: GameState, world: World): void {
   recoverMorale(state);
   joinBattles(state);
   startBattles(state);
   for (const battle of sortedValues(state.battles)) {
     fightOneDay(state, battle.id);
-    settle(state, battle.id);
+    settle(state, world, battle.id);
   }
 }
 
@@ -240,7 +242,7 @@ function pressureOn(men: number, enemyMen: number, shareLost: number, enemyShare
  * Removes emptied formations and armies, sends beaten armies home, and ends the battle
  * when a side has no army left in it.
  */
-function settle(state: GameState, id: BattleId) {
+function settle(state: GameState, world: World, id: BattleId) {
   const battle = state.battles[id];
   if (!battle) return;
   for (const side of ['attackers', 'defenders'] as const) {
@@ -252,7 +254,7 @@ function settle(state: GameState, id: BattleId) {
         battle[side] = battle[side].filter((other) => other !== armyId);
         removeArmy(state, army);
       } else if (!formationsOf(state, army).some(isFighting)) {
-        retreatFromBattle(state, army);
+        retreatFromBattle(state, world, army);
       }
     }
   }
@@ -268,10 +270,11 @@ function settle(state: GameState, id: BattleId) {
 
 /**
  * Takes an army out of its battle and sets it marching to the nearest city its owner
- * holds. An army whose owner holds no city has nowhere to go and surrenders. The
- * battle may be left with an empty side, which the battles system ends the same day.
+ * holds that a land route reaches. An army with no such city has nowhere to go and
+ * surrenders. The battle may be left with an empty side, which the battles system
+ * ends the same day.
  */
-export function retreatFromBattle(state: GameState, army: Army): void {
+export function retreatFromBattle(state: GameState, world: World, army: Army): void {
   const { activity } = army;
   if (activity.kind !== 'inBattle') return;
   const battle = state.battles[activity.battle];
@@ -279,21 +282,10 @@ export function retreatFromBattle(state: GameState, army: Army): void {
     battle.attackers = battle.attackers.filter((id) => id !== army.id);
     battle.defenders = battle.defenders.filter((id) => id !== army.id);
   }
-  const home = nearestOwnCity(state, army, activity.position);
-  if (!home) {
+  const home = nearestReachableCity(state, world, army.owner, activity.position);
+  if (!home || startMarch(world, army, activity.position, home.position) !== undefined) {
     removeArmy(state, army);
-    return;
   }
-  army.activity = { kind: 'marching', position: activity.position, destination: home };
-}
-
-function nearestOwnCity(state: GameState, army: Army, from: MapPoint): MapPoint | undefined {
-  let best: MapPoint | undefined;
-  for (const city of sortedValues(state.cities)) {
-    if (city.owner !== army.owner) continue;
-    if (!best || distance(from, city.position) < distance(from, best)) best = city.position;
-  }
-  return best && { x: best.x, y: best.y };
 }
 
 export function removeEmptyFormations(state: GameState, army: Army): void {

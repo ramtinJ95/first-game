@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildFixture, FIXTURE } from '../sim/fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import type { System } from '../sim/systems.ts';
 import { createClock } from './clock.ts';
+
+const world = fixtureWorld();
 
 function fakeTime() {
   let ms = 0;
@@ -23,7 +25,7 @@ function run(clock: { frame(): void }, time: ReturnType<typeof fakeTime>, totalM
 describe('clock', () => {
   it('runs no tick while paused, and applies an order issued in the pause on the first tick after resume', () => {
     const time = fakeTime();
-    const clock = createClock({ state: buildFixture(), now: time.now });
+    const clock = createClock({ world, state: buildFixture(), now: time.now });
     clock.pause();
     clock.issue({
       kind: 'setStance',
@@ -51,7 +53,7 @@ describe('clock', () => {
   it('runs exactly twice the ticks at speed 2 as at speed 1 over the same time', () => {
     const daysAfter = (speed: 1 | 2) => {
       const time = fakeTime();
-      const clock = createClock({ state: buildFixture(), now: time.now });
+      const clock = createClock({ world, state: buildFixture(), now: time.now });
       clock.setSpeed(speed);
       run(clock, time, 10_000);
       return clock.state.day - 1;
@@ -62,7 +64,7 @@ describe('clock', () => {
 
   it('counts time before a speed change at the old speed', () => {
     const time = fakeTime();
-    const clock = createClock({ state: buildFixture(), now: time.now });
+    const clock = createClock({ world, state: buildFixture(), now: time.now });
     time.advance(900);
     clock.setSpeed(3);
     clock.frame();
@@ -77,7 +79,7 @@ describe('clock', () => {
 
   it('runs the day a delayed pause owes, then runs no tick until resume', () => {
     const time = fakeTime();
-    const clock = createClock({ state: buildFixture(), now: time.now });
+    const clock = createClock({ world, state: buildFixture(), now: time.now });
     time.advance(1500);
     clock.pause();
     expect(clock.state.day).toBe(2);
@@ -98,7 +100,7 @@ describe('clock', () => {
 
   it('keeps progress below 1 after any control action', () => {
     const time = fakeTime();
-    const clock = createClock({ state: buildFixture(), now: time.now, maxTicksPerFrame: 4 });
+    const clock = createClock({ world, state: buildFixture(), now: time.now, maxTicksPerFrame: 4 });
     const actions = [
       () => clock.setSpeed(3),
       () => clock.pause(),
@@ -123,7 +125,12 @@ describe('clock', () => {
       state.armies[FIXTURE.romanArmy]?.formations.push(FIXTURE.citizenSpears);
     };
     const time = fakeTime();
-    const clock = createClock({ state: buildFixture(), now: time.now, systems: [linkOneSide] });
+    const clock = createClock({
+      world,
+      state: buildFixture(),
+      now: time.now,
+      systems: [linkOneSide],
+    });
     time.advance(1000);
     expect(() => clock.frame()).toThrow(
       'Day 1 left broken links: army army-roman lists formation formation-citizen-spears, which does not name it back',
@@ -132,7 +139,7 @@ describe('clock', () => {
 
   it('runs at most maxTicksPerFrame ticks in a long frame and does not catch up afterwards', () => {
     const time = fakeTime();
-    const clock = createClock({ state: buildFixture(), now: time.now, maxTicksPerFrame: 4 });
+    const clock = createClock({ world, state: buildFixture(), now: time.now, maxTicksPerFrame: 4 });
     time.advance(10_000);
     clock.frame();
     expect(clock.state.day).toBe(5);
@@ -144,7 +151,7 @@ describe('clock', () => {
 
   it('reports progress as the fraction of the way to the next tick', () => {
     const time = fakeTime();
-    const clock = createClock({ state: buildFixture(), now: time.now });
+    const clock = createClock({ world, state: buildFixture(), now: time.now });
     expect(clock.progress).toBe(0);
 
     time.advance(250);
@@ -164,7 +171,7 @@ describe('clock', () => {
 
   it('keeps the state from before the latest tick as previous', () => {
     const time = fakeTime();
-    const clock = createClock({ state: buildFixture(), now: time.now });
+    const clock = createClock({ world, state: buildFixture(), now: time.now });
     expect(clock.previous.day).toBe(1);
 
     time.advance(1000);
@@ -182,6 +189,7 @@ describe('clock', () => {
     const time = fakeTime();
     const rejected: string[] = [];
     const clock = createClock({
+      world,
       state: buildFixture(),
       now: time.now,
       onRejected: (batch) => rejected.push(...batch.map((r) => r.order.kind)),

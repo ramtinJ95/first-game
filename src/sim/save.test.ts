@@ -2,16 +2,27 @@ import type { DeepReadonly } from './deep-readonly.ts';
 import type { GameState } from './state/game-state.ts';
 import { describe, expect, test } from 'vitest';
 import { UNREST_DAYS } from './cities.ts';
-import { buildFixture, FIXTURE } from './fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld } from './fixture.ts';
 import { loadGame, SAVE_FORMAT, saveGame } from './save.ts';
 import { warKey } from './state/war.ts';
 import { tick } from './tick.ts';
 
+const world = fixtureWorld();
+
 describe('save and load', () => {
   test('a state survives save and load unchanged', () => {
-    const state = tick(buildFixture(42), [
-      { kind: 'moveArmy', faction: FIXTURE.rome, army: FIXTURE.romanArmy, to: { x: 1, y: 2 } },
-    ]).state;
+    const state = tick(
+      buildFixture(42),
+      [
+        {
+          kind: 'moveArmy',
+          faction: FIXTURE.rome,
+          army: FIXTURE.romanArmy,
+          to: { x: 2638.8, y: 2448.3 },
+        },
+      ],
+      world,
+    ).state;
     const loaded = loadGame(saveGame(state));
     expect(loaded).toEqual({ ok: true, state });
   });
@@ -36,7 +47,7 @@ describe('save and load', () => {
     const save = JSON.stringify({ format: 99, state: buildFixture() });
     expect(loadGame(save)).toEqual({
       ok: false,
-      error: 'The save has format 99, but this game reads format 3.',
+      error: 'The save has format 99, but this game reads format 4.',
     });
   });
 

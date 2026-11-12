@@ -1,6 +1,9 @@
 import type { GameState } from '../state/game-state.ts';
+import type { World } from '../world/world.ts';
 import { declareWar } from './declare-war.ts';
 import { evacuate } from './evacuate.ts';
+import { embark } from './embark.ts';
+import { halt } from './halt.ts';
 import { moveArmy } from './move-army.ts';
 import { recruit } from './recruit.ts';
 import { retreat } from './retreat.ts';
@@ -12,6 +15,8 @@ import { setStance } from './set-stance.ts';
  */
 const ORDER_HANDLERS = {
   moveArmy,
+  halt,
+  embark,
   setStance,
   declareWar,
   retreat,
@@ -33,13 +38,18 @@ export interface RejectedOrder {
 }
 
 /** Applies one order to the state, or returns why it was rejected. */
-export function executeOrder(state: GameState, order: Order): RejectedOrder | undefined {
+export function executeOrder(
+  state: GameState,
+  order: Order,
+  world: World,
+): RejectedOrder | undefined {
   if (!Object.hasOwn(state.factions, order.faction))
     return { order, reason: `faction ${order.faction} does not exist` };
   const handler = ORDER_HANDLERS[order.kind] as (
     state: GameState,
     order: Order,
+    world: World,
   ) => string | undefined;
-  const reason = handler(state, order);
+  const reason = handler(state, order, world);
   return reason === undefined ? undefined : { order, reason };
 }
