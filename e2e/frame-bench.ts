@@ -6,13 +6,21 @@ import { parseArgs } from 'node:util';
 import { preview } from 'vite';
 import { SOFTWARE_GL } from '../playwright.config.ts';
 import { LAYERS } from '../src/render/renderer.ts';
+import { decideAll } from '../src/sim/ai/decide.ts';
+import { saveGame } from '../src/sim/save.ts';
+import { tick } from '../src/sim/tick.ts';
+import { buildWorld } from '../src/sim/world/world.ts';
+import { startGame, map } from './support.ts';
 
 /**
  * Plays the built page under each drawing and prints the frame interval that the
  * page's own `?frames` readout reports, median and p95, in rounds that take the
  * drawings in turn so drift favours none. Build first with `npm run build`.
  *
- *   node e2e/frame-bench.ts [--rounds 3] [--only full,draw=test] [--args "--flag ..."]
+ * Each page loads a game that the faction AI has played for `--days` days, so armies
+ * march, fight, and besiege on it, and plays on at speed 1.
+ *
+ *   node e2e/frame-bench.ts [--rounds 3] [--days 300] [--only full,draw=test] [--args "--flag ..."]
  */
 const { values } = parseArgs({
   options: {
@@ -21,6 +29,7 @@ const { values } = parseArgs({
     args: { type: 'string' },
     shots: { type: 'string' },
     channel: { type: 'string' },
+    days: { type: 'string', default: '300' },
   },
 });
 
@@ -53,6 +62,18 @@ async function measure(browser: Browser, base: string, query: string, shot?: str
   await page.goto(`${base}/?frames${query ? `&${query}` : ''}`);
   const meter = page.getByTestId('frame-meter');
   await meter.waitFor();
+  if (save) {
+    const dataTransfer = await page.evaluateHandle((text) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([text], 'save.json', { type: 'application/json' }));
+      return transfer;
+    }, save);
+    await page.dispatchEvent('canvas', 'drop', { dataTransfer });
+    await page
+      .getByTestId('time-controls-day')
+      .and(page.locator(`[data-day="${days}"], [data-day="${days + 1}"]`))
+      .waitFor();
+  }
   await delay(WARM_MS + WINDOW_MS);
   const reading = await meter.evaluate((el) => ({
     median: Number(el.dataset['median']),
@@ -71,6 +92,16 @@ async function measure(browser: Browser, base: string, query: string, shot?: str
   if (!(reading.drawMedian > 0)) throw new Error(`${query}: the meter read nothing`);
   return { reading, gl };
 }
+
+const days = 1 + Number(values.days);
+const world = buildWorld(map);
+let game = startGame();
+while (game.day < days) game = tick(game, decideAll(game, world), world).state;
+const save = days > 1 ? saveGame(game) : undefined;
+const armies = Object.values(game.armies);
+console.error(
+  `day ${game.day}: ${armies.length} armies, ${armies.filter((a) => a.activity.kind === 'marching').length} marching, ${Object.keys(game.battles).length} battles, ${Object.keys(game.sieges).length} sieges`,
+);
 
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? NaN;
 
@@ -107,6 +138,7 @@ try {
 }
 
 console.log(`GL renderer: ${renderer}`);
+console.log(`Game: day ${days} of a game the faction AI played, at speed 1`);
 console.log(`Chromium args: ${launchArgs.join(' ')}`);
 console.log(
   `| Drawing | Frame interval median (ms) | p95 | Drawn frame median (ms) | p95 | Interval medians of ${rounds} rounds |`,

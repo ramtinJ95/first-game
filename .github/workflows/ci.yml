@@ -27,6 +27,14 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
+      - name: Frame times in software
+        run: node e2e/frame-bench.ts --rounds 1 --only full,draw=test >> "$GITHUB_STEP_SUMMARY"
+      - name: Frame times with the GPU flags of headless Chromium
+        continue-on-error: true
+        run: >-
+          node e2e/frame-bench.ts --rounds 1 --only full
+          --args "--enable-gpu --ignore-gpu-blocklist --use-angle=vulkan --enable-features=Vulkan"
+          >> "$GITHUB_STEP_SUMMARY"
       - run: npm run capture
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}

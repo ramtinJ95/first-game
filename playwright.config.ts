@@ -19,6 +19,14 @@ export default defineConfig({
   ],
   use: {
     baseURL: 'http://localhost:4173',
+    // Every page a test opens draws the test drawing of src/render/draw-options.ts.
+    // A page opened with ?draw=full draws everything, as the game and the captures do.
+    storageState: {
+      cookies: [],
+      origins: [
+        { origin: 'http://localhost:4173', localStorage: [{ name: 'draw', value: 'test' }] },
+      ],
+    },
     trace: 'retain-on-failure',
     launchOptions: { args: [...SOFTWARE_GL] },
   },

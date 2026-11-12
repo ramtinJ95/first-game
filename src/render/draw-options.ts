@@ -19,14 +19,16 @@ export const FULL_DRAWING: DrawOptions = {
 };
 
 /**
- * What browser tests draw with `?draw=test`. A test checks behaviour, so it leaves out
- * the full-screen passes that a computer with no graphics card draws slowly.
+ * What browser tests draw with `?draw=test`. A test checks behaviour, not the picture.
+ * Without a graphics card every full-screen layer costs about 100 ms of fill, so this
+ * draws a quarter of the pixels, without antialiasing, grain, or the swell, and so
+ * draws only when something changes.
  */
 export const TEST_DRAWING: DrawOptions = {
   hidden: new Set(['grain']),
   swell: false,
   antialias: false,
-  resolution: 1,
+  resolution: 0.5,
 };
 
 function isLayer(name: string): name is LayerName {
@@ -34,14 +36,17 @@ function isLayer(name: string): name is LayerName {
 }
 
 /**
- * Reads the drawing from the page's query: `draw=test` picks the test drawing,
+ * Reads the drawing from the page's query: `draw=test` picks the test drawing and
+ * `draw=full` the full one,
  * `hide=sea,grain` leaves out layers, and `swell=off`, `antialias=off`,
  * `resolution=<n>`, and `fog=off` each turn off one thing. Unknown names are an error.
  */
 export function parseDrawOptions(search: string): DrawOptions {
   const query = new URLSearchParams(search);
   const draw = query.get('draw');
-  if (draw !== null && draw !== 'test') throw new Error(`draw=${draw}: expected draw=test`);
+  if (draw !== null && draw !== 'test' && draw !== 'full') {
+    throw new Error(`draw=${draw}: expected draw=test or draw=full`);
+  }
   const base = draw === 'test' ? TEST_DRAWING : FULL_DRAWING;
   const hidden = new Set(base.hidden);
   for (const name of (query.get('hide') ?? '').split(',').filter(Boolean)) {

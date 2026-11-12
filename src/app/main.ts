@@ -193,6 +193,21 @@ function plannedPaths(): MapPoint[][] {
   return planned;
 }
 
+/**
+ * The page's query, with `draw` taken from local storage when the query leaves it out.
+ * playwright.config.ts stores `draw=test`, so every page a browser test opens draws less.
+ */
+function drawQuery(): string {
+  const query = new URLSearchParams(location.search);
+  try {
+    const stored = localStorage.getItem('draw');
+    if (stored && !query.has('draw')) query.set('draw', stored);
+  } catch {
+    // Storage can be blocked. The page then draws what its query says.
+  }
+  return query.toString();
+}
+
 /** `?frames` shows the frame readout, which needs each drawn frame finished to time it. */
 const metering = new URLSearchParams(location.search).has('frames');
 const canvas = document.createElement('canvas');
@@ -207,7 +222,7 @@ const renderer = await createRenderer({
     view.refresh();
   },
   onCommand: command,
-  drawing: parseDrawOptions(location.search),
+  drawing: parseDrawOptions(drawQuery()),
   waitForGpu: metering,
 });
 const meter = metering ? showFrameMeter(host) : undefined;

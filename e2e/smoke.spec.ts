@@ -6,14 +6,16 @@ const map = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../data/map/map.json'), 'utf8'),
 ) as { version: number; provinces: unknown[] };
 
-test('the skeleton renders the map and the time controls without errors', async ({ page }) => {
+test('the skeleton renders the full drawing of the map and the time controls without errors', async ({
+  page,
+}) => {
   const errors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
   });
   page.on('pageerror', (error) => errors.push(error.message));
 
-  await page.goto('/');
+  await page.goto('/?draw=full');
 
   const canvas = page.locator('canvas');
   await expect(canvas).toBeVisible();

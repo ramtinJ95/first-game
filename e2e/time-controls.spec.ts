@@ -86,13 +86,13 @@ test.describe('time controls', () => {
     const speed1 = page.getByRole('button', { name: 'Speed 1', exact: true });
     const speed3 = page.getByRole('button', { name: 'Speed 3', exact: true });
     await expect(speed1).toHaveAttribute('aria-pressed', 'true');
-    const slow = await daysPerSecond(page, 2);
+    const slow = await daysPerSecond(page, 3);
 
     await speed3.click();
     await expect(speed3).toHaveAttribute('aria-pressed', 'true');
     await expect(speed1).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByTestId('time-controls-speed')).toContainText('Speed 3');
-    const fast = await daysPerSecond(page, 5);
+    const fast = await daysPerSecond(page, 10);
 
     expect(fast).toBeGreaterThan(slow * 2);
   });

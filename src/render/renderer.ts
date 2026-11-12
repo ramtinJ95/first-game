@@ -701,7 +701,15 @@ export async function createRenderer({
   const pixel = new Uint8Array(4);
   function finish() {
     if ('gl' in app.renderer) {
-      app.renderer.gl.readPixels(0, 0, 1, 1, WebGLRenderingContext.RGBA, WebGLRenderingContext.UNSIGNED_BYTE, pixel);
+      app.renderer.gl.readPixels(
+        0,
+        0,
+        1,
+        1,
+        WebGLRenderingContext.RGBA,
+        WebGLRenderingContext.UNSIGNED_BYTE,
+        pixel,
+      );
     }
   }
 

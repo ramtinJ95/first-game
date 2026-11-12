@@ -8,6 +8,7 @@ describe('parseDrawOptions', () => {
 
   it('picks the test drawing with draw=test', () => {
     expect(parseDrawOptions('?draw=test')).toEqual(TEST_DRAWING);
+    expect(parseDrawOptions('?draw=full')).toEqual(FULL_DRAWING);
   });
 
   it('leaves out each named layer, and the fog with fog=off', () => {
@@ -29,7 +30,7 @@ describe('parseDrawOptions', () => {
 
   it('refuses a layer, a drawing, or a resolution it does not know', () => {
     expect(() => parseDrawOptions('?hide=clouds')).toThrow('hide=clouds: no such layer');
-    expect(() => parseDrawOptions('?draw=fast')).toThrow('expected draw=test');
+    expect(() => parseDrawOptions('?draw=fast')).toThrow('expected draw=test or draw=full');
     expect(() => parseDrawOptions('?resolution=0')).toThrow('not > 0');
   });
 });
