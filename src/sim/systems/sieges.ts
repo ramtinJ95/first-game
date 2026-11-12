@@ -282,6 +282,21 @@ export function defendersAt(state: DeepReadonly<GameState>, city: DeepReadonly<C
   );
 }
 
+/**
+ * Whether the city is besieged, or an army at war with its owner stands at its walls and
+ * will besiege it today. Such a city starts no new training.
+ */
+export function beleaguered(state: DeepReadonly<GameState>, city: DeepReadonly<City>): boolean {
+  if (Object.values(state.sieges).some((siege) => siege.city === city.id)) return true;
+  return Object.values(state.armies).some(
+    (army) =>
+      army.activity.kind !== 'embarked' &&
+      army.activity.kind !== 'retreating' &&
+      areAtWar(state, army.owner, city.owner) &&
+      distance(army.activity.position, city.position) <= SIEGE_DISTANCE,
+  );
+}
+
 /** The siege at the city, if one runs. A city has at most one. */
 export function siegeAt(state: GameState, city: City): Siege | undefined {
   return Object.values(state.sieges).find((siege) => siege.city === city.id);

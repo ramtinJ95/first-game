@@ -7,7 +7,13 @@ import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
 import { warSides } from '../state/war.ts';
 import { GENERAL_EFFECT } from '../systems/battles.ts';
-import { STORM_KILL, STORM_LUCK, STORM_ODDS, WALL_DEFENCE } from '../systems/sieges.ts';
+import {
+  beleaguered,
+  STORM_KILL,
+  STORM_LUCK,
+  STORM_ODDS,
+  WALL_DEFENCE,
+} from '../systems/sieges.ts';
 import { dailyBalances, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import type { Stores } from '../state/faction.ts';
 import { TROOPS } from '../troops.ts';
@@ -188,8 +194,9 @@ export function byLand(world: World, from: MapPoint, to: MapPoint): boolean {
   return connected(world.mesh, from, to, 'land');
 }
 
+/** Whether the city is besieged or has an enemy army at its walls, so it cannot recruit. */
 export function besieged(state: State, city: CityView): boolean {
-  return Object.values(state.sieges).some((siege) => siege.city === city.id);
+  return beleaguered(state, city);
 }
 
 /** Whether another faction leads the siege of the city, so that it would take the city, whoever storms. */

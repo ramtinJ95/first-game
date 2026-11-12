@@ -338,6 +338,18 @@ describe('troops in training', () => {
     expectConsistent(besieged);
   });
 
+  test('a recruit is refused while an enemy army stands at the walls, before its siege begins', () => {
+    const state = besiegingCapua();
+    const refused = tick(
+      state,
+      [{ kind: 'recruit', faction: FIXTURE.rome, city: FIXTURE.capua, troop: 'spearmen' }],
+      world,
+    );
+    expect(refused.rejected.map((r) => r.reason)).toEqual(['city capua is under siege']);
+    expect(Object.values(refused.state.sieges)).toHaveLength(1);
+    expectConsistent(refused.state);
+  });
+
   test('a recruit is refused in a besieged city, so no training can be lost with it', () => {
     const state = tick(besiegingCapua(), [], world).state;
     const refused = tick(
