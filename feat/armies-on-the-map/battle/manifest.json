@@ -16,17 +16,17 @@
   },
   {
     "file": "clip.gif",
-    "title": "A battle at the closest zoom outside Roma, from the first contact to the rout of Carthage, at speed 1",
+    "title": "A battle at the closest zoom outside Roma, from the first contact to the rout of Carthage, at speed 2",
     "kind": "clip"
   },
   {
     "file": "video.webm",
-    "title": "A battle at the closest zoom outside Roma, from the first contact to the rout of Carthage, at speed 1 (video)",
+    "title": "A battle at the closest zoom outside Roma, from the first contact to the rout of Carthage, at speed 2 (video)",
     "kind": "video"
   },
   {
     "file": "trace.zip",
-    "title": "A battle at the closest zoom outside Roma, from the first contact to the rout of Carthage, at speed 1 (Playwright trace)",
+    "title": "A battle at the closest zoom outside Roma, from the first contact to the rout of Carthage, at speed 2 (Playwright trace)",
     "kind": "trace"
   }
 ]
