@@ -76,11 +76,13 @@ function hatchTexture(): Texture {
 
 export interface Fog {
   /** The fog layer's content, drawn in screen pixels. */
-  readonly root: Container;
+  readonly root: Sprite;
   /** Redraws the mask when the sight has moved enough to show. Says whether it did. */
   update(provinces: ReadonlySet<ProvinceId>, circles: readonly SightCircle[]): boolean;
   /** Follows the camera: `x`, `y` is where the map's origin lands on screen. */
   place(x: number, y: number, scale: number, width: number, height: number): void;
+  /** Repaints the fog into its texture if the camera or the sight moved since the last paint. */
+  paint(): void;
   destroy(): void;
 }
 
@@ -129,8 +131,18 @@ export function createFog(renderer: Renderer, map: GameMap): Fog {
   shade.mask = toneMask;
   const hatch = new TilingSprite({ texture: hatchTexture(), width: 1, height: 1 });
   hatch.mask = bandMask;
-  const root = new Container();
-  root.addChild(shade, hatch, toneMask, bandMask);
+  const paint = new Container();
+  paint.addChild(shade, hatch, toneMask, bandMask);
+  // The masks cost full-screen passes, so the painted fog is kept in a texture and
+  // repainted only when the camera or the sight moves, not on every frame the sea moves.
+  const screen = RenderTexture.create({
+    width: 1,
+    height: 1,
+    resolution: renderer.resolution,
+    antialias: true,
+  });
+  const root = new Sprite(screen);
+  let stale = true;
 
   const outlines = new Map(map.provinces.map((p) => [p.id as ProvinceId, p.outline]));
   let drawnProvinces: ReadonlySet<ProvinceId> | undefined;
@@ -212,6 +224,7 @@ export function createFog(renderer: Renderer, map: GameMap): Fog {
       drawCircles(circles);
       renderer.render({ container: tone, target: toneTexture, clear: true });
       renderer.render({ container: band, target: bandTexture, clear: true });
+      stale = true;
       return true;
     },
     place(x, y, scale, width, height) {
@@ -224,15 +237,26 @@ export function createFog(renderer: Renderer, map: GameMap): Fog {
       hatch.width = width;
       hatch.height = height;
       hatch.tilePosition.set(x, y);
+      if (screen.width !== width || screen.height !== height) {
+        screen.resize(width, height, renderer.resolution);
+      }
+      stale = true;
+    },
+    paint() {
+      if (!stale) return;
+      renderer.render({ container: paint, target: screen, clear: true });
+      stale = false;
     },
     destroy() {
-      for (const container of [toneLand, bandLand, tone, band]) {
+      for (const container of [toneLand, bandLand, tone, band, paint]) {
         container.destroy({ children: true });
       }
       for (const texture of [...discTextures.values(), ...ringTextures.values()]) {
         texture.destroy(true);
       }
-      for (const texture of [toneTexture, bandTexture, landTone, landBand]) texture.destroy(true);
+      for (const texture of [toneTexture, bandTexture, landTone, landBand, screen]) {
+        texture.destroy(true);
+      }
     },
   };
 }

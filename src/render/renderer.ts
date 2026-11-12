@@ -815,6 +815,7 @@ export async function createRenderer({
       drawRoutes(current, selection, planned);
       placeBanners(current, selection);
       placeBattles(selection);
+      fog.paint();
       app.render();
     },
     focus(point) {
