@@ -28,4 +28,4 @@ npm run capture   # screenshots and a GIF clip in captures/
 
 ## Map data
 
-`npm run build:map` builds `data/map/map.json` from the city list in `data/map/cities.json` and from Natural Earth. The map uses Natural Earth (public domain) and Pleiades (CC BY 3.0). [`data/map/ATTRIBUTION.md`](data/map/ATTRIBUTION.md) gives the credits and licences.
+`npm run build:map` builds `data/map/map.json` from the city list in `data/map/cities.json` and from pinned copies of free geographic data. Natural Earth (public domain) gives the land, coast, rivers, lakes, peaks, and the names of mountain ranges and deserts. ETOPO1 elevation (NOAA, public domain) outlines the mountains and hills. RESOLVE Ecoregions 2017 (CC BY 4.0) outlines the forests. Pleiades (CC BY 3.0) gives the cities, towns, and villages. [`data/map/ATTRIBUTION.md`](data/map/ATTRIBUTION.md) gives the credits and licences.

@@ -73,6 +73,8 @@ A field that only your system needs goes into the kind's schema in `src/sim/stat
 
 The map is static data outside the state. Outlines, neighbours, coastline, and rivers never go into the state. Rules code that needs geometry reads the `World`, which holds the map.
 
+The map also holds terrain areas, peaks, and settlements. A settlement is a named place with no people and no rules. The rules that choose them sit at the top of `scripts/map/terrain.ts` and `scripts/map/settlements.ts`.
+
 ### Battles
 
 - `areAtWar(state, a, b)` in `src/sim/wars.ts` says whether two factions are at war. Every rule that asks uses it. `state.wars` maps `warKey(a, b)` to the war. The key is the JSON pair of the two faction ids in ascending order, so a pair is stored once and a faction is never at war with itself. Only orders such as `declareWar` change it.
