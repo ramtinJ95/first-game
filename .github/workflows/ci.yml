@@ -25,6 +25,17 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run build
+
+  e2e:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
       - name: Frame times in software
@@ -35,21 +46,41 @@ jobs:
           node e2e/frame-bench.ts --rounds 1 --only full
           --args="--enable-gpu --ignore-gpu-blocklist --use-angle=vulkan --enable-features=Vulkan"
           >> "$GITHUB_STEP_SUMMARY"
-      - run: npm run capture
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: playwright-report
           path: playwright-report/
+
+  capture:
+    needs: verify
+    runs-on: ubuntu-latest
+    outputs:
+      captured: ${{ steps.made.outputs.captured }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run capture
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: captures
           path: captures/
+      - id: made
+        if: ${{ !cancelled() }}
+        run: echo "captured=${{ hashFiles('captures/**') != '' }}" >> "$GITHUB_OUTPUT"
 
   publish-media:
-    needs: verify
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: capture
+    if: >-
+      !cancelled() && needs.capture.outputs.captured == 'true' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: write
