@@ -154,30 +154,29 @@ export default defineScenario({
       'Two armies at Roma draw as one banner; the city panel lists both, each a row that selects it',
     );
 
-    await load(page, musteringRome());
-    const overview = page.getByRole('button', { name: 'Overview' });
-    await overview.click();
-    await page.getByTestId('overview').getByRole('button', { name: /^Roma/ }).click();
-    await overview.click();
-    await page.getByTestId('city-panel').waitFor();
-    await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
-    await resume(page);
-    await page.waitForFunction(
-      () =>
-        Number(
-          document.querySelector('[data-testid="time-controls-day"]')?.getAttribute('data-day'),
-        ) >= 13,
-    );
-    await pause(page);
     for (const viewport of WIDTHS) {
-      await page.setViewportSize(viewport);
+      await start(page, viewport);
+      await load(page, musteringRome());
+      const overview = page.getByRole('button', { name: 'Overview' });
+      await overview.click();
+      await page.getByTestId('overview').getByRole('button', { name: /^Roma/ }).click();
+      await overview.click();
+      await page.getByTestId('city-panel').waitFor();
+      await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
+      await resume(page);
+      await page.waitForFunction(
+        () =>
+          Number(
+            document.querySelector('[data-testid="time-controls-day"]')?.getAttribute('data-day'),
+          ) >= 13,
+      );
+      await pause(page);
       await nextFrame(page);
       await shot(
         `layout-${viewport.width}`,
         `At ${viewport.width} px: Roma's city panel and two dozen alerts in a list that scrolls, and nothing covers the clock, the stores, or the speed buttons`,
       );
     }
-    await page.setViewportSize(WIDTHS[1]);
     await page.getByTestId('alerts').evaluate((list) => list.scrollTo({ top: list.scrollHeight }));
     await nextFrame(page);
     await shot(
