@@ -1,0 +1,27 @@
+[
+  {
+    "file": "start.png",
+    "title": "Skeleton app on load: parchment map canvas with the \"Day 1\" panel",
+    "kind": "screenshot"
+  },
+  {
+    "file": "later.png",
+    "title": "Skeleton app three seconds later: the map marker has moved along its circle",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Skeleton app: the placeholder map marker circling under the day panel",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Skeleton app: the placeholder map marker circling under the day panel (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Skeleton app: the placeholder map marker circling under the day panel (Playwright trace)",
+    "kind": "trace"
+  }
+]
