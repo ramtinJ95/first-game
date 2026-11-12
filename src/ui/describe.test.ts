@@ -124,6 +124,18 @@ describe('whyNotBesieging', () => {
     expect(besiegesNextDay(state)).toBe(false);
   });
 
+  it('does not promise a siege with a declared war while the army is short of food', () => {
+    const state = atSyracusae();
+    const stores = state.factions[f.rome]?.stores;
+    if (!stores) throw new Error('fixture changed');
+    stores.food = -10;
+    const declare: Order = { kind: 'declareWar', faction: f.rome, against: f.syracusaeFaction };
+    expect(whyNotBesieging(state, roman(state), [declare])).toBe(
+      'Short of food, so this army cannot besiege Syracusae.',
+    );
+    expect(tick(state, [declare], world).state.armies[f.romanArmy]?.activity.kind).toBe('idle');
+  });
+
   it('says a declared war begins the siege with the next day, as the rules do', () => {
     const state = atSyracusae();
     const declare: Order = { kind: 'declareWar', faction: f.rome, against: f.syracusaeFaction };

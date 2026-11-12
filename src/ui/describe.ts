@@ -218,27 +218,30 @@ export function whyNotBesieging(
   const city = near.find((c) => areAtWar(state, army.owner, c.owner)) ?? near[0];
   if (!city) return undefined;
   const owner = factionName(state, city.owner);
+  const stores = state.factions[army.owner]?.stores;
+  const short = (['gold', 'food'] as const).filter((store) => stores && stores[store] < 0);
+  const fit = army.formations.some((id) => {
+    const formation = state.formations[id];
+    return formation !== undefined && formation.men > 0 && formation.morale > 0;
+  });
+  const blocked =
+    short.length > 0
+      ? `Short of ${short.join(' and ')}, so this army cannot besiege ${city.name}.`
+      : fit
+        ? undefined
+        : `Every formation is broken. The siege of ${city.name} waits for morale.`;
   if (!areAtWar(state, army.owner, city.owner)) {
     const declared = pendingOrder(
       pending,
       'declareWar',
       (order) => order.faction === army.owner && order.against === city.owner,
     );
-    if (declared) return `War on ${owner} begins with the next day, and the siege with it.`;
+    if (declared)
+      return blocked ?? `War on ${owner} begins with the next day, and the siege with it.`;
     const target = city.name === owner ? 'it' : city.name;
     return `At peace with ${owner}. Declare war to besiege ${target}.`;
   }
-  const stores = state.factions[army.owner]?.stores;
-  const short = (['gold', 'food'] as const).filter((store) => stores && stores[store] < 0);
-  if (short.length > 0) {
-    return `Short of ${short.join(' and ')}, so this army cannot besiege ${city.name}.`;
-  }
-  const fit = army.formations.some((id) => {
-    const formation = state.formations[id];
-    return formation !== undefined && formation.men > 0 && formation.morale > 0;
-  });
-  if (!fit) return `Every formation is broken. The siege of ${city.name} waits for morale.`;
-  return undefined;
+  return blocked;
 }
 
 /** How many of the player's armies have orders waiting, or nothing when none has. */
