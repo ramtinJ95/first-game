@@ -12,7 +12,11 @@ import {
 import type { CityId, FactionId } from '../../../src/sim/ids.ts';
 import { parseMap } from '../../../src/sim/map.ts';
 import { newGame } from '../../../src/sim/new-game.ts';
+import { decideAll } from '../../../src/sim/ai/decide.ts';
 import { saveGame } from '../../../src/sim/save.ts';
+import type { GameState } from '../../../src/sim/state/game-state.ts';
+import { tick } from '../../../src/sim/tick.ts';
+import { buildWorld } from '../../../src/sim/world/world.ts';
 import type { MapPoint } from '../../../src/sim/state/map-point.ts';
 import { defineScenario } from '../scenario.ts';
 
@@ -24,6 +28,8 @@ const centre = { x: viewport.width / 2, y: viewport.height / 2 };
 const CLIP_MS = 12_000;
 const NOTCH = Math.log(wheelFactor(-100));
 const CLOSEST = 4.2;
+/** The pans are timed in a game the AI has played this long. */
+const AI_DAYS = 300;
 
 /** The part of the view that no panel covers, where the mouse can always reach the map. */
 const SAFE = { left: 40, top: 90, right: 900, bottom: 690 } as const;
@@ -201,6 +207,14 @@ const REGIONS = [
 ] as const;
 const ZOOM_NAMES = ['regional', 'middle', 'closest'] as const;
 
+/** A game the faction AI has played for `days`, so the pans draw a world at war. */
+function aiGame(days: number): GameState {
+  const world = buildWorld(map);
+  let state = newGame(map, { seed: 7, player: 'rome' });
+  for (let n = 0; n < days; n++) state = tick(state, decideAll(state, world), world).state;
+  return state;
+}
+
 function percentile(sorted: number[], p: number): number {
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? NaN;
 }
@@ -328,6 +342,15 @@ export default defineScenario({
       [1000, 360, 200, 360],
     ] as const;
     const lines: string[] = [];
+    const war = aiGame(AI_DAYS);
+    await dropSave(page, saveGame(war));
+    await page.waitForFunction(
+      (day) =>
+        Number(
+          document.querySelector('[data-testid="time-controls-day"]')?.getAttribute('data-day'),
+        ) >= day,
+      war.day,
+    );
     const pans = [
       { name: 'widest', at: { x: map.width / 2, y: map.height / 2 }, scale: 0.17 },
       { name: 'middle', at: { x: 2600, y: 2200 }, scale: 1.0 },
@@ -359,7 +382,7 @@ export default defineScenario({
       }, collector);
       const gaps = recorded.slice(1).sort((a, b) => a - b);
       const line =
-        `${pan.name} pan at ${camera.scale.toFixed(2)} px per km: ${gaps.length} frames, ` +
+        `${pan.name} pan, day ${AI_DAYS} of an AI game, at ${camera.scale.toFixed(2)} px per km: ${gaps.length} frames, ` +
         `main thread busy ${(busy / gaps.length).toFixed(1)} ms per frame, ` +
         `frame interval median ${percentile(gaps, 0.5).toFixed(1)} ms, p95 ${percentile(gaps, 0.95).toFixed(1)} ms`;
       console.log(line);
