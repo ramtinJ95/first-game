@@ -32,6 +32,14 @@ export default defineConfig(
   {
     files: ['src/sim/**'],
     rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'ImportExpression[source.value=/^(pixi\\.js|svelte)($|\\u002F)|(^|\\u002F)(render|ui|app)($|\\u002F)/]',
+          message: layerRule,
+        },
+      ],
       'no-restricted-imports': [
         'error',
         {
