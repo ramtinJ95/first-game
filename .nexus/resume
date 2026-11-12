@@ -1,0 +1,15 @@
+#!/bin/sh
+set -u
+cd "$(dirname "$0")/.."
+
+# A pylon checked out on a template keeps the node_modules of an older lockfile.
+stamp=node_modules/.nexus-installed-lock
+cmp -s package-lock.json "$stamp" && exit 0
+
+# A failed install must not fail the wake. .nexus/check installs again and fails loudly.
+if npm ci --no-audit --no-fund 2>&1 && cp package-lock.json "$stamp"; then
+	npx playwright install chromium || echo "Chromium download failed. Run e2e and capture in CI, then use npm run capture:fetch." >&2
+else
+	echo "resume: npm ci failed, so node_modules may not match package-lock.json. Run npm ci, or let .nexus/check reinstall." >&2
+fi
+exit 0

@@ -139,7 +139,7 @@ CI runs `npm run capture` on every pull request and publishes the media to `pr-a
 - Use Conventional Commit titles, such as `feat(sim): add movement system`.
 - Add no `Co-Authored-By` trailers and no generated-by footers.
 - Never commit captured media. `capture:publish` stores it on the `pr-assets` branch.
-- Nexus runs `.nexus/check` (install, `npm run check`, `npm test`, `npm run build`) in a fresh pylon before it lands a pull request. A pull request that changes `.nexus/check` or `.nexus/setup` gets a hold that the owner must waive, so leave both files alone unless your brief says otherwise.
+- Nexus runs `.nexus/check` (install, `npm run check`, `npm test`, `npm run build`) in a fresh pylon before it lands a pull request. A pull request that changes `.nexus/check` or `.nexus/setup` gets a hold that the owner must waive, so leave both files alone unless your brief says otherwise. Nexus runs `.nexus/resume` on every wake and after it checks out a commit on a template, where it reinstalls the packages when `package-lock.json` differs from the one last installed, and a pull request that changes it gets the same hold.
 
 ## Pull request description
 
