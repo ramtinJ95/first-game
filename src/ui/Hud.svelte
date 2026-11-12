@@ -14,14 +14,21 @@
 
   const game = $derived(view.current.state);
   const selection = $derived(view.current.selection);
-  const army = $derived(selection?.kind === 'army' ? game.armies[selection.army] : undefined);
+  const sight = $derived(view.current.sight);
+  const army = $derived(
+    selection?.kind === 'army' && sight.armies.has(selection.army)
+      ? game.armies[selection.army]
+      : undefined,
+  );
   const city = $derived.by(() => {
     if (selection?.kind !== 'province') return undefined;
     const id = game.provinces[selection.province]?.city;
     return id && game.cities[id];
   });
 
-  const battles = $derived(shownBattles(game, selection));
+  const battles = $derived(
+    shownBattles(game, selection).filter((battle) => sight.battles.has(battle.id)),
+  );
 
   function onkeydown(event: KeyboardEvent) {
     if (event.key !== 'Escape') return;
@@ -40,7 +47,7 @@
   {/if}
   {#if city}
     {#key city.id}
-      <CityPanel {game} {city} pending={view.current.pending} {actions} />
+      <CityPanel {game} {city} {sight} pending={view.current.pending} {actions} />
     {/key}
   {/if}
   {#each battles as battle (battle.id)}

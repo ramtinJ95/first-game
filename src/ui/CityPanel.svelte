@@ -4,6 +4,7 @@
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { CityId } from '../sim/ids.ts';
   import type { Order } from '../sim/orders/orders.ts';
+  import type { Sight } from '../sim/sight.ts';
   import type { City } from '../sim/state/city.ts';
   import type { GameState } from '../sim/state/game-state.ts';
   import { OUTPUT_PER_PERSON } from '../sim/systems/economy.ts';
@@ -16,11 +17,13 @@
   let {
     game,
     city,
+    sight,
     pending,
     actions,
   }: {
     game: DeepReadonly<GameState>;
     city: DeepReadonly<City>;
+    sight: Sight;
     pending: readonly Order[];
     actions: Actions;
   } = $props();
@@ -34,8 +37,15 @@
 
   const own = $derived(city.owner === game.player);
   const full = $derived(CITY_DEFENCES[city.rank]);
-  const siege = $derived(Object.values(game.sieges).find((s) => s.city === city.id));
-  const besiegers = $derived(siege?.besiegers.flatMap((id) => game.armies[id] ?? []) ?? []);
+  // A siege the player cannot see is not shown: its besiegers stand out of sight.
+  const siege = $derived(
+    Object.values(game.sieges).find(
+      (s) => s.city === city.id && s.besiegers.some((id) => sight.armies.has(id)),
+    ),
+  );
+  const besiegers = $derived(
+    siege?.besiegers.flatMap((id) => (sight.armies.has(id) ? (game.armies[id] ?? []) : [])) ?? [],
+  );
   const canStorm = $derived(besiegers.some((army) => army.owner === game.player));
   const ordered = $derived(
     pending.filter(

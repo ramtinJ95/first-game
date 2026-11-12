@@ -113,10 +113,10 @@ Known faults in the source data. Check them before you draw or label terrain.
 
 ### Renderer
 
-- `createRenderer({ canvas, map, onPick })` in `src/render/renderer.ts` is the boundary. `src/app/main.ts` calls `draw({ previous, current, progress, selection })` once per animation frame, and the renderer calls `onPick` with what a click points at. It reads the state and never writes it.
+- `createRenderer({ canvas, map, onPick })` in `src/render/renderer.ts` is the boundary. `src/app/main.ts` calls `draw({ previous, current, progress, selection, planned, previousSight, sight })` once per animation frame, and the renderer calls `onPick` with what a click points at. It reads the state and never writes it.
 - `provinceAt(map, point)` in `src/render/pick.ts` finds the province under a map point, or nothing at sea. `pickAt` checks army banners first and then calls it. Both are pure, so tests and any later rule use the same function.
 - `src/render/camera.ts` holds the pan and zoom maths with no PixiJS import. `drawnArmies` in `src/render/markers.ts` places each banner between the previous and the current day by the clock's progress.
-- The map is drawn as named layers, in this order from the bottom: `paper`, `sea` (fill, water lines, and the moving swell), `land`, `terrain` (empty, for the terrain unit), `washes` (owner colours at 30 % alpha, so terrain under them shows), `borders`, `riversAndCoast`, `grain` (the paper texture, printed over the drawing), `settlements` (`towns`, empty for small settlements, then `cities`), `labels`, `markers`, `selection`. `LAYERS` in `renderer.ts` is that list. Add to a layer and keep the order.
+- The map is drawn as named layers, in this order from the bottom: `paper`, `sea` (fill, water lines, and the moving swell), `land`, `terrain` (empty, for the terrain unit), `washes` (owner colours at 30 % alpha, so terrain under them shows), `borders`, `riversAndCoast`, `fog` (the shade and hatching over what the player cannot see), `grain` (the paper texture, printed over the drawing), `settlements` (`towns`, empty for small settlements, then `cities`), `labels`, `markers`, `selection`. `LAYERS` in `renderer.ts` is that list. Add to a layer and keep the order.
 - City symbols are drawn in code in `src/render/symbols.ts`, one per `city.rank`: a great power's capital, its other cities, and a minor city. They grow up to 1.8 times at the closest zoom.
 - The selection lives in `src/app/main.ts` and reaches panels as `view.current.selection`. It is not game state.
 - Dropping a save file on the page loads it through `loadGame` and `clock.load`.
@@ -131,6 +131,13 @@ Known faults in the source data. Check them before you draw or label terrain.
 - `reasonText` in `src/app/names.ts` turns a rule's refusal into words a player reads. The notice shows it for four seconds.
 - The view times each refresh as the user-timing measure `panels`. The `panels` capture scenario reads it.
 - `e2e/support.ts` builds saves for browser tests and capture scenarios, such as a battle or a fallen city. Tests drop them on the page and then play through the panels.
+
+### Fog of war
+
+- `sightOf(state, world, faction)` in `src/sim/sight.ts` says what a faction sees: the `armies`, `convoys`, `refugeeColumns`, and `battles` in sight, and `sees(point)`. A faction sees the land of its own provinces and within `SIGHT_KM` of its cities, its armies on land, and its convoys. It always sees its own things. A battle with any part in sight is seen with every army in it. The map, the cities, and their owners are always known.
+- Sight is only what the player is shown. The rules and the AI never call it.
+- `src/app/main.ts` computes the player's sight once per day's state and hands it to the renderer as `sight` and `previousSight`, and to panels as `view.current.sight`. The renderer draws and picks only armies and battles in sight. `seesPick` and `alertsInSight` in `src/app/sighted.ts` keep the selection, a panel's selection, and the alerts to what the player sees, so a selection that leaves sight is cleared and a click on an alert selects nothing hidden. A new panel or alert shows nothing outside `view.current.sight`.
+- `src/render/fog.ts` draws the `fog` layer. Its mask is drawn in km into a texture, so a pan only moves it. The land part is blurred when ownership changes, and each sight circle is a soft disc placed between the two days by the clock's progress.
 
 ## Code and tests
 

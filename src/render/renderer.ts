@@ -12,6 +12,8 @@ import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { ArmyId, BattleId, CityId, ProvinceId } from '../sim/ids.ts';
 import type { GameMap, MapLine, MultiPolygon } from '../sim/map.ts';
 import type { City, CityRank } from '../sim/state/city.ts';
+import type { Sight } from '../sim/sight.ts';
+import type { Battle } from '../sim/state/battle.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import {
@@ -25,6 +27,7 @@ import {
   type Camera,
   type Size,
 } from './camera.ts';
+import { createFog, fogCircles } from './fog.ts';
 import { placeLabels, type Box, type LabelRequest } from './labels.ts';
 import { BANNER, BATTLE_HIT_RADIUS, drawnArmies, type DrawnArmy } from './markers.ts';
 import {
@@ -54,6 +57,9 @@ export interface Frame {
   readonly selection: Pick | undefined;
   /** Paths of orders given but not yet applied, drawn fainter than a march under way. */
   readonly planned?: readonly (readonly MapPoint[])[];
+  /** What the player sees on each of the two days. Only armies and battles in `sight` are drawn. */
+  readonly previousSight: Sight;
+  readonly sight: Sight;
 }
 
 /** A right click: the map point, what it points at, and where on the canvas it was. */
@@ -69,6 +75,8 @@ export interface RendererOptions {
   /** A click that did not drag: what it points at, or nothing at sea. */
   readonly onPick: (pick: Pick | undefined) => void;
   readonly onCommand?: (command: Command) => void;
+  /** Draws the fog layer. Leaving it out shows the map as if the player saw it all. */
+  readonly fog?: boolean;
 }
 
 export interface Renderer {
@@ -91,6 +99,7 @@ const LAYERS = [
   { name: 'washes', world: true },
   { name: 'borders', world: true },
   { name: 'riversAndCoast', world: true },
+  { name: 'fog', world: false },
   { name: 'grain', world: false },
   { name: 'settlements', world: false },
   { name: 'labels', world: false },
@@ -283,6 +292,7 @@ export async function createRenderer({
   map,
   onPick,
   onCommand,
+  fog: showFog = true,
 }: RendererOptions): Promise<Renderer> {
   const app = new Application();
   await app.init({
@@ -354,6 +364,10 @@ export async function createRenderer({
   const frame = new Graphics();
   layers.riversAndCoast.addChild(inkLines, inkMask, frame);
 
+  const fog = createFog(app.renderer, map);
+  layers.fog.addChild(fog.root);
+  layers.fog.visible = showFog;
+
   const grain = new TilingSprite({ texture: paperTexture(), width: 1, height: 1 });
   layers.grain.addChild(grain);
 
@@ -391,6 +405,8 @@ export async function createRenderer({
   let highlighted: { selection: Pick | undefined; scale: number } | undefined;
   let armies: DrawnArmy[] = [];
   let plannedShown: Frame['planned'];
+  let seenBy: Sight | undefined;
+  let seenBattles: DeepReadonly<Battle>[] = [];
   let swellAt = -Infinity;
 
   function restroke(scale: number) {
@@ -570,8 +586,8 @@ export async function createRenderer({
     }
   }
 
-  function placeBattles(state: DeepReadonly<GameState>, selection: Pick | undefined) {
-    reconcile(battleMarkers, Object.values(state.battles), (battle) => battle.id, {
+  function placeBattles(selection: Pick | undefined) {
+    reconcile(battleMarkers, seenBattles, (battle) => battle.id, {
       create() {
         const graphics = drawBattleMarker(new Graphics());
         battleLayer.addChild(graphics);
@@ -581,7 +597,7 @@ export async function createRenderer({
       remove: (graphics) => graphics.destroy(),
     });
     const view = viewport();
-    for (const battle of Object.values(state.battles)) {
+    for (const battle of seenBattles) {
       const at = mapToScreen(camera, view, battle.position);
       battleMarkers.get(battle.id)?.position.set(at.x, at.y);
       if (selection?.kind === 'battle' && selection.battle === battle.id) {
@@ -637,6 +653,7 @@ export async function createRenderer({
     grain.width = width;
     grain.height = height;
     grain.tilePosition.set(x, y);
+    fog.place(x, y, camera.scale, width, height);
     if (Math.abs(Math.log(camera.scale / strokedAt)) > Math.log(RESTROKE_RATIO)) {
       restroke(camera.scale);
     }
@@ -668,7 +685,7 @@ export async function createRenderer({
     swell.position.set(-tile + drift.x, -tile + drift.y);
   }
 
-  const battlesShown = () => (shown ? Object.values(shown.battles) : []);
+  const battlesShown = () => seenBattles;
 
   const listening = new AbortController();
   const { signal } = listening;
@@ -751,13 +768,18 @@ export async function createRenderer({
   app.renderer.on('resize', onResize);
 
   return {
-    draw({ previous, current, progress, selection, planned }) {
+    draw({ previous, current, progress, selection, planned, previousSight, sight }) {
       const now = performance.now();
       let dirty = cameraMoved;
       if (current !== shown) {
         recolour(current);
         syncSettlements(current);
         shown = current;
+        dirty = true;
+      }
+      if (sight !== seenBy) {
+        seenBy = sight;
+        seenBattles = Object.values(current.battles).filter((b) => sight.battles.has(b.id));
         dirty = true;
       }
       if (cameraMoved) applyCamera();
@@ -772,7 +794,10 @@ export async function createRenderer({
         dirty = true;
       }
       cameraMoved = false;
-      const next = drawnArmies(previous, current, progress);
+      if (fog.update(sight.provinces, fogCircles(previousSight, sight, progress))) dirty = true;
+      const next = drawnArmies(previous, current, progress).filter((army) =>
+        sight.armies.has(army.id),
+      );
       if (!sameArmies(armies, next)) {
         armies = next;
         dirty = true;
@@ -789,7 +814,7 @@ export async function createRenderer({
       moveSwell(now);
       drawRoutes(current, selection, planned);
       placeBanners(current, selection);
-      placeBattles(current, selection);
+      placeBattles(selection);
       app.render();
     },
     focus(point) {
@@ -805,6 +830,7 @@ export async function createRenderer({
       app.renderer.off('resize', onResize);
       seaRoot.destroy({ children: true });
       seaTexture.destroy(true);
+      fog.destroy();
       app.destroy(true, { children: true, texture: true });
     },
   };

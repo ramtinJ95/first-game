@@ -32,6 +32,11 @@ async function load(page: Page, state: GameState) {
   );
 }
 
+/** Rome sees foreign armies only in its sight, so the Punic army visits Capua. */
+function punicArmyAtCapua(state: GameState) {
+  armyOf(state, carthage).activity = { kind: 'idle', position: cityPoint('capua') };
+}
+
 test.describe('the panels', () => {
   const errors: string[] = [];
 
@@ -161,9 +166,12 @@ test.describe('the panels', () => {
   test('a foreign army shows its facts and no orders, and the panel declares war on its owner after a confirmation', async ({
     page,
   }) => {
+    const state = startGame();
+    punicArmyAtCapua(state);
+    await load(page, state);
     const view = camera(page);
-    const carthago = view.banner(cityPoint('carthago'));
-    await page.mouse.click(carthago.x, carthago.y);
+    const capua = view.banner(cityPoint('capua'));
+    await page.mouse.click(capua.x, capua.y);
     const panel = page.getByTestId('army-panel');
     await expect(panel.getByRole('heading', { level: 2 })).toHaveText('Army of Carthage');
     await expect(panel.getByTestId('formation')).toHaveCount(2);
@@ -370,10 +378,11 @@ test.describe('the panels', () => {
   test("a foreign army's panel shows a war under way with its owner", async ({ page }) => {
     const state = startGame();
     declareWar(state, rome, carthage);
+    punicArmyAtCapua(state);
     await load(page, state);
     const view = camera(page);
-    const carthago = view.banner(cityPoint('carthago'));
-    await page.mouse.click(carthago.x, carthago.y);
+    const capua = view.banner(cityPoint('capua'));
+    await page.mouse.click(capua.x, capua.y);
     await expect(page.getByTestId('war-status')).toHaveText(/At war with Carthage since day 1/);
   });
 });

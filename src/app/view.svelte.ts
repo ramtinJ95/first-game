@@ -2,6 +2,7 @@ import { flushSync } from 'svelte';
 import type { Pick } from '../render/pick.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { Order } from '../sim/orders/orders.ts';
+import type { Sight } from '../sim/sight.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import type { Alert } from './alerts.ts';
@@ -31,6 +32,8 @@ export interface Snapshot {
   alerts: readonly Alert[];
   notice: Notice | undefined;
   menu: CommandMenu | undefined;
+  /** What the player sees. A panel or an alert shows nothing outside it. */
+  sight: Sight;
 }
 
 export interface View {

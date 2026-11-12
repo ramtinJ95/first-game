@@ -10,6 +10,7 @@ import { newGame } from '../sim/new-game.ts';
 import { AT_PORT_KM } from '../sim/orders/embark.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import { loadGame } from '../sim/save.ts';
+import { sightOf, type Sight } from '../sim/sight.ts';
 import type { Army } from '../sim/state/army.ts';
 import type { City } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
@@ -22,6 +23,7 @@ import '../ui/panels.css';
 import { alertsBetween, type Alert } from './alerts.ts';
 import { createClock } from './clock.ts';
 import { reasonText } from './names.ts';
+import { alertsInSight, seesPick } from './sighted.ts';
 import { createView, type CommandMenu, type Notice } from './view.svelte.ts';
 
 /** The alerts the list keeps, newest first. */
@@ -57,6 +59,17 @@ let notice: Notice | undefined;
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 let menu: CommandMenu | undefined;
 
+const sights = new WeakMap<DeepReadonly<GameState>, Sight>();
+/** What the player sees on a day. A state never changes once a tick returns it. */
+function sightFor(state: DeepReadonly<GameState>): Sight {
+  let sight = sights.get(state);
+  if (!sight) {
+    sight = sightOf(state, world, state.player);
+    sights.set(state, sight);
+  }
+  return sight;
+}
+
 function showNotice(text: string) {
   notice = { id: (notice?.id ?? 0) + 1, text };
   clearTimeout(noticeTimer);
@@ -76,7 +89,7 @@ const clock = createClock({
     if (last) showNotice(`Order refused. ${reasonText(clock.state, last.reason)}.`);
   },
   onDay(before, after) {
-    const news = alertsBetween(before, after);
+    const news = alertsInSight(alertsBetween(before, after), sightFor(before), sightFor(after));
     if (news.length > 0) alerts = [...news.reverse(), ...alerts].slice(0, ALERTS_KEPT);
   },
 });
@@ -91,6 +104,7 @@ const view = createView(
     alerts,
     notice,
     menu,
+    sight: sightFor(clock.state),
   }),
   100,
   'panels',
@@ -187,16 +201,24 @@ const renderer = await createRenderer({
     view.refresh();
   },
   onCommand: command,
+  fog: new URLSearchParams(location.search).get('fog') !== 'off',
 });
 
 function loop() {
   clock.frame();
+  const sight = sightFor(clock.state);
+  if (!seesPick(sight, selection)) {
+    selection = undefined;
+    view.refresh();
+  }
   renderer.draw({
     previous: clock.previous,
     current: clock.state,
     progress: clock.progress,
     selection,
     planned: plannedPaths(),
+    previousSight: sightFor(clock.previous),
+    sight,
   });
   requestAnimationFrame(loop);
 }
@@ -237,13 +259,15 @@ const actions: Actions = {
     view.refresh();
   },
   select(pick) {
+    if (!seesPick(sightFor(clock.state), pick)) return;
     selection = pick;
     view.refresh();
   },
   openAlert(alert) {
     if (!alert.focus) return;
     renderer.focus(alert.focus.at);
-    if (alert.focus.select) selection = alert.focus.select;
+    const { select } = alert.focus;
+    if (select && seesPick(sightFor(clock.state), select)) selection = select;
     view.refresh();
   },
   closeMenu() {
