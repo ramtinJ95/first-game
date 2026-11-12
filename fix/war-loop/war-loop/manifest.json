@@ -1,0 +1,22 @@
+[
+  {
+    "file": "war-loop-battle-began.png",
+    "title": "Day 2: the armies lock together beside Capua and the alert tells of the battle",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "One battle beside Capua at speed 1, from its first day to its last: Rome's army is outnumbered two to one, the alerts tell of the battle, its end with the losses, and the retreat to Roma, and the army falls back alive",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "One battle beside Capua at speed 1, from its first day to its last: Rome's army is outnumbered two to one, the alerts tell of the battle, its end with the losses, and the retreat to Roma, and the army falls back alive (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "One battle beside Capua at speed 1, from its first day to its last: Rome's army is outnumbered two to one, the alerts tell of the battle, its end with the losses, and the retreat to Roma, and the army falls back alive (Playwright trace)",
+    "kind": "trace"
+  }
+]
