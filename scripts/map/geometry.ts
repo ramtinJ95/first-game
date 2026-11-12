@@ -1,5 +1,6 @@
 import polygonClipping from 'polygon-clipping';
 import type { MapLine, MultiPolygon, Point, Polygon, Ring } from '../../src/sim/map.ts';
+import { round } from './projection.ts';
 
 export interface Box {
   minX: number;
@@ -71,6 +72,100 @@ export function polygonContains(polygon: Polygon, point: Point): boolean {
 
 export function contains(polygons: MultiPolygon, point: Point): boolean {
   return polygons.some((polygon) => polygonContains(polygon, point));
+}
+
+export function perimeter(polygons: MultiPolygon): number {
+  let total = 0;
+  for (const [a, b] of edges(polygons)) total += distance(a, b);
+  return total;
+}
+
+/** Douglas–Peucker on each ring. A ring left with fewer than three points is dropped. */
+export function simplify(polygons: MultiPolygon, tolerance: number): MultiPolygon {
+  return polygons.flatMap(([outer = [], ...holes]) => {
+    const [kept] = simplifyRing(outer, tolerance) ?? [];
+    if (!kept) return [];
+    return [[kept, ...holes.flatMap((hole) => simplifyRing(hole, tolerance) ?? [])]];
+  });
+}
+
+function simplifyRing(closed: Ring, tolerance: number): [Ring] | undefined {
+  const ring = comparePoints(closed[0], closed[closed.length - 1]) ? closed : closed.slice(0, -1);
+  const n = ring.length;
+  const first = ring[0];
+  if (n < 3 || !first) return undefined;
+  let far = 0;
+  for (let i = 1; i < n; i++) {
+    if (distance(first, ring[i] as Point) > distance(first, ring[far] as Point)) far = i;
+  }
+  const keep = new Uint8Array(n);
+  keep[0] = 1;
+  keep[far] = 1;
+  const spans: [number, number][] = [
+    [0, far],
+    [far, n],
+  ];
+  for (let span = spans.pop(); span; span = spans.pop()) {
+    const [from, to] = span;
+    const a = ring[from] as Point;
+    const b = ring[to % n] as Point;
+    let worst = -1;
+    let worstDistance = tolerance;
+    for (let i = from + 1; i < to; i++) {
+      const point = ring[i] as Point;
+      const d = distance(point, closestOnSegment(point, a, b));
+      if (d > worstDistance) {
+        worst = i;
+        worstDistance = d;
+      }
+    }
+    if (worst >= 0) {
+      keep[worst] = 1;
+      spans.push([from, worst], [worst, to]);
+    }
+  }
+  const out = ring.filter((_, i) => keep[i] === 1);
+  return out.length >= 3 ? [out] : undefined;
+}
+
+export function compare(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+export function comparePoints(a: Point | undefined, b: Point | undefined): number {
+  if (!a || !b) return a ? 1 : b ? -1 : 0;
+  return a[0] - b[0] || a[1] - b[1];
+}
+
+export function roundPoint([x, y]: Point): Point {
+  return [round(x), round(y)];
+}
+
+function roundPoints(points: Point[]): Point[] {
+  const out: Point[] = [];
+  for (const point of points) {
+    const rounded = roundPoint(point);
+    if (comparePoints(out[out.length - 1], rounded) !== 0) out.push(rounded);
+  }
+  return out;
+}
+
+export function roundLine(line: MapLine): MapLine[] {
+  const out = roundPoints(line);
+  return out.length >= 2 ? [out] : [];
+}
+
+export function roundRing(ring: Ring): Ring[] {
+  const out = roundPoints(ring);
+  while (out.length > 1 && comparePoints(out[0], out[out.length - 1]) === 0) out.pop();
+  return out.length >= 3 ? [out] : [];
+}
+
+export function roundOutline(polygons: MultiPolygon): MultiPolygon {
+  return polygons.flatMap(([outer = [], ...holes]) => {
+    const [rounded] = roundRing(outer);
+    return rounded ? [[rounded, ...holes.flatMap(roundRing)]] : [];
+  });
 }
 
 function closestOnSegment([px, py]: Point, [ax, ay]: Point, [bx, by]: Point): Point {
@@ -193,6 +288,10 @@ export function union(...parts: MultiPolygon[]): MultiPolygon {
 
 export function xor(a: MultiPolygon, b: MultiPolygon): MultiPolygon {
   return openRings(polygonClipping.xor(a, b));
+}
+
+export function difference(subject: MultiPolygon, ...clips: MultiPolygon[]): MultiPolygon {
+  return openRings(polygonClipping.difference(subject, ...clips));
 }
 
 function openRings(polygons: MultiPolygon): MultiPolygon {
