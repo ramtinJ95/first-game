@@ -181,6 +181,48 @@ describe('a great power', () => {
       });
     });
 
+    test('sends two armies together at a target that neither beats alone', () => {
+      const state = buildFixture();
+      declare(state, f.rome, f.carthage);
+      city(state, f.capua).owner = f.carthage;
+      city(state, f.carthago).owner = f.syracusaeFaction;
+      place(state, f.punicArmy, CAPUA);
+      setMen(state, f.citizenSpears, 2000);
+      const rome = state.factions[f.rome];
+      if (!rome) throw new Error('no Rome');
+      rome.stores.gold = 0;
+      const second = 'army-roman-2' as never;
+      const spears = 'formation-second-spears' as FormationId;
+      state.formations[spears] = {
+        id: spears,
+        army: second,
+        troop: 'spearmen',
+        men: 1200,
+        morale: 1,
+      };
+      const horse = 'formation-second-horse' as FormationId;
+      state.formations[horse] = {
+        id: horse,
+        army: second,
+        troop: 'lightCavalry',
+        men: 300,
+        morale: 1,
+      };
+      state.armies[second] = {
+        ...army(state, f.romanArmy),
+        id: second,
+        formations: [spears, horse],
+      };
+      const orders = decide(state, f.rome);
+      expect(orders).toContainEqual({
+        kind: 'moveArmy',
+        faction: f.rome,
+        army: f.romanArmy,
+        to: CAPUA,
+      });
+      expect(orders).toContainEqual({ kind: 'moveArmy', faction: f.rome, army: second, to: CAPUA });
+    });
+
     test('embarks at its port for an enemy city across the sea', () => {
       const state = buildFixture();
       declare(state, f.rome, f.syracusaeFaction);

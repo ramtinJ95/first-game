@@ -134,8 +134,9 @@ interface Mover {
  * cities is within CAPITAL_GUARD_KM of it. Then armies relieve each besieged city
  * they are strong enough to relieve. The rest go on the offence: an army that marches on
  * a target it is still strong enough for keeps its course, and the others take the
- * cheapest such target by road and sea, or gather at the muster city when none is in
- * their power.
+ * cheapest such target by road and sea. Armies too weak alone form groups that can win
+ * together: a group that stands assembled marches on its target at once, and the others
+ * gather at the muster city first. The rest wait at the muster city.
  */
 export function movements(context: Context, muster: CityView | undefined): Order[] {
   const { state, world, faction, enemies } = context;
@@ -223,16 +224,47 @@ export function movements(context: Context, muster: CityView | undefined): Order
   const feasible = (city: CityView, mover: Mover) =>
     (assigned.get(city.id) ?? 0) + mover.strength >= (needed.get(city.id) ?? 0);
 
+  const keptTarget = (mover: Mover) => {
+    const heading = destinationOf(mover.army);
+    return heading && targets.find((city) => distance(city.position, heading) <= SAME_POINT_KM);
+  };
+
+  /**
+   * The nearest target, from the strongest army left, that the armies left can beat
+   * together, and the armies nearest that army that suffice for it.
+   */
+  const groupFor = (rest: readonly Mover[]) => {
+    const [lead] = rest;
+    if (!lead) return undefined;
+    const byDistance = [...targets].sort(
+      (a, b) => distance(lead.at, a.position) - distance(lead.at, b.position),
+    );
+    for (const city of byDistance) {
+      if (!context.router.reaches(lead.at, city)) continue;
+      const near = rest
+        .filter((m) => context.router.reaches(m.at, city))
+        .sort((a, b) => distance(a.at, lead.at) - distance(b.at, lead.at));
+      const members: Mover[] = [];
+      let strength = assigned.get(city.id) ?? 0;
+      for (const mover of near) {
+        if (strength >= (needed.get(city.id) ?? 0)) break;
+        members.push(mover);
+        strength += mover.strength;
+      }
+      if (members.length > 1 && strength >= (needed.get(city.id) ?? 0)) return { city, members };
+    }
+    return undefined;
+  };
+
   const free = movers
     .filter((m) => !used.has(m.army.id))
     .sort((a, b) => b.strength - a.strength || (a.army.id < b.army.id ? -1 : 1));
+  const left: Mover[] = [];
   for (const mover of free) {
     if (mover.army.activity.kind === 'idle' && meanMorale(state, mover.army) < MARCH_MORALE)
       continue;
     if (mover.army.activity.kind === 'idle' && awaitsRecruits(state, faction, mover.at)) continue;
-    const heading = destinationOf(mover.army);
-    const kept =
-      heading && targets.find((city) => distance(city.position, heading) <= SAME_POINT_KM);
+    const kept = keptTarget(mover);
     if (kept && feasible(kept, mover)) {
       assigned.set(kept.id, (assigned.get(kept.id) ?? 0) + mover.strength);
       used.add(mover.army.id);
@@ -252,7 +284,51 @@ export function movements(context: Context, muster: CityView | undefined): Order
     if (best) {
       assigned.set(best.city.id, (assigned.get(best.city.id) ?? 0) + mover.strength);
       send(mover, best.step);
-    } else if (
+    } else left.push(mover);
+  }
+
+  // Armies too weak alone that already march on one target together keep their course.
+  const heading = new Map<CityId, Mover[]>();
+  for (const mover of left) {
+    const kept = keptTarget(mover);
+    if (kept) heading.set(kept.id, [...(heading.get(kept.id) ?? []), mover]);
+  }
+  for (const [city, group] of heading) {
+    const together = group.reduce((sum, m) => sum + m.strength, assigned.get(city) ?? 0);
+    if (together < (needed.get(city) ?? 0)) continue;
+    assigned.set(city, together);
+    for (const mover of group) used.add(mover.army.id);
+  }
+
+  let rest = left.filter((m) => !used.has(m.army.id));
+  const meeting = muster?.position;
+  while (rest.length > 1) {
+    const group = groupFor(rest);
+    if (!group) break;
+    const assembled =
+      group.members.every((m) => m.army.activity.kind === 'idle') &&
+      group.members.every((m) => distance(m.at, group.members[0]?.at ?? m.at) <= RALLY_DISTANCE);
+    for (const mover of group.members) {
+      const route = assembled && context.router.routeTo(mover.at, group.city);
+      if (route) send(mover, route.step);
+      else {
+        const to = meeting ?? (group.members[0] as Mover).at;
+        if (distance(mover.at, to) <= RALLY_DISTANCE) used.add(mover.army.id);
+        else if (byLand(world, mover.at, to)) send(mover, { kind: 'march', to });
+        else used.add(mover.army.id);
+      }
+    }
+    if (assembled) {
+      assigned.set(
+        group.city.id,
+        group.members.reduce((sum, m) => sum + m.strength, assigned.get(group.city.id) ?? 0),
+      );
+    }
+    rest = rest.filter((m) => !used.has(m.army.id));
+  }
+
+  for (const mover of rest) {
+    if (
       targets.length > 0 &&
       muster &&
       distance(mover.at, muster.position) > RALLY_DISTANCE &&
