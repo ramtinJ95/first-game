@@ -29,12 +29,16 @@ import {
 
 const world = buildWorld(map);
 
-/** Drops the save and waits until the page shows its day. */
+/** Drops the save and waits until the page shows its day and has drawn it, since a click picks what the map last drew. */
 async function load(page: Page, state: GameState) {
   await dropSave(page, state);
   await expect(page.getByTestId('time-controls-day')).toHaveAttribute(
     'data-day',
     String(state.day),
+  );
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
   );
 }
 

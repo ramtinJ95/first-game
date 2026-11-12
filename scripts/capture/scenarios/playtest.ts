@@ -8,6 +8,7 @@ import {
   declareWar,
   dropSave,
   fallenTo,
+  openGame,
   pause,
   playDays,
   resume,
@@ -45,8 +46,7 @@ async function load(page: Page, state: GameState) {
 
 async function start(page: Page, viewport: { width: number; height: number }) {
   await page.setViewportSize(viewport);
-  await page.goto('/');
-  await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+  await openGame(page);
   await pause(page);
 }
 
@@ -123,6 +123,7 @@ export default defineScenario({
     );
 
     await load(page, busyRome());
+    await page.getByTestId('fate-occupy').click();
     await page.getByRole('button', { name: 'Overview' }).click();
     await page.getByTestId('overview').waitFor();
     await shot(

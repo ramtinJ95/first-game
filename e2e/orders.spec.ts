@@ -8,6 +8,7 @@ import {
   cityPoint,
   declareWar,
   dropSave,
+  openGame,
   pause,
   resume,
   rome,
@@ -96,8 +97,7 @@ test.describe('orders by right click', () => {
       if (message.type() === 'error') errors.push(message.text());
     });
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
   });
 
   test.afterEach(() => {
