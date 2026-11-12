@@ -462,3 +462,17 @@ export function greatBattle(): GameState {
   withFormations(state, armyOf(state, carthage), eight);
   return state;
 }
+
+/**
+ * The field battle with Rome on its way east when Carthage meets it, played by the AI
+ * to day 7: the next day Rome wins and takes up its march, and Carthage retreats.
+ */
+export function winnerMarchesOn(): GameState {
+  const start = fieldBattle();
+  const roma = cityPoint('roma');
+  const to = { x: roma.x + 160, y: roma.y + 30 };
+  const joined = playDays(start, 1, [
+    { kind: 'moveArmy', faction: rome, army: armyOf(start, rome).id, to },
+  ]);
+  return playAi(joined, 5);
+}

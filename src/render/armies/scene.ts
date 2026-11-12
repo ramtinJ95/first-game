@@ -269,13 +269,14 @@ class Context {
             ? before.waypoints
             : [activity.position];
         const trail = dayPath(from, ahead, activity.position);
-        const beaten = activity.kind === 'retreating' || before?.kind === 'inBattle';
+        // Only a beaten army retreats: a winner leaves the field on the march it was on.
+        const beaten = activity.kind === 'retreating';
         return {
           kind: 'march',
           trail: trail.length > 1 ? trail : [from, activity.waypoints[0] ?? from],
           heading: unit(activity.position, activity.waypoints[0] ?? activity.position),
           beaten,
-          fled: before?.kind === 'inBattle',
+          fled: beaten && before?.kind === 'inBattle',
         };
       }
       case 'inBattle': {
@@ -524,7 +525,13 @@ class Context {
           transition.weight > 0 &&
           transition.weight < 1 &&
           Math.hypot(end.x - start.x, end.y - start.y) > 0.3 * this.h;
-        if (moving) at = { ...at, facing: Math.sign(end.x - start.x) || at.facing };
+        // Men falling into a column face the way it marches; others face the way they move.
+        if (moving)
+          at = {
+            ...at,
+            facing:
+              modeNow?.kind === 'march' ? end.facing : Math.sign(end.x - start.x) || at.facing,
+          };
       } else {
         at = end ?? start;
         if (!start && end) alpha = smooth(p * 1.5);
@@ -624,8 +631,10 @@ class Context {
       this.camp(nowLayout, colour, record.id);
     if (modeNow?.kind === 'siege' && nowLayout instanceof RingLayout)
       this.siegeCamp(modeNow, nowLayout, colour, record.id);
-    if (modeNow?.kind === 'line' && modeBefore?.kind === 'battle' && nowLayout)
-      this.victory(modeBefore, colour, p);
+    const won =
+      modeBefore?.kind === 'battle' &&
+      (modeNow?.kind === 'line' || (modeNow?.kind === 'march' && !modeNow.beaten));
+    if (won) this.victory(modeBefore, colour, p);
   }
 
   anchorOf(mode: Mode): MapPoint {
@@ -657,7 +666,7 @@ class Context {
     if (before.kind === 'battle' && now.kind === 'line')
       return { weight: smooth((p - 0.45) / 0.5), rout: false };
     if (before.kind === 'battle' && now.kind === 'march')
-      return { weight: smooth((p - 0.35) / 0.6), rout: true };
+      return { weight: smooth((p - 0.35) / 0.6), rout: now.fled };
     return { weight: smooth(p / 0.6), rout: false };
   }
 

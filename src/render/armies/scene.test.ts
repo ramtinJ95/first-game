@@ -268,3 +268,96 @@ describe('a retreating army', () => {
     expect(figures.every((s) => s.key.includes('.march.') && !s.mirror)).toBe(true);
   });
 });
+
+describe('the day a battle ends', () => {
+  /** Rome and Carthage in battle on the day before, Rome east of Carthage, and the two days. */
+  function battleDays(leave: 'marching' | 'retreating'): [GameState, GameState] {
+    const previous = buildFixture();
+    const battle = 'battle-1' as keyof GameState['battles'];
+    const at = { x: 2516.3, y: 2340.8 };
+    const punicAt = { x: at.x - 10, y: at.y };
+    const roman = previous.armies[FIXTURE.romanArmy];
+    const punic = previous.armies[FIXTURE.punicArmy];
+    if (!roman || !punic) throw new Error('fixture lacks the armies');
+    roman.activity = { kind: 'inBattle', position: at, battle, march: [{ x: at.x + 80, y: at.y }] };
+    punic.activity = { kind: 'inBattle', position: punicAt, battle, march: [] };
+    previous.battles[battle] = {
+      id: battle,
+      position: { x: at.x - 5, y: at.y },
+      attackers: [FIXTURE.romanArmy],
+      defenders: [FIXTURE.punicArmy],
+      startedOn: previous.day,
+      sides: {
+        attackers: { factions: [FIXTURE.rome], lost: 0 },
+        defenders: { factions: [FIXTURE.carthage], lost: 0 },
+      },
+    };
+    const current = structuredClone(previous);
+    current.day = (previous.day + 1) as GameState['day'];
+    Reflect.deleteProperty(current.battles, battle);
+    const army = current.armies[leave === 'marching' ? FIXTURE.romanArmy : FIXTURE.punicArmy];
+    const other = current.armies[leave === 'marching' ? FIXTURE.punicArmy : FIXTURE.romanArmy];
+    if (!army || !other || army.activity.kind !== 'inBattle' || other.activity.kind !== 'inBattle')
+      throw new Error('armies left the battle');
+    const from = army.activity.position;
+    const step = leave === 'marching' ? 20 : -20;
+    army.activity = {
+      kind: leave,
+      position: { x: from.x + step, y: from.y },
+      waypoints: [{ x: from.x + 4 * step, y: from.y }],
+    };
+    other.activity = { kind: 'idle', position: other.activity.position };
+    if (leave === 'retreating') {
+      for (const id of army.formations) {
+        const formation = current.formations[id];
+        if (formation) formation.morale = 0;
+      }
+    }
+    return [previous, current];
+  }
+
+  const late = (previous: GameState, current: GameState, army: ArmyId) =>
+    figuresOf(
+      buildScene(
+        input(previous, current, {
+          progress: 0.8,
+          camera: { centre: { x: 2530, y: 2340 }, scale: 4 },
+        }),
+      ),
+      army,
+    );
+
+  test('a winner that takes up its march again marches off in column, under its raised standard', () => {
+    const [previous, current] = battleDays('marching');
+    const scene = buildScene(
+      input(previous, current, {
+        progress: 0.3,
+        camera: { centre: { x: 2530, y: 2340 }, scale: 4 },
+      }),
+    );
+    expect(scene.sprites.some((s) => s.key.startsWith('standard.'))).toBe(true);
+    const figures = late(previous, current, FIXTURE.romanArmy);
+    expect(figures.length).toBeGreaterThan(0);
+    expect(figures.some((s) => s.key.includes('.run.'))).toBe(false);
+    expect(figures.filter((s) => s.key.includes('.march.')).length).toBeGreaterThan(
+      figures.length * 0.8,
+    );
+    expect(figures.every((s) => !s.mirror)).toBe(true);
+  });
+
+  test('a beaten army that retreats turns and runs from the field', () => {
+    const [previous, current] = battleDays('retreating');
+    const camera = { centre: { x: 2510, y: 2340 }, scale: 4 };
+    const figures = figuresOf(
+      buildScene(input(previous, current, { progress: 0.3, camera })),
+      FIXTURE.punicArmy,
+    );
+    expect(figures.filter((s) => s.key.includes('.run.')).length).toBeGreaterThan(
+      figures.length * 0.8,
+    );
+    const scene = buildScene(input(previous, current, { progress: 0.3, camera }));
+    const standards = scene.sprites.filter((s) => s.key.startsWith('standard.'));
+    // The standard raised over the field is the winner's, in Rome's colour, not Carthage's.
+    expect(standards.every((s) => s.key.endsWith('@0'))).toBe(true);
+  });
+});

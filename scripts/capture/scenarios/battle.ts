@@ -6,8 +6,9 @@ import {
   playAi,
   playDays,
   resume,
+  winnerMarchesOn,
 } from '../../../e2e/support.ts';
-import { loadSave, stillAfter } from '../../../e2e/watch.ts';
+import { intoNextDay, loadSave, stillAfter } from '../../../e2e/watch.ts';
 import { defineScenario } from '../scenario.ts';
 
 export default defineScenario({
@@ -22,7 +23,9 @@ export default defineScenario({
     const start = playDays(fieldBattle(), 1);
     await loadSave(page, start);
     const roma = cityPoint('roma');
-    await camera(page).jumpTo({ x: roma.x + 100, y: roma.y - 8 }, 4);
+    const view = camera(page);
+    const field = { x: roma.x + 100, y: roma.y - 8 };
+    await view.jumpTo(field, 4);
     await page.getByRole('button', { name: 'Speed 2', exact: true }).click();
     await resume(page);
     await page
@@ -47,6 +50,20 @@ export default defineScenario({
     await shot(
       'battle-last-day',
       'Day 8, the last: Carthage leaves the field and Rome raises its standard',
+    );
+    // A frame at the closest zoom takes over a second in software, long enough for the
+    // clock to play two days in one frame. The day is entered at the widest zoom, where
+    // frames are quick, and shown close once the game is paused, when no day can pass.
+    await page.goto('/');
+    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await pause(page);
+    await loadSave(page, winnerMarchesOn());
+    await intoNextDay(page, 200);
+    await camera(page).jumpTo(field, 4);
+    await page.waitForTimeout(1500);
+    await shot(
+      'battle-winner-marches',
+      'Day 8: Rome won the battle it met on its march and forms its column under its standard to march on east, while beaten Carthage runs west across the field',
     );
   },
 });
