@@ -1127,6 +1127,7 @@ export async function createRenderer({
       cameraMoved = true;
     },
     destroy() {
+      terrain.destroy();
       listening.abort();
       app.renderer.off('resize', onResize);
       seaRoot.destroy({ children: true });
