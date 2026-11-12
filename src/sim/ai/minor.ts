@@ -3,7 +3,7 @@ import { RALLY_DISTANCE, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import { TROOPS, type Troop } from '../troops.ts';
 import { distance } from '../world/find-path.ts';
 import { retreats, type Context } from './armies.ts';
-import { balanceOf, byLand, meanMorale, menInTraining, sorted } from './situation.ts';
+import { balanceOf, besieged, byLand, meanMorale, menInTraining, sorted } from './situation.ts';
 import { MARCH_MORALE, MINOR_DEFICIT_DAYS } from './thresholds.ts';
 
 const CHEAPEST: Troop = (Object.keys(TROOPS) as Troop[]).reduce((a, b) =>
@@ -34,11 +34,12 @@ export function minorOrders(context: Context): Order[] {
 
   const stores = state.factions[faction]?.stores;
   const balance = balanceOf(state, faction);
-  if (!stores || !balance || home.unrestDays > 0) return orders;
+  if (!stores || !balance || home.unrestDays > 0 || besieged(state, home)) return orders;
   const { men, gold } = TROOPS[CHEAPEST].recruit;
-  const upkeep = (menInTraining(state, faction) + men) * UPKEEP_PER_MAN.gold;
+  const extra = menInTraining(state, faction) + men;
   const covers = (store: 'gold' | 'food', cost: number) =>
-    stores[store] >= cost + Math.max(0, upkeep - balance[store]) * MINOR_DEFICIT_DAYS;
+    stores[store] >=
+    cost + Math.max(0, extra * UPKEEP_PER_MAN[store] - balance[store]) * MINOR_DEFICIT_DAYS;
   if (stores.manpower >= men && covers('gold', gold) && covers('food', 0)) {
     orders.push({ kind: 'recruit', faction, city: home.id, troop: CHEAPEST });
   }

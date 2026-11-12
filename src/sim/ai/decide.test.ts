@@ -6,7 +6,7 @@ import { expectConsistent } from '../references.ts';
 import type { Day } from '../state/day.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
-import { OUTPUT_PER_PERSON, UPKEEP_PER_MAN } from '../systems/economy.ts';
+import { dailyBalances, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import { removeRecord } from '../records.ts';
 import { tick } from '../tick.ts';
 import { decideAll, decideOrders } from './decide.ts';
@@ -75,6 +75,7 @@ function richRome(): GameState {
 describe('the decision function', () => {
   test('reads a frozen state without changing it and gives the same orders twice', () => {
     const state = buildFixture();
+    setMen(state, f.hastati, 2000);
     declare(state, f.carthage, f.rome);
     declare(state, f.rome, f.syracusaeFaction);
     place(state, f.punicArmy, { x: CAPUA.x + 3, y: CAPUA.y });
@@ -92,6 +93,7 @@ describe('the decision function', () => {
     city(state, f.carthago).population = 200_000;
     const carthage = state.factions[f.carthage];
     if (!carthage) throw new Error('no Carthage');
+    carthage.stores.gold = 20_000;
     expect(decideAll(state, world).every((order) => order.faction !== f.rome)).toBe(true);
     expect(decideAll(state, world).some((order) => order.faction === f.carthage)).toBe(true);
     carthage.defeatedOn = 1 as Day;
@@ -148,7 +150,9 @@ describe('a great power', () => {
 
   describe('war', () => {
     test('declares war on the neighbour it is strong enough to beat', () => {
-      expect(decide(buildFixture(), f.rome)).toEqual([
+      const state = buildFixture();
+      setMen(state, f.hastati, 1500);
+      expect(decide(state, f.rome)).toEqual([
         { kind: 'declareWar', faction: f.rome, against: f.syracusaeFaction },
       ]);
     });
@@ -158,6 +162,18 @@ describe('a great power', () => {
       declare(state, f.carthage, f.rome);
       place(state, f.punicArmy, { x: 2229.9, y: 2865.1 });
       expect(kinds(decide(state, f.rome))).not.toContain('declareWar');
+    });
+
+    test('presses a rival great power that keeps to its homeland once its armies outweigh it twice', () => {
+      const pressed = (punicMen: number) => {
+        const state = buildFixture();
+        setMen(state, f.hastati, 2000);
+        setMen(state, f.citizenSpears, punicMen);
+        declare(state, f.rome, f.syracusaeFaction);
+        return only(decide(state, f.rome), 'declareWar');
+      };
+      expect(pressed(500)).toEqual([{ kind: 'declareWar', faction: f.rome, against: f.carthage }]);
+      expect(pressed(1500)).toEqual([]);
     });
 
     test('declares nothing against a neighbour stronger than the threshold allows', () => {
@@ -171,6 +187,7 @@ describe('a great power', () => {
   describe('offence', () => {
     test('marches on an enemy city it can reach by land', () => {
       const state = buildFixture();
+      setMen(state, f.hastati, 2000);
       declare(state, f.rome, f.carthage);
       city(state, f.capua).owner = f.carthage;
       expect(decide(state, f.rome)).toContainEqual({
@@ -253,6 +270,7 @@ describe('a great power', () => {
 
     test('embarks at its port for an enemy city across the sea', () => {
       const state = buildFixture();
+      setMen(state, f.hastati, 2000);
       declare(state, f.rome, f.syracusaeFaction);
       expect(decide(state, f.rome)).toContainEqual({
         kind: 'embark',
@@ -262,8 +280,51 @@ describe('a great power', () => {
       });
     });
 
+    test('marches only on a city whose garrison it can blockade with men to spare', () => {
+      const state = buildFixture();
+      declare(state, f.rome, f.carthage);
+      city(state, f.capua).owner = f.carthage;
+      expect(only(decide(state, f.rome), 'moveArmy')).not.toContainEqual(
+        expect.objectContaining({ to: CAPUA }),
+      );
+      city(state, f.capua).garrison = 1000;
+      expect(decide(state, f.rome)).toContainEqual({
+        kind: 'moveArmy',
+        faction: f.rome,
+        army: f.romanArmy,
+        to: CAPUA,
+      });
+    });
+
+    test('counts men, not strength, against the garrison it must blockade', () => {
+      const state = buildFixture();
+      declare(state, f.rome, f.carthage);
+      city(state, f.capua).owner = f.carthage;
+      const hastati = state.formations[f.hastati];
+      if (!hastati) throw new Error('no hastati');
+      hastati.troop = 'heavyCavalry';
+      setMen(state, f.hastati, 1400);
+      setMen(state, f.equites, 200);
+      expect(only(decide(state, f.rome), 'moveArmy')).not.toContainEqual(
+        expect.objectContaining({ to: CAPUA }),
+      );
+    });
+
+    test('leaves for its muster city a siege whose garrison outnumbers its besiegers, before the sallies wear them down', () => {
+      // Carthage's army besieges Capua, so Rome musters at Roma.
+      const state = besieging(f.carthago, 1200);
+      expect(decide(state, f.rome)).toContainEqual({
+        kind: 'moveArmy',
+        faction: f.rome,
+        army: f.romanArmy,
+        to: ROMA,
+      });
+    });
+
     test('storms a city when the storm is near certain and cheap, and besieges a strong one', () => {
       const weak = besieging(f.syracusae);
+      city(weak, f.syracusae).walls = 0;
+      city(weak, f.syracusae).garrison = 300;
       expect(decide(weak, f.rome)).toContainEqual({
         kind: 'storm',
         faction: f.rome,
@@ -358,6 +419,7 @@ describe('a great power', () => {
   describe('each order once', () => {
     test('gives no new order to an army already marching to its target', () => {
       const state = buildFixture();
+      setMen(state, f.hastati, 2000);
       declare(state, f.rome, f.carthage);
       city(state, f.capua).owner = f.carthage;
       const marching = tick(state, decideOrders(state, world, f.rome), world).state;
@@ -374,7 +436,9 @@ describe('a great power', () => {
       for (const siege of Object.values(captured.sieges)) removeRecord(captured.sieges, siege.id);
       place(captured, f.romanArmy, carthago.position);
       city(captured, f.capua).owner = f.carthage;
-      expect(kinds(decide(captured, f.rome))).toContain('moveArmy');
+      expect(decide(captured, f.rome)).toContainEqual(
+        expect.objectContaining({ army: f.romanArmy }),
+      );
     });
   });
 });
@@ -385,11 +449,12 @@ describe('a minor', () => {
     declare(state, f.rome, f.syracusaeFaction);
     const minor = state.factions[f.syracusaeFaction];
     if (!minor) throw new Error('no Syracusae');
-    const deficit =
-      500 * UPKEEP_PER_MAN.gold - city(state, f.syracusae).population * OUTPUT_PER_PERSON.gold;
+    const balance = dailyBalances(state).get(f.syracusaeFaction);
+    if (!balance) throw new Error('no balance for Syracusae');
+    const deficit = (store: 'gold' | 'food') => 500 * UPKEEP_PER_MAN[store] - balance[store];
     minor.stores = {
-      gold: 900 + deficit * MINOR_DEFICIT_DAYS,
-      food: deficit * MINOR_DEFICIT_DAYS,
+      gold: 900 + deficit('gold') * MINOR_DEFICIT_DAYS,
+      food: deficit('food') * MINOR_DEFICIT_DAYS,
       manpower: 500,
     };
     return state;
@@ -461,9 +526,13 @@ function addSecondRomanArmy(state: GameState): string {
   return second;
 }
 
-/** Rome's army besieges the city, which Carthage or Syracusae holds, and Rome is at war with its owner. */
-function besieging(target: CityId): GameState {
+/**
+ * Rome's army, its spearmen this many, besieges the city, which Carthage or Syracusae
+ * holds, and Rome is at war with its owner.
+ */
+function besieging(target: CityId, spearmen = 4000): GameState {
   const state = buildFixture();
+  setMen(state, f.hastati, spearmen);
   const owner = city(state, target).owner;
   declare(state, f.rome, owner);
   place(state, f.romanArmy, city(state, target).position);

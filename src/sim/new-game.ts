@@ -28,10 +28,13 @@ export const STARTING_POPULATION: Readonly<Record<CityRank, number>> = {
   minorCity: 12_000,
 };
 
-/** The stores each faction starts with, by its kind. */
+/**
+ * The stores each faction starts with, by its kind. A minor starts able to raise its
+ * cheapest troop and keep it for a year of war.
+ */
 export const STARTING_STORES: Readonly<Record<FactionKind, Readonly<Stores>>> = {
-  greatPower: { gold: 600, food: 600, manpower: 300 },
-  minor: { gold: 100, food: 100, manpower: 100 },
+  greatPower: { gold: 1500, food: 600, manpower: 1000 },
+  minor: { gold: 1200, food: 300, manpower: 500 },
 };
 
 /** Every power's starting general has this skill, on the 0 to 10 scale. */
@@ -129,6 +132,7 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
       recruits: [],
       ...CITY_DEFENCES[cityRank],
       fellOn: null,
+      sackedOn: null,
     };
   }
 

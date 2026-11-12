@@ -8,6 +8,7 @@ import { recruitment } from './budget.ts';
 import { minorOrders } from './minor.ts';
 import { createRouter } from './routes.ts';
 import {
+  besieged,
   enemiesOf,
   homeCapital,
   positionOf,
@@ -57,13 +58,13 @@ export function decideAll(
 }
 
 /**
- * Where a power raises recruits and gathers armies too weak for any target. At war, it
- * is its calm city nearest an enemy city. At peace, it is the calm city where its
+ * Where a power raises recruits and gathers armies too weak for any target, among its
+ * calm cities that are not besieged. At war, it is the one nearest an enemy city. At peace, it is the calm city where its
  * strongest idle army stands, so recruits join that army, or else its capital.
  */
 function musterCity({ state, world, faction, enemies }: Context): CityView | undefined {
   const calm = sorted(state.cities).filter(
-    (city) => city.owner === faction && city.unrestDays === 0,
+    (city) => city.owner === faction && city.unrestDays === 0 && !besieged(state, city),
   );
   if (calm.length === 0) return undefined;
   const enemyCities = sorted(state.cities).filter((city) => enemies.has(city.owner));

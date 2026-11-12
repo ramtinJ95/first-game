@@ -3,7 +3,7 @@ import { ENSLAVE, FATE_DAYS, SACK } from '../cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import { expectConsistent } from '../references.ts';
 import type { GameState } from '../state/game-state.ts';
-import { OUTPUT_PER_PERSON } from '../systems/economy.ts';
+import { dailyBalances, OUTPUT_PER_PERSON } from '../systems/economy.ts';
 import { tick } from '../tick.ts';
 import { executeOrder, type Order } from './orders.ts';
 
@@ -39,19 +39,20 @@ function reasons(state: GameState, ...orders: Order[]): (string | undefined)[] {
 }
 
 describe('the fate of a fallen city', () => {
-  test('sack takes a year of the city gold at once, a share of its people, and a long unrest', () => {
+  test('sack takes the city gold at once, a share of its people, and a long unrest, and marks the day', () => {
     const state = capuaFallen();
     const people = state.cities[FIXTURE.capua]?.population ?? 0;
     const gold = state.factions[FIXTURE.carthage]?.stores.gold ?? 0;
     expect(executeOrder(state, sack, world)).toBeUndefined();
     expect(state.factions[FIXTURE.carthage]?.stores.gold).toBeCloseTo(
-      gold + people * OUTPUT_PER_PERSON.gold * 365,
+      gold + people * OUTPUT_PER_PERSON.gold * 365 * SACK.wealthYears,
       9,
     );
     expect(state.cities[FIXTURE.capua]).toMatchObject({
       population: people * (1 - SACK.populationShare),
       unrestDays: SACK.unrestDays,
       fellOn: null,
+      sackedOn: 3,
     });
     expect(reasons(state, sack, enslave)).toEqual([
       'city capua has no fate left to decide',
@@ -151,5 +152,54 @@ describe('the fate of a fallen city', () => {
       'city carthago belongs to carthage, not rome',
     ]);
     expectConsistent(next);
+  });
+});
+
+describe('the choice of fate', () => {
+  function play(state: GameState, days: number): GameState {
+    for (let day = 0; day < days; day++) state = tick(state, [], world).state;
+    return state;
+  }
+  const gold = (state: GameState) => state.factions[FIXTURE.carthage]?.stores.gold ?? 0;
+  const manpower = (state: GameState) => state.factions[FIXTURE.carthage]?.stores.manpower ?? 0;
+
+  function afterFate(order: Order | undefined, days: number): GameState {
+    const state = capuaFallen();
+    if (order) expect(executeOrder(state, order, world)).toBeUndefined();
+    return play(state, days);
+  }
+
+  test('a sack pays more at once, and an occupied city out-earns it within a year', () => {
+    expect(gold(afterFate(sack, 60))).toBeGreaterThan(gold(afterFate(undefined, 60)));
+    expect(gold(afterFate(undefined, 365))).toBeGreaterThan(gold(afterFate(sack, 365)));
+  });
+
+  test('a sacked city yields half its gold for years after its unrest is over', () => {
+    const halfway = afterFate(sack, SACK.unrestDays + 30);
+    const capua = halfway.cities[FIXTURE.capua];
+    if (!capua) throw new Error('Capua is missing');
+    expect(capua.unrestDays).toBe(0);
+    const spared = structuredClone(halfway);
+    const sparedCapua = spared.cities[FIXTURE.capua];
+    if (sparedCapua) sparedCapua.sackedOn = null;
+    const balance = (state: GameState) => dailyBalances(state).get(FIXTURE.carthage)?.gold ?? 0;
+    expect(balance(spared) - balance(halfway)).toBeCloseTo(
+      capua.population * OUTPUT_PER_PERSON.gold * (1 - SACK.poorOutput),
+      9,
+    );
+
+    const recovered = play(halfway, SACK.poorDays - SACK.unrestDays);
+    const later = structuredClone(recovered);
+    const laterCapua = later.cities[FIXTURE.capua];
+    if (laterCapua) laterCapua.sackedOn = null;
+    expect(balance(later)).toBeCloseTo(balance(recovered), 9);
+    expectConsistent(recovered);
+  });
+
+  test('enslaving gives more manpower at once than the occupied city raises in a year', () => {
+    const now = manpower(afterFate(enslave, 0));
+    const occupied = manpower(afterFate(undefined, 365));
+    const start = manpower(afterFate(undefined, 0));
+    expect(now - start).toBeGreaterThan(occupied - start);
   });
 });

@@ -1,6 +1,7 @@
 import type { CityId, FactionId } from '../ids.ts';
 import type { Day } from '../state/day.ts';
 import type { GameState } from '../state/game-state.ts';
+import { siegeAt } from '../systems/sieges.ts';
 import { TROOPS, type Troop } from '../troops.ts';
 import { ownedCity } from './owned-city.ts';
 
@@ -13,13 +14,15 @@ export interface RecruitOrder {
 
 /**
  * Pays the troop's gold and manpower now. The economy system musters the formation
- * when its days of training are over.
+ * when its days of training are over. A besieged city musters what it trains at once
+ * and starts no new training.
  */
 export function recruit(state: GameState, order: RecruitOrder): string | undefined {
   if (!Object.hasOwn(TROOPS, order.troop)) return `troop ${order.troop} does not exist`;
   const city = ownedCity(state, order.faction, order.city);
   if (typeof city === 'string') return city;
   if (city.unrestDays > 0) return `city ${city.id} is in unrest for ${city.unrestDays} more days`;
+  if (siegeAt(state, city)) return `city ${city.id} is under siege`;
   const { men, gold, days } = TROOPS[order.troop].recruit;
   const stores = state.factions[order.faction]?.stores;
   if (!stores) return `faction ${order.faction} does not exist`;

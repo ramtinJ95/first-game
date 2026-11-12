@@ -3,7 +3,7 @@ import type { ArmyId, CityId, FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import type { MapPoint } from '../state/map-point.ts';
 import { RALLY_DISTANCE } from '../systems/economy.ts';
-import { SIEGE_DISTANCE } from '../systems/sieges.ts';
+import { BLOCKADE_ODDS, defendersAt, SIEGE_DISTANCE } from '../systems/sieges.ts';
 import { distance } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import type { Router, Step } from './routes.ts';
@@ -11,6 +11,7 @@ import {
   byLand,
   canFight,
   enemyArmies,
+  formationsOf,
   homeCapital,
   meanMorale,
   positionOf,
@@ -29,6 +30,7 @@ import {
   CAPITAL_GUARD_KM,
   DEFENDER_KM,
   ENSLAVE_BELOW_MANPOWER,
+  GARRISON_ODDS,
   MARCH_MORALE,
   RALLY_WAIT_DAYS,
   RELIEF_KM,
@@ -87,7 +89,7 @@ export function fates({ state, faction }: Context): Order[] {
       return at && distance(at, city.position) <= SIEGE_DISTANCE;
     });
     if (!present) continue;
-    if (record.stores.gold < reserveOf(state, faction)) {
+    if (record.stores.gold < reserveOf(state, faction, 'gold')) {
       orders.push({ kind: 'sack', faction, city: city.id });
     } else if (record.stores.manpower < ENSLAVE_BELOW_MANPOWER && ownCities.length > 1) {
       orders.push({ kind: 'enslave', faction, city: city.id });
@@ -113,7 +115,9 @@ export function storms({ state, faction }: Context): Order[] {
       const army = state.armies[id];
       return army?.owner === faction ? [army] : [];
     });
-    if (!city || !stormers.some((army) => canFight(state, army))) continue;
+    if (!city || !stormers.some((army) => canFight(state, army)) || defendersAt(state, city)) {
+      continue;
+    }
     const { chance, loss, men } = stormOdds(state, city, stormers);
     if (chance >= STORM_MIN_CHANCE && loss <= STORM_MAX_LOSS * men) {
       orders.push({ kind: 'storm', faction, city: city.id });
@@ -122,17 +126,35 @@ export function storms({ state, faction }: Context): Order[] {
   return orders;
 }
 
-interface Mover {
+/** What an army or a group brings to a target: its strength in battle and its men for the blockade. */
+interface Force {
+  strength: number;
+  men: number;
+}
+
+interface Mover extends Force {
   army: ArmyView;
   at: MapPoint;
-  strength: number;
+}
+
+const NO_FORCE: Force = { strength: 0, men: 0 };
+
+function joined(a: Force, b: Force): Force {
+  return { strength: a.strength + b.strength, men: a.men + b.men };
+}
+
+function menOfArmy(state: State, army: ArmyView): number {
+  return formationsOf(state, army).reduce((sum, f) => sum + f.men, 0);
 }
 
 /**
  * Moves the faction's armies. First its weakest army at the capital stays there, or the
  * nearest army returns to it, while an enemy army that is not standing at one of its own
  * cities is within CAPITAL_GUARD_KM of it. Then armies relieve each besieged city
- * they are strong enough to relieve. The rest go on the offence: an army that marches on
+ * they are strong enough to relieve, and armies leave for the muster city from each
+ * siege whose besiegers are too few to hold the blockade, before the garrison's sallies
+ * wear them down. The rest go on the offence, each target needing at least
+ * GARRISON_ODDS times its garrison: an army that marches on
  * a target it is still strong enough for keeps its course, and the others take the
  * cheapest such target by road and sea. Armies too weak alone form groups that can win
  * together: a group that stands assembled marches on its target at once and keeps to its
@@ -148,7 +170,14 @@ export function movements(context: Context, muster: CityView | undefined): Order
     const { activity } = army;
     if (activity.kind !== 'idle' && activity.kind !== 'marching') return [];
     if (!canFight(state, army)) return [];
-    return [{ army, at: activity.position, strength: strengthOf(state, army) }];
+    return [
+      {
+        army,
+        at: activity.position,
+        strength: strengthOf(state, army),
+        men: menOfArmy(state, army),
+      },
+    ];
   });
 
   const send = (mover: Mover, step: Step) => {
@@ -207,22 +236,45 @@ export function movements(context: Context, muster: CityView | undefined): Order
     for (const mover of relief) send(mover, { kind: 'march', to: city.position });
   }
 
+  for (const siege of sorted(state.sieges)) {
+    const city = state.cities[siege.city];
+    const besiegers = siege.besiegers.flatMap((id) => state.armies[id] ?? []);
+    if (!city || !besiegers.some((army) => army.owner === faction)) continue;
+    const men = besiegers.reduce((sum, army) => sum + menOfArmy(state, army), 0);
+    if (men >= BLOCKADE_ODDS * city.garrison || !muster) continue;
+    for (const army of besiegers) {
+      const at = positionOf(army);
+      if (army.owner !== faction || !at || !byLand(world, at, muster.position)) continue;
+      used.add(army.id);
+      orders.push({ kind: 'moveArmy', faction, army: army.id, to: muster.position });
+    }
+  }
+
   const targets = targetsOf(state, faction, enemies);
-  const needed = new Map<CityId, number>(
+  const needed = new Map<CityId, Force>(
     targets.map((city) => [
       city.id,
-      ATTACK_ODDS * strengthNear(state, hostile, city.position, DEFENDER_KM),
+      {
+        strength: ATTACK_ODDS * strengthNear(state, hostile, city.position, DEFENDER_KM),
+        men: GARRISON_ODDS * city.garrison,
+      },
     ]),
   );
-  const assigned = new Map<CityId, number>();
+  const assigned = new Map<CityId, Force>();
+  const assign = (city: CityId, force: Force) =>
+    assigned.set(city, joined(assigned.get(city) ?? NO_FORCE, force));
   for (const army of own) {
     if (army.activity.kind !== 'besieging') continue;
     const city = state.sieges[army.activity.siege]?.city;
-    if (city) assigned.set(city, (assigned.get(city) ?? 0) + strengthOf(state, army));
+    if (city) assign(city, { strength: strengthOf(state, army), men: menOfArmy(state, army) });
   }
+  const suffices = (city: CityId, force: Force) => {
+    const need = needed.get(city) ?? NO_FORCE;
+    return force.strength >= need.strength && force.men >= need.men;
+  };
 
   const feasible = (city: CityView, mover: Mover) =>
-    (assigned.get(city.id) ?? 0) + mover.strength >= (needed.get(city.id) ?? 0);
+    suffices(city.id, joined(assigned.get(city.id) ?? NO_FORCE, mover));
 
   const keptTarget = (mover: Mover) => {
     const heading = destinationOf(mover.army);
@@ -245,13 +297,13 @@ export function movements(context: Context, muster: CityView | undefined): Order
         .filter((m) => context.router.reaches(m.at, city))
         .sort((a, b) => distance(a.at, lead.at) - distance(b.at, lead.at));
       const members: Mover[] = [];
-      let strength = assigned.get(city.id) ?? 0;
+      let force = assigned.get(city.id) ?? NO_FORCE;
       for (const mover of near) {
-        if (strength >= (needed.get(city.id) ?? 0)) break;
+        if (suffices(city.id, force)) break;
         members.push(mover);
-        strength += mover.strength;
+        force = joined(force, mover);
       }
-      if (members.length > 1 && strength >= (needed.get(city.id) ?? 0)) return { city, members };
+      if (members.length > 1 && suffices(city.id, force)) return { city, members };
     }
     return undefined;
   };
@@ -266,7 +318,7 @@ export function movements(context: Context, muster: CityView | undefined): Order
     if (mover.army.activity.kind === 'idle' && awaitsRecruits(state, faction, mover.at)) continue;
     const kept = keptTarget(mover);
     if (kept && feasible(kept, mover)) {
-      assigned.set(kept.id, (assigned.get(kept.id) ?? 0) + mover.strength);
+      assign(kept.id, mover);
       used.add(mover.army.id);
       continue;
     }
@@ -282,7 +334,7 @@ export function movements(context: Context, muster: CityView | undefined): Order
       if (route) best = { city, cost: route.cost, step: route.step };
     }
     if (best) {
-      assigned.set(best.city.id, (assigned.get(best.city.id) ?? 0) + mover.strength);
+      assign(best.city.id, mover);
       send(mover, best.step);
     } else left.push(mover);
   }
@@ -294,8 +346,8 @@ export function movements(context: Context, muster: CityView | undefined): Order
     if (kept) heading.set(kept.id, [...(heading.get(kept.id) ?? []), mover]);
   }
   for (const [city, group] of heading) {
-    const together = group.reduce((sum, m) => sum + m.strength, assigned.get(city) ?? 0);
-    if (together < (needed.get(city) ?? 0)) continue;
+    const together = group.reduce<Force>(joined, assigned.get(city) ?? NO_FORCE);
+    if (!suffices(city, together)) continue;
     assigned.set(city, together);
     for (const mover of group) used.add(mover.army.id);
   }
@@ -328,10 +380,7 @@ export function movements(context: Context, muster: CityView | undefined): Order
       }
     }
     if (assembled) {
-      assigned.set(
-        group.city.id,
-        group.members.reduce((sum, m) => sum + m.strength, assigned.get(group.city.id) ?? 0),
-      );
+      for (const mover of group.members) assign(group.city.id, mover);
     }
     rest = rest.filter((m) => !used.has(m.army.id));
   }

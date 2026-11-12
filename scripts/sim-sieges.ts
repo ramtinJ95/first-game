@@ -41,14 +41,14 @@ const CASES: Case[] = [
     fates: true,
   },
   {
-    name: 'storm day 1: starting army (3x garrison) v minor',
+    name: 'storm day 1: starting army v minor, walls up',
     target: 'minor',
     army: STARTING_ARMY,
     storm: true,
     fates: true,
   },
   {
-    name: 'storm day 1: 500 spearmen (1x garrison) v minor',
+    name: 'storm day 1: 500 spearmen v minor, walls up',
     target: 'minor',
     army: { spearmen: 500 },
     storm: true,

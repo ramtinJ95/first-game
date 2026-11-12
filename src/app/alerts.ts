@@ -334,6 +334,7 @@ const LOSS_TEXT: Record<DeepReadonly<DayEvent & { kind: 'armyDestroyed' }>['caus
   battle: 'was destroyed in battle',
   surrender: 'surrendered',
   storm: 'was lost storming the walls',
+  sally: 'was cut down by sallies from the walls',
   defeat: 'laid down its arms',
 };
 

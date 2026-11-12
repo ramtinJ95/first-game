@@ -1,10 +1,12 @@
 import { leaveSiege, removeArmy } from '../armies.ts';
 import { changeCityOwner } from '../cities.ts';
+import type { ArmyLoss } from '../events.ts';
 import type { FactionId, SiegeId } from '../ids.ts';
 import { allocateId } from '../ids.ts';
 import { removeRecord } from '../records.ts';
 import { nextRandom } from '../rng.ts';
 import type { Army } from '../state/army.ts';
+import type { DeepReadonly } from '../deep-readonly.ts';
 import type { City, CityRank } from '../state/city.ts';
 import type { Formation } from '../state/formation.ts';
 import type { GameState } from '../state/game-state.ts';
@@ -12,6 +14,7 @@ import type { MapPoint } from '../state/map-point.ts';
 import type { Siege } from '../state/siege.ts';
 import { TROOPS } from '../troops.ts';
 import { areAtWar } from '../wars.ts';
+import { musterEarly } from './economy.ts';
 
 /** An idle army this close to a city of a faction it is at war with, in kilometres, besieges it. */
 export const SIEGE_DISTANCE = 10;
@@ -20,10 +23,20 @@ export const SIEGE_DISTANCE = 10;
 export const CITY_DEFENCES: Readonly<
   Record<CityRank, Readonly<Pick<City, 'walls' | 'garrison' | 'foodDays'>>>
 > = {
-  capital: { walls: 400, garrison: 2500, foodDays: 150 },
-  greatPowerCity: { walls: 200, garrison: 1000, foodDays: 60 },
-  minorCity: { walls: 100, garrison: 500, foodDays: 30 },
+  capital: { walls: 400, garrison: 3000, foodDays: 150 },
+  greatPowerCity: { walls: 200, garrison: 1500, foodDays: 60 },
+  minorCity: { walls: 100, garrison: 1200, foodDays: 40 },
 };
+
+/**
+ * A siege cuts the city's food only while the besiegers' men are at least this many
+ * times its garrison. Below that, the garrison sallies each day instead.
+ */
+export const BLOCKADE_ODDS = 1;
+/** Besiegers a sally kills each day, as a share of the garrison, rounded up. */
+export const SALLY_SHARE = 0.05;
+/** The share of a city's full garrison that its conquerors leave in it, from their own men. */
+export const OCCUPATION_SHARE = 0.25;
 
 /** Points of wall that each thousand besieging men wear down a day. */
 export const WALL_WEAR_PER_THOUSAND_MEN = 2;
@@ -38,8 +51,10 @@ export const RECOVERY_DAYS = 120;
 export const WALL_DEFENCE = 0.01;
 /** Each draw scales a storm's attack or its cost by a factor in [1 - STORM_LUCK, 1 + STORM_LUCK). */
 export const STORM_LUCK = 0.25;
+/** A storm takes the city when its attack, with luck, is more than this many times the defence. */
+export const STORM_ODDS = 1.5;
 /** Attackers lost per point of the defence's strength, in any storm. */
-export const STORM_KILL = 0.2;
+export const STORM_KILL = 0.5;
 /** Garrison lost per point of the attack's strength, in a storm that fails. */
 export const STORM_GARRISON_KILL = 0.1;
 /** Morale each storming formation loses when a storm fails. */
@@ -96,9 +111,13 @@ function nearestEnemyCity(state: GameState, army: Army, from: MapPoint): City | 
 }
 
 /**
- * The food goes first, a day at a time. Then hunger takes a share of the full garrison
- * each day. The walls wear down by the besiegers' numbers. The city falls when its
- * garrison is gone, or, once its walls are down, when the garrison gives up.
+ * The city musters the recruits it trains, so they stand at the walls as a field army.
+ * The walls wear down by the besiegers' numbers. Besiegers who number at least
+ * BLOCKADE_ODDS times the garrison cut the food: it goes first, a day at a time, and
+ * then hunger takes a share of the full garrison each day. Fewer besiegers do not, and
+ * the garrison sallies against them. The city falls when its garrison is gone, or, once
+ * its walls are down, when the garrison gives up, but never while a field army of its
+ * owner stands at it.
  */
 function besiegeOneDay(state: GameState, id: SiegeId) {
   const siege = state.sieges[id];
@@ -108,19 +127,66 @@ function besiegeOneDay(state: GameState, id: SiegeId) {
     removeRecord(state.sieges, id);
     return;
   }
-  const men = siege.besiegers.reduce((sum, armyId) => {
-    const army = state.armies[armyId];
-    return sum + (army ? menOf(state, army) : 0);
-  }, 0);
+  musterEarly(state, city);
+  const armies = besiegersOf(state, siege);
+  const men = armies.reduce((sum, army) => sum + menOf(state, army), 0);
   city.walls = Math.max(0, city.walls - (men / 1000) * WALL_WEAR_PER_THOUSAND_MEN);
+  if (men < BLOCKADE_ODDS * city.garrison) {
+    killMen(state, armies, Math.ceil(city.garrison * SALLY_SHARE), 'sally');
+    if (siege.besiegers.length === 0) removeRecord(state.sieges, id);
+    return;
+  }
   if (city.foodDays > 0) {
     city.foodDays = Math.max(0, city.foodDays - 1);
   } else {
     const hunger = Math.ceil(CITY_DEFENCES[city.rank].garrison * HUNGER_SHARE);
     city.garrison = Math.max(0, city.garrison - hunger);
   }
+  if (defendersAt(state, city)) return;
   if (city.garrison === 0 || (city.walls === 0 && nextRandom(state) < GIVE_UP_CHANCE)) {
     cityFalls(state, siege);
+  }
+}
+
+function besiegersOf(state: GameState, siege: Siege): Army[] {
+  return siege.besiegers.flatMap((id) => state.armies[id] ?? []);
+}
+
+/**
+ * Takes exactly `lost` men, or all there are, from the formations in proportion to
+ * their size, the odd men from the largest remainders. Then removes the formations
+ * left empty and the armies left without one.
+ */
+function killMen(
+  state: GameState,
+  armies: readonly Army[],
+  lost: number,
+  cause: ArmyLoss,
+  formations = armies.flatMap((army) => formationsOf(state, army)),
+) {
+  const men = formations.reduce((sum, formation) => sum + formation.men, 0);
+  if (men === 0) return;
+  const total = Math.min(men, lost);
+  const shares = formations.map((formation) => (total * formation.men) / men);
+  const taken = shares.map(Math.floor);
+  let left = total - taken.reduce((sum, n) => sum + n, 0);
+  const byRemainder = shares
+    .map((share, i) => ({ i, rest: share - Math.floor(share) }))
+    .sort((a, b) => b.rest - a.rest || a.i - b.i);
+  for (const { i } of byRemainder) {
+    if (left === 0) break;
+    taken[i] = (taken[i] ?? 0) + 1;
+    left -= 1;
+  }
+  formations.forEach((formation, i) => (formation.men -= taken[i] ?? 0));
+  for (const army of armies) {
+    army.formations = army.formations.filter((id) => {
+      const formation = state.formations[id];
+      if (formation && formation.men > 0) return true;
+      removeRecord(state.formations, id);
+      return false;
+    });
+    if (army.formations.length === 0) removeArmy(state, army, cause);
   }
 }
 
@@ -140,12 +206,15 @@ function recover(state: GameState) {
 
 /**
  * Ends the siege with the city's fall: the besiegers stand idle where they are, the
- * garrison is gone, and the city goes, with its fate open, to the faction of the
- * besieger that has stood there longest, whoever took the walls.
+ * old garrison is gone, and the city goes, with its fate open, to the faction of the
+ * besieger that has stood there longest, whoever took the walls. That faction's
+ * besiegers leave OCCUPATION_SHARE of the city's full garrison behind as its new one,
+ * but never more than half their men.
  */
 export function cityFalls(state: GameState, siege: Siege): void {
   const [longest] = siege.besiegers;
   const winner = longest === undefined ? undefined : state.armies[longest]?.owner;
+  const occupiers = besiegersOf(state, siege).filter((army) => army.owner === winner);
   for (const armyId of siege.besiegers) {
     const army = state.armies[armyId];
     if (army) leaveSiege(state, army);
@@ -153,7 +222,13 @@ export function cityFalls(state: GameState, siege: Siege): void {
   removeRecord(state.sieges, siege.id);
   const city = state.cities[siege.city];
   if (!city || winner === undefined) return;
-  city.garrison = 0;
+  const men = occupiers.reduce((sum, army) => sum + menOf(state, army), 0);
+  const garrison = Math.min(
+    Math.floor(men / 2),
+    Math.round(CITY_DEFENCES[city.rank].garrison * OCCUPATION_SHARE),
+  );
+  killMen(state, occupiers, garrison, 'storm');
+  city.garrison = garrison;
   changeCityOwner(state, city.id, winner);
   city.fellOn = state.day;
 }
@@ -161,46 +236,49 @@ export function cityFalls(state: GameState, siege: Siege): void {
 export type StormResult = 'taken' | 'repulsed';
 
 /**
- * Sends the faction's besieging armies at the walls. The attackers lose men in
- * proportion to the strength of the defence, which is the garrison raised by the walls
- * left. The storm takes the city if the attack, with luck, beats that strength.
- * Otherwise the garrison loses men in proportion to the attack, every storming
+ * Sends the faction's besieging armies at the walls. The city first musters the
+ * recruits it trains, who stay outside the storm. The attackers lose men in proportion
+ * to the strength of the defence, which is the garrison raised by the walls left. The
+ * storm takes the city if the attack, with luck, is more than STORM_ODDS times that
+ * strength. Otherwise the garrison loses men in proportion to the attack, every storming
  * formation loses morale, and the siege goes on. The caller checks that an army of the
  * faction in the siege `canBesiege`.
  */
 export function stormCity(state: GameState, siege: Siege, faction: FactionId): StormResult {
   const city = state.cities[siege.city];
   if (!city) throw new Error(`siege ${siege.id} is at unknown city ${siege.city}`);
-  const stormers = siege.besiegers.flatMap((id) => {
-    const army = state.armies[id];
-    return army && army.owner === faction ? [army] : [];
-  });
+  musterEarly(state, city);
+  const stormers = besiegersOf(state, siege).filter((army) => army.owner === faction);
   const fighters = stormers.flatMap((army) => formationsOf(state, army).filter(isFighting));
-  const men = fighters.reduce((sum, formation) => sum + formation.men, 0);
   const attack = fighters.reduce((sum, f) => sum + f.men * TROOPS[f.troop].attack, 0) * luck(state);
   const defence = city.garrison * (1 + city.walls * WALL_DEFENCE);
-  const lost = Math.min(men, Math.round(defence * STORM_KILL * luck(state)));
-  const taken = attack > defence;
-
-  for (const formation of fighters) {
-    formation.men -= Math.min(formation.men, Math.round((lost * formation.men) / men));
-    if (!taken) formation.morale = Math.max(0, formation.morale - STORM_MORALE_LOSS);
+  const taken = attack > STORM_ODDS * defence;
+  if (!taken) {
+    for (const formation of fighters) {
+      formation.morale = Math.max(0, formation.morale - STORM_MORALE_LOSS);
+    }
   }
-  for (const army of stormers) {
-    army.formations = army.formations.filter((id) => {
-      const formation = state.formations[id];
-      if (formation && formation.men > 0) return true;
-      removeRecord(state.formations, id);
-      return false;
-    });
-    if (army.formations.length === 0) removeArmy(state, army, 'storm');
-  }
+  killMen(state, stormers, Math.round(defence * STORM_KILL * luck(state)), 'storm', fighters);
   if (taken) {
     cityFalls(state, siege);
     return 'taken';
   }
   city.garrison -= Math.min(city.garrison, Math.round(attack * STORM_GARRISON_KILL));
   return 'repulsed';
+}
+
+/** Whether an army of the city's owner with an unbroken formation stands at the city. */
+export function defendersAt(state: DeepReadonly<GameState>, city: DeepReadonly<City>): boolean {
+  return Object.values(state.armies).some(
+    (army) =>
+      army.owner === city.owner &&
+      army.activity.kind !== 'embarked' &&
+      distance(army.activity.position, city.position) <= SIEGE_DISTANCE &&
+      army.formations.some((id) => {
+        const formation = state.formations[id];
+        return !!formation && formation.men > 0 && formation.morale > 0;
+      }),
+  );
 }
 
 /** The siege at the city, if one runs. A city has at most one. */

@@ -34,6 +34,8 @@ export const CitySchema = v.object({
   foodDays: v.pipe(v.number(), v.finite(), v.minValue(0)),
   /** The day the city fell to its owner, until the owner decides its fate. */
   fellOn: v.nullable(DaySchema),
+  /** The day the city was last sacked, or null if it never was. Its gold stays low for `SACK.poorDays` after. */
+  sackedOn: v.nullable(DaySchema),
 });
 
 export type City = v.InferOutput<typeof CitySchema>;

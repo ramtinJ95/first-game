@@ -7,7 +7,7 @@ import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
 import { warSides } from '../state/war.ts';
 import { GENERAL_EFFECT } from '../systems/battles.ts';
-import { WALL_DEFENCE, STORM_KILL, STORM_LUCK } from '../systems/sieges.ts';
+import { STORM_KILL, STORM_LUCK, STORM_ODDS, WALL_DEFENCE } from '../systems/sieges.ts';
 import { dailyBalances, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import type { Stores } from '../state/faction.ts';
 import { TROOPS } from '../troops.ts';
@@ -101,10 +101,15 @@ export function menInTraining(state: State, faction: FactionId): number {
   return men;
 }
 
-/** The gold and food a faction keeps back: RESERVE_DAYS of the upkeep of its men and recruits. */
-export function reserveOf(state: State, faction: FactionId, extraMen = 0): number {
+/** The gold or food a faction keeps back: RESERVE_DAYS of the upkeep of its men and recruits. */
+export function reserveOf(
+  state: State,
+  faction: FactionId,
+  store: 'gold' | 'food',
+  extraMen = 0,
+): number {
   const men = menUnderArms(state, faction) + menInTraining(state, faction) + extraMen;
-  return RESERVE_DAYS * men * UPKEEP_PER_MAN.gold;
+  return RESERVE_DAYS * men * UPKEEP_PER_MAN[store];
 }
 
 export function positionOf(army: ArmyView): MapPoint | undefined {
@@ -170,14 +175,21 @@ export function stormOdds(
   const attack = fighters.reduce((sum, f) => sum + f.men * TROOPS[f.troop].attack, 0);
   const defence = city.garrison * (1 + city.walls * WALL_DEFENCE);
   if (attack === 0) return { chance: 0, loss: men, men };
-  // The storm takes the city when attack times a luck draw in [1 - L, 1 + L) beats the defence.
-  const chance = Math.min(1, Math.max(0, (1 + STORM_LUCK - defence / attack) / (2 * STORM_LUCK)));
+  // The storm takes the city when attack times a luck draw in [1 - L, 1 + L) beats the defence by STORM_ODDS.
+  const chance = Math.min(
+    1,
+    Math.max(0, (1 + STORM_LUCK - (STORM_ODDS * defence) / attack) / (2 * STORM_LUCK)),
+  );
   return { chance, loss: Math.min(men, defence * STORM_KILL), men };
 }
 
 /** Whether an army can walk from the point to the city. */
 export function byLand(world: World, from: MapPoint, to: MapPoint): boolean {
   return connected(world.mesh, from, to, 'land');
+}
+
+export function besieged(state: State, city: CityView): boolean {
+  return Object.values(state.sieges).some((siege) => siege.city === city.id);
 }
 
 /** Whether another faction leads the siege of the city, so that it would take the city, whoever storms. */

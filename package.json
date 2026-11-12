@@ -24,7 +24,9 @@
     "sim:battles": "node scripts/sim-battles.ts",
     "sim:economy": "node scripts/sim-economy.ts",
     "sim:sieges": "node scripts/sim-sieges.ts",
-    "sim:ai": "node scripts/sim-ai.ts"
+    "sim:ai": "node scripts/sim-ai.ts",
+    "sim:opening": "node scripts/sim-opening.ts",
+    "sim:recruit": "node scripts/sim-recruit.ts"
   },
   "dependencies": {
     "pixi.js": "^8.23.0",
