@@ -1,0 +1,52 @@
+[
+ {
+  "file": "01-best-atlas-first-load.png",
+  "title": "Fit zoom on day 10: the atlas look works",
+  "kind": "screenshot"
+ },
+ {
+  "file": "02-best-rome-expands-with-sight.png",
+  "title": "Day 296: Rome at ten provinces, sight discs over the sea",
+  "kind": "screenshot"
+ },
+ {
+  "file": "03-best-battle-panel.png",
+  "title": "Day 503: the battle panel is clear, the map marker hides the banners",
+  "kind": "screenshot"
+ },
+ {
+  "file": "04-persia-playable-label-overlap.png",
+  "title": "Persia via a dropped save: banner and path cover the PERSEPOLIS label",
+  "kind": "screenshot"
+ },
+ {
+  "file": "05-worst-closest-zoom-empty.png",
+  "title": "Closest zoom on Roma: no terrain, no towns, no Tiber",
+  "kind": "screenshot"
+ },
+ {
+  "file": "06-worst-army-bleeds-no-enemy-shown.png",
+  "title": "Day 517: beaten army stuck at 1 day left, losing about 90 men a day, no enemy or battle shown",
+  "kind": "screenshot"
+ },
+ {
+  "file": "07-worst-macedon-wash-looks-like-fog.png",
+  "title": "Day 636: Macedon grey-blue wash reads as fog",
+  "kind": "screenshot"
+ },
+ {
+  "file": "08-worst-defeated-no-message.png",
+  "title": "Day 881: Rome is defeated, no message, panel still offers war",
+  "kind": "screenshot"
+ },
+ {
+  "file": "09-worst-229-queued-marches.png",
+  "title": "229 march orders queued while paused, all drawn",
+  "kind": "screenshot"
+ },
+ {
+  "file": "10-worst-phone-panel-covers-clock.png",
+  "title": "390 px wide: the city panel covers the clock and stores",
+  "kind": "screenshot"
+ }
+]
