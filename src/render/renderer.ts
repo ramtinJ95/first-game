@@ -380,6 +380,7 @@ export async function createRenderer({
 
   const fog = createFog(app.renderer, map);
   layers.fog.addChild(fog.root);
+  const fogShown = layers.fog.visible;
 
   const grain = new TilingSprite({ texture: paperTexture(), width: 1, height: 1 });
   layers.grain.addChild(grain);
@@ -822,7 +823,9 @@ export async function createRenderer({
         dirty = true;
       }
       cameraMoved = false;
-      if (fog.update(sight.provinces, fogCircles(previousSight, sight, progress))) dirty = true;
+      if (fogShown && fog.update(sight.provinces, fogCircles(previousSight, sight, progress))) {
+        dirty = true;
+      }
       const next = drawnArmies(previous, current, progress).filter((army) =>
         sight.armies.has(army.id),
       );
@@ -843,7 +846,7 @@ export async function createRenderer({
       drawRoutes(current, selection, planned);
       placeBanners(current, selection);
       placeBattles(selection);
-      fog.paint();
+      if (fogShown) fog.paint();
       app.render();
       if (waitForGpu) finish();
       return true;
