@@ -58,6 +58,14 @@ A field that only your system needs goes into the kind's schema in `src/sim/stat
 
 The map is static data outside the state. Outlines, neighbours, coastline, and rivers never go into the state. Code that needs geometry takes the `GameMap` as an argument.
 
+### Battles
+
+- `areAtWar(state, a, b)` in `src/sim/wars.ts` says whether two factions are at war. Every rule that asks uses it. `state.wars` maps `warKey(a, b)` to the war. The key is the JSON pair of the two faction ids in ascending order, so a pair is stored once and a faction is never at war with itself. Only orders such as `declareWar` change it.
+- `TROOPS` in `src/sim/troops.ts` holds every number a battle uses for a troop: category, attack, defence, discipline, and bonuses against categories. `formation.troop` accepts only its keys.
+- To add a troop type, add one row to `TROOPS` and nothing else. Add a matchup for it to `scripts/sim-battles.ts`, run `npm run sim:battles`, and put the table in the pull request. Renaming or removing a troop breaks old saves and needs a raise of `SAVE_FORMAT`.
+- `src/sim/systems/battles.ts` names `ENGAGEMENT_DISTANCE`, the stance effects, and the tuning numbers at its top. `retreatFromBattle` is the one way out of a battle, so a lane that pulls an army out calls it.
+- A beaten army marches home with every formation at morale 0. An army without an unbroken formation does not start or join a battle. Only idle armies regain morale.
+
 ### The clock and the panels
 
 `src/app/clock.ts` turns real time into ticks and queues orders until the next tick. Panels never read the clock or the live state. They read `view.current` from `src/app/view.svelte.ts`, a `$state.raw` snapshot that is published about ten times a second. A click in a panel becomes an order through the clock.
@@ -70,16 +78,17 @@ The map is static data outside the state. Outlines, neighbours, coastline, and r
 
 ## Commands
 
-| Command                           | Does                                                                                                            |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`                     | Vite dev server                                                                                                 |
-| `npm run build`                   | Production build to `dist/`                                                                                     |
-| `npm run check`                   | svelte-check, the sim type check, ESLint, Prettier                                                              |
-| `npm test`                        | Vitest unit tests                                                                                               |
-| `npm run e2e`                     | Playwright tests against the built page, Chromium only                                                          |
-| `npm run capture [-- <scenario>]` | Build, then write screenshots, `clip.gif`, video, and trace to `captures/<scenario>/`                           |
-| `npm run capture:publish`         | Push the PNG and GIF files to the `pr-assets` branch and print Markdown for the pull request                    |
-| `npm run capture:fetch`           | Pull this branch's media from `pr-assets` into `captures/`, declare it as Nexus outputs, and print the Markdown |
+| Command                                       | Does                                                                                                            |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                                 | Vite dev server                                                                                                 |
+| `npm run build`                               | Production build to `dist/`                                                                                     |
+| `npm run check`                               | svelte-check, the sim type check, ESLint, Prettier                                                              |
+| `npm test`                                    | Vitest unit tests                                                                                               |
+| `npm run e2e`                                 | Playwright tests against the built page, Chromium only                                                          |
+| `npm run sim:battles [-- --log <row> <seed>]` | Play the battle matchups over many seeds and print the tuning table, or one battle day by day                   |
+| `npm run capture [-- <scenario>]`             | Build, then write screenshots, `clip.gif`, video, and trace to `captures/<scenario>/`                           |
+| `npm run capture:publish`                     | Push the PNG and GIF files to the `pr-assets` branch and print Markdown for the pull request                    |
+| `npm run capture:fetch`                       | Pull this branch's media from `pr-assets` into `captures/`, declare it as Nexus outputs, and print the Markdown |
 
 To show a new view, add a scenario file to `scripts/capture/scenarios/`. It default-exports `defineScenario({ name, title, run })`. `run` gets the Playwright `page` and `shot(name, title)`. The whole run becomes the clip.
 

@@ -4,7 +4,8 @@ import * as v from 'valibot';
 import { describe, expect, test } from 'vitest';
 import type { CityId, FactionId } from './ids.ts';
 import { parseMap, POWERS, type PowerId } from './map.ts';
-import { newGame } from './new-game.ts';
+import { newGame, STARTING_GENERAL_SKILL } from './new-game.ts';
+import type { Order } from './orders/orders.ts';
 import { expectConsistent } from './references.ts';
 import { seedRng } from './rng.ts';
 import { loadGame, saveGame } from './save.ts';
@@ -79,6 +80,7 @@ describe('newGame on the committed map', () => {
         position: { x: capital?.city[0], y: capital?.city[1] },
       });
       expect(own[0]?.formations.length).toBeGreaterThan(0);
+      expect(own[0]?.generalSkill).toBe(STARTING_GENERAL_SKILL);
     }
     const troopsOf = (power: PowerId) =>
       armies
@@ -132,12 +134,29 @@ describe('newGame on the committed map', () => {
     expectConsistent(state);
   });
 
-  test('365 ticks from the new game run with no broken link', () => {
+  test('365 ticks from the new game run with no broken link, through a war and a battle', () => {
     let state = start();
+    expect(state.wars).toEqual({});
+    const declarations: Order[] = POWERS.flatMap((a, i) =>
+      POWERS.slice(i + 1).map((b) => ({
+        kind: 'declareWar' as const,
+        faction: a as FactionId,
+        against: b as FactionId,
+      })),
+    );
+    const roman = Object.values(state.armies).find((army) => army.owner === 'rome');
+    const punic = Object.values(state.armies).find((army) => army.owner === 'carthage');
+    if (!roman || !punic || roman.activity.kind !== 'idle') throw new Error('missing armies');
+    punic.activity = { kind: 'idle', position: { ...roman.activity.position } };
+    let battleDays = 0;
     for (let day = 0; day < 365; day++) {
-      state = tick(state, []).state;
+      state = tick(state, day === 0 ? declarations : []).state;
+      if (Object.keys(state.battles).length > 0) battleDays += 1;
       expectConsistent(state);
     }
+    expect(Object.keys(state.wars)).toHaveLength((POWERS.length * (POWERS.length - 1)) / 2);
+    expect(battleDays).toBeGreaterThan(0);
+    expect(state.battles).toEqual({});
     expect(state.day).toBe(366);
     expect(state.cities['roma' as CityId]?.owner).toBe('rome');
     expectConsistent(state);

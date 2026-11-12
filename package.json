@@ -17,7 +17,8 @@
     "capture": "vite build && node scripts/capture/run.ts",
     "capture:publish": "node scripts/capture/publish.ts",
     "capture:fetch": "node scripts/capture/fetch.ts",
-    "map:cities": "node scripts/map/pleiades.ts"
+    "map:cities": "node scripts/map/pleiades.ts",
+    "sim:battles": "node scripts/sim-battles.ts"
   },
   "dependencies": {
     "pixi.js": "^8.23.0",
