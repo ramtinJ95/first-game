@@ -13,6 +13,7 @@ export function fixtureWorld(): World {
   world ??= buildWorld(parseMap(mapData));
   return world;
 }
+import { CITY_DEFENCES } from './systems/sieges.ts';
 
 /** The ids in the fixture, so tests can name its records. */
 export const FIXTURE = {
@@ -37,8 +38,8 @@ export const FIXTURE = {
 /**
  * A tiny valid game on the committed map: Rome holds Latium and Campania, Carthage
  * holds Africa, the minor Syracusae holds Sicily, and Rome and Carthage each have one
- * idle army beside their capital. The cities stand where the map puts them. Nobody
- * is at war. Every call returns a fresh copy.
+ * idle army beside their capital. The cities stand where the map puts them, each
+ * with its rank's full defences. Nobody is at war. Every call returns a fresh copy.
  */
 export function buildFixture(seed = 1): GameState {
   const f = FIXTURE;
@@ -53,18 +54,21 @@ export function buildFixture(seed = 1): GameState {
         name: 'Rome',
         kind: 'greatPower',
         stores: { gold: 5000, food: 1000, manpower: 2000 },
+        defeatedOn: null,
       },
       [f.carthage]: {
         id: f.carthage,
         name: 'Carthage',
         kind: 'greatPower',
         stores: { gold: 3000, food: 1000, manpower: 1000 },
+        defeatedOn: null,
       },
       [f.syracusaeFaction]: {
         id: f.syracusaeFaction,
         name: 'Syracusae',
         kind: 'minor',
         stores: { gold: 100, food: 100, manpower: 100 },
+        defeatedOn: null,
       },
     },
     provinces: {
@@ -78,41 +82,53 @@ export function buildFixture(seed = 1): GameState {
         id: f.roma,
         name: 'Roma',
         province: f.latium,
+        rank: 'capital',
         owner: f.rome,
         position: { x: 2511.3, y: 2335.8 },
         population: 40_000,
         unrestDays: 0,
         recruits: [],
+        ...CITY_DEFENCES.capital,
+        fellOn: null,
       },
       [f.capua]: {
         id: f.capua,
         name: 'Capua',
         province: f.campania,
+        rank: 'greatPowerCity',
         owner: f.rome,
         position: { x: 2638.8, y: 2448.3 },
         population: 18_000,
         unrestDays: 0,
         recruits: [],
+        ...CITY_DEFENCES.greatPowerCity,
+        fellOn: null,
       },
       [f.carthago]: {
         id: f.carthago,
         name: 'Carthago',
         province: f.africa,
+        rank: 'capital',
         owner: f.carthage,
         position: { x: 2229.9, y: 2865.1 },
         population: 50_000,
         unrestDays: 0,
         recruits: [],
+        ...CITY_DEFENCES.capital,
+        fellOn: null,
       },
       [f.syracusae]: {
         id: f.syracusae,
         name: 'Syracusae',
         province: f.sicilia,
+        rank: 'minorCity',
         owner: f.syracusaeFaction,
         position: { x: 2661.2, y: 2911.3 },
         population: 8_000,
         unrestDays: 0,
         recruits: [],
+        ...CITY_DEFENCES.minorCity,
+        fellOn: null,
       },
     },
     armies: {

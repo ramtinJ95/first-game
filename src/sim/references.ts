@@ -147,11 +147,14 @@ export function findBrokenReferences(state: DeepReadonly<GameState>): string[] {
       );
     }
   }
+  const besieged = new Set<string>();
   for (const siege of Object.values(state.sieges)) {
     expect(
       get(state.cities, siege.city) !== undefined,
       `siege ${siege.id} is at unknown city ${siege.city}`,
     );
+    expect(!besieged.has(siege.city), `city ${siege.city} has more than one siege`);
+    besieged.add(siege.city);
     unique(siege.besiegers, `siege ${siege.id}`);
     for (const id of siege.besiegers) {
       const activity = get(state.armies, id)?.activity;
@@ -166,11 +169,25 @@ export function findBrokenReferences(state: DeepReadonly<GameState>): string[] {
     const sides = warSides(key);
     expect(!!sides, `war ${key} does not name two different factions in ascending order`);
     for (const faction of sides ?? []) {
-      expect(
-        get(state.factions, faction) !== undefined,
-        `war ${key} names unknown faction ${faction}`,
-      );
+      const record = get(state.factions, faction);
+      expect(record !== undefined, `war ${key} names unknown faction ${faction}`);
+      expect(record?.defeatedOn == null, `war ${key} names ${faction}, which is out of the game`);
     }
+  }
+
+  const defeated = new Set(
+    Object.values(state.factions)
+      .filter((faction) => faction.defeatedOn !== null)
+      .map((faction) => faction.id as string),
+  );
+  const holdings = [
+    ...Object.values(state.cities).map((r) => ['city', r.id, r.owner] as const),
+    ...Object.values(state.armies).map((r) => ['army', r.id, r.owner] as const),
+    ...Object.values(state.convoys).map((r) => ['convoy', r.id, r.owner] as const),
+    ...Object.values(state.refugeeColumns).map((r) => ['refugee column', r.id, r.owner] as const),
+  ];
+  for (const [kind, id, owner] of holdings) {
+    expect(!defeated.has(owner), `${kind} ${id} belongs to ${owner}, which is out of the game`);
   }
 
   return problems;

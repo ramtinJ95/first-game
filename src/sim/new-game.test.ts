@@ -12,6 +12,7 @@ import { loadGame, saveGame } from './save.ts';
 import { GameStateSchema, type GameState } from './state/game-state.ts';
 import { UNREST_DAYS } from './cities.ts';
 import { dailyBalances, menOf, UPKEEP_PER_MAN } from './systems/economy.ts';
+import { CITY_DEFENCES } from './systems/sieges.ts';
 import { tick } from './tick.ts';
 import { TROOPS, type Troop } from './troops.ts';
 import { buildWorld } from './world/world.ts';
@@ -139,7 +140,7 @@ describe('newGame on the committed map', () => {
     expectConsistent(state);
   });
 
-  test('365 ticks from the new game run with no broken link, through a war and a battle', () => {
+  test('365 ticks from the new game run with no broken link, through a war, a battle, and a siege', () => {
     let state = start();
     expect(state.wars).toEqual({});
     const declarations: Order[] = POWERS.flatMap((a, i) =>
@@ -154,16 +155,18 @@ describe('newGame on the committed map', () => {
     if (!roman || !punic || roman.activity.kind !== 'idle') throw new Error('missing armies');
     punic.activity = { kind: 'idle', position: { ...roman.activity.position } };
     let battleDays = 0;
+    let siegeDays = 0;
     for (let day = 0; day < 365; day++) {
       state = tick(state, day === 0 ? declarations : [], world).state;
       if (Object.keys(state.battles).length > 0) battleDays += 1;
+      if (Object.keys(state.sieges).length > 0) siegeDays += 1;
       expectConsistent(state);
     }
     expect(Object.keys(state.wars)).toHaveLength((POWERS.length * (POWERS.length - 1)) / 2);
     expect(battleDays).toBeGreaterThan(0);
+    expect(siegeDays).toBeGreaterThan(0);
     expect(state.battles).toEqual({});
     expect(state.day).toBe(366);
-    expect(state.cities['roma' as CityId]?.owner).toBe('rome');
     expectConsistent(state);
   });
 });
@@ -183,6 +186,19 @@ describe('the economy of the new game meets its tuning targets', () => {
     for (const city of Object.values(state.cities)) {
       expect(city).toMatchObject({ unrestDays: 0, recruits: [] });
     }
+    expectConsistent(state);
+  });
+
+  test('every city starts with the full walls, garrison, and food of its rank', () => {
+    const state = start();
+    const ranks = { capital: 0, greatPowerCity: 0, minorCity: 0 };
+    for (const city of Object.values(state.cities)) {
+      ranks[city.rank] += 1;
+      expect(city).toMatchObject({ ...CITY_DEFENCES[city.rank], fellOn: null });
+      expect(city.rank === 'minorCity').toBe(state.factions[city.owner]?.kind === 'minor');
+    }
+    expect(ranks.capital).toBe(POWERS.length);
+    expect(ranks.greatPowerCity).toBeGreaterThan(0);
     expectConsistent(state);
   });
 

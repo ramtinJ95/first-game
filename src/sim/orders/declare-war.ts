@@ -10,8 +10,11 @@ export interface DeclareWarOrder {
 }
 
 export function declareWar(state: GameState, order: DeclareWarOrder): string | undefined {
-  if (!Object.hasOwn(state.factions, order.against))
-    return `faction ${order.against} does not exist`;
+  const against = Object.hasOwn(state.factions, order.against)
+    ? state.factions[order.against]
+    : undefined;
+  if (!against) return `faction ${order.against} does not exist`;
+  if (against.defeatedOn !== null) return `faction ${order.against} is out of the game`;
   if (order.against === order.faction)
     return `faction ${order.faction} cannot declare war on itself`;
   if (areAtWar(state, order.faction, order.against)) {

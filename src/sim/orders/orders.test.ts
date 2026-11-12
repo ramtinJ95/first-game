@@ -24,24 +24,53 @@ describe('moveArmy', () => {
     expectConsistent(state);
   });
 
-  test('is rejected for a besieging army, which keeps its siege', () => {
+  test('takes a besieging army off its siege and sets it marching', () => {
     const state = buildFixture();
     const army = state.armies[FIXTURE.romanArmy];
     if (!army) throw new Error('fixture lacks the Roman army');
     const siege = 'siege-1' as SiegeId;
-    army.activity = { kind: 'besieging', position: { x: 0, y: 0 }, siege };
+    state.nextSerial = 2;
+    state.sieges[siege] = {
+      id: siege,
+      city: FIXTURE.carthago,
+      besiegers: [army.id],
+      startedOn: state.day,
+    };
+    const camp = { x: 2516.3, y: 2340.8 };
+    const capua = { x: 2638.8, y: 2448.3 };
+    army.activity = { kind: 'besieging', position: camp, siege };
+    const order: Order = { kind: 'moveArmy', faction: FIXTURE.rome, army: army.id, to: capua };
+    expect(executeOrder(state, order, world)).toBeUndefined();
+    const activity = state.armies[FIXTURE.romanArmy]?.activity;
+    expect(activity).toMatchObject({ kind: 'marching', position: camp });
+    expect(activity?.kind === 'marching' && activity.waypoints.at(-1)).toEqual(capua);
+    expect(state.sieges[siege]?.besiegers).toEqual([]);
+    expectConsistent(state);
+  });
+
+  test('keeps a besieging army in its siege when no land route reaches the point', () => {
+    const state = buildFixture();
+    const army = state.armies[FIXTURE.romanArmy];
+    if (!army) throw new Error('fixture lacks the Roman army');
+    const siege = 'siege-1' as SiegeId;
+    state.nextSerial = 2;
+    state.sieges[siege] = {
+      id: siege,
+      city: FIXTURE.carthago,
+      besiegers: [army.id],
+      startedOn: state.day,
+    };
+    army.activity = { kind: 'besieging', position: { x: 2516.3, y: 2340.8 }, siege };
     const before = structuredClone(state);
     const order: Order = {
       kind: 'moveArmy',
       faction: FIXTURE.rome,
       army: army.id,
-      to: { x: 1, y: 1 },
+      to: { x: 2400, y: 2500 },
     };
-    expect(executeOrder(state, order, world)).toEqual({
-      order,
-      reason: 'army army-roman is besieging and must lift siege siege-1 first',
-    });
+    expect(executeOrder(state, order, world)?.reason).toBe('destination 2400, 2500 is in the sea');
     expect(state).toEqual(before);
+    expectConsistent(state);
   });
 
   test('is rejected for a destination that is not a finite point', () => {
