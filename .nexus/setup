@@ -2,4 +2,5 @@
 set -eu
 cd "$(dirname "$0")/.."
 npm ci --no-audit --no-fund
+cp package-lock.json node_modules/.nexus-installed-lock
 npx playwright install chromium || echo "Chromium download failed. Run e2e and capture in CI, then use npm run capture:fetch." >&2

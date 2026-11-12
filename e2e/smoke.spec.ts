@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('the skeleton renders the map and the panel without errors', async ({ page }) => {
+test('the skeleton renders the map and the time controls without errors', async ({ page }) => {
   const errors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
@@ -15,6 +15,6 @@ test('the skeleton renders the map and the panel without errors', async ({ page 
   expect(box?.width).toBeGreaterThan(0);
   expect(box?.height).toBeGreaterThan(0);
 
-  await expect(page.getByTestId('panel')).toContainText('Day 1');
+  await expect(page.getByTestId('time-controls-day')).toHaveText(/^Day \d+$/);
   expect(errors).toEqual([]);
 });
