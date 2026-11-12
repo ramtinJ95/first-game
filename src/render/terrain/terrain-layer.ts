@@ -75,10 +75,19 @@ function rectOf(size: number, key: number): Rect {
 export function createTerrain(map: GameMap, parent: Container, renderer: Renderer): Terrain {
   const land = new Land(map);
 
+  // The watered strips follow rivers and fan out to the coast, so they are clipped to
+  // the land. The mask costs only when the cached texture is drawn again.
+  const valleys = new Graphics(drawValleys(land.valleys, land.deltas));
+  const landMask = new Graphics();
+  for (const province of map.provinces) {
+    for (const [outer] of province.outline) if (outer) landMask.poly(outer.flat()).fill(0xffffff);
+  }
+  valleys.mask = landMask;
   const ground = new Container({ label: 'ground' });
   ground.addChild(
     new Graphics(drawDesert(map.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline))),
-    new Graphics(drawValleys(land.valleys, land.deltas)),
+    valleys,
+    landMask,
     new Graphics(drawWoods(land.woods)),
   );
 

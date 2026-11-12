@@ -46,7 +46,7 @@ export type Tier = 'wide' | 'middle' | 'close';
 /** Spacing of each kind of drawing in km, and the side of a chunk, per tier. */
 export const TIERS = {
   wide: { chunk: 2048, mountain: 34, ridge: 0, hill: 70, tree: 8.5, dune: 30, stipple: 16 },
-  texture: { chunk: 1024 },
+  texture: { chunk: 256 },
   middle: { chunk: 256, mountain: 9, ridge: 24, hill: 22, tree: 4.6, dune: 13, stipple: 7 },
   close: { chunk: 64, mountain: 4.6, ridge: 13, hill: 9, tree: 1.7, dune: 5.5, stipple: 2.8 },
 } as const;

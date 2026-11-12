@@ -15,6 +15,7 @@ beforeAll(() => {
 const ALPS = { left: 2048, top: 1536, right: 2560, bottom: 2048 };
 const GAUL = { left: 1536, top: 1024, right: 2560, bottom: 1536 };
 const SAHARA = { left: 1024, top: 3072, right: 2048, bottom: 3584 };
+const NILE_DELTA = { left: 3968, top: 3584, right: 4160, bottom: 3776 };
 const ROMA = { left: 2432, top: 2304, right: 2560, bottom: 2432 };
 
 interface Foot {
@@ -55,6 +56,7 @@ describe('placing the terrain', () => {
     expect(count(placeRelief(land, GAUL, 'middle'), 'tree')).toBeGreaterThan(300);
     expect(count(placeRelief(land, SAHARA, 'middle'), 'dune')).toBeGreaterThan(50);
     expect(count(placeFields(land, ROMA), 'field')).toBeGreaterThan(20);
+    expect(count(placeFields(land, NILE_DELTA), 'field')).toBeGreaterThan(200);
   });
 
   it('places nothing in the sea or a lake, and each kind only inside its own area', () => {
@@ -68,7 +70,7 @@ describe('placing the terrain', () => {
     for (const tier of ['wide', 'middle', 'close'] as const) {
       const rects =
         tier === 'close'
-          ? [ROMA, { left: 2176, top: 1792, right: 2304, bottom: 1920 }]
+          ? [ROMA, NILE_DELTA, { left: 2176, top: 1792, right: 2304, bottom: 1920 }]
           : [...chunks(ALPS, tier), ...chunks(SAHARA, tier)];
       for (const rect of rects) {
         for (const { kind, x, y } of feet([
