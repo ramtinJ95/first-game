@@ -4,7 +4,7 @@ import type { Plane } from './projection.ts';
 import type { LonLat } from './sources.ts';
 
 /** The span runs from the first period's lower bound to the last period's upper bound. */
-export const PERIODS = ['classical', 'hellenistic-republican'] as const;
+export const PERIODS = ['classical', 'hellenistic-republican', 'roman'] as const;
 export const SETTLEMENT_TYPES: readonly string[] = ['settlement', 'urban', 'fortified-settlement'];
 export const TOWN_TYPES: readonly string[] = ['urban', 'fortified-settlement'];
 /** A place that another place lies at or in makes it a town. */
@@ -187,11 +187,13 @@ function periodSpan(rows: Record<string, string>[]): [from: number, to: number] 
   return [Math.min(...bounds.flat()), Math.max(...bounds.flat())];
 }
 
-/** `550 BC` is -550, `30 AD` is 30. */
+/** `550 BC` is -550, `AD 300` and `300 AD` are 300. */
 function era(text: string): number {
-  const match = /^(\d+) (BC|AD)$/.exec(text);
-  if (!match) throw new Error(`unexpected period bound ${text}`);
-  return match[2] === 'BC' ? -Number(match[1]) : Number(match[1]);
+  const bc = /^(\d+) BC$/.exec(text);
+  if (bc) return -Number(bc[1]);
+  const ad = /^(?:AD (\d+)|(\d+) AD)$/.exec(text);
+  if (!ad) throw new Error(`unexpected period bound ${text}`);
+  return Number(ad[1] ?? ad[2]);
 }
 
 function year(text: string): number | undefined {

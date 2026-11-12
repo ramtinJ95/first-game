@@ -75,6 +75,11 @@ The map is static data outside the state. Outlines, neighbours, coastline, and r
 
 The map also holds terrain areas, peaks, and settlements. A settlement is a named place with no people and no rules. The rules that choose them sit at the top of `scripts/map/terrain.ts` and `scripts/map/settlements.ts`.
 
+Known faults in the source data. Check them before you draw or label terrain.
+
+- Natural Earth's English name for the whole Apennines is "Appennino Ligure", which is only their northern end.
+- Natural Earth lists IJsselmeer, a modern polder lake, and Syvash, a lagoon of the Sea of Azov, as lakes. The build drops both by name.
+
 ### Battles
 
 - `areAtWar(state, a, b)` in `src/sim/wars.ts` says whether two factions are at war. Every rule that asks uses it. `state.wars` maps `warKey(a, b)` to the war. The key is the JSON pair of the two faction ids in ascending order, so a pair is stored once and a faction is never at war with itself. Only orders such as `declareWar` change it.

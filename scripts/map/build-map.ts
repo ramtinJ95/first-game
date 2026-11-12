@@ -108,6 +108,7 @@ export function buildMap(cities: City[], sources: Sources): MapBuild {
     })
     .sort((a, b) => compare(a.id, b.id));
 
+  const rivers = riverLines(sources.rivers, plane);
   return {
     map: {
       version: MAP_VERSION,
@@ -118,8 +119,8 @@ export function buildMap(cities: City[], sources: Sources): MapBuild {
       extent: roundRing(plane.extent)[0] ?? [],
       provinces,
       coastline: coastline(landArea, plane.extent).flatMap(roundLine),
-      rivers: riverLines(sources.rivers, plane),
-      terrain: terrainAreas(sources, plane, landArea),
+      rivers,
+      terrain: terrainAreas(sources, plane, landArea, rivers),
       peaks: peaksOnLand(sources.elevationPoints, plane, landArea),
       settlements: chooseSettlements(sources.settlementCandidates, provinces, plane, landArea),
     },

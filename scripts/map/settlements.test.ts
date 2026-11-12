@@ -19,6 +19,7 @@ function files(places: Place[], connections: [from: number, type: string, to: nu
       'classical,Classical,"c",550 BC,330 BC,',
       'hellenistic-republican,Hellenistic,"d",330 BC,30 BC,',
       'roman,Roman,"e",30 BC,AD 300,',
+      'late-antique,Late Antique,"f",AD 300,AD 640,',
     ]),
     places: csv(
       'created,description,details,provenance,title,uri,id,representative_latitude,representative_longitude,bounding_box_wkt,location_precision',
@@ -53,16 +54,18 @@ function files(places: Place[], connections: [from: number, type: string, to: nu
 
 const ids = (all: PleiadesFiles) => readCandidates(all).map((candidate) => candidate.pleiadesId);
 
-test('a place dated inside the classical or the Hellenistic period is a candidate', () => {
+test('a place dated inside the classical, Hellenistic, or Roman period is a candidate', () => {
   expect(
     ids(
       files([
         { id: 1, locations: [['-500', '-400']] },
         { id: 2, locations: [['-200', '-100']] },
-        { id: 3, locations: [['-1000', '500']] },
+        { id: 3, locations: [['-30', '300']] },
+        { id: 4, locations: [['100', '200']] },
+        { id: 5, locations: [['-1000', '500']] },
       ]),
     ),
-  ).toEqual([1, 2, 3]);
+  ).toEqual([1, 2, 3, 4, 5]);
 });
 
 test('a place dated only outside the span, or only touching its ends, is not', () => {
@@ -70,9 +73,9 @@ test('a place dated only outside the span, or only touching its ends, is not', (
     ids(
       files([
         { id: 1, locations: [['-750', '-600']] },
-        { id: 2, locations: [['100', '300']] },
+        { id: 2, locations: [['400', '600']] },
         { id: 3, locations: [['-750', '-550']] },
-        { id: 4, locations: [['-30', '300']] },
+        { id: 4, locations: [['300', '640']] },
         { id: 5, locations: [['', '']] },
       ]),
     ),

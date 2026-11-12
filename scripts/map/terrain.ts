@@ -1,8 +1,11 @@
 import { contours } from 'd3-contour';
 import {
   TERRAIN_KINDS,
+  type MapLine,
   type MultiPolygon,
   type Peak,
+  type Point,
+  type River,
   type TerrainArea,
   type TerrainKind,
 } from '../../src/sim/map.ts';
@@ -18,7 +21,6 @@ import {
   roundPoint,
   simplify as exactSimplify,
   union as exactUnion,
-  type Box,
 } from './geometry.ts';
 import { EXTENT_BOX, touchesExtent, type Plane } from './projection.ts';
 import {
@@ -43,12 +45,18 @@ export const MOUNTAIN_ELEVATION_M = 2000;
 export const HILL_RELIEF_M = 400;
 const RANGE_CLASS = 'Range/mtn';
 const DESERT_CLASS = 'Desert';
+/** River valleys and deltas are watered land. Desert keeps this far from every river line. */
+export const DESERT_RIVER_KM = 15;
+const DELTA_CLASS = 'Delta';
+const BUFFER_SIDES = 16;
 /** RESOLVE biomes: temperate broadleaf and mixed, temperate conifer, boreal. */
 export const FOREST_BIOMES: readonly number[] = [4, 5, 6];
 /** Forest steppe is open grassland with groves, and the biome lists it as forest. */
 const NOT_FOREST = /steppe/i;
 /** Reservoirs are modern dams. */
 export const LAKE_CLASSES: readonly string[] = ['Lake', 'Alkaline Lake'];
+/** Natural Earth lists a modern polder lake and a lagoon of the Sea of Azov as lakes. */
+const NOT_LAKES: readonly string[] = ['IJsselmeer', 'Syvash'];
 const PEAK_CLASS = 'mountain';
 /** Drops national high points such as the Vaalserberg (321 m). */
 export const MIN_PEAK_M = 1000;
@@ -84,6 +92,7 @@ export function terrainAreas(
   sources: Pick<Sources, 'regions' | 'elevation' | 'ecoregions' | 'lakes'>,
   plane: Plane,
   land: MultiPolygon,
+  rivers: River[],
 ): TerrainArea[] {
   const toPlane = (polygons: LonLatPolygon[]): MultiPolygon =>
     simplify(
@@ -106,13 +115,16 @@ export function terrainAreas(
     .filter((region) => FOREST_BIOMES.includes(region.biome) && !NOT_FOREST.test(region.name))
     .map((region) => ({ name: region.name, outline: toPlane(region.polygons) }));
   const lakes = sources.lakes
-    .filter((lake) => LAKE_CLASSES.includes(lake.featurecla))
+    .filter(
+      (lake) => LAKE_CLASSES.includes(lake.featurecla) && !NOT_LAKES.includes(lake.name ?? ''),
+    )
     .map((lake) => ({ name: lake.name ?? '', outline: toPlane(lake.polygons) }));
 
+  const deserts = regions(DESERT_CLASS);
   const claims: Record<TerrainKind, Claim[]> = {
     mountains: inRanges(relief.mountains),
     hills: inRanges(difference(relief.hills, relief.mountains)),
-    desert: carve(regions(DESERT_CLASS)),
+    desert: carve(deserts, waterways(deserts, rivers, regions(DELTA_CLASS))),
     forest: carve(forests),
     lake: carve(lakes),
   };
@@ -131,9 +143,12 @@ export function terrainAreas(
   );
 }
 
-/** In ascending area, each claim keeps only what no smaller claim of its list took. */
-function carve(claims: Claim[]): Claim[] {
-  const taken: { outline: MultiPolygon; box: Box }[] = [];
+/**
+ * In ascending area, each claim keeps only what no smaller claim of its list took, and nothing of
+ * what `before` already took.
+ */
+function carve(claims: Claim[], before: MultiPolygon[] = []): Claim[] {
+  const taken = before.map((outline) => ({ outline, box: boxOf(outline) }));
   return claims
     .map((claim) => ({ claim, size: area(claim.outline) }))
     .filter(({ size }) => size > 0)
@@ -151,6 +166,50 @@ function subtract(shape: MultiPolygon, others: { outline: MultiPolygon }[]): Mul
     .filter((other) => boxesOverlap(boxOf(other.outline), box))
     .map((other) => other.outline);
   return near.length > 0 ? difference(shape, ...near) : shape;
+}
+
+/** The deltas, and the land within `DESERT_RIVER_KM` of each river line that reaches a desert. */
+function waterways(deserts: Claim[], rivers: River[], deltas: Claim[]): MultiPolygon[] {
+  const boxes = deserts.map((desert) => boxOf(desert.outline));
+  const reaching = rivers
+    .map((river) => river.line)
+    .filter((line) => {
+      const box = boxOf([[line]]);
+      return boxes.some((desert) => boxesOverlap(desert, box));
+    });
+  const strips = reaching.map((line) => union(...lineBuffer(line, DESERT_RIVER_KM)));
+  return [...strips, ...deltas.map((delta) => delta.outline)].filter((shape) => shape.length > 0);
+}
+
+/** A quadrilateral along each segment and a polygon of `BUFFER_SIDES` around each vertex. */
+function lineBuffer(line: MapLine, radius: number): MultiPolygon[] {
+  const pieces: MultiPolygon[] = line.map(([x, y]) => [
+    [
+      Array.from({ length: BUFFER_SIDES }, (_, k): Point => {
+        const angle = (2 * Math.PI * k) / BUFFER_SIDES;
+        return [x + radius * Math.cos(angle), y + radius * Math.sin(angle)];
+      }),
+    ],
+  ]);
+  for (let i = 0; i + 1 < line.length; i++) {
+    const [ax, ay] = line[i] as Point;
+    const [bx, by] = line[i + 1] as Point;
+    const length = Math.hypot(bx - ax, by - ay);
+    if (length === 0) continue;
+    const nx = (-(by - ay) / length) * radius;
+    const ny = ((bx - ax) / length) * radius;
+    pieces.push([
+      [
+        [
+          [ax + nx, ay + ny],
+          [bx + nx, by + ny],
+          [bx - nx, by - ny],
+          [ax - nx, ay - ny],
+        ],
+      ],
+    ]);
+  }
+  return pieces;
 }
 
 /** One claim per name, sorted by name. */

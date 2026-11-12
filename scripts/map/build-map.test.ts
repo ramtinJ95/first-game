@@ -18,6 +18,7 @@ import {
   contains,
   difference,
   distance,
+  distanceToBoundary,
   intersection,
   perimeter,
   union,
@@ -25,7 +26,7 @@ import {
 } from './geometry.ts';
 import { MIN_CITY_SPACING_KM, MIN_SPACING_KM, quotaOf } from './settlements.ts';
 import { loadSources, type Sources } from './sources.ts';
-import { MIN_PEAK_M } from './terrain.ts';
+import { DESERT_RIVER_KM, MIN_PEAK_M } from './terrain.ts';
 
 const BUILD_TIMEOUT_MS = 60_000;
 /** Rounding a vertex to the 0.1 km grid moves it by at most this, so an edge sweeps this times its length. */
@@ -248,6 +249,36 @@ test('there are mountains, hills, desert, forest, and lakes, and the Alps are na
     ).toBe(true);
   }
   expect(map.terrain.some(({ kind, name }) => kind === 'mountains' && name === 'Alps')).toBe(true);
+});
+
+test(`desert keeps ${DESERT_RIVER_KM} km from every river, so the river cities lie outside it`, () => {
+  const deserts = map.terrain
+    .filter((terrain) => terrain.kind === 'desert')
+    .map((desert) => ({ outline: desert.outline, box: boxOf(desert.outline) }));
+  // The buffer's 16-gons reach cos(π/16) of the distance between their corners.
+  const reach = DESERT_RIVER_KM * Math.cos(Math.PI / 16) - ROUNDING_KM;
+  const close = map.rivers.flatMap((river) =>
+    river.line.flatMap(([x, y]) =>
+      deserts
+        .filter(
+          ({ box }) =>
+            x >= box.minX - reach &&
+            x <= box.maxX + reach &&
+            y >= box.minY - reach &&
+            y <= box.maxY + reach,
+        )
+        .filter(
+          ({ outline }) => contains(outline, [x, y]) || distanceToBoundary(outline, [x, y]) < reach,
+        )
+        .map(() => `${river.name} at ${x},${y}`),
+    ),
+  );
+  expect(close).toEqual([]);
+  const inDesert = ['memphis', 'thebai', 'syene', 'babylon'].filter((id) => {
+    const city = map.provinces.find((province) => province.id === id)?.city;
+    return !city || deserts.some(({ outline }) => contains(outline, city));
+  });
+  expect(inDesert).toEqual([]);
 });
 
 test(`every peak lies on the land inside the extent and is at least ${MIN_PEAK_M} m high`, () => {
