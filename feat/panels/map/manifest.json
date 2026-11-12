@@ -31,7 +31,7 @@
   },
   {
     "file": "pan-frame-time.png",
-    "title": "Pan over the map at 0.99 px per km: 384 frames, frame interval median 200.0 ms, p95 500.0 ms, main thread busy 4.9 ms per frame; idle frame interval median 16.7 ms",
+    "title": "Pan over the map at 0.99 px per km: 404 frames, frame interval median 300.0 ms, p95 850.0 ms, main thread busy 5.5 ms per frame; idle frame interval median 16.7 ms",
     "kind": "screenshot"
   },
   {
