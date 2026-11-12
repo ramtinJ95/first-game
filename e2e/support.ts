@@ -10,9 +10,10 @@ import {
   type Camera,
 } from '../src/render/camera.ts';
 import { BANNER } from '../src/render/markers.ts';
+import { decideAll } from '../src/sim/ai/decide.ts';
 import { changeCityOwner } from '../src/sim/cities.ts';
 import type { ArmyId, CityId, FactionId, FormationId } from '../src/sim/ids.ts';
-import { parseMap } from '../src/sim/map.ts';
+import { parseMap, type PowerId } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
 import type { Order } from '../src/sim/orders/orders.ts';
 import { saveGame } from '../src/sim/save.ts';
@@ -21,6 +22,7 @@ import type { GameState } from '../src/sim/state/game-state.ts';
 import type { MapPoint } from '../src/sim/state/map-point.ts';
 import { warKey } from '../src/sim/state/war.ts';
 import { tick } from '../src/sim/tick.ts';
+import { areAtWar } from '../src/sim/wars.ts';
 import { buildWorld, type World } from '../src/sim/world/world.ts';
 
 export const map = parseMap(
@@ -38,7 +40,25 @@ export function cityPoint(id: string): MapPoint {
 export const rome = 'rome' as FactionId;
 export const carthage = 'carthage' as FactionId;
 
-/** A new game as the page starts it, with Rome as the player. */
+/**
+ * The one way a browser test or a capture scenario enters a game: a running game as
+ * `power`, at the widest zoom, with no start screen and no guide, by the page's
+ * `?play=` query. `query` adds to it, such as `draw=full`, and `base` names another
+ * server than the test's own.
+ */
+export async function openGame(
+  page: Page,
+  {
+    query = '',
+    power = 'rome',
+    base = '',
+  }: { query?: string; power?: PowerId; base?: string } = {},
+) {
+  await page.goto(`${base}/?play=${power}${query ? `&${query}` : ''}`);
+  await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+}
+
+/** A new game like the one `openGame` starts, with Rome as the player. */
 export function startGame(): GameState {
   return newGame(map, { seed: 1, player: 'rome' });
 }
@@ -149,6 +169,57 @@ export async function dropSave(page: Page, state: GameState) {
     return transfer;
   }, saveGame(state));
   await page.dispatchEvent('canvas', 'drop', { dataTransfer });
+}
+
+/** Plays one day as the page plays it, with every faction but the player under the AI. */
+export function nextDay(state: GameState): GameState {
+  world ??= buildWorld(map);
+  return tick(state, decideAll(state, world), world).state;
+}
+
+/**
+ * The attacker's army stands at the city, at war with its owner, and the city has no
+ * garrison left, so the city falls to the attacker on the next day.
+ */
+export function fallsTomorrow(state: GameState, city: string, attacker: FactionId) {
+  const target = state.cities[city as CityId];
+  if (!target) throw new Error(`no city ${city}`);
+  if (!areAtWar(state, attacker, target.owner)) declareWar(state, attacker, target.owner);
+  armyOf(state, attacker).activity = { kind: 'idle', position: { ...target.position } };
+  target.garrison = 0;
+  target.foodDays = 0;
+}
+
+/** Rome holds Roma alone, and Carthage's army takes it tomorrow. */
+export function romaFallsTomorrow(): GameState {
+  const state = startGame();
+  for (const id of ['capua', 'arretium', 'ariminum'] as CityId[]) {
+    changeCityOwner(state, id, carthage);
+  }
+  fallsTomorrow(state, 'roma', carthage);
+  armyOf(state, rome).activity = { kind: 'idle', position: cityPoint('massalia') };
+  return state;
+}
+
+/** Rome takes Mediolanum tomorrow, and nobody else is at war. */
+export function mediolanumFallsTomorrow(): GameState {
+  const state = startGame();
+  fallsTomorrow(state, 'mediolanum', rome);
+  return state;
+}
+
+/**
+ * Rome holds 31 provinces with Roma, Carthago, and Alexandria, and takes Mediolanum
+ * tomorrow, which meets the victory rule.
+ */
+export function romeWinsTomorrow(): GameState {
+  const state = mediolanumFallsTomorrow();
+  for (const id of ['carthago', 'alexandria'] as CityId[]) changeCityOwner(state, id, rome);
+  const minors = Object.values(state.cities)
+    .filter((city) => city.rank === 'minorCity' && city.id !== 'mediolanum')
+    .sort((a, b) => (a.id < b.id ? -1 : 1));
+  for (const city of minors.slice(0, 25)) changeCityOwner(state, city.id, rome);
+  return state;
 }
 
 /** Follows the page's camera with the same maths while it drives the mouse. */

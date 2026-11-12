@@ -10,7 +10,7 @@ import { decideAll } from '../src/sim/ai/decide.ts';
 import { saveGame } from '../src/sim/save.ts';
 import { tick } from '../src/sim/tick.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
-import { startGame, map } from './support.ts';
+import { map, openGame, startGame } from './support.ts';
 
 /**
  * Plays the built page under each drawing and prints the frame interval that the
@@ -59,7 +59,7 @@ async function measure(browser: Browser, base: string, query: string, shot?: str
   const page = await context.newPage();
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto(`${base}/?frames${query ? `&${query}` : ''}`);
+  await openGame(page, { base, query: `frames${query ? `&${query}` : ''}` });
   const meter = page.getByTestId('frame-meter');
   await meter.waitFor();
   if (save) {

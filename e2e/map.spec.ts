@@ -9,6 +9,7 @@ import { parseMap } from '../src/sim/map.ts';
 import { newGame, STARTING_POPULATION } from '../src/sim/new-game.ts';
 import { saveGame } from '../src/sim/save.ts';
 import type { MapPoint } from '../src/sim/state/map-point.ts';
+import { openGame } from './support.ts';
 
 const map = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../data/map/map.json'), 'utf8')),
@@ -44,8 +45,7 @@ test.describe('the map', () => {
       if (message.type() === 'error') errors.push(message.text());
     });
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.goto('/');
-    await page.getByTestId('time-controls').waitFor({ state: 'visible' });
+    await openGame(page);
   });
 
   test.afterEach(() => {

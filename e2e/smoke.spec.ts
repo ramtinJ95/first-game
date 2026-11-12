@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
+import { openGame } from './support.ts';
 
 const map = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../data/map/map.json'), 'utf8'),
@@ -15,10 +16,7 @@ test('the skeleton renders the full drawing of the map and the time controls wit
   });
   page.on('pageerror', (error) => errors.push(error.message));
 
-  await page.goto('/?draw=full');
-  // The canvas appears once the map is parsed and the world built, which a slow machine
-  // takes seconds over, so wait for the game to start as every other spec does.
-  await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+  await openGame(page, { query: 'draw=full' });
 
   const canvas = page.locator('canvas');
   await expect(canvas).toBeVisible();

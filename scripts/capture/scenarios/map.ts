@@ -19,6 +19,7 @@ import { tick } from '../../../src/sim/tick.ts';
 import { buildWorld } from '../../../src/sim/world/world.ts';
 import type { MapPoint } from '../../../src/sim/state/map-point.ts';
 import { defineScenario } from '../scenario.ts';
+import { openGame } from '../../../e2e/support.ts';
 
 const map = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../../../data/map/map.json'), 'utf8')),
@@ -235,8 +236,7 @@ export default defineScenario({
       await take(name, title);
     };
     const started = Date.now();
-    await page.goto('/');
-    await page.getByTestId('time-controls').waitFor({ state: 'visible' });
+    await openGame(page);
     await frames(page);
     await page.waitForTimeout(600);
     await shot(

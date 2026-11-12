@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { camera, day, map, pause } from './support.ts';
+import { camera, day, map, openGame, pause } from './support.ts';
 
 const FOREIGN_POWERS = ['Carthage', 'Macedon', 'Egypt', 'Persia'];
 
@@ -16,8 +16,7 @@ test('after 200 days at the highest speed a foreign army has marched and taken a
     if (message.type() === 'error') errors.push(message.text());
   });
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto('/');
-  await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+  await openGame(page);
 
   await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
   await expect.poll(() => day(page), { timeout: 240_000, intervals: [1000] }).toBeGreaterThan(200);

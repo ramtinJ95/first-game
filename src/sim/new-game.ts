@@ -13,7 +13,7 @@ export interface NewGameOptions {
   player: PowerId;
 }
 
-const POWER_NAMES: Record<PowerId, string> = {
+export const POWER_NAMES: Readonly<Record<PowerId, string>> = {
   rome: 'Rome',
   carthage: 'Carthage',
   macedon: 'Macedon',

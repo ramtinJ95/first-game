@@ -9,14 +9,24 @@
   import CityPanel from './CityPanel.svelte';
   import CommandMenu from './CommandMenu.svelte';
   import { shownBattles } from './describe.ts';
+  import Ending from './Ending.svelte';
+  import FatePrompt from './FatePrompt.svelte';
+  import type { FrameActions } from './frame-actions.ts';
+  import Guide from './Guide.svelte';
   import NoticeToast from './NoticeToast.svelte';
   import OverviewPanel from './OverviewPanel.svelte';
+  import StartScreen from './StartScreen.svelte';
   import TopBar from './TopBar.svelte';
 
-  let { view, map, actions }: { view: View; map: DeepReadonly<GameMap>; actions: Actions } =
-    $props();
+  let {
+    view,
+    map,
+    actions,
+    frame,
+  }: { view: View; map: DeepReadonly<GameMap>; actions: Actions; frame: FrameActions } = $props();
 
   let overview = $state(false);
+  const modal = $derived(view.current.frame.modal);
 
   const game = $derived(view.current.state);
   const selection = $derived(view.current.selection);
@@ -45,35 +55,49 @@
 
 <svelte:window {onkeydown} />
 
-<!-- The grid spans the map, so it lets clicks through and only the panels take them. -->
-<div class="hud">
-  <div class="slot top">
-    <TopBar {view} {actions} {overview} toggleOverview={() => (overview = !overview)} />
+{#if modal?.kind === 'start'}
+  <StartScreen frame={view.current.frame} actions={frame} />
+{:else}
+  <!-- The grid spans the map, so it lets clicks through and only the panels take them. -->
+  <div class="hud">
+    <div class="slot top">
+      <TopBar {view} {actions} {frame} {overview} toggleOverview={() => (overview = !overview)} />
+    </div>
+    <div class="slot main">
+      {#if overview}
+        <OverviewPanel {game} {sight} {actions} />
+      {/if}
+    </div>
+    <aside class="side" aria-label="Selection">
+      {#if army}
+        <ArmyPanel {game} {army} {sight} pending={view.current.pending} {actions} />
+      {/if}
+      {#if city}
+        {#key city.id}
+          <CityPanel {game} {map} {city} {sight} pending={view.current.pending} {actions} />
+        {/key}
+      {/if}
+      {#each battles as battle (battle.id)}
+        <BattlePanel {game} {battle} pending={view.current.pending} {actions} />
+      {/each}
+    </aside>
+    <div class="slot alerts">
+      <AlertList alerts={view.current.alerts} day={game.day} {actions} />
+    </div>
   </div>
-  <div class="slot main">
-    {#if overview}
-      <OverviewPanel {game} {sight} {actions} />
-    {/if}
-  </div>
-  <aside class="side" aria-label="Selection">
-    {#if army}
-      <ArmyPanel {game} {army} {sight} pending={view.current.pending} {actions} />
-    {/if}
-    {#if city}
-      {#key city.id}
-        <CityPanel {game} {map} {city} {sight} pending={view.current.pending} {actions} />
-      {/key}
-    {/if}
-    {#each battles as battle (battle.id)}
-      <BattlePanel {game} {battle} pending={view.current.pending} {actions} />
-    {/each}
-  </aside>
-  <div class="slot alerts">
-    <AlertList alerts={view.current.alerts} day={game.day} {actions} />
-  </div>
-</div>
+  {#if !modal}
+    <CommandMenu menu={view.current.menu} {actions} />
+  {/if}
+
+  {#if modal?.kind === 'guide'}
+    <Guide {game} frame={view.current.frame} actions={frame} />
+  {:else if modal?.kind === 'fate'}
+    <FatePrompt {game} fate={modal} pauseOnFate={view.current.frame.pauseOnFate} actions={frame} />
+  {:else if modal?.kind === 'lost' || modal?.kind === 'won'}
+    <Ending {game} frame={view.current.frame} ending={modal} actions={frame} />
+  {/if}
+{/if}
 <NoticeToast notice={view.current.notice} />
-<CommandMenu menu={view.current.menu} {actions} />
 
 <style>
   .hud {

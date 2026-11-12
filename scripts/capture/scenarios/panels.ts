@@ -8,6 +8,7 @@ import {
   declareWar,
   dropSave,
   fallenTo,
+  openGame,
   pause,
   playDays,
   resume,
@@ -37,8 +38,7 @@ export default defineScenario({
   title:
     'Each panel in use: the top bar, your army and a foreign one, a city raising troops, the sea crossing, a battle, a siege, a fallen city, a refused order, and the alerts',
   async run({ page, shot }) {
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
     await pause(page);
     const view = camera(page);
     await view.closeUp(cityPoint('roma'), 6);
@@ -119,6 +119,7 @@ export default defineScenario({
     const fallen = startGame();
     fallenTo(fallen, 'mediolanum');
     await load(page, fallen);
+    await page.getByTestId('fate-occupy').click();
     await view.drag(view.city('mediolanum'), { x: 640, y: 360 });
     const milan = view.city('mediolanum');
     await page.mouse.click(milan.x, milan.y);

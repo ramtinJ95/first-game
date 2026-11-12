@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { camera, cityPoint, day, pause, resume } from '../../../e2e/support.ts';
+import { camera, cityPoint, day, openGame, pause, resume } from '../../../e2e/support.ts';
 import { defineScenario } from '../scenario.ts';
 
 async function until(page: Page, target: number) {
@@ -12,8 +12,7 @@ export default defineScenario({
     'Faction AI: a year at the highest speed on the whole map, as Rome sees it. The other powers take the minor cities, which change colour, and armies march in Roman sight',
   viewport: { width: 1280, height: 720 },
   async run({ page, shot }) {
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
     await pause(page);
     await shot(
       'start',

@@ -11,6 +11,7 @@ import {
   declareWar,
   dropSave,
   fallenTo,
+  openGame,
   pause,
   resume,
   rome,
@@ -129,8 +130,7 @@ test.describe('the panels after the playtest', () => {
       if (message.type() === 'error') errors.push(message.text());
     });
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
   });
 
   test.afterEach(() => {
@@ -245,6 +245,7 @@ test.describe('the panels after the playtest', () => {
     const state = startGame();
     fallenTo(state, 'mediolanum');
     await load(page, state);
+    await page.getByTestId('fate-occupy').click();
     const panel = page.getByTestId('city-panel');
 
     await clickCity(page, 'mediolanum');
@@ -325,8 +326,7 @@ for (const viewport of [
     test('no panel covers the clock, the stores, or the speed buttons, and the alerts scroll in a bounded list', async ({
       page,
     }) => {
-      await page.goto('/');
-      await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+      await openGame(page);
       await load(page, musteringRome());
       await clickCity(page, 'roma');
       await expect(page.getByTestId('city-panel').getByTestId('city-name')).toHaveText('Roma');

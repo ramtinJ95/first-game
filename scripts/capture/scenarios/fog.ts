@@ -6,6 +6,7 @@ import {
   cityPoint,
   dropSave,
   map,
+  openGame,
   pause,
   resume,
   rome,
@@ -29,9 +30,8 @@ async function day(page: Page): Promise<number> {
   return Number(await page.getByTestId('time-controls-day').getAttribute('data-day'));
 }
 
-async function open(page: Page, url: string, state: GameState) {
-  await page.goto(url);
-  await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+async function open(page: Page, query: string, state: GameState) {
+  await openGame(page, { query });
   await pause(page);
   await dropSave(page, state);
   await page
@@ -97,10 +97,10 @@ export default defineScenario({
     let camera = fitCamera(viewport, map);
     const onScreen = (points: MapPoint[]) => points.map((p) => mapToScreen(camera, viewport, p));
 
-    await open(page, '/?fog=off', state);
+    await open(page, 'fog=off', state);
     const clear = await page.screenshot();
     await shot('whole-map-no-fog', 'The same map with the fog layer hidden, for comparison');
-    await open(page, '/', state);
+    await open(page, '', state);
     const fogged = await page.screenshot();
     const compare = async (owner: string) => {
       const points = onScreen(washPoints(state, owner));
