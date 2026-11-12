@@ -7,11 +7,11 @@ import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import type { Alert } from './alerts.ts';
 import type { Speed } from './clock.ts';
+import type { OrderMenu } from './command.ts';
 
 /** A choice of orders offered at a right click, at its place on the screen. */
-export interface CommandMenu {
+export interface CommandMenu extends OrderMenu {
   readonly screen: MapPoint;
-  readonly options: readonly { readonly label: string; readonly order: Order }[];
 }
 
 /** A short message for the player, such as why the rules refused an order. */

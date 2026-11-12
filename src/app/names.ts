@@ -74,6 +74,11 @@ export function reasonText(state: DeepReadonly<GameState>, reason: string): stri
     .replace(/^./, (first) => first.toUpperCase());
 }
 
+/** What the player reads when the rules refuse an order. */
+export function refusalText(state: DeepReadonly<GameState>, reason: string): string {
+  return `Order refused. ${reasonText(state, reason)}.`;
+}
+
 /** Year 1 starts on day 1. A year is 365 days. */
 export function dateText(day: number): string {
   return `Year ${Math.floor((day - 1) / 365) + 1}, day ${((day - 1) % 365) + 1}`;

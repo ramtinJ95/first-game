@@ -1,31 +1,26 @@
 import { mount } from 'svelte';
 import mapUrl from '../../data/map/map.json?url';
 import { parseDrawOptions } from '../render/draw-options.ts';
-import { provinceAt, type Pick } from '../render/pick.ts';
+import type { Pick } from '../render/pick.ts';
 import { createRenderer, type Command } from '../render/renderer.ts';
 import { decideAll } from '../sim/ai/decide.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { CityId } from '../sim/ids.ts';
-import { landPath } from '../sim/march.ts';
 import { parseMap, type GameMap } from '../sim/map.ts';
 import { newGame } from '../sim/new-game.ts';
-import { AT_PORT_KM } from '../sim/orders/embark.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import { loadGame } from '../sim/save.ts';
 import { sightOf, type Sight } from '../sim/sight.ts';
-import type { Army } from '../sim/state/army.ts';
-import type { City } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
-import { distance, findPath } from '../sim/world/find-path.ts';
 import { buildWorld } from '../sim/world/world.ts';
 import type { Actions } from '../ui/actions.ts';
 import Hud from '../ui/Hud.svelte';
 import '../ui/panels.css';
 import { alertsBetween, type Alert } from './alerts.ts';
 import { createClock } from './clock.ts';
+import { planCommand, route, type CommandTarget } from './command.ts';
 import { showFrameMeter } from './frame-meter.ts';
-import { reasonText } from './names.ts';
+import { refusalText } from './names.ts';
 import { alertsInSight, seesPick } from './sighted.ts';
 import { createView, type CommandMenu, type Notice } from './view.svelte.ts';
 
@@ -90,7 +85,7 @@ const clock = createClock({
   onRejected(rejected) {
     const own = rejected.filter(({ order }) => order.faction === clock.state.player);
     const last = own.at(-1);
-    if (last) showNotice(`Order refused. ${reasonText(clock.state, last.reason)}.`);
+    if (last) showNotice(refusalText(clock.state, last.reason));
   },
   onDay(before, after) {
     const news = alertsInSight(alertsBetween(before, after), sightFor(before), sightFor(after));
@@ -114,81 +109,37 @@ const view = createView(
   'panels',
 );
 
-/** The port city of its owner that the army stands at, as the embark order judges it. */
-function portOf(
-  state: DeepReadonly<GameState>,
-  army: DeepReadonly<Army>,
-): DeepReadonly<City> | undefined {
-  if (army.activity.kind !== 'idle' && army.activity.kind !== 'marching') return undefined;
-  const at = army.activity.position;
-  return Object.values(state.cities).find((city) => {
-    const harbour = world.harbours.get(city.id);
-    return (
-      city.owner === army.owner &&
-      harbour &&
-      Math.min(distance(at, city.position), distance(at, harbour)) <= AT_PORT_KM
-    );
-  });
-}
-
-/**
- * A right click with one of the player's armies selected marches it to the point. On
- * a port city, while the army stands at one of the player's ports, it offers the sea.
- */
-function command({ point, screen }: Command) {
+/** A right click with one of the player's armies selected plans an order for the city or point. */
+function command({ point, city, screen }: Command) {
   menu = undefined;
   const state = clock.state;
   const army = selection?.kind === 'army' ? state.armies[selection.army] : undefined;
-  if (!army || army.owner !== state.player) {
-    view.refresh();
-    return;
-  }
-  const march: Order = { kind: 'moveArmy', faction: state.player, army: army.id, to: point };
-  // The land under the click, not the pick: a banner or battle marker may cover a port.
-  const province = provinceAt(map, point);
-  const target: CityId | undefined = province && state.provinces[province]?.city;
-  const city = target && state.cities[target];
-  const from = portOf(state, army);
-  if (city && from && city.id !== from.id && world.harbours.has(city.id)) {
-    menu = {
-      screen,
-      options: [
-        {
-          label: `Sail from ${from.name} to ${city.name}`,
-          order: { kind: 'embark', faction: state.player, army: army.id, to: city.id },
-        },
-        { label: `March to ${city.name}`, order: march },
-      ],
-    };
-  } else {
-    clock.issue(march);
+  const clicked = city && state.cities[city];
+  if (army && army.owner === state.player) {
+    const target: CommandTarget = clicked
+      ? { kind: 'city', city: clicked }
+      : { kind: 'point', point };
+    const plan = planCommand(state, world, army, target);
+    if (plan.kind === 'issue') clock.issue(plan.order);
+    if (plan.kind === 'menu') menu = { ...plan.menu, screen };
+    if (plan.notice) showNotice(plan.notice);
   }
   view.refresh();
 }
 
 let plannedFor: readonly Order[] | undefined;
-let planned: MapPoint[][] = [];
+let planned: (readonly MapPoint[])[] = [];
 
 /** The paths that the player's waiting march and sail orders will take. */
-function plannedPaths(): MapPoint[][] {
+function plannedPaths(): (readonly MapPoint[])[] {
   if (clock.pending === plannedFor) return planned;
   plannedFor = clock.pending;
   const state = clock.state;
   planned = clock.pending.flatMap((order) => {
     if (order.faction !== state.player) return [];
-    const army = (order.kind === 'moveArmy' || order.kind === 'embark') && state.armies[order.army];
-    if (!army || army.activity.kind === 'embarked') return [];
-    const at = army.activity.position;
-    if (order.kind === 'moveArmy') {
-      const path = landPath(world, at, order.to);
-      return typeof path === 'string' ? [] : [[at, ...path]];
-    }
-    if (order.kind !== 'embark') return [];
-    const from = portOf(state, army);
-    const harbour = from && world.harbours.get(from.id);
-    const landing = world.harbours.get(order.to);
-    const path = harbour && landing && findPath(world.mesh, harbour, landing, 'sea');
-    return path ? [[at, harbour, ...path]] : [];
+    if (order.kind !== 'moveArmy' && order.kind !== 'embark') return [];
+    const way = route(state, world, order);
+    return typeof way === 'string' ? [] : [way.path];
   });
   return planned;
 }
