@@ -1,5 +1,6 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { Order, RejectedOrder } from '../sim/orders/orders.ts';
+import type { ArmyId } from '../sim/ids.ts';
+import type { Order, OrderKind, RejectedOrder } from '../sim/orders/orders.ts';
 import { findBrokenReferences } from '../sim/references.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { System } from '../sim/systems.ts';
@@ -8,6 +9,34 @@ import type { World } from '../sim/world/world.ts';
 
 export const DAYS_PER_SECOND = { 1: 1, 2: 2, 3: 5 } as const;
 export type Speed = keyof typeof DAYS_PER_SECOND;
+
+type Slot = 'movement' | 'stance';
+
+/**
+ * The slot of its army that each kind of order fills. An army keeps one waiting order
+ * per slot, so the latest order replaces the one before it. Orders that name no army
+ * have no slot and wait side by side.
+ */
+const SLOTS: {
+  [K in OrderKind]: Extract<Order, { kind: K }> extends { army: ArmyId } ? Slot : undefined;
+} = {
+  moveArmy: 'movement',
+  halt: 'movement',
+  embark: 'movement',
+  retreat: 'movement',
+  setStance: 'stance',
+  recruit: undefined,
+  declareWar: undefined,
+  evacuate: undefined,
+  storm: undefined,
+  sack: undefined,
+  enslave: undefined,
+};
+
+function slotOf(order: Order): string | undefined {
+  const slot = SLOTS[order.kind];
+  return slot && 'army' in order ? `${slot} ${order.army}` : undefined;
+}
 
 export interface ClockOptions {
   state: GameState;
@@ -31,6 +60,7 @@ export interface Clock {
   readonly progress: number;
   /** Orders issued since the last tick, in the order they will apply. */
   readonly pending: readonly Order[];
+  /** Queues the order for the next tick, in place of a waiting order for the same slot of its army. */
   issue(order: Order): void;
   pause(): void;
   resume(): void;
@@ -113,7 +143,9 @@ export function createClock({
       return pending;
     },
     issue(order) {
-      pending = [...pending, order];
+      const slot = slotOf(order);
+      const kept = slot === undefined ? pending : pending.filter((o) => slotOf(o) !== slot);
+      pending = [...kept, order];
     },
     pause() {
       setPaused(true);
