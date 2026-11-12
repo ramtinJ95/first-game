@@ -308,4 +308,4 @@ const actions: Actions = {
   },
 };
 
-mount(Hud, { target: host, props: { view, actions } });
+mount(Hud, { target: host, props: { view, map, actions } });

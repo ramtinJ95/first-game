@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { View } from '../app/view.svelte.ts';
+  import type { DeepReadonly } from '../sim/deep-readonly.ts';
+  import type { GameMap } from '../sim/map.ts';
   import type { Actions } from './actions.ts';
   import AlertList from './AlertList.svelte';
   import ArmyPanel from './ArmyPanel.svelte';
@@ -8,9 +10,13 @@
   import CommandMenu from './CommandMenu.svelte';
   import { shownBattles } from './describe.ts';
   import NoticeToast from './NoticeToast.svelte';
+  import OverviewPanel from './OverviewPanel.svelte';
   import TopBar from './TopBar.svelte';
 
-  let { view, actions }: { view: View; actions: Actions } = $props();
+  let { view, map, actions }: { view: View; map: DeepReadonly<GameMap>; actions: Actions } =
+    $props();
+
+  let overview = $state(false);
 
   const game = $derived(view.current.state);
   const selection = $derived(view.current.selection);
@@ -39,36 +45,116 @@
 
 <svelte:window {onkeydown} />
 
-<TopBar {view} {actions} />
-
-<aside class="side" aria-label="Selection">
-  {#if army}
-    <ArmyPanel {game} {army} pending={view.current.pending} {actions} />
-  {/if}
-  {#if city}
-    {#key city.id}
-      <CityPanel {game} {city} {sight} pending={view.current.pending} {actions} />
-    {/key}
-  {/if}
-  {#each battles as battle (battle.id)}
-    <BattlePanel {game} {battle} {actions} />
-  {/each}
-</aside>
-
-<AlertList alerts={view.current.alerts} day={game.day} {actions} />
+<!--
+  One grid holds the top bar, the overview, the alerts, and the side column, so none
+  covers another. The grid lets clicks through to the map; only the panels take them.
+-->
+<div class="hud">
+  <div class="slot top">
+    <TopBar {view} {actions} {overview} toggleOverview={() => (overview = !overview)} />
+  </div>
+  <div class="slot main">
+    {#if overview}
+      <OverviewPanel {game} {sight} {actions} />
+    {/if}
+  </div>
+  <aside class="side" aria-label="Selection">
+    {#if army}
+      <ArmyPanel {game} {army} {sight} pending={view.current.pending} {actions} />
+    {/if}
+    {#if city}
+      {#key city.id}
+        <CityPanel {game} {map} {city} {sight} pending={view.current.pending} {actions} />
+      {/key}
+    {/if}
+    {#each battles as battle (battle.id)}
+      <BattlePanel {game} {battle} pending={view.current.pending} {actions} />
+    {/each}
+  </aside>
+  <div class="slot alerts">
+    <AlertList alerts={view.current.alerts} day={game.day} {actions} />
+  </div>
+</div>
 <NoticeToast notice={view.current.notice} />
 <CommandMenu menu={view.current.menu} {actions} />
 
 <style>
-  .side {
+  .hud {
+    --gutter: 12px;
+    --side-width: 320px;
+
     position: fixed;
-    top: 12px;
-    right: 12px;
+    inset: 0;
+    display: grid;
+    grid-template-areas:
+      'top side'
+      'main side'
+      'alerts side';
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) var(--side-width);
+    gap: 8px;
+    padding: var(--gutter);
+    pointer-events: none;
+  }
+
+  .slot {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .top {
+    grid-area: top;
+  }
+
+  .main {
+    grid-area: main;
+  }
+
+  .alerts {
+    grid-area: alerts;
+    max-height: min(30vh, 11.5rem);
+  }
+
+  .side {
+    display: flex;
+    flex-direction: column;
+    grid-area: side;
     gap: 8px;
-    width: 320px;
-    max-height: calc(100vh - 24px);
+    align-self: start;
+    max-height: 100%;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+  }
+
+  @media (max-width: 719px) {
+    .hud {
+      --gutter: 8px;
+
+      grid-template-areas:
+        'top'
+        'main'
+        'alerts'
+        'side';
+      grid-template-rows: auto minmax(0, 1fr) auto auto;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+    }
+
+    .top > :global(*) {
+      align-self: stretch;
+    }
+
+    .alerts {
+      max-height: 5.2rem;
+    }
+
+    .side {
+      align-self: end;
+      max-height: 42vh;
+    }
   }
 </style>
