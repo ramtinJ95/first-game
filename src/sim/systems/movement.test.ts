@@ -247,6 +247,23 @@ describe('a crossing by convoy', () => {
     expectConsistent(state);
   });
 
+  test('an army that lands at a friendly harbour far from its city can sail again from there', () => {
+    let state = buildFixture();
+    const roma = state.cities[FIXTURE.roma];
+    if (!roma) throw new Error('the fixture lacks Roma');
+    roma.owner = FIXTURE.carthage;
+    const harbour = world.harbours.get(FIXTURE.roma) as MapPoint;
+    expect(distance(harbour, ROMA)).toBeGreaterThan(20);
+    expect(executeOrder(state, embark(FIXTURE.roma), world)).toBeUndefined();
+    for (let day = 0; day < 200 && Object.keys(state.convoys).length > 0; day += 1) {
+      state = tick(state, [], world).state;
+    }
+    expect(armyOf(state, FIXTURE.punicArmy).activity).toEqual({ kind: 'idle', position: harbour });
+    expect(executeOrder(state, embark(FIXTURE.carthago), world)).toBeUndefined();
+    expect(armyOf(state, FIXTURE.punicArmy).activity.kind).toBe('embarked');
+    expectConsistent(state);
+  });
+
   test('is rejected away from a port of the faction, and to a city that is not a port', () => {
     const state = buildFixture();
     expect(executeOrder(state, embark('capua' as CityId), world)?.reason).toBe(

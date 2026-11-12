@@ -44,7 +44,7 @@ Read `docs/design.md` before any work. It is the agreed design. When a task conf
 
 - `src/sim/march.ts` names the speeds `MARCH_KM_PER_DAY`, `CONVOY_KM_PER_DAY`, and `REFUGEE_KM_PER_DAY`. `startMarch` is the one way to set an army marching: it finds the land path, or returns why there is none. `nearestReachableCity` picks the nearest city of a faction by straight line among those a land route reaches.
 - A marching army, a convoy, and a refugee column hold the `waypoints` still ahead. The path is found once, when the march starts, and `src/sim/systems/movement.ts` follows it. Movement runs first in the day.
-- `moveArmy` replaces any march, `halt` stops one, and `embark` puts an army that stands at its faction's port aboard a convoy to another port. A convoy lands its armies idle at the destination harbour. `evacuate` gives a new refugee column its land path, and the column ends its walk at its destination with no waypoints, where `population` settles it.
+- `moveArmy` replaces any march, `halt` stops one, and `embark` puts an army within 10 km of its faction's port city or that city's harbour aboard a convoy to another port. A convoy lands its armies idle at the destination harbour. `evacuate` gives a new refugee column its land path, and the column ends its walk at its destination with no waypoints, where `population` settles it.
 - `npm run sim:paths` reruns the path-finding experiment, `npm run sim:movement` prints the route table and the tick times, and `npm run map:routes` draws routes on the map preview into `captures/movement/`.
 
 ### Adding a system

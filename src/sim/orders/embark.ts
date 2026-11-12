@@ -6,7 +6,7 @@ import { distance, findPath } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import { ownedArmy } from './owned-army.ts';
 
-/** An army this close to a port city of its faction stands at that port. */
+/** An army this close to a port city of its faction, or to that city's harbour, stands at that port. */
 export const AT_PORT_KM = 10;
 
 export interface EmbarkOrder {
@@ -29,11 +29,16 @@ export function embark(state: GameState, order: EmbarkOrder, world: World): stri
   const at = activity.position;
 
   let port: City | undefined;
+  let portDistance = Number.POSITIVE_INFINITY;
   for (const id of Object.keys(state.cities).sort()) {
     const city = state.cities[id as CityId];
-    if (!city || city.owner !== army.owner || !world.harbours.has(city.id)) continue;
-    if (distance(at, city.position) > AT_PORT_KM) continue;
-    if (!port || distance(at, city.position) < distance(at, port.position)) port = city;
+    const harbour = city && world.harbours.get(city.id);
+    if (!city || !harbour || city.owner !== army.owner) continue;
+    const away = Math.min(distance(at, city.position), distance(at, harbour));
+    if (away <= AT_PORT_KM && away < portDistance) {
+      port = city;
+      portDistance = away;
+    }
   }
   if (!port) return `army ${army.id} does not stand at a port of ${army.owner}`;
   const destination = Object.hasOwn(state.cities, order.to) ? state.cities[order.to] : undefined;
