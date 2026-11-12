@@ -267,12 +267,13 @@ export function stormCity(state: GameState, siege: Siege, faction: FactionId): S
   return 'repulsed';
 }
 
-/** Whether an army of the city's owner with an unbroken formation stands at the city. */
+/** Whether an army of the city's owner with an unbroken formation stands at the city, and is not retreating. */
 export function defendersAt(state: DeepReadonly<GameState>, city: DeepReadonly<City>): boolean {
   return Object.values(state.armies).some(
     (army) =>
       army.owner === city.owner &&
       army.activity.kind !== 'embarked' &&
+      army.activity.kind !== 'retreating' &&
       distance(army.activity.position, city.position) <= SIEGE_DISTANCE &&
       army.formations.some((id) => {
         const formation = state.formations[id];

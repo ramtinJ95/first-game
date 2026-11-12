@@ -44,7 +44,7 @@ export const WAR_REACH_KM = 700;
 export const WAR_FRONT_KM = 1500;
 
 /** An army sets out for a city when its side is this many times the enemy armies near the city. */
-export const ATTACK_ODDS = 1.5;
+export const ATTACK_ODDS = 1.2;
 /**
  * An army sets out for a city only while its side has this many times the city's
  * garrison in men, so that it holds the blockade with men to spare. It keeps a siege
@@ -65,7 +65,7 @@ export const MARCH_MORALE = 0.7;
 export const RALLY_WAIT_DAYS = 10;
 
 /** An army retreats when its side's strength in a battle falls below this share of the enemy's. */
-export const RETREAT_ODDS = 0.6;
+export const RETREAT_ODDS = 0.4;
 /** Armies march to lift a siege of their city when together they are this many times the besiegers. */
 export const RELIEF_ODDS = 1.3;
 /** Armies further than this from a besieged city do not march to relieve it. */
