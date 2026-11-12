@@ -30,7 +30,7 @@ import { alertsInSight, seesPick } from './sighted.ts';
 import { createView, type CommandMenu, type Notice } from './view.svelte.ts';
 
 /** The alerts the list keeps, newest first. */
-const ALERTS_KEPT = 6;
+const ALERTS_KEPT = 30;
 /** How long a refused order's reason stays on screen. */
 const NOTICE_MS = 4000;
 
@@ -286,6 +286,13 @@ const actions: Actions = {
   select(pick) {
     if (!seesPick(sightFor(clock.state), pick)) return;
     selection = pick;
+    view.refresh();
+  },
+  show(pick, at) {
+    if (!seesPick(sightFor(clock.state), pick)) return;
+    selection = pick;
+    menu = undefined;
+    renderer.focus(at);
     view.refresh();
   },
   openAlert(alert) {

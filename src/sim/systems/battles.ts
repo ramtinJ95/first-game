@@ -39,7 +39,7 @@ export const MORALE_RECOVERY = 0.05;
 export const RETREAT_LOSS = 0.15;
 
 /** How a stance scales the blows an army gives, the blows it takes, and the morale it loses. */
-const STANCE_EFFECTS: Record<Stance, { dealt: number; taken: number; morale: number }> = {
+export const STANCE_EFFECTS: Record<Stance, { dealt: number; taken: number; morale: number }> = {
   holdTheLine: { dealt: 1, taken: 1, morale: 1 },
   allOutAssault: { dealt: 1.5, taken: 1.4, morale: 1 },
   skirmishAndWithdraw: { dealt: 0.6, taken: 0.6, morale: 2.5 },

@@ -1,4 +1,4 @@
-import { factionName, nearestCity, placeName } from '../app/names.ts';
+import { AT_CITY_KM, factionName, nearestCity, placeName } from '../app/names.ts';
 import { factionColour } from '../render/palette.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { Pick } from '../render/pick.ts';
@@ -34,7 +34,7 @@ function daysLeft(km: number, perDay: number): string {
 function destination(state: State, end: MapPoint | undefined): string {
   const city = end && nearestCity(state, end);
   if (!city) return '';
-  return city.km <= 15 ? ` to ${city.name}` : ` toward ${city.name}`;
+  return city.km <= AT_CITY_KM ? ` to ${city.name}` : ` toward ${city.name}`;
 }
 
 /** What the army is doing, in a line a player reads at a glance. */
