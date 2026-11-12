@@ -846,7 +846,8 @@ export async function createRenderer({
       if (cameraMoved) applyCamera();
       const terrainBusy = terrain.update(camera, viewport(), now);
       if (terrainBusy) dirty = true;
-      canvas.dataset['terrain'] = terrainBusy ? 'busy' : 'ready';
+      const terrainState = terrainBusy ? 'busy' : 'ready';
+      if (canvas.dataset['terrain'] !== terrainState) canvas.dataset['terrain'] = terrainState;
       if (dirty) layoutCities(current);
       if (
         !highlighted ||
