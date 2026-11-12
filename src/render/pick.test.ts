@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ArmyId, BattleId, FactionId, ProvinceId } from '../sim/ids.ts';
+import type { ArmyId, BattleId, CityId, FactionId, ProvinceId } from '../sim/ids.ts';
 import { parseMap, type GameMap } from '../sim/map.ts';
 import { fitCamera, mapToScreen, type Camera } from './camera.ts';
 import type { DrawnArmy, DrawnBattle } from './markers.ts';
-import { pickAt, provinceAt } from './pick.ts';
+import { CITY_HIT_MARGIN, cityAt, pickAt, provinceAt, type DrawnCity } from './pick.ts';
 
 const MAP = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../../data/map/map.json'), 'utf8')),
@@ -104,5 +104,44 @@ describe('pickAt', () => {
     expect(
       pickAt(MAP, camera, viewport, [army], { x: foot.x + 40, y: foot.y + 40 }, [battle]),
     ).toEqual({ kind: 'province', province: 'roma' });
+  });
+});
+
+describe('cityAt', () => {
+  const box = (x: number, y: number, half: number) => ({
+    left: x - half,
+    top: y - half,
+    right: x + half,
+    bottom: y + half,
+  });
+  const massalia: DrawnCity = {
+    id: 'massalia' as CityId,
+    symbol: box(100, 100, 5),
+    label: { left: 108, top: 92, right: 170, bottom: 108 },
+  };
+  const arelate: DrawnCity = { id: 'arelate' as CityId, symbol: box(60, 100, 5), label: undefined };
+
+  it('finds the city from a click on its symbol, on its name, or a few pixels off either', () => {
+    expect(cityAt([massalia], { x: 100, y: 100 })).toBe('massalia');
+    expect(cityAt([massalia], { x: 160, y: 100 })).toBe('massalia');
+    expect(cityAt([massalia], { x: 100, y: 105 + CITY_HIT_MARGIN })).toBe('massalia');
+    expect(cityAt([massalia], { x: 175, y: 112 })).toBe('massalia');
+  });
+
+  it('finds nothing farther than the margin from every symbol and name', () => {
+    expect(cityAt([massalia], { x: 100, y: 106 + CITY_HIT_MARGIN })).toBeUndefined();
+    expect(cityAt([massalia], { x: 171 + CITY_HIT_MARGIN, y: 100 })).toBeUndefined();
+    expect(cityAt([], { x: 100, y: 100 })).toBeUndefined();
+  });
+
+  it('gives a click between two cities to the nearer one', () => {
+    expect(cityAt([massalia, arelate], { x: 74, y: 100 })).toBe('arelate');
+    expect(cityAt([massalia, arelate], { x: 87, y: 100 })).toBe('massalia');
+  });
+
+  it('gives a click on overlapping symbols to the one centred nearer', () => {
+    const close: DrawnCity = { id: 'arelate' as CityId, symbol: box(104, 100, 5), label: undefined };
+    expect(cityAt([massalia, close], { x: 101, y: 100 })).toBe('massalia');
+    expect(cityAt([massalia, close], { x: 103, y: 100 })).toBe('arelate');
   });
 });

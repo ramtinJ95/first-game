@@ -45,7 +45,7 @@ import {
 } from './palette.ts';
 import { paperTexture, waterTexture } from './paper.ts';
 import { toPixels } from './lines.ts';
-import { pickAt, type Pick } from './pick.ts';
+import { cityAt, pickAt, type DrawnCity, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
 import { citySymbols } from './symbols.ts';
 
@@ -67,6 +67,8 @@ export interface Frame {
 export interface Command {
   readonly point: MapPoint;
   readonly pick: Pick | undefined;
+  /** The city whose drawn symbol or name the click is on or close to. */
+  readonly city: CityId | undefined;
   readonly screen: MapPoint;
 }
 
@@ -418,6 +420,7 @@ export async function createRenderer({
   let shown: DeepReadonly<GameState> | undefined;
   let highlighted: { selection: Pick | undefined; scale: number } | undefined;
   let armies: DrawnArmy[] = [];
+  let drawnCities: DrawnCity[] = [];
   let plannedShown: Frame['planned'];
   let seenBy: Sight | undefined;
   let seenBattles: DeepReadonly<Battle>[] = [];
@@ -544,12 +547,18 @@ export async function createRenderer({
         population: city.population,
       });
     }
-    for (const [id, box] of placeLabels(requests, symbolBoxes, view)) {
+    const placed = placeLabels(requests, symbolBoxes, view);
+    for (const [id, box] of placed) {
       const label = cities.get(id as CityId)?.label;
       if (!label) continue;
       label.visible = true;
       label.position.set(box.left, box.top);
     }
+    drawnCities = requests.map(({ id }, i) => ({
+      id: id as CityId,
+      symbol: symbolBoxes[i] as Box,
+      label: placed.get(id),
+    }));
   }
 
   function drawHighlight(selection: Pick | undefined) {
@@ -775,6 +784,7 @@ export async function createRenderer({
       onCommand({
         point: screenToMap(camera, viewport(), screen),
         pick: pickAt(map, camera, viewport(), armies, screen, battlesShown()),
+        city: cityAt(drawnCities, screen),
         screen,
       });
     },

@@ -1,13 +1,51 @@
-import type { ArmyId, BattleId, ProvinceId } from '../sim/ids.ts';
+import type { ArmyId, BattleId, CityId, ProvinceId } from '../sim/ids.ts';
 import type { GameMap, Ring } from '../sim/map.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { mapToScreen, screenToMap, type Camera, type Size } from './camera.ts';
+import type { Box } from './labels.ts';
 import { BANNER_HIT, BATTLE_HIT_RADIUS, type DrawnArmy, type DrawnBattle } from './markers.ts';
 
 export type Pick =
   | { kind: 'province'; province: ProvinceId }
   | { kind: 'army'; army: ArmyId }
   | { kind: 'battle'; battle: BattleId };
+
+/** A city as the map draws it: its symbol and, while it is shown, its name, in screen pixels. */
+export interface DrawnCity {
+  readonly id: CityId;
+  readonly symbol: Box;
+  readonly label: Box | undefined;
+}
+
+/** How far from a city's symbol or name a click still means that city, in screen pixels. */
+export const CITY_HIT_MARGIN = 10;
+
+function gap(box: Box, { x, y }: MapPoint): number {
+  return Math.hypot(
+    Math.max(box.left - x, 0, x - box.right),
+    Math.max(box.top - y, 0, y - box.bottom),
+  );
+}
+
+/**
+ * The city whose symbol or name is under `screen` or within CITY_HIT_MARGIN of either.
+ * The nearest wins, and between symbols that overlap, the one centred nearer.
+ */
+export function cityAt(cities: readonly DrawnCity[], screen: MapPoint): CityId | undefined {
+  let best: { id: CityId; gap: number; centre: number } | undefined;
+  for (const { id, symbol, label } of cities) {
+    const near = Math.min(gap(symbol, screen), label ? gap(label, screen) : Infinity);
+    if (near > CITY_HIT_MARGIN) continue;
+    const centre = Math.hypot(
+      screen.x - (symbol.left + symbol.right) / 2,
+      screen.y - (symbol.top + symbol.bottom) / 2,
+    );
+    if (!best || near < best.gap || (near === best.gap && centre < best.centre)) {
+      best = { id, gap: near, centre };
+    }
+  }
+  return best?.id;
+}
 
 function insideRing(ring: Ring, { x, y }: MapPoint): boolean {
   let inside = false;
