@@ -21,6 +21,32 @@ export const EXTENT_CORNERS: readonly LonLat[] = [
   [-11, 59.5],
 ];
 
+const EXTENT_LON = EXTENT_CORNERS.map(([lon]) => lon);
+const EXTENT_LAT = EXTENT_CORNERS.map(([, lat]) => lat);
+/** The extent's bounding box in degrees. */
+export const EXTENT_BOX = {
+  west: Math.min(...EXTENT_LON),
+  east: Math.max(...EXTENT_LON),
+  south: Math.min(...EXTENT_LAT),
+  north: Math.max(...EXTENT_LAT),
+} as const;
+
+export function touchesExtent(positions: LonLat[]): boolean {
+  let [west, east, south, north] = [Infinity, -Infinity, Infinity, -Infinity];
+  for (const [lon, lat] of positions) {
+    west = Math.min(west, lon);
+    east = Math.max(east, lon);
+    south = Math.min(south, lat);
+    north = Math.max(north, lat);
+  }
+  return (
+    west <= EXTENT_BOX.east &&
+    east >= EXTENT_BOX.west &&
+    south <= EXTENT_BOX.north &&
+    north >= EXTENT_BOX.south
+  );
+}
+
 const DENSIFY_STEP = 0.25;
 const RAD = Math.PI / 180;
 const N = (Math.sin(ALBERS.parallels[0] * RAD) + Math.sin(ALBERS.parallels[1] * RAD)) / 2;

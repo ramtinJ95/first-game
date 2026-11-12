@@ -11,8 +11,21 @@ import {
 } from '../../src/sim/map.ts';
 import type { ProvinceId } from '../../src/sim/ids.ts';
 import type { City } from './cities.ts';
-import { area, clipLine, closestOnBoundary, contains, distance, intersection } from './geometry.ts';
-import { EXTENT_CORNERS, mapPlane, round, type Plane } from './projection.ts';
+import {
+  area,
+  clipLine,
+  closestOnBoundary,
+  compare,
+  comparePoints,
+  contains,
+  distance,
+  intersection,
+  roundLine,
+  roundOutline,
+  roundPoint,
+  roundRing,
+} from './geometry.ts';
+import { mapPlane, touchesExtent, type Plane } from './projection.ts';
 import { onExtentEdge, partition, relations } from './provinces.ts';
 import type { LonLat, LonLatPolygon, NaturalEarthRiver } from './sources.ts';
 
@@ -133,31 +146,6 @@ export function landInExtent(land: LonLatPolygon[], plane: Plane = mapPlane()): 
   return intersection(projected, [[plane.extent]]);
 }
 
-const EXTENT_LON = EXTENT_CORNERS.map(([lon]) => lon);
-const EXTENT_LAT = EXTENT_CORNERS.map(([, lat]) => lat);
-const EXTENT_BOX = {
-  west: Math.min(...EXTENT_LON),
-  east: Math.max(...EXTENT_LON),
-  south: Math.min(...EXTENT_LAT),
-  north: Math.max(...EXTENT_LAT),
-};
-
-function touchesExtent(positions: LonLat[]): boolean {
-  let [west, east, south, north] = [Infinity, -Infinity, Infinity, -Infinity];
-  for (const [lon, lat] of positions) {
-    west = Math.min(west, lon);
-    east = Math.max(east, lon);
-    south = Math.min(south, lat);
-    north = Math.max(north, lat);
-  }
-  return (
-    west <= EXTENT_BOX.east &&
-    east >= EXTENT_BOX.west &&
-    south <= EXTENT_BOX.north &&
-    north >= EXTENT_BOX.south
-  );
-}
-
 function placeOnLand(point: Point, land: MultiPolygon): Point {
   if (contains(land, point)) return point;
   const coast = closestOnBoundary(land, point);
@@ -220,46 +208,6 @@ function riverLines(rivers: NaturalEarthRiver[], plane: Plane): River[] {
         .map((line) => ({ name: river.name ?? '', line })),
     )
     .sort((a, b) => compare(a.name, b.name) || comparePoints(a.line[0], b.line[0]));
-}
-
-function roundPoint([x, y]: Point): Point {
-  return [round(x), round(y)];
-}
-
-function roundPoints(points: Point[]): Point[] {
-  const out: Point[] = [];
-  for (const point of points) {
-    const rounded = roundPoint(point);
-    if (comparePoints(out[out.length - 1], rounded) !== 0) out.push(rounded);
-  }
-  return out;
-}
-
-function roundLine(line: MapLine): MapLine[] {
-  const out = roundPoints(line);
-  return out.length >= 2 ? [out] : [];
-}
-
-function roundRing(ring: Ring): Ring[] {
-  const out = roundPoints(ring);
-  while (out.length > 1 && comparePoints(out[0], out[out.length - 1]) === 0) out.pop();
-  return out.length >= 3 ? [out] : [];
-}
-
-function roundOutline(polygons: MultiPolygon): MultiPolygon {
-  return polygons.flatMap(([outer = [], ...holes]) => {
-    const [rounded] = roundRing(outer);
-    return rounded ? [[rounded, ...holes.flatMap(roundRing)]] : [];
-  });
-}
-
-function compare(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
-function comparePoints(a: Point | undefined, b: Point | undefined): number {
-  if (!a || !b) return a ? 1 : b ? -1 : 0;
-  return a[0] - b[0] || a[1] - b[1];
 }
 
 /** One top-level key, province, line, or river per line, so diffs of the file stay readable. */

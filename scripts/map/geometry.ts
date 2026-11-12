@@ -1,5 +1,6 @@
 import polygonClipping from 'polygon-clipping';
 import type { MapLine, MultiPolygon, Point, Polygon, Ring } from '../../src/sim/map.ts';
+import { round } from './projection.ts';
 
 export interface Box {
   minX: number;
@@ -71,6 +72,46 @@ export function polygonContains(polygon: Polygon, point: Point): boolean {
 
 export function contains(polygons: MultiPolygon, point: Point): boolean {
   return polygons.some((polygon) => polygonContains(polygon, point));
+}
+
+export function compare(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+export function comparePoints(a: Point | undefined, b: Point | undefined): number {
+  if (!a || !b) return a ? 1 : b ? -1 : 0;
+  return a[0] - b[0] || a[1] - b[1];
+}
+
+export function roundPoint([x, y]: Point): Point {
+  return [round(x), round(y)];
+}
+
+function roundPoints(points: Point[]): Point[] {
+  const out: Point[] = [];
+  for (const point of points) {
+    const rounded = roundPoint(point);
+    if (comparePoints(out[out.length - 1], rounded) !== 0) out.push(rounded);
+  }
+  return out;
+}
+
+export function roundLine(line: MapLine): MapLine[] {
+  const out = roundPoints(line);
+  return out.length >= 2 ? [out] : [];
+}
+
+export function roundRing(ring: Ring): Ring[] {
+  const out = roundPoints(ring);
+  while (out.length > 1 && comparePoints(out[0], out[out.length - 1]) === 0) out.pop();
+  return out.length >= 3 ? [out] : [];
+}
+
+export function roundOutline(polygons: MultiPolygon): MultiPolygon {
+  return polygons.flatMap(([outer = [], ...holes]) => {
+    const [rounded] = roundRing(outer);
+    return rounded ? [[rounded, ...holes.flatMap(roundRing)]] : [];
+  });
 }
 
 function closestOnSegment([px, py]: Point, [ax, ay]: Point, [bx, by]: Point): Point {
