@@ -1,6 +1,8 @@
 import { UNREST_DAYS } from '../cities.ts';
 import type { DeepReadonly } from '../deep-readonly.ts';
+import { emit } from '../events.ts';
 import { allocateId, type FactionId } from '../ids.ts';
+import { STARTING_GENERAL_SKILL } from '../new-game.ts';
 import type { Army } from '../state/army.ts';
 import type { City } from '../state/city.ts';
 import type { Stores } from '../state/faction.ts';
@@ -119,7 +121,7 @@ function rallyArmy(state: GameState, city: City): Army {
     owner: city.owner,
     formations: [],
     stance: 'holdTheLine',
-    generalSkill: 0,
+    generalSkill: STARTING_GENERAL_SKILL,
     activity: { kind: 'idle', position: { x: city.position.x, y: city.position.y } },
   };
   state.armies[id] = army;
@@ -132,11 +134,22 @@ function desert(state: GameState) {
     if (!stores) continue;
     const shortages = Number(stores.gold < 0) + Number(stores.food < 0);
     if (shortages === 0) continue;
+    let men = 0;
     for (const id of army.formations) {
       const formation = state.formations[id];
       if (!formation) continue;
-      const deserters = Math.ceil(formation.men * DESERTION * shortages);
-      formation.men -= Math.max(0, Math.min(deserters, formation.men - 1));
+      const deserters = Math.max(
+        0,
+        Math.min(Math.ceil(formation.men * DESERTION * shortages), formation.men - 1),
+      );
+      formation.men -= deserters;
+      men += deserters;
+    }
+    const { activity } = army;
+    const position =
+      activity.kind === 'embarked' ? state.convoys[activity.convoy]?.position : activity.position;
+    if (men > 0 && position) {
+      emit(state, { kind: 'armyDeserted', army: army.id, owner: army.owner, position, men });
     }
   }
 }

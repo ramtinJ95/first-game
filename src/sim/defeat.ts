@@ -19,12 +19,12 @@ export function defeatFaction(state: GameState, faction: FactionId): void {
     if (convoy.owner !== faction) continue;
     for (const id of convoy.armies) {
       const army = state.armies[id];
-      if (army) removeArmy(state, army);
+      if (army) removeArmy(state, army, 'defeat');
     }
     removeRecord(state.convoys, convoy.id);
   }
   for (const army of Object.values(state.armies)) {
-    if (army.owner === faction) removeArmy(state, army);
+    if (army.owner === faction) removeArmy(state, army, 'defeat');
   }
   for (const siege of Object.values(state.sieges)) {
     if (siege.besiegers.length === 0) removeRecord(state.sieges, siege.id);

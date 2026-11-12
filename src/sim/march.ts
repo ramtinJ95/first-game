@@ -1,9 +1,6 @@
-import type { FactionId } from './ids.ts';
 import type { Army } from './state/army.ts';
-import type { City } from './state/city.ts';
-import type { GameState } from './state/game-state.ts';
 import type { MapPoint } from './state/map-point.ts';
-import { connected, distance, findPath, surfaceAt } from './world/find-path.ts';
+import { distance, findPath, surfaceAt } from './world/find-path.ts';
 import type { World } from './world/world.ts';
 
 /** How far an army marches in a day. Troop speeds come later. */
@@ -41,23 +38,6 @@ export function startMarch(
   return undefined;
 }
 
-/** The city of the faction nearest the point in a straight line, among those a land route reaches. */
-export function nearestReachableCity(
-  state: GameState,
-  world: World,
-  owner: FactionId,
-  from: MapPoint,
-): City | undefined {
-  let best: City | undefined;
-  for (const id of Object.keys(state.cities).sort()) {
-    const city = state.cities[id as City['id']];
-    if (!city || city.owner !== owner) continue;
-    if (best && distance(from, city.position) >= distance(from, best.position)) continue;
-    if (connected(world.mesh, from, city.position, 'land')) best = city;
-  }
-  return best;
-}
-
 /** Why an army cannot set out now, or undefined when it is idle or already marching. */
 export function busyReason(army: Army): string | undefined {
   const { activity } = army;
@@ -65,6 +45,8 @@ export function busyReason(army: Army): string | undefined {
     case 'idle':
     case 'marching':
       return undefined;
+    case 'retreating':
+      return `army ${army.id} is retreating and takes no orders until it arrives`;
     case 'inBattle':
       return `army ${army.id} is in battle ${activity.battle} and must retreat first`;
     case 'besieging':

@@ -1,17 +1,22 @@
 import type { Pick } from '../render/pick.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
+import type { BattleSideOutcome, DayEvent } from '../sim/events.ts';
 import type { ArmyId, FactionId } from '../sim/ids.ts';
 import type { Army, ArmyActivity } from '../sim/state/army.ts';
-import type { Battle } from '../sim/state/battle.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { Stores } from '../sim/state/faction.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
+import { areAtWar } from '../sim/wars.ts';
 import { factionName, placeName, TROOP_NAMES } from './names.ts';
 
 export type AlertKind =
   | 'battleBegan'
   | 'battleEnded'
+  | 'armyRetreated'
+  | 'armyDestroyed'
+  | 'armyDeserted'
+  | 'warDeclared'
   | 'armyArrived'
   | 'formationMustered'
   | 'cityChangedOwner'
@@ -40,55 +45,24 @@ const STORE_NAMES: Record<keyof Stores, string> = {
 };
 
 /**
- * What the player should hear about from one day to the next, worked out by
- * comparing the two states. It concerns the player's own armies, cities, and stores.
+ * What the player should hear about from one day: the day's events that touch the
+ * player or that the player may see, and the changes to the player's own armies,
+ * cities, and stores between the two days. `alertsInSight` then drops what the
+ * player did not see.
  */
-export function alertsBetween(before: State, after: State): Alert[] {
+export function alertsOfDay(
+  before: State,
+  after: State,
+  events: readonly DeepReadonly<DayEvent>[],
+): Alert[] {
   const player = after.player;
   const day = after.day;
   const alerts: Alert[] = [];
   const add = (alert: Omit<Alert, 'day'>) => alerts.push({ ...alert, day });
 
-  for (const battle of Object.values(after.battles)) {
-    if (before.battles[battle.id] || !fightsIn(after, battle, player)) continue;
-    const enemies =
-      sideOf(after, battle, player) === 'attackers' ? battle.defenders : battle.attackers;
-    add({
-      kind: 'battleBegan',
-      tone: 'neutral',
-      text: `Battle ${placeName(after, battle.position)} against ${ownersOf(after, enemies)}`,
-      focus: { at: battle.position, select: { kind: 'battle', battle: battle.id } },
-    });
-  }
-
-  for (const battle of Object.values(before.battles)) {
-    if (after.battles[battle.id] || !fightsIn(before, battle, player)) continue;
-    const ours = sideOf(before, battle, player);
-    const theirs = ours === 'attackers' ? 'defenders' : 'attackers';
-    const where = placeName(before, battle.position);
-    const standing = battle[ours ?? 'attackers'].find((id) => heldField(before, after, id));
-    if (standing) {
-      add({
-        kind: 'battleEnded',
-        tone: 'good',
-        text: `You held the field ${where}`,
-        focus: { at: battle.position, select: { kind: 'army', army: standing } },
-      });
-    } else if (battle[theirs].some((id) => heldField(before, after, id))) {
-      add({
-        kind: 'battleEnded',
-        tone: 'bad',
-        text: `${ownersOf(before, battle[theirs])} held the field ${where}`,
-        focus: { at: battle.position },
-      });
-    } else {
-      add({
-        kind: 'battleEnded',
-        tone: 'neutral',
-        text: `The battle ${where} ended with neither side holding the field`,
-        focus: { at: battle.position },
-      });
-    }
+  for (const event of events) {
+    const alert = eventAlert(before, after, event);
+    if (alert) add(alert);
   }
 
   for (const army of Object.values(after.armies)) {
@@ -104,7 +78,7 @@ export function alertsBetween(before: State, after: State): Alert[] {
         text: `Your army landed ${placeName(after, at)}`,
         focus: { at, select },
       });
-    } else if (army.activity.kind !== 'marching' && arrived(was.activity, at)) {
+    } else if (!isOnTheMove(army.activity) && arrived(was.activity, at)) {
       add({
         kind: 'armyArrived',
         tone: 'neutral',
@@ -175,37 +149,198 @@ export function alertsBetween(before: State, after: State): Alert[] {
   return alerts;
 }
 
+function eventAlert(
+  before: State,
+  after: State,
+  event: DeepReadonly<DayEvent>,
+): Omit<Alert, 'day'> | undefined {
+  const player = after.player;
+  switch (event.kind) {
+    case 'battleBegan': {
+      const where = placeName(after, event.position);
+      const select = after.battles[event.battle]
+        ? ({ kind: 'battle', battle: event.battle } as const)
+        : undefined;
+      const focus = { at: event.position, ...(select && { select }) };
+      const enemies = event.attackers.includes(player)
+        ? event.defenders
+        : event.defenders.includes(player)
+          ? event.attackers
+          : undefined;
+      if (enemies) {
+        return {
+          kind: 'battleBegan',
+          tone: 'neutral',
+          text: `Battle ${where} against ${namesOf(after, enemies)}`,
+          focus,
+        };
+      }
+      return {
+        kind: 'battleBegan',
+        tone: 'neutral',
+        text: `Battle ${where}: ${namesOf(after, event.attackers)} against ${namesOf(after, event.defenders)}`,
+        focus,
+      };
+    }
+    case 'battleEnded': {
+      const where = placeName(after, event.position);
+      const side = event.attackers.factions.includes(player)
+        ? 'attackers'
+        : event.defenders.factions.includes(player)
+          ? 'defenders'
+          : undefined;
+      if (!side) {
+        if (event.winner === 'none') {
+          return {
+            kind: 'battleEnded',
+            tone: 'neutral',
+            text: `The battle ${where} ended with neither side holding the field`,
+            focus: { at: event.position },
+          };
+        }
+        const beaten = event.winner === 'attackers' ? event.defenders : event.attackers;
+        return {
+          kind: 'battleEnded',
+          tone: 'neutral',
+          text: `${namesOf(after, event[event.winner].factions)} beat ${namesOf(after, beaten.factions)} ${where}`,
+          focus: { at: event.position },
+        };
+      }
+      const ours = event[side];
+      const theirs = side === 'attackers' ? event.defenders : event.attackers;
+      const losses = lossesText(after, ours, theirs);
+      const standing = event.standing.find((id) => after.armies[id]?.owner === player);
+      if (event.winner === side) {
+        return {
+          kind: 'battleEnded',
+          tone: 'good',
+          text: `You held the field ${where} after ${daysText(event.days)}. ${losses}`,
+          focus: {
+            at: event.position,
+            ...(standing && { select: { kind: 'army', army: standing } as const }),
+          },
+        };
+      }
+      if (event.winner === 'none') {
+        return {
+          kind: 'battleEnded',
+          tone: 'neutral',
+          text: `The battle ${where} ended with neither side holding the field. ${losses}`,
+          focus: { at: event.position },
+        };
+      }
+      return {
+        kind: 'battleEnded',
+        tone: 'bad',
+        text: `${namesOf(after, theirs.factions)} held the field ${where} after ${daysText(event.days)}. ${losses}`,
+        focus: { at: event.position },
+      };
+    }
+    case 'armyRetreated': {
+      if (event.owner !== player) return undefined;
+      const lost = event.lost > 0 ? `, losing ${event.lost} men to the pursuit` : '';
+      return {
+        kind: 'armyRetreated',
+        tone: 'bad',
+        text: `Your army ${event.ordered ? 'withdrew' : 'broke'} ${placeName(before, event.from)}${lost}, and falls back ${destinationText(after, event.to)}`,
+        focus: {
+          at: event.from,
+          ...(after.armies[event.army] && {
+            select: { kind: 'army', army: event.army } as const,
+          }),
+        },
+      };
+    }
+    case 'armyDestroyed': {
+      const where = placeName(before, event.position);
+      const focus = { at: event.position };
+      if (event.owner !== player) {
+        return {
+          kind: 'armyDestroyed',
+          tone: areAtWar(after, player, event.owner) ? 'good' : 'neutral',
+          text: `An army of ${factionName(after, event.owner)} ${LOSS_TEXT[event.cause]} ${where}`,
+          focus,
+        };
+      }
+      return {
+        kind: 'armyDestroyed',
+        tone: 'bad',
+        text:
+          event.cause === 'surrender'
+            ? `Your army of ${event.men} men had nowhere to retreat and surrendered ${where}`
+            : `Your army ${LOSS_TEXT[event.cause]} ${where}`,
+        focus,
+      };
+    }
+    case 'armyDeserted': {
+      if (event.owner !== player || isShort(before, player)) return undefined;
+      return {
+        kind: 'armyDeserted',
+        tone: 'bad',
+        text: `${event.men} men deserted your army ${placeName(after, event.position)}`,
+        focus: {
+          at: event.position,
+          ...(after.armies[event.army] && {
+            select: { kind: 'army', army: event.army } as const,
+          }),
+        },
+      };
+    }
+    case 'warDeclared':
+      if (event.against === player) {
+        return {
+          kind: 'warDeclared',
+          tone: 'bad',
+          text: `${factionName(after, event.by)} declared war on you`,
+        };
+      }
+      if (event.by === player) {
+        return {
+          kind: 'warDeclared',
+          tone: 'neutral',
+          text: `You declared war on ${factionName(after, event.against)}`,
+        };
+      }
+      return undefined;
+  }
+}
+
+const LOSS_TEXT: Record<DeepReadonly<DayEvent & { kind: 'armyDestroyed' }>['cause'], string> = {
+  battle: 'was destroyed in battle',
+  surrender: 'surrendered',
+  storm: 'was lost storming the walls',
+  defeat: 'laid down its arms',
+};
+
+function lossesText(
+  state: State,
+  ours: DeepReadonly<BattleSideOutcome>,
+  theirs: DeepReadonly<BattleSideOutcome>,
+): string {
+  return `You lost ${ours.lost} men, ${namesOf(state, theirs.factions)} lost ${theirs.lost}.`;
+}
+
+function daysText(days: number): string {
+  return days === 1 ? '1 day' : `${days} days`;
+}
+
+/** "to Roma" for a city's own spot, otherwise the place in the field. */
+function destinationText(state: State, to: MapPoint): string {
+  const city = Object.values(state.cities).find((c) => distanceKm(c.position, to) <= ARRIVED_KM);
+  return city ? `to ${city.name}` : `into the field ${placeName(state, to)}`;
+}
+
+/** Desertion began on an earlier day while a store was already below zero. */
+function isShort(state: State, faction: FactionId): boolean {
+  const stores = state.factions[faction]?.stores;
+  return !!stores && (stores.gold < 0 || stores.food < 0);
+}
+
 function positionOf(state: State, army: DeepReadonly<Army>): MapPoint | undefined {
   const { activity } = army;
   return activity.kind === 'embarked'
     ? state.convoys[activity.convoy]?.position
     : activity.position;
-}
-
-function fightsIn(state: State, battle: DeepReadonly<Battle>, faction: FactionId): boolean {
-  return sideOf(state, battle, faction) !== undefined;
-}
-
-function sideOf(
-  state: State,
-  battle: DeepReadonly<Battle>,
-  faction: FactionId,
-): 'attackers' | 'defenders' | undefined {
-  const owns = (id: ArmyId) => state.armies[id]?.owner === faction;
-  if (battle.attackers.some(owns)) return 'attackers';
-  if (battle.defenders.some(owns)) return 'defenders';
-  return undefined;
-}
-
-/**
- * A beaten army is gone, marches home, or has already reached a home close by. An
- * army still standing where it fought held the field.
- */
-function heldField(before: State, after: State, id: ArmyId): boolean {
-  const was = before.armies[id]?.activity;
-  const is = after.armies[id]?.activity;
-  if (!was || !is || was.kind === 'embarked' || is.kind === 'embarked') return false;
-  return is.kind !== 'marching' && distanceKm(was.position, is.position) <= ARRIVED_KM;
 }
 
 /**
@@ -214,18 +349,26 @@ function heldField(before: State, after: State, id: ArmyId): boolean {
  */
 function arrived(was: DeepReadonly<ArmyActivity>, at: MapPoint): boolean {
   if (was.kind === 'embarked') return false;
-  if (was.kind !== 'marching') return distanceKm(was.position, at) > ARRIVED_KM;
+  if (!isOnTheMove(was)) return distanceKm(was.position, at) > ARRIVED_KM;
   const end = was.waypoints.at(-1);
   return !!end && distanceKm(end, at) <= ARRIVED_KM;
+}
+
+function isOnTheMove(
+  activity: DeepReadonly<ArmyActivity>,
+): activity is DeepReadonly<ArmyActivity & { kind: 'marching' | 'retreating' }> {
+  return activity.kind === 'marching' || activity.kind === 'retreating';
 }
 
 function distanceKm(a: MapPoint, b: MapPoint): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+function namesOf(state: State, factions: readonly FactionId[]): string {
+  const names = factions.map((faction) => factionName(state, faction));
+  return names.length > 0 ? names.join(' and ') : 'an enemy';
+}
+
 function ownersOf(state: State, armies: readonly ArmyId[]): string {
-  const owners = [...new Set(armies.flatMap((id) => state.armies[id]?.owner ?? []))].map((owner) =>
-    factionName(state, owner),
-  );
-  return owners.length > 0 ? owners.join(' and ') : 'an enemy';
+  return namesOf(state, [...new Set(armies.flatMap((id) => state.armies[id]?.owner ?? []))]);
 }

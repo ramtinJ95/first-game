@@ -193,7 +193,7 @@ export function stormCity(state: GameState, siege: Siege, faction: FactionId): S
       removeRecord(state.formations, id);
       return false;
     });
-    if (army.formations.length === 0) removeArmy(state, army);
+    if (army.formations.length === 0) removeArmy(state, army, 'storm');
   }
   if (taken) {
     cityFalls(state, siege);

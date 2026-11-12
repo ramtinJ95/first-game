@@ -57,6 +57,11 @@ export function activityText(state: State, army: DeepReadonly<Army>): string {
         pathKm(activity.position, activity.waypoints),
         MARCH_KM_PER_DAY,
       )}`;
+    case 'retreating':
+      return `Retreating${destination(state, activity.waypoints.at(-1))} · ${daysLeft(
+        pathKm(activity.position, activity.waypoints),
+        MARCH_KM_PER_DAY,
+      )}`;
     case 'inBattle': {
       const battle = state.battles[activity.battle];
       const day = battle ? state.day - battle.startedOn + 1 : 1;

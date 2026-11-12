@@ -129,7 +129,7 @@ function setUp(c: Case, seed: number) {
   const state = newGame(map, { seed, player: 'rome' });
   const city = targetOf(state, c.target);
   for (const army of Object.values(state.armies)) {
-    if (army.owner === ROME || army.owner === city.owner) removeArmy(state, army);
+    if (army.owner === ROME || army.owner === city.owner) removeArmy(state, army, 'defeat');
   }
   state.wars[warKey(ROME, city.owner)] = { since: state.day };
   const camp = [

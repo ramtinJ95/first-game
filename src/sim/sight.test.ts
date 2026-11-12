@@ -149,14 +149,15 @@ describe('sightOf', () => {
     const defender = armyOf(state, 'persia');
     const inside = east(PERSIA, SIGHT_KM.army - 5);
     const outside = east(PERSIA, SIGHT_KM.army + 5);
-    attacker.activity = { kind: 'inBattle', position: inside, battle };
-    defender.activity = { kind: 'inBattle', position: outside, battle };
+    attacker.activity = { kind: 'inBattle', position: inside, battle, march: [] };
+    defender.activity = { kind: 'inBattle', position: outside, battle, march: [] };
     state.battles[battle] = {
       id: battle,
       position: east(PERSIA, SIGHT_KM.army + 1),
       attackers: [attacker.id],
       defenders: [defender.id],
       startedOn: state.day,
+      sides: { attackers: { factions: [], lost: 0 }, defenders: { factions: [], lost: 0 } },
     };
     const sight = sightOf(state, world, rome);
     expect(sight.sees(state.battles[battle].position)).toBe(false);

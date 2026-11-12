@@ -30,6 +30,7 @@ function withBattle() {
     attackers: [f.punicArmy],
     defenders: [f.romanArmy],
     startedOn: 1 as Day,
+    sides: { attackers: { factions: [], lost: 0 }, defenders: { factions: [], lost: 0 } },
   };
   return { state, id };
 }

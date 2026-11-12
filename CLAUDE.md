@@ -30,7 +30,15 @@ Read `docs/design.md` before any work. It is the agreed design. When a task conf
 
 ### The tick contract
 
-`tick(state, orders, world)` in `src/sim/tick.ts` plays one day. It never changes its input. It copies the state, applies the orders in the given order, then runs `SYSTEMS` in list order on the copy, and returns `{ state, rejected }`. Every order handler and every system receives the same `world`. Inside a tick, orders and systems change that copy in place. Outside the rules, a state is frozen once a tick returns it. The clock, the panels, and the renderer can keep and compare references to it without copying, and the renderer can draw between the previous and the current day.
+`tick(state, orders, world)` in `src/sim/tick.ts` plays one day. It never changes its input. It copies the state, applies the orders in the given order, then runs `SYSTEMS` in list order on the copy, and returns `{ state, rejected, events }`. Every order handler and every system receives the same `world`. Inside a tick, orders and systems change that copy in place. Outside the rules, a state is frozen once a tick returns it. The clock, the panels, and the renderer can keep and compare references to it without copying, and the renderer can draw between the previous and the current day.
+
+### The day's events
+
+`tick` also returns `events`, the `DayEvent`s of the day in the order they happened: a battle began or ended, an army retreated, was destroyed, or lost men to desertion, and a war was declared. `src/sim/events.ts` defines them. An event carries what a reader needs, such as owners, a position, and men, because the records it names may be gone by the end of the day.
+
+- Rules code calls `emit(state, event)` where the change happens. The events are kept beside the tick's copy of the state, never in it, so they are not saved and a loaded game has none. `emit` outside a recorded day drops the event, so tests that call an order handler directly need nothing.
+- A script that plays the tick's steps itself wraps them in `recordEvents(state, run)`, as `scripts/sim-ai.ts` does.
+- A new kind of news is a new variant of `DayEvent`, emitted at the one place the change happens.
 
 ### The world
 
@@ -42,8 +50,9 @@ Read `docs/design.md` before any work. It is the agreed design. When a task conf
 
 ### Movement
 
-- `src/sim/march.ts` names the speeds `MARCH_KM_PER_DAY`, `CONVOY_KM_PER_DAY`, and `REFUGEE_KM_PER_DAY`. `startMarch` is the one way to set an army marching: it finds the land path, or returns why there is none. `nearestReachableCity` picks the nearest city of a faction by straight line among those a land route reaches.
+- `src/sim/march.ts` names the speeds `MARCH_KM_PER_DAY`, `CONVOY_KM_PER_DAY`, and `REFUGEE_KM_PER_DAY`. `startMarch` is the one way to set an army marching: it finds the land path, or returns why there is none.
 - A marching army, a convoy, and a refugee column hold the `waypoints` still ahead. The path is found once, when the march starts, and `src/sim/systems/movement.ts` follows it. Movement runs first in the day.
+- A retreating army walks its path like a marching one, but takes no order and fights no battle until it arrives and stands idle.
 - `moveArmy` replaces any march, `halt` stops one, and `embark` puts an army within 10 km of its faction's port city or that city's harbour aboard a convoy to another port. A convoy lands its armies idle at the destination harbour. `evacuate` gives a new refugee column its land path, and the column ends its walk at its destination with no waypoints, where `population` settles it.
 - `npm run sim:paths` reruns the path-finding experiment, `npm run sim:movement` prints the route table and the tick times, and `npm run map:routes` draws routes on the map preview into `captures/movement/`.
 
@@ -85,8 +94,13 @@ Known faults in the source data. Check them before you draw or label terrain.
 - `areAtWar(state, a, b)` in `src/sim/wars.ts` says whether two factions are at war. Every rule that asks uses it. `state.wars` maps `warKey(a, b)` to the war. The key is the JSON pair of the two faction ids in ascending order, so a pair is stored once and a faction is never at war with itself. Only orders such as `declareWar` change it.
 - `TROOPS` in `src/sim/troops.ts` holds every number a battle uses for a troop: category, attack, defence, discipline, and bonuses against categories. `formation.troop` accepts only its keys.
 - To add a troop type, add one row to `TROOPS` and nothing else. Add a matchup for it to `scripts/sim-battles.ts`, run `npm run sim:battles`, and put the table in the pull request. Renaming or removing a troop breaks old saves and needs a raise of `SAVE_FORMAT`.
-- `src/sim/systems/battles.ts` names `ENGAGEMENT_DISTANCE`, the stance effects, and the tuning numbers at its top. `retreatFromBattle` is the one way out of a battle, so a lane that pulls an army out calls it. It marches the army to its nearest city that a land route reaches, and the army surrenders when there is none.
-- A beaten army marches home with every formation at morale 0. An army without an unbroken formation does not start or join a battle. Only idle armies regain morale.
+- `src/sim/systems/battles.ts` names `ENGAGEMENT_DISTANCE`, the stance effects, and the tuning numbers at its top. `npm run sim:battles` prints the length of each matchup. Two armies of about the same strength fight 6 to 12 days, a side outnumbered two to one holds at least 3, and a formation loses at most `MAX_DAILY_LOSS` of its men a day or `REMNANT_MEN`, so only a remnant dies on its first day.
+- `GENERAL_EFFECT` is what one point of general's skill adds to blows and morale, so the best general against none does not make up for a fifth more men. The AI's strength estimate reads the same constant. Every new army, at the start or raised by recruits, has a general of `STARTING_GENERAL_SKILL`.
+- `retreatFromBattle(state, world, army, ordered)` is the one way out of a battle, so a lane that pulls an army out calls it. Every formation leaves at morale 0. Ordered out, each loses `RETREAT_LOSS` of its men. Beaten, each loses what the pursuit cuts down: `PURSUIT_BASE` plus `PURSUIT_PER_RIDER` for each unbroken enemy horseman per man of the army, up to `PURSUIT_MAX`.
+- The army retreats to the nearest city of its owner that a land route reaches, that is not besieged, that has no enemy army within `ENGAGEMENT_DISTANCE`, and that lies at least `SAFE_KM` from every army it fought. With no such city it goes `FIELD_RETREAT_KM` into the field, as directly away from those armies as the land allows. With neither it surrenders. It is `retreating` until it arrives, so it fights no battle on the way. Once it stands idle, an enemy that marched after it can fight it again.
+- When a battle ends, an army that holds the field takes up the march it was on when the battle took it (`inBattle.march`), so an order to march survives a battle on the way. An army that was idle or besieging stands where it fought.
+- An army without an unbroken formation does not start or join a battle. Only idle armies regain morale.
+- `removeArmy(state, army, cause)` in `src/sim/armies.ts` is the one way an army leaves the game, and it emits `armyDestroyed` with the cause.
 
 ### Cities
 
@@ -116,7 +130,7 @@ Known faults in the source data. Check them before you draw or label terrain.
 - `decideOrders(state, world, faction): Order[]` in `src/sim/ai/decide.ts` gives the orders one faction gives today. It takes a `DeepReadonly<GameState>`, never writes it, and draws no random numbers. Ties go to the lower id, so the same state gives the same orders. `decideAll(state, world, skip = [state.player])` gives the orders of every other faction that is not defeated, in faction id order.
 - The clock calls it. `createClock` takes `decide(state)`, and each tick plays the player's queued orders and then `decide(state)` on the day being played. `src/app/main.ts` passes `(state) => decideAll(state, world)`.
 - Every threshold is a named constant in `src/sim/ai/thresholds.ts`. Budget: `RESERVE_DAYS`, `MIN_BALANCE_SHARE`, `TROOP_MIX`. War: `WAR_ODDS`, `PEACE_WAR_ODDS`, `WAR_DISTANCE_KM`, `WAR_REACH_KM`. Offence: `ATTACK_ODDS`, `DEFENDER_KM`, `SEA_KM_FACTOR`, `STORM_MIN_CHANCE`, `STORM_MAX_LOSS`, `MARCH_MORALE`, `RALLY_WAIT_DAYS`. Defence: `RETREAT_ODDS`, `RELIEF_ODDS`, `RELIEF_KM`, `CAPITAL_GUARD_KM`. Fates: `ENSLAVE_BELOW_MANPOWER`. Minors: `MINOR_DEFICIT_DAYS`. The doc comment on each rule's function in `src/sim/ai` states the rule.
-- A great power's day runs in this order: retreats, fates, storms, army movements (capital guard, relief, offence), one recruit, at most one declaration of war. A minor gives orders only at war. It recruits its cheapest troop, keeps its armies at its city, and retreats from a battle it is losing.
+- A great power's day runs in this order: retreats, fates, storms, army movements (capital guard, relief, offence), one recruit, at most one declaration of war. A minor gives orders only at war. It recruits its cheapest troop, keeps its armies at its city once their morale is back to `MARCH_MORALE`, and retreats from a battle it is losing.
 - No order joins two armies. A recruit joins the idle army at its city, so a power gathers by keeping an army at the muster city while recruits train, and sends separate armies at one target so they besiege and fight together.
 - The AI caches each collection's sorted order, each faction's enemies, each army's strength, and the day's balances in `WeakMap`s keyed by the record objects. Never change a state's collections after the AI has read it.
 - `npm run sim:ai [-- --seeds 20 --years 5]` plays the new game with every faction under the AI, then with Rome giving no orders, and prints the tables the thresholds were tuned on.
@@ -141,7 +155,8 @@ Known faults in the source data. Check them before you draw or label terrain.
 - The battle panel shows the stance buttons and the retreat for each of the player's armies in the battle, through `StanceControls.svelte`, which the army panel shares. Each stance's line comes from `STANCE_EFFECTS`. The army and city panels list the other armies in sight at the same place.
 - The top bar's Overview opens a list of the player's cities, armies, and wars (`overviewOf` in `src/ui/describe.ts`). A click on a row calls `actions.show`, which selects and centres the map. A city's rank line comes from `rankText`, which reads the starting owner from the map.
 - The renderer also takes `onCommand` for a right click and offers `focus(point)` for an alert's click. In the `markers` layer it draws the player's march and sea paths, the paths of orders still waiting, and a battle marker that `pickAt` selects after banners and before provinces. An army at sea is drawn at its convoy.
-- `alertsBetween(before, after)` in `src/app/alerts.ts` works out the alerts from two days, and the clock's `onDay` feeds it every tick. Alerts are page state, not game state. To add a kind, add it to `AlertKind` and one test to `alerts.test.ts`.
+- `alertsOfDay(before, after, events)` in `src/app/alerts.ts` works out the alerts of a day, and the clock's `onDay` feeds it every tick with the tick's events. News of something that happened, such as a battle, a retreat, a lost army, desertion, or a declaration of war, comes from the events, so a battle that begins and ends inside one tick is still told. Only standing changes, such as a city's owner, a new siege, a mustered formation, an arrival, or an empty store, are read by comparing the two days. Alerts are page state, not game state. To add a kind, add it to `AlertKind` and one test to `alerts.test.ts`.
+- An alert covers the player's own armies and wars, and battles and lost armies of others that the player sees. `alertsInSight` drops the rest. An alert selects a battle or an army only while it still exists.
 - `reasonText` in `src/app/names.ts` turns a rule's refusal into words a player reads. The notice shows it for four seconds.
 - The view times each refresh as the user-timing measure `panels`. The `panels` capture scenario reads it.
 - `e2e/support.ts` builds saves for browser tests and capture scenarios, such as a battle or a fallen city. Tests drop them on the page and then play through the panels.
@@ -163,23 +178,23 @@ Browser tests draw the test drawing, because a browser test checks behaviour and
 
 ## Commands
 
-| Command                                       | Does                                                                                                            |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`                                 | Vite dev server                                                                                                 |
-| `npm run build`                               | Production build to `dist/`                                                                                     |
-| `npm run check`                               | svelte-check, the sim type check, ESLint, Prettier                                                              |
-| `npm test`                                    | Vitest unit tests                                                                                               |
-| `npm run e2e`                                 | Playwright tests against the built page, Chromium only                                                          |
-| `npm run sim:battles [-- --log <row> <seed>]` | Play the battle matchups over many seeds and print the tuning table, or one battle day by day                   |
-| `npm run sim:economy`                         | Play the new game for three years without orders and print each great power's economy at the end of each year   |
-| `npm run sim:paths`                           | Compare grid and navigation-mesh path finding with the exact shortest path                                      |
-| `npm run sim:movement`                        | Print long routes, their marching days and path times, and the tick time with every army marching               |
-| `npm run map:routes`                          | Draw long routes on the map preview into `captures/movement/`                                                   |
-| `npm run sim:sieges`                          | Play the siege, storm, relief, and fate cases and print the tuning table                                        |
-| `npm run sim:ai [-- --seeds <n> --years <n>]` | Play the new game under the AI, with every faction and with a passive Rome, and print the tuning tables         |
-| `npm run capture [-- <scenario>]`             | Build, then write screenshots, `clip.gif`, video, and trace to `captures/<scenario>/`                           |
-| `npm run capture:publish`                     | Push the PNG and GIF files to the `pr-assets` branch and print Markdown for the pull request                    |
-| `npm run capture:fetch`                       | Pull this branch's media from `pr-assets` into `captures/`, declare it as Nexus outputs, and print the Markdown |
+| Command                                       | Does                                                                                                                                                        |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                                 | Vite dev server                                                                                                                                             |
+| `npm run build`                               | Production build to `dist/`                                                                                                                                 |
+| `npm run check`                               | svelte-check, the sim type check, ESLint, Prettier                                                                                                          |
+| `npm test`                                    | Vitest unit tests                                                                                                                                           |
+| `npm run e2e`                                 | Playwright tests against the built page, Chromium only                                                                                                      |
+| `npm run sim:battles [-- --log <row> <seed>]` | Play the battle matchups over many seeds and print the tuning table, or one battle day by day                                                               |
+| `npm run sim:economy`                         | Play the new game for three years without orders and print each great power's economy at the end of each year                                               |
+| `npm run sim:paths`                           | Compare grid and navigation-mesh path finding with the exact shortest path                                                                                  |
+| `npm run sim:movement`                        | Print long routes, their marching days and path times, and the tick time with every army marching                                                           |
+| `npm run map:routes`                          | Draw long routes on the map preview into `captures/movement/`                                                                                               |
+| `npm run sim:sieges`                          | Play the siege, storm, relief, and fate cases and print the tuning table                                                                                    |
+| `npm run sim:ai [-- --seeds <n> --years <n>]` | Play the new game under the AI, with every faction and with a passive Rome, and print the tuning tables, battle lengths, and beaten armies alive 30 days on |
+| `npm run capture [-- <scenario>]`             | Build, then write screenshots, `clip.gif`, video, and trace to `captures/<scenario>/`                                                                       |
+| `npm run capture:publish`                     | Push the PNG and GIF files to the `pr-assets` branch and print Markdown for the pull request                                                                |
+| `npm run capture:fetch`                       | Pull this branch's media from `pr-assets` into `captures/`, declare it as Nexus outputs, and print the Markdown                                             |
 
 To show a new view, add a scenario file to `scripts/capture/scenarios/`. It default-exports `defineScenario({ name, title, run })`. `run` gets the Playwright `page` and `shot(name, title)`. The whole run becomes the clip.
 

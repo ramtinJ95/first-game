@@ -1,14 +1,17 @@
-import { leaveSiege } from '../armies.ts';
-import type { ArmyId, BattleId } from '../ids.ts';
+import { leaveSiege, removeArmy } from '../armies.ts';
+import { emit, type BattleSideName } from '../events.ts';
+import type { ArmyId, BattleId, CityId, FactionId } from '../ids.ts';
 import { allocateId } from '../ids.ts';
 import { removeRecord } from '../records.ts';
 import { nextRandom } from '../rng.ts';
 import type { Army, Stance } from '../state/army.ts';
 import type { Battle } from '../state/battle.ts';
+import type { City } from '../state/city.ts';
 import type { Formation } from '../state/formation.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
-import { nearestReachableCity, startMarch } from '../march.ts';
+import { landPath } from '../march.ts';
+import { connected, surfaceAt } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import { TROOPS } from '../troops.ts';
 import { areAtWar } from '../wars.ts';
@@ -30,13 +33,32 @@ const DAILY_STRAIN = 0.02;
 const LUCK = 0.4;
 /** How strongly falling behind in today's losses costs extra morale, and its cap. */
 const BEHIND_WEIGHT = 1;
-const MAX_BEHIND = 2;
-/** Each point of general's skill adds this share to the army's blows and its morale. */
-const GENERAL_EFFECT = 0.04;
+const MAX_BEHIND = 1.5;
+/**
+ * Each point of general's skill adds this share to the army's blows and its morale, so
+ * the best general against none does not make up for a fifth more men.
+ */
+export const GENERAL_EFFECT = 0.015;
+/** A formation loses at most this share of its men in a day, */
+const MAX_DAILY_LOSS = 0.2;
+/** or this many men, whichever is more, so only a remnant this small can die in one day. */
+const REMNANT_MEN = 50;
 /** Morale that a formation of an idle army regains each day. */
 export const MORALE_RECOVERY = 0.05;
 /** The share of its men that each formation of an army loses when it retreats by order. */
 export const RETREAT_LOSS = 0.15;
+/**
+ * A beaten army is cut down as it breaks: each formation loses PURSUIT_BASE of its men,
+ * plus PURSUIT_PER_RIDER for each unbroken enemy horseman per man of the army, up to
+ * PURSUIT_MAX.
+ */
+const PURSUIT_BASE = 0.03;
+const PURSUIT_PER_RIDER = 0.2;
+const PURSUIT_MAX = 0.25;
+/** A retreat goes to a city at least this far from every enemy it fled from. */
+export const SAFE_KM = 2 * ENGAGEMENT_DISTANCE;
+/** With no safe city, a retreat goes this far into the field, away from the enemy. */
+export const FIELD_RETREAT_KM = 100;
 
 /** How a stance scales the blows an army gives, the blows it takes, and the morale it loses. */
 export const STANCE_EFFECTS: Record<Stance, { dealt: number; taken: number; morale: number }> = {
@@ -93,9 +115,17 @@ function join(state: GameState, army: Army, position: MapPoint, battle: Battle):
   const side = sideToJoin(state, army, battle.attackers, battle.defenders);
   if (!side) return false;
   battle[side].push(army.id);
-  leaveSiege(state, army);
-  army.activity = { kind: 'inBattle', position, battle: battle.id };
+  const { factions } = battle.sides[side];
+  if (!factions.includes(army.owner)) factions.push(army.owner);
+  enterBattle(state, army, position, battle.id);
   return true;
+}
+
+/** A marching army keeps the rest of its march, to take up again if it holds the field. */
+function enterBattle(state: GameState, army: Army, position: MapPoint, battle: BattleId) {
+  const march = army.activity.kind === 'marching' ? army.activity.waypoints : [];
+  leaveSiege(state, army);
+  army.activity = { kind: 'inBattle', position, battle, march };
 }
 
 /**
@@ -155,16 +185,26 @@ function startBattles(state: GameState) {
       attackers: [attacker.army.id],
       defenders: [defender.army.id],
       startedOn: state.day,
+      sides: {
+        attackers: { factions: [attacker.army.owner], lost: 0 },
+        defenders: { factions: [defender.army.owner], lost: 0 },
+      },
     };
     state.battles[id] = battle;
     for (const { army, position } of [attacker, defender]) {
-      leaveSiege(state, army);
-      army.activity = { kind: 'inBattle', position, battle: id };
+      enterBattle(state, army, position, id);
       taken.add(army.id);
     }
     for (const { army, position } of free) {
       if (!taken.has(army.id) && join(state, army, position, battle)) taken.add(army.id);
     }
+    emit(state, {
+      kind: 'battleBegan',
+      battle: id,
+      position: { ...battle.position },
+      attackers: [...battle.sides.attackers.factions],
+      defenders: [...battle.sides.defenders.factions],
+    });
   }
 }
 
@@ -214,12 +254,14 @@ function fightOneDay(state: GameState, id: BattleId) {
     fighters.reduce((sum, { formation }) => sum + (losses.get(formation) ?? 0), 0) / men;
   const attackersLost = shareLost(attackers, attackerMen);
   const defendersLost = shareLost(defenders, defenderMen);
-  for (const [fighters, pressure] of [
-    [attackers, pressureOn(attackerMen, defenderMen, attackersLost, defendersLost)],
-    [defenders, pressureOn(defenderMen, attackerMen, defendersLost, attackersLost)],
+  for (const [side, fighters, pressure] of [
+    ['attackers', attackers, pressureOn(attackerMen, defenderMen, attackersLost, defendersLost)],
+    ['defenders', defenders, pressureOn(defenderMen, attackerMen, defendersLost, attackersLost)],
   ] as const) {
     for (const { formation, army } of fighters) {
-      const lost = Math.min(formation.men, Math.round(losses.get(formation) ?? 0));
+      const cap = Math.max(Math.round(formation.men * MAX_DAILY_LOSS), REMNANT_MEN);
+      const lost = Math.min(formation.men, cap, Math.round(losses.get(formation) ?? 0));
+      battle.sides[side].lost += lost;
       const moraleLost =
         ((lost / formation.men) * MORALE_PER_LOSS + DAILY_STRAIN) *
         pressure *
@@ -244,8 +286,9 @@ function pressureOn(men: number, enemyMen: number, shareLost: number, enemyShare
 }
 
 /**
- * Removes emptied formations and armies, sends beaten armies home, and ends the battle
- * when a side has no army left in it.
+ * Removes emptied formations and armies, sends beaten armies away, and ends the battle
+ * when a side has no army left in it. An army that holds the field takes up the march
+ * it was on, or stands where it fought.
  */
 function settle(state: GameState, world: World, id: BattleId) {
   const battle = state.battles[id];
@@ -256,41 +299,180 @@ function settle(state: GameState, world: World, id: BattleId) {
       if (!army) continue;
       removeEmptyFormations(state, army);
       if (army.formations.length === 0) {
-        battle[side] = battle[side].filter((other) => other !== armyId);
-        removeArmy(state, army);
+        removeArmy(state, army, 'battle');
       } else if (!formationsOf(state, army).some(isFighting)) {
-        retreatFromBattle(state, world, army);
+        retreatFromBattle(state, world, army, false);
       }
     }
   }
   if (battle.attackers.length > 0 && battle.defenders.length > 0) return;
   for (const armyId of [...battle.attackers, ...battle.defenders]) {
     const army = state.armies[armyId];
-    if (army?.activity.kind === 'inBattle') {
-      army.activity = { kind: 'idle', position: army.activity.position };
-    }
+    if (army?.activity.kind !== 'inBattle') continue;
+    const { position, march } = army.activity;
+    army.activity =
+      march.length > 0
+        ? { kind: 'marching', position, waypoints: march }
+        : { kind: 'idle', position };
   }
+  const winner: BattleSideName | 'none' =
+    battle.attackers.length > 0 ? 'attackers' : battle.defenders.length > 0 ? 'defenders' : 'none';
+  emit(state, {
+    kind: 'battleEnded',
+    battle: id,
+    position: { ...battle.position },
+    startedOn: battle.startedOn,
+    days: state.day - battle.startedOn + 1,
+    winner,
+    standing: [...battle.attackers, ...battle.defenders],
+    attackers: { ...battle.sides.attackers, factions: [...battle.sides.attackers.factions] },
+    defenders: { ...battle.sides.defenders, factions: [...battle.sides.defenders.factions] },
+  });
   removeRecord(state.battles, id);
 }
 
 /**
- * Takes an army out of its battle and sets it marching to the nearest city its owner
- * holds that a land route reaches. An army with no such city has nowhere to go and
- * surrenders. The battle may be left with an empty side, which the battles system
- * ends the same day.
+ * Takes an army out of its battle, broken, and sends it to safety. Ordered out, each
+ * formation loses RETREAT_LOSS of its men. Beaten, it loses what the enemy's horsemen
+ * cut down as it breaks. It retreats to the nearest city its owner holds that a land
+ * route reaches, that is not besieged, that has no enemy army within ENGAGEMENT_DISTANCE,
+ * and that lies at least SAFE_KM from every army it fought. With no such city it goes
+ * FIELD_RETREAT_KM into the field, as directly away from those armies as the land allows.
+ * With neither it surrenders. No battle takes it until it arrives. The battle may be left
+ * with an empty side, which the battles system ends the same day.
  */
-export function retreatFromBattle(state: GameState, world: World, army: Army): void {
+export function retreatFromBattle(
+  state: GameState,
+  world: World,
+  army: Army,
+  ordered: boolean,
+): void {
   const { activity } = army;
   if (activity.kind !== 'inBattle') return;
   const battle = state.battles[activity.battle];
+  const side: BattleSideName = battle?.attackers.includes(army.id) ? 'attackers' : 'defenders';
+  const enemyIds = battle ? battle[side === 'attackers' ? 'defenders' : 'attackers'] : [];
+  const before = menOf(state, army);
+  const share = ordered ? RETREAT_LOSS : pursuitShare(fightersOf(state, enemyIds), before);
+  for (const formation of formationsOf(state, army)) {
+    formation.men -= Math.round(formation.men * share);
+    formation.morale = 0;
+  }
+  const lost = before - menOf(state, army);
   if (battle) {
+    battle.sides[side].lost += lost;
     battle.attackers = battle.attackers.filter((id) => id !== army.id);
     battle.defenders = battle.defenders.filter((id) => id !== army.id);
   }
-  const home = nearestReachableCity(state, world, army.owner, activity.position);
-  if (!home || startMarch(world, army, activity.position, home.position) !== undefined) {
-    removeArmy(state, army);
+  removeEmptyFormations(state, army);
+  if (army.formations.length === 0) {
+    removeArmy(state, army, 'battle');
+    return;
   }
+  const from = activity.position;
+  const foes = enemyIds.flatMap((id) => {
+    const enemy = state.armies[id];
+    return enemy && enemy.activity.kind !== 'embarked' ? [enemy.activity.position] : [];
+  });
+  const path = retreatPath(state, world, army.owner, from, foes, battle?.position ?? from);
+  if (!path) {
+    removeArmy(state, army, 'surrender');
+    return;
+  }
+  army.activity = { kind: 'retreating', position: { x: from.x, y: from.y }, waypoints: path };
+  emit(state, {
+    kind: 'armyRetreated',
+    army: army.id,
+    owner: army.owner,
+    from: { ...from },
+    to: { ...(path.at(-1) as MapPoint) },
+    ordered,
+    lost,
+    men: menOf(state, army),
+  });
+}
+
+function pursuitShare(enemies: readonly Fighter[], men: number): number {
+  if (men === 0) return 0;
+  const riders = enemies
+    .filter(({ formation }) => TROOPS[formation.troop].category === 'cavalry')
+    .reduce((sum, { formation }) => sum + formation.men, 0);
+  return Math.min(PURSUIT_MAX, PURSUIT_BASE + (PURSUIT_PER_RIDER * riders) / men);
+}
+
+/** Unit vectors turned from straight away, nearest first, to try for a retreat into the field. */
+const AWAY_TURNS: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [0.8660254037844386, 0.5],
+  [0.8660254037844386, -0.5],
+  [0.5, 0.8660254037844386],
+  [0.5, -0.8660254037844386],
+  [0, 1],
+  [0, -1],
+  [-0.5, 0.8660254037844386],
+  [-0.5, -0.8660254037844386],
+  [-1, 0],
+];
+
+function retreatPath(
+  state: GameState,
+  world: World,
+  owner: FactionId,
+  from: MapPoint,
+  foes: readonly MapPoint[],
+  battlePosition: MapPoint,
+): MapPoint[] | undefined {
+  const city = safeCity(state, world, owner, from, foes);
+  if (city) {
+    const path = landPath(world, from, city.position);
+    if (typeof path !== 'string') return path;
+  }
+  const centre =
+    foes.length > 0
+      ? {
+          x: foes.reduce((sum, p) => sum + p.x, 0) / foes.length,
+          y: foes.reduce((sum, p) => sum + p.y, 0) / foes.length,
+        }
+      : battlePosition;
+  const dx = from.x - centre.x;
+  const dy = from.y - centre.y;
+  const length = Math.hypot(dx, dy);
+  const [ux, uy] = length > 0 ? [dx / length, dy / length] : [1, 0];
+  for (const [cos, sin] of AWAY_TURNS) {
+    const to = {
+      x: Math.round((from.x + FIELD_RETREAT_KM * (ux * cos - uy * sin)) * 10) / 10,
+      y: Math.round((from.y + FIELD_RETREAT_KM * (ux * sin + uy * cos)) * 10) / 10,
+    };
+    if (surfaceAt(world.mesh, to) !== 'land' || !connected(world.mesh, from, to, 'land')) continue;
+    const path = landPath(world, from, to);
+    if (typeof path !== 'string') return path;
+  }
+  return undefined;
+}
+
+function safeCity(
+  state: GameState,
+  world: World,
+  owner: FactionId,
+  from: MapPoint,
+  foes: readonly MapPoint[],
+): City | undefined {
+  const besieged = new Set(Object.values(state.sieges).map((siege) => siege.city));
+  const hostile = Object.values(state.armies).flatMap((army) =>
+    army.activity.kind !== 'embarked' && areAtWar(state, owner, army.owner)
+      ? [army.activity.position]
+      : [],
+  );
+  let best: City | undefined;
+  for (const id of Object.keys(state.cities).sort()) {
+    const city = state.cities[id as CityId];
+    if (!city || city.owner !== owner || besieged.has(city.id)) continue;
+    if (best && distance(from, city.position) >= distance(from, best.position)) continue;
+    if (foes.some((foe) => distance(foe, city.position) < SAFE_KM)) continue;
+    if (hostile.some((enemy) => distance(enemy, city.position) <= ENGAGEMENT_DISTANCE)) continue;
+    if (connected(world.mesh, from, city.position, 'land')) best = city;
+  }
+  return best;
 }
 
 export function removeEmptyFormations(state: GameState, army: Army): void {
@@ -298,11 +480,6 @@ export function removeEmptyFormations(state: GameState, army: Army): void {
     if (formation.men === 0) removeRecord(state.formations, formation.id);
   }
   army.formations = army.formations.filter((id) => Object.hasOwn(state.formations, id));
-}
-
-function removeArmy(state: GameState, army: Army) {
-  for (const id of army.formations) removeRecord(state.formations, id);
-  removeRecord(state.armies, army.id);
 }
 
 function fightersOf(state: GameState, ids: readonly ArmyId[]): Fighter[] {
@@ -325,6 +502,10 @@ function isFighting(formation: Formation): boolean {
 
 function generalFactor(army: Army): number {
   return 1 + GENERAL_EFFECT * army.generalSkill;
+}
+
+function menOf(state: GameState, army: Army): number {
+  return formationsOf(state, army).reduce((sum, formation) => sum + formation.men, 0);
 }
 
 function sumMen(fighters: Fighter[]): number {

@@ -6,6 +6,7 @@ import type { Formation } from '../state/formation.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
 import { warSides } from '../state/war.ts';
+import { GENERAL_EFFECT } from '../systems/battles.ts';
 import { WALL_DEFENCE, STORM_KILL, STORM_LUCK } from '../systems/sieges.ts';
 import { dailyBalances, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import type { Stores } from '../state/faction.ts';
@@ -18,9 +19,6 @@ export type State = DeepReadonly<GameState>;
 export type ArmyView = DeepReadonly<Army>;
 export type CityView = DeepReadonly<City>;
 type FormationView = DeepReadonly<Formation>;
-
-/** The AI's own estimate of what a general adds to an army's blows, as the battles reward it. */
-const GENERAL_WEIGHT = 0.04;
 
 const sortings = new WeakMap<object, readonly unknown[]>();
 
@@ -79,7 +77,7 @@ export function strengthOf(state: State, army: ArmyView): number {
         const troop = TROOPS[f.troop];
         return sum + f.men * Math.sqrt(troop.attack * troop.defence) * f.morale;
       }, 0);
-    strength = body * (1 + GENERAL_WEIGHT * army.generalSkill);
+    strength = body * (1 + GENERAL_EFFECT * army.generalSkill);
     ofState.set(army, strength);
   }
   return strength;

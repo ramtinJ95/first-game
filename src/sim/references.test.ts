@@ -15,9 +15,10 @@ test('an army in a battle that does not list it is reported', () => {
     attackers: [FIXTURE.punicArmy],
     defenders: [],
     startedOn: 1 as Day,
+    sides: { attackers: { factions: [], lost: 0 }, defenders: { factions: [], lost: 0 } },
   };
   const army = state.armies[FIXTURE.romanArmy];
-  if (army) army.activity = { kind: 'inBattle', position: { x: 0, y: 0 }, battle };
+  if (army) army.activity = { kind: 'inBattle', position: { x: 0, y: 0 }, battle, march: [] };
   expect(findBrokenReferences(state)).toEqual([
     'army army-roman is in battle battle-1, which does not list it',
     'battle battle-1 lists army army-punic, which is not in it',
@@ -55,6 +56,7 @@ test('an id that names a built-in object property is not taken for a record', ()
       kind: 'inBattle',
       position: { x: 0, y: 0 },
       battle: 'constructor' as BattleId,
+      march: [],
     };
   state.player = 'constructor' as typeof state.player;
   expect(findBrokenReferences(state)).toEqual([
@@ -73,9 +75,10 @@ test('an army listed on both sides of a battle is reported', () => {
     attackers: [FIXTURE.romanArmy],
     defenders: [FIXTURE.romanArmy],
     startedOn: 1 as Day,
+    sides: { attackers: { factions: [], lost: 0 }, defenders: { factions: [], lost: 0 } },
   };
   const army = state.armies[FIXTURE.romanArmy];
-  if (army) army.activity = { kind: 'inBattle', position: { x: 0, y: 0 }, battle };
+  if (army) army.activity = { kind: 'inBattle', position: { x: 0, y: 0 }, battle, march: [] };
   expect(findBrokenReferences(state)).toEqual(['battle battle-1 lists army-roman twice']);
 });
 

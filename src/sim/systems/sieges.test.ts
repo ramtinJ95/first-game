@@ -357,7 +357,7 @@ describe('relief', () => {
     expect(cityOf(first, FIXTURE.capua).walls).toBeCloseTo(walls + 200 / RECOVERY_DAYS, 9);
 
     const after = untilNoBattle(first);
-    expect(armyOf(after, FIXTURE.punicArmy).activity.kind).toBe('marching');
+    expect(armyOf(after, FIXTURE.punicArmy).activity.kind).toBe('retreating');
     expect(armyOf(after, relief).activity.kind).toBe('idle');
     expect(after.sieges).toEqual({});
     expect(cityOf(after, FIXTURE.capua).owner).toBe(FIXTURE.rome);
