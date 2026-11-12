@@ -95,6 +95,18 @@ describe('shortage', () => {
     expectConsistent(later);
   });
 
+  test('a shortage never adds men, even to an empty formation', () => {
+    const state = buildFixture();
+    const equites = state.formations[FIXTURE.equites];
+    if (!equites) throw new Error('the fixture lacks the equites');
+    equites.men = 0;
+    stores(state).gold = -1_000_000;
+    stores(state).food = -1_000_000;
+    const later = play(state, 30);
+    expect(later.formations[FIXTURE.equites]?.men).toBe(0);
+    expectConsistent(later);
+  });
+
   test('short of both stores, armies desert twice as fast', () => {
     const state = buildFixture();
     stores(state).gold = -1000;

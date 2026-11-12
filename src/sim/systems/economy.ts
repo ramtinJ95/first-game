@@ -133,7 +133,7 @@ function desert(state: GameState) {
       const formation = state.formations[id];
       if (!formation) continue;
       const deserters = Math.ceil(formation.men * DESERTION * shortages);
-      formation.men -= Math.min(deserters, formation.men - 1);
+      formation.men -= Math.max(0, Math.min(deserters, formation.men - 1));
     }
   }
 }
