@@ -31,6 +31,8 @@ export interface Alert {
   readonly tone: 'good' | 'bad' | 'neutral';
   /** Where a click on the alert takes the camera and what it selects. A store has no place. */
   readonly focus?: { readonly at: MapPoint; readonly select?: Pick };
+  /** A battle or an army that is gone by the end of the day, which the player may have seen the day before. */
+  readonly seenAs?: Pick;
 }
 
 type State = DeepReadonly<GameState>;
@@ -62,7 +64,8 @@ export function alertsOfDay(
 
   for (const event of events) {
     const alert = eventAlert(before, after, event);
-    if (alert) add(alert);
+    const seenAs = goneRecord(event);
+    if (alert) add(seenAs ? { ...alert, seenAs } : alert);
   }
 
   for (const army of Object.values(after.armies)) {
@@ -303,6 +306,12 @@ function eventAlert(
       }
       return undefined;
   }
+}
+
+function goneRecord(event: DeepReadonly<DayEvent>): Pick | undefined {
+  if (event.kind === 'battleEnded') return { kind: 'battle', battle: event.battle };
+  if (event.kind === 'armyDestroyed') return { kind: 'army', army: event.army };
+  return undefined;
 }
 
 const LOSS_TEXT: Record<DeepReadonly<DayEvent & { kind: 'armyDestroyed' }>['cause'], string> = {

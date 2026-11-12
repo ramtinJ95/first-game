@@ -376,6 +376,7 @@ export function retreatFromBattle(
   });
   const path = retreatPath(state, world, army.owner, from, foes, battle?.position ?? from);
   if (!path) {
+    if (battle) battle.sides[side].lost += menOf(state, army);
     removeArmy(state, army, 'surrender');
     return;
   }

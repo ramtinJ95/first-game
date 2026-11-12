@@ -5,7 +5,10 @@ import type { GameState } from '../sim/state/game-state.ts';
 import { warKey } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import type { Day } from '../sim/state/day.ts';
+import type { ArmyId, FormationId } from '../sim/ids.ts';
+import { sightOf } from '../sim/sight.ts';
 import { alertsOfDay, type Alert } from './alerts.ts';
+import { alertsInSight } from './sighted.ts';
 
 const world = fixtureWorld();
 const f = FIXTURE;
@@ -145,6 +148,44 @@ describe('alertsOfDay', () => {
     expect(ofKind(alerts, 'armyRetreated').map((a) => a.text)).toEqual([
       expect.stringMatching(/, and falls back into the field (near|in the field)/),
     ]);
+  });
+
+  it('tells the end of a battle between others that the player saw, though its centre lies out of sight', () => {
+    const state = buildFixture();
+    atWar(state, f.carthage, f.syracusaeFaction);
+    const roman = state.armies[f.romanArmy];
+    const punic = state.armies[f.punicArmy];
+    if (!roman || !punic) throw new Error('fixture changed');
+    roman.activity = { kind: 'idle', position: { x: 2069.9, y: 2895.1 } };
+    punic.activity = { kind: 'idle', position: { x: 2164.9, y: 2895.1 } };
+    const greek = 'army-greek' as ArmyId;
+    const spears = 'formation-greek' as FormationId;
+    state.formations[spears] = { id: spears, army: greek, troop: 'spearmen', men: 900, morale: 1 };
+    state.armies[greek] = {
+      id: greek,
+      owner: f.syracusaeFaction,
+      formations: [spears],
+      stance: 'holdTheLine',
+      generalSkill: 3,
+      activity: { kind: 'idle', position: { x: 2184.9, y: 2895.1 } },
+    };
+    let current = state;
+    const told: Alert[] = [];
+    for (let day = 0; day < 30 && told.length === 0; day++) {
+      const { state: next, events } = tick(current, [], world);
+      const seen = alertsInSight(
+        alertsOfDay(current, next, events),
+        sightOf(current, world, f.rome),
+        sightOf(next, world, f.rome),
+      );
+      told.push(...ofKind(seen, 'battleEnded'));
+      current = next;
+    }
+    const [battle] = told;
+    expect(battle?.text).toMatch(/^Carthage beat Syracusae /);
+    expect(
+      battle && sightOf(current, world, f.rome).sees(battle.focus?.at ?? roman.activity.position),
+    ).toBe(false);
   });
 
   it('tells when a power declares war on the player, and when the player declares one', () => {

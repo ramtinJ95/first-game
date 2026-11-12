@@ -457,9 +457,16 @@ describe('the end of a battle', () => {
     place(state, FIXTURE.romanArmy, FAR_AWAY);
     addArmy(state, 'legion', 4000, { kind: 'idle', position: islet });
     place(state, FIXTURE.punicArmy, { kind: 'idle', position: { x: islet.x + 1, y: islet.y } });
-    state = playUntilPeace(tick(state, [], world).state);
+    const men = menOf(state, FIXTURE.punicArmy);
+    const ended = [];
+    for (let day = 0; day < 30 && ended.length === 0; day += 1) {
+      const result = tick(state, [], world);
+      state = result.state;
+      ended.push(...result.events.filter((event) => event.kind === 'battleEnded'));
+    }
     expect(state.armies[FIXTURE.punicArmy]).toBeUndefined();
     expect(state.formations[FIXTURE.citizenSpears]).toBeUndefined();
+    expect(ended).toMatchObject([{ winner: 'defenders', attackers: { lost: men } }]);
     expectConsistent(state);
   });
 
