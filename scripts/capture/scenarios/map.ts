@@ -148,6 +148,25 @@ export default defineScenario({
       const { metrics } = await cdp.send('Performance.getMetrics');
       return metrics.find((metric) => metric.name === 'TaskDuration')?.value ?? NaN;
     };
+    const idle = await page.evaluate(
+      () =>
+        new Promise<number[]>((done) => {
+          const gaps: number[] = [];
+          let last = performance.now();
+          const end = last + 2000;
+          const step = (now: number) => {
+            gaps.push(now - last);
+            last = now;
+            if (now < end) requestAnimationFrame(step);
+            else done(gaps);
+          };
+          requestAnimationFrame(step);
+        }),
+    );
+    const idleMedian = percentile(
+      idle.slice(1).sort((a, b) => a - b),
+      0.5,
+    );
     const collector = 'frameGaps';
     await page.evaluate((key) => {
       const gaps: number[] = [];
@@ -186,7 +205,8 @@ export default defineScenario({
     const summary =
       `Pan over the map at ${camera.scale.toFixed(2)} px per km: ${gaps.length} frames, ` +
       `frame interval median ${median.toFixed(1)} ms, p95 ${p95.toFixed(1)} ms, ` +
-      `main thread busy ${(busy / gaps.length).toFixed(1)} ms per frame`;
+      `main thread busy ${(busy / gaps.length).toFixed(1)} ms per frame; ` +
+      `idle frame interval median ${idleMedian.toFixed(1)} ms`;
     console.log(summary);
     await shot('pan-frame-time', summary);
   },

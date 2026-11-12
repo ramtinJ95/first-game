@@ -112,6 +112,13 @@ const WATER_LINES = [
   { distance: 3.8, strength: 0.62 },
 ] as const;
 const WATER_LINE_WIDTH = 0.9;
+/** Pixels of sea drawn beyond each edge of the view, so a pan can slide the drawing. */
+const SEA_MARGIN = 256;
+/**
+ * City symbols grow from the base size at 0.6 px per km to at most this factor at
+ * the closest zoom, so a close view shows a town and not a speck.
+ */
+const SYMBOL_GROWTH = { from: 0.6, perDoubling: 0.35, most: 1.8 } as const;
 /**
  * The sea's drift: how far it bends in pixels, the size of its swell, its speed, and
  * how often it steps. The map draws only when something changed, and the swell is
@@ -176,6 +183,11 @@ function sameSelection(a: Pick | undefined, b: Pick | undefined): boolean {
   return a === b;
 }
 
+function symbolGrowth(scale: number): number {
+  const { from, perDoubling, most } = SYMBOL_GROWTH;
+  return Math.min(most, Math.max(1, 1 + perDoubling * Math.log2(scale / from)));
+}
+
 function sameArmies(a: readonly DrawnArmy[], b: readonly DrawnArmy[]): boolean {
   return (
     a.length === b.length &&
@@ -237,21 +249,27 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
 
   // The sea's drawing is many wide strokes. It is drawn into a texture only when the
   // camera moves, so the swell that runs every frame bends one sprite, not the strokes.
+  // A pan slides the texture and draws it again only after moving SEA_MARGIN pixels.
   const waterLines = new Graphics();
+  const seaMask = new Graphics().poly(map.extent.flat()).fill(0xffffff);
+  waterLines.mask = seaMask;
   const seaArt = new Container();
-  seaArt.addChild(new Graphics().poly(map.extent.flat()).fill(SEA), waterLines);
+  seaArt.addChild(new Graphics().poly(map.extent.flat()).fill(SEA), waterLines, seaMask);
   const seaRoot = new Container();
   seaRoot.addChild(seaArt);
   const seaTexture = RenderTexture.create({
-    width: viewport().width,
-    height: viewport().height,
+    width: viewport().width + 2 * SEA_MARGIN,
+    height: viewport().height + 2 * SEA_MARGIN,
     resolution: app.renderer.resolution,
     antialias: true,
   });
+  const seaSprite = new Sprite(seaTexture);
+  let seaDrawn: { x: number; y: number; scale: number } | undefined;
   const swell = new Sprite(waterTexture());
   swell.scale.set(SWELL.scale);
-  layers.sea.addChild(new Sprite(seaTexture), swell);
+  layers.sea.addChild(seaSprite, swell);
   layers.sea.filters = [new DisplacementFilter({ sprite: swell, scale: SWELL.bend })];
+  layers.sea.filterArea = app.screen;
 
   const land = new Graphics();
   for (const province of map.provinces) fillOutline(land, province.outline, PAPER);
@@ -268,7 +286,10 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
   const borders = new Graphics();
   layers.borders.addChild(borders);
   const inkLines = new Graphics();
-  layers.riversAndCoast.addChild(inkLines);
+  const inkMask = new Graphics().poly(map.extent.flat()).fill(0xffffff);
+  inkLines.mask = inkMask;
+  const frame = new Graphics();
+  layers.riversAndCoast.addChild(inkLines, inkMask, frame);
 
   const grain = new TilingSprite({ texture: paperTexture(), width: 1, height: 1 });
   layers.grain.addChild(grain);
@@ -331,8 +352,9 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
       0.75,
     ).stroke({ width: 1.1, color: RIVER, alpha: 0.9, ...round });
     traceLines(inkLines, map.coastline, scale, 0.75).stroke({ width: 1.5, color: INK, ...round });
-    inkLines.poly(toPixels(map.extent, scale, 0)).stroke({ width: 2.5, color: INK, join: 'round' });
-    for (const line of [waterLines, borders, inkLines]) line.scale.set(1 / scale);
+    frame.clear();
+    frame.poly(toPixels(map.extent, scale, 0)).stroke({ width: 2.5, color: INK, join: 'round' });
+    for (const line of [waterLines, borders, inkLines, frame]) line.scale.set(1 / scale);
   }
 
   function recolour(state: DeepReadonly<GameState>) {
@@ -398,7 +420,10 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
       const drawn = cities.get(city.id);
       if (!drawn) continue;
       const { symbol, label, rank } = drawn;
-      const { halfWidth, halfHeight } = extents[rank];
+      const grow = symbolGrowth(camera.scale);
+      const halfWidth = extents[rank].halfWidth * grow;
+      const halfHeight = extents[rank].halfHeight * grow;
+      symbol.scale.set(grow);
       const at = mapToScreen(camera, view, city.position);
       label.visible = false;
       symbol.visible =
@@ -495,12 +520,22 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
     if (Math.abs(Math.log(camera.scale / strokedAt)) > Math.log(RESTROKE_RATIO)) {
       restroke(camera.scale);
     }
-    seaArt.scale.set(camera.scale);
-    seaArt.position.set(x, y);
-    if (seaTexture.width !== width || seaTexture.height !== height) {
-      seaTexture.resize(width, height, app.renderer.resolution);
+    const size = { width: width + 2 * SEA_MARGIN, height: height + 2 * SEA_MARGIN };
+    const resized = seaTexture.width !== size.width || seaTexture.height !== size.height;
+    if (resized) seaTexture.resize(size.width, size.height, app.renderer.resolution);
+    if (
+      resized ||
+      !seaDrawn ||
+      seaDrawn.scale !== camera.scale ||
+      Math.abs(x - seaDrawn.x) > SEA_MARGIN ||
+      Math.abs(y - seaDrawn.y) > SEA_MARGIN
+    ) {
+      seaArt.scale.set(camera.scale);
+      seaArt.position.set(x + SEA_MARGIN, y + SEA_MARGIN);
+      app.renderer.render({ container: seaRoot, target: seaTexture, clear: true });
+      seaDrawn = { x, y, scale: camera.scale };
     }
-    app.renderer.render({ container: seaRoot, target: seaTexture, clear: true });
+    seaSprite.position.set(x - seaDrawn.x - SEA_MARGIN, y - seaDrawn.y - SEA_MARGIN);
   }
 
   function moveSwell(nowMs: number) {
