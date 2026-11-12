@@ -182,7 +182,9 @@ describe('alertsOfDay', () => {
       current = next;
     }
     const [battle] = told;
-    expect(battle?.text).toMatch(/^Carthage beat Syracusae /);
+    expect(battle?.text).toMatch(
+      /^Carthage beat Syracusae .+ after \d+ days?\. Carthage lost \d+, Syracusae lost \d+\.$/,
+    );
     expect(
       battle && sightOf(current, world, f.rome).sees(battle.focus?.at ?? roman.activity.position),
     ).toBe(false);
@@ -203,6 +205,59 @@ describe('alertsOfDay', () => {
       () => true,
     );
     expect(declaring.alerts.map((a) => a.text)).toEqual(['You declared war on Syracusae']);
+  });
+
+  it('tells of a battle between others that ended with neither side on the field, with both losses', () => {
+    const state = buildFixture();
+    const alerts = alertsOfDay(state, state, [
+      {
+        kind: 'battleEnded',
+        battle: 'battle-1' as never,
+        position: { x: 2229.9, y: 2865.1 },
+        startedOn: 1 as Day,
+        days: 4,
+        winner: 'none',
+        standing: [],
+        attackers: { factions: [f.carthage], lost: 700 },
+        defenders: { factions: [f.syracusaeFaction], lost: 650 },
+      },
+    ]);
+    expect(alerts.map((a) => a.text)).toEqual([
+      'The battle at Carthago ended with neither side holding the field after 4 days. Carthage lost 700, Syracusae lost 650.',
+    ]);
+  });
+
+  it("tells when men first desert another faction's army in sight, and not out of sight", () => {
+    const deserting = (romanAt: { x: number; y: number }) => {
+      const state = buildFixture();
+      const stores = state.factions[f.carthage]?.stores;
+      const spears = state.formations[f.citizenSpears];
+      const roman = state.armies[f.romanArmy];
+      if (!stores || !spears || !roman) throw new Error('fixture changed');
+      stores.gold = 0;
+      spears.men = 50_000;
+      roman.activity = { kind: 'idle', position: romanAt };
+      const told: Alert[] = [];
+      let current = state;
+      for (let day = 0; day < 3; day++) {
+        const { state: next, events } = tick(current, [], world);
+        told.push(
+          ...alertsInSight(
+            ofKind(alertsOfDay(current, next, events), 'armyDeserted'),
+            sightOf(current, world, f.rome),
+            sightOf(next, world, f.rome),
+          ),
+        );
+        current = next;
+      }
+      return told.map((a) => [a.day, a.tone, a.text]);
+    };
+    expect(deserting({ x: 2164.9, y: 2895.1 })).toEqual([
+      [2, 'neutral', expect.stringMatching(/^\d+ men deserted an army of Carthage at Carthago$/)],
+    ]);
+    const roma = buildFixture().cities[f.roma]?.position;
+    if (!roma) throw new Error('fixture changed');
+    expect(deserting(roma)).toEqual([]);
   });
 
   it('tells when men first desert an army of the player, and not each day after', () => {

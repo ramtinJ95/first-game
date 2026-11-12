@@ -193,11 +193,12 @@ function eventAlert(
           ? 'defenders'
           : undefined;
       if (!side) {
+        const losses = `${sideLosses(after, event.attackers)}, ${sideLosses(after, event.defenders)}.`;
         if (event.winner === 'none') {
           return {
             kind: 'battleEnded',
             tone: 'neutral',
-            text: `The battle ${where} ended with neither side holding the field`,
+            text: `The battle ${where} ended with neither side holding the field after ${daysText(event.days)}. ${losses}`,
             focus: { at: event.position },
           };
         }
@@ -205,7 +206,7 @@ function eventAlert(
         return {
           kind: 'battleEnded',
           tone: 'neutral',
-          text: `${namesOf(after, event[event.winner].factions)} beat ${namesOf(after, beaten.factions)} ${where}`,
+          text: `${namesOf(after, event[event.winner].factions)} beat ${namesOf(after, beaten.factions)} ${where} after ${daysText(event.days)}. ${sideLosses(after, event[event.winner])}, ${sideLosses(after, beaten)}.`,
           focus: { at: event.position },
         };
       }
@@ -228,7 +229,7 @@ function eventAlert(
         return {
           kind: 'battleEnded',
           tone: 'neutral',
-          text: `The battle ${where} ended with neither side holding the field. ${losses}`,
+          text: `The battle ${where} ended with neither side holding the field after ${daysText(event.days)}. ${losses}`,
           focus: { at: event.position },
         };
       }
@@ -276,11 +277,12 @@ function eventAlert(
       };
     }
     case 'armyDeserted': {
-      if (event.owner !== player || isShort(before, player)) return undefined;
+      if (isShort(before, event.owner)) return undefined;
+      const ours = event.owner === player;
       return {
         kind: 'armyDeserted',
-        tone: 'bad',
-        text: `${event.men} men deserted your army ${placeName(after, event.position)}`,
+        tone: ours ? 'bad' : 'neutral',
+        text: `${event.men} men deserted ${ours ? 'your army' : `an army of ${factionName(after, event.owner)}`} ${placeName(after, event.position)}`,
         focus: {
           at: event.position,
           ...(after.armies[event.army] && {
@@ -327,6 +329,10 @@ function lossesText(
   theirs: DeepReadonly<BattleSideOutcome>,
 ): string {
   return `You lost ${ours.lost} men, ${namesOf(state, theirs.factions)} lost ${theirs.lost}.`;
+}
+
+function sideLosses(state: State, side: DeepReadonly<BattleSideOutcome>): string {
+  return `${namesOf(state, side.factions)} lost ${side.lost}`;
 }
 
 function daysText(days: number): string {
