@@ -1,0 +1,95 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import type { ArmyId, FactionId, ProvinceId } from '../sim/ids.ts';
+import { parseMap, type GameMap } from '../sim/map.ts';
+import { fitCamera, mapToScreen, type Camera } from './camera.ts';
+import type { DrawnArmy } from './markers.ts';
+import { pickAt, provinceAt } from './pick.ts';
+
+const MAP = parseMap(
+  JSON.parse(readFileSync(resolve(import.meta.dirname, '../../data/map/map.json'), 'utf8')),
+);
+
+const cityOf = (id: string) => {
+  const province = MAP.provinces.find((p) => p.id === id);
+  if (!province) throw new Error(`no province ${id}`);
+  return { x: province.city[0], y: province.city[1] };
+};
+
+describe('provinceAt', () => {
+  it('finds the province around a point on its land', () => {
+    expect(provinceAt(MAP, cityOf('roma'))).toBe('roma');
+    expect(provinceAt(MAP, cityOf('persepolis'))).toBe('persepolis');
+  });
+
+  it('finds nothing at sea', () => {
+    expect(provinceAt(MAP, { x: 2400, y: 2500 })).toBeUndefined();
+    expect(provinceAt(MAP, { x: 3700, y: 3400 })).toBeUndefined();
+    expect(provinceAt(MAP, { x: 10, y: 10 })).toBeUndefined();
+  });
+
+  it('finds a province made of several pieces from a point on any piece', () => {
+    expect(MAP.provinces.find((p) => p.id === 'caralis')?.outline.length).toBeGreaterThan(1);
+    expect(provinceAt(MAP, cityOf('caralis'))).toBe('caralis');
+    expect(provinceAt(MAP, { x: 2250, y: 2250 })).toBe('caralis');
+  });
+
+  it('finds the province of a point on an island', () => {
+    expect(provinceAt(MAP, cityOf('syracusae'))).toBe('syracusae');
+    expect(provinceAt(MAP, cityOf('salamis'))).toBe('salamis');
+    expect(provinceAt(MAP, cityOf('knosos'))).toBe('knosos');
+  });
+
+  it('finds nothing in a hole of a province', () => {
+    const square = (x: number, y: number, size: number): [number, number][] => [
+      [x, y],
+      [x + size, y],
+      [x + size, y + size],
+      [x, y + size],
+    ];
+    const lake: GameMap = {
+      ...MAP,
+      provinces: [
+        {
+          ...(MAP.provinces[0] as GameMap['provinces'][number]),
+          id: 'ring' as ProvinceId,
+          outline: [[square(0, 0, 100), square(40, 40, 20)]],
+        },
+      ],
+    };
+    expect(provinceAt(lake, { x: 10, y: 10 })).toBe('ring');
+    expect(provinceAt(lake, { x: 50, y: 50 })).toBeUndefined();
+  });
+});
+
+describe('pickAt', () => {
+  const viewport = { width: 1280, height: 720 };
+  const camera: Camera = { centre: cityOf('roma'), scale: 2 };
+  const army: DrawnArmy = {
+    id: 'army-1' as ArmyId,
+    owner: 'rome' as FactionId,
+    position: cityOf('roma'),
+  };
+  const foot = mapToScreen(camera, viewport, army.position);
+
+  it('selects an army from a click on its banner before the province under it', () => {
+    expect(pickAt(MAP, camera, viewport, [army], { x: foot.x + 8, y: foot.y - 24 })).toEqual({
+      kind: 'army',
+      army: army.id,
+    });
+  });
+
+  it('selects the province from a click on the city an army stands on', () => {
+    expect(pickAt(MAP, camera, viewport, [army], foot)).toEqual({
+      kind: 'province',
+      province: 'roma',
+    });
+  });
+
+  it('selects nothing from a click on the sea', () => {
+    const fit = fitCamera(viewport, MAP);
+    const sea = mapToScreen(fit, viewport, { x: 2400, y: 2500 });
+    expect(pickAt(MAP, fit, viewport, [army], sea)).toBeUndefined();
+  });
+});

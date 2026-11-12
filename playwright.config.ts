@@ -1,12 +1,23 @@
 import { defineConfig, devices } from '@playwright/test';
 
+/**
+ * CI runners have no GPU. Chromium's default GL path there draws one map frame in
+ * over a second, and ANGLE's SwiftShader backend draws it within a frame at 60 Hz.
+ */
+export const SOFTWARE_GL = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] as const;
+
 export default defineConfig({
   testDir: 'e2e',
   forbidOnly: !!process.env['CI'],
-  reporter: [['html', { outputFolder: 'playwright-report', open: 'never' }], ['list']],
+  reporter: [
+    ['html', { outputFolder: 'playwright-report', open: 'never' }],
+    ['list'],
+    ...(process.env['CI'] ? [['github'] as const] : []),
+  ],
   use: {
     baseURL: 'http://localhost:4173',
     trace: 'retain-on-failure',
+    launchOptions: { args: [...SOFTWARE_GL] },
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {

@@ -12,7 +12,12 @@ describe('view', () => {
   });
 
   function source() {
-    let snapshot: Snapshot = { state: buildFixture(), speed: 1, paused: false };
+    let snapshot: Snapshot = {
+      state: buildFixture(),
+      speed: 1,
+      paused: false,
+      selection: undefined,
+    };
     return {
       read: () => snapshot,
       setSpeed(speed: Speed) {
