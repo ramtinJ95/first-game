@@ -822,6 +822,25 @@ export async function createRenderer({
     swell.position.set(-tile + drift.x, -tile + drift.y);
   }
 
+  // A slow GPU takes longer to draw a frame than the page takes to ask for the next.
+  // Unpaced, the frames queue up, so a click or a screenshot waits behind seconds of
+  // them. A fence after each frame lets the next one start only once the GPU is done.
+  let fence: WebGLSync | null = null;
+  function fenceFrame() {
+    if (!('gl' in app.renderer) || !(app.renderer.gl instanceof WebGL2RenderingContext)) return;
+    const gl = app.renderer.gl;
+    fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    gl.flush();
+  }
+  function gpuBusy(): boolean {
+    if (!fence || !('gl' in app.renderer)) return false;
+    const gl = app.renderer.gl as WebGL2RenderingContext;
+    if (gl.getSyncParameter(fence, gl.SYNC_STATUS) !== gl.SIGNALED) return true;
+    gl.deleteSync(fence);
+    fence = null;
+    return false;
+  }
+
   const pixel = new Uint8Array(4);
   function finish() {
     if ('gl' in app.renderer) {
@@ -964,6 +983,7 @@ export async function createRenderer({
 
   return {
     draw({ previous, current, progress, selection, planned, replaced, previousSight, sight }) {
+      if (gpuBusy()) return false;
       const now = performance.now();
       let dirty = cameraMoved;
       if (current !== shown) {
@@ -1116,6 +1136,7 @@ export async function createRenderer({
       if (layers.fog.visible) fog.paint();
       app.render();
       if (waitForGpu) finish();
+      else fenceFrame();
       return true;
     },
     focus(point) {

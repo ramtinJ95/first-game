@@ -202,7 +202,8 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       layer.chunks.set(key, { graphics, bornAt: performance.now() });
       const row = chunkRow(key);
       let before = 0;
-      for (const other of layer.chunks.keys()) if (other !== key && chunkRow(other) <= row) before++;
+      for (const other of layer.chunks.keys())
+        if (other !== key && chunkRow(other) <= row) before++;
       layer.container.addChildAt(graphics, Math.min(before, layer.container.children.length));
     }
     if (queue.length > 0) scheduleBuild();
