@@ -19,6 +19,36 @@ Read `docs/design.md` before any work. It is the agreed design. When a task conf
 - The player and the AI change the state only through orders.
 - Each system is one file under `src/sim/systems/`, with its tests beside it.
 
+## The rules module
+
+- `src/sim/state/` holds one file per kind of record. Each file defines a valibot schema and derives the type from it, so the schema is the one source of the shape and also the check that loading a save runs. `game-state.ts` gathers the collections. Each collection maps an id to its record.
+- An army's `activity` is a tagged union (idle, marching, in battle, besieging, embarked). Add a variant instead of an optional field.
+- Records that point at each other must agree. `findBrokenReferences` in `src/sim/references.ts` lists every disagreement. Loading rejects a save that has any. Assert an empty list in the tests of a system that creates or links records.
+- New records get their ids from `allocateId` in `src/sim/ids.ts`, which counts in the state.
+- Randomness comes from `nextRandom` and `nextInt` in `src/sim/rng.ts`, which advance `state.rng`. Never call `Math.random`.
+- `buildFixture()` in `src/sim/fixture.ts` returns a fresh tiny valid state, and `FIXTURE` names its ids. Use it in tests.
+
+### The tick contract
+
+`tick(state, orders)` in `src/sim/tick.ts` plays one day. It never changes its input. It copies the state, applies the orders in the given order, then runs `SYSTEMS` in list order on the copy, and returns `{ state, rejected }`. Inside a tick, orders and systems change that copy in place. Outside the rules, a state is frozen once a tick returns it. The clock, the panels, and the renderer can keep and compare references to it without copying, and the renderer can draw between the previous and the current day.
+
+### Adding a system
+
+1. Write `src/sim/systems/<name>.ts`, which exports a `System`, `(state: GameState) => void`. It changes the state it is given.
+2. Add it to `SYSTEMS` in `src/sim/systems.ts`, at its place in the day: movement, battles, sieges, economy, population. `advanceDay` stays last.
+3. Write `src/sim/systems/<name>.test.ts`, which starts from `buildFixture()`.
+
+A field that only your system needs goes into the kind's schema in `src/sim/state/`. A field that old saves lack needs a default with `v.optional(schema, default)`, or a raise of `SAVE_FORMAT` in `src/sim/save.ts`.
+
+### Adding an order
+
+1. Write `src/sim/orders/<name>.ts`. It exports the order's interface, with `kind` and `faction`, and a handler `(state, order) => string | undefined`. The handler checks everything before it writes anything. It returns a reason to reject, or `undefined` after it has applied the order. `ownedArmy` in `orders/owned-army.ts` does the ownership check.
+2. Add the handler to `ORDER_HANDLERS` in `src/sim/orders/orders.ts`. The `Order` union derives from that table.
+
+### The clock and the panels
+
+`src/app/clock.ts` turns real time into ticks and queues orders until the next tick. Panels never read the clock or the live state. They read `view.current` from `src/app/view.svelte.ts`, a `$state.raw` snapshot that is published about ten times a second. A click in a panel becomes an order through the clock.
+
 ## Code and tests
 
 - TypeScript strict. No `any`.
