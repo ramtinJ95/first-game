@@ -4,6 +4,7 @@ import {
   area,
   boundaryDistance,
   boundarySamples,
+  type BoundarySample,
   boxDistance,
   boxOf,
   distanceToBoundary,
@@ -18,6 +19,8 @@ const PROBE_KM = 0.5;
 export const NEIGHBOUR_MIN_BORDER_KM = 2;
 export const COASTAL_MIN_SEA_KM = 5;
 const ON_EXTENT_EDGE_KM = 0.01;
+/** Borders cut from the same clip coincide to float noise; across a strait they are apart. */
+const TOUCH_KM = 0.01;
 
 export interface OrphanMerge {
   /** The seed whose Voronoi cell produced the orphan piece. */
@@ -112,19 +115,40 @@ function cutByVoronoi(component: Polygon, members: number[], seeds: Point[]): Pi
   return pieces;
 }
 
+interface Borders {
+  /** Border length shared with each other region, by key. */
+  shared: Map<number, number>;
+  /** Stretches of border that touch no other region. */
+  open: BoundarySample[];
+}
+
+/**
+ * Probes across every stretch of a region's border. A probe that lands in another region counts
+ * as shared border only when the stretch lies on that region's boundary, so land across a strait
+ * narrower than the probe is open border, not a shared one.
+ */
+function probeBorders(key: number, regions: MultiPolygon[], locate: Locate): Borders {
+  const shared = new Map<number, number>();
+  const open: BoundarySample[] = [];
+  for (const sample of boundarySamples(regions[key] ?? [], PROBE_KM)) {
+    const other = locate(sample.outside);
+    if (other === key) continue;
+    const touches =
+      other !== undefined && distanceToBoundary(regions[other] ?? [], sample.mid) <= TOUCH_KM;
+    if (other !== undefined && touches) shared.set(other, (shared.get(other) ?? 0) + sample.length);
+    else open.push(sample);
+  }
+  return { shared, open };
+}
+
+type Locate = (point: Point) => number | undefined;
+
 function mergeOrphans(pieces: Piece[], merges: OrphanMerge[]): Piece[] {
-  const locate = locator(pieces.map((piece, key) => ({ key, polygons: [piece.polygon] })));
+  const regions = pieces.map((piece) => [piece.polygon]);
+  const locate = locator(regions.map((polygons, key) => ({ key, polygons })));
   const borders = new Map<Piece, Map<number, number>>();
   for (const [key, piece] of pieces.entries()) {
-    if (piece.owner !== undefined) continue;
-    const across = new Map<number, number>();
-    for (const sample of boundarySamples([piece.polygon], PROBE_KM)) {
-      const other = locate(sample.outside);
-      if (other !== undefined && other !== key) {
-        across.set(other, (across.get(other) ?? 0) + sample.length);
-      }
-    }
-    borders.set(piece, across);
+    if (piece.owner === undefined) borders.set(piece, probeBorders(key, regions, locate).shared);
   }
 
   for (;;) {
@@ -185,27 +209,16 @@ export interface Relations {
   coastal: boolean[];
 }
 
-/**
- * Probes across every stretch of each territory's border. Land on the other side counts toward
- * a shared border, open water toward the coast, and the extent edge toward neither.
- */
+/** Shared border counts toward neighbours, open border toward the coast, the extent edge toward neither. */
 export function relations(territories: MultiPolygon[], extent: Ring): Relations {
   const locate = locator(territories.map((polygons, key) => ({ key, polygons })));
-  const shared = territories.map(() => new Map<number, number>());
-  const sea = territories.map((polygons, key) => {
-    let length = 0;
-    for (const sample of boundarySamples(polygons, PROBE_KM)) {
-      const other = locate(sample.outside);
-      if (other === key) continue;
-      if (other !== undefined) {
-        const across = shared[key] as Map<number, number>;
-        across.set(other, (across.get(other) ?? 0) + sample.length);
-      } else if (!onExtentEdge(extent, sample.mid)) {
-        length += sample.length;
-      }
-    }
-    return length;
-  });
+  const borders = territories.map((_, key) => probeBorders(key, territories, locate));
+  const shared = borders.map(({ shared }) => shared);
+  const sea = borders.map(({ open }) =>
+    open
+      .filter((sample) => !onExtentEdge(extent, sample.mid))
+      .reduce((length, sample) => length + sample.length, 0),
+  );
   const neighbours = shared.map((across, a) =>
     [...territories.keys()].filter(
       (b) =>
