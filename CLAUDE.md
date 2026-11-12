@@ -111,6 +111,16 @@ Known faults in the source data. Check them before you draw or label terrain.
 
 `src/app/clock.ts` turns real time into ticks and queues orders until the next tick. Panels never read the clock or the live state. They read `view.current` from `src/app/view.svelte.ts`, a `$state.raw` snapshot that is published about ten times a second. A click in a panel becomes an order through the clock.
 
+### Renderer
+
+- `createRenderer({ canvas, map, onPick })` in `src/render/renderer.ts` is the boundary. `src/app/main.ts` calls `draw({ previous, current, progress, selection })` once per animation frame, and the renderer calls `onPick` with what a click points at. It reads the state and never writes it.
+- `provinceAt(map, point)` in `src/render/pick.ts` finds the province under a map point, or nothing at sea. `pickAt` checks army banners first and then calls it. Both are pure, so tests and any later rule use the same function.
+- `src/render/camera.ts` holds the pan and zoom maths with no PixiJS import. `drawnArmies` in `src/render/markers.ts` places each banner between the previous and the current day by the clock's progress.
+- The map is drawn as named layers, in this order from the bottom: `paper`, `sea` (fill, water lines, and the moving swell), `land`, `terrain` (empty, for the terrain unit), `washes` (owner colours at 30 % alpha, so terrain under them shows), `borders`, `riversAndCoast`, `grain` (the paper texture, printed over the drawing), `settlements` (`towns`, empty for small settlements, then `cities`), `labels`, `markers`, `selection`. `LAYERS` in `renderer.ts` is that list. Add to a layer and keep the order.
+- City symbols are drawn in code in `src/render/symbols.ts`, one per `city.rank`: a great power's capital, its other cities, and a minor city. They grow up to 1.8 times at the closest zoom.
+- The selection lives in `src/app/main.ts` and reaches panels as `view.current.selection`. It is not game state.
+- Dropping a save file on the page loads it through `loadGame` and `clock.load`.
+
 ## Code and tests
 
 - TypeScript strict. No `any`.

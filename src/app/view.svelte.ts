@@ -1,3 +1,4 @@
+import type { Pick } from '../render/pick.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { Speed } from './clock.ts';
@@ -6,6 +7,8 @@ export interface Snapshot {
   state: DeepReadonly<GameState>;
   speed: Speed;
   paused: boolean;
+  /** What the player last clicked on the map. It is page state, not game state. */
+  selection: Pick | undefined;
 }
 
 export interface View {

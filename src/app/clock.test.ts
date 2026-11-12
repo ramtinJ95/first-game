@@ -205,4 +205,29 @@ describe('clock', () => {
     expect(rejected).toEqual(['setStance']);
     expect(clock.state.armies[FIXTURE.punicArmy]?.stance).toBe('holdTheLine');
   });
+
+  it('runs a loaded game from its own day and drops the orders queued before the load', () => {
+    const time = fakeTime();
+    const clock = createClock({ world, state: buildFixture(), now: time.now });
+    run(clock, time, 3000);
+    clock.issue({
+      kind: 'setStance',
+      faction: FIXTURE.rome,
+      army: FIXTURE.romanArmy,
+      stance: 'allOutAssault',
+    });
+    const loaded = buildFixture();
+    const capua = loaded.cities[FIXTURE.capua];
+    if (!capua) throw new Error('fixture lacks Capua');
+    capua.owner = FIXTURE.carthage;
+    clock.load(loaded);
+    expect(clock.state).toBe(loaded);
+    expect(clock.previous).toBe(loaded);
+    expect(clock.progress).toBe(0);
+
+    run(clock, time, 1000);
+    expect(clock.state.day).toBe(2);
+    expect(clock.state.cities[FIXTURE.capua]?.owner).toBe(FIXTURE.carthage);
+    expect(clock.state.armies[FIXTURE.romanArmy]?.stance).toBe('holdTheLine');
+  });
 });

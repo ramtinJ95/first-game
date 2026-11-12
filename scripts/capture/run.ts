@@ -14,6 +14,7 @@ import {
   type ManifestEntry,
   type NexusOutput,
 } from './manifest.ts';
+import { SOFTWARE_GL } from '../../playwright.config.ts';
 import type { Scenario } from './scenario.ts';
 
 const CAPTURES_DIR = resolve('captures');
@@ -174,7 +175,7 @@ async function main(names: string[]): Promise<number> {
   });
   const results: ScenarioResult[] = [];
   try {
-    const browser = await chromium.launch();
+    const browser = await chromium.launch({ args: [...SOFTWARE_GL] });
     try {
       for (const scenario of scenarios) {
         console.log(`capturing ${scenario.name}`);

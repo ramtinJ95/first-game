@@ -1,0 +1,83 @@
+import type { MapPoint } from '../sim/state/map-point.ts';
+import type { Size } from './camera.ts';
+
+export interface Box {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+export interface LabelRequest {
+  readonly id: string;
+  /** The city marker's centre on screen. */
+  readonly anchor: MapPoint;
+  /** Half the width and height of the city's symbol, which its label must clear. */
+  readonly clearance: { readonly x: number; readonly y: number };
+  readonly width: number;
+  readonly height: number;
+  readonly capital: boolean;
+  readonly population: number;
+}
+
+/** Space between a city's symbol and its label. */
+const GAP = 3;
+const PADDING = 2;
+
+/** Great-power capitals first, then the larger city, then by name so the order is stable. */
+function compare(a: LabelRequest, b: LabelRequest): number {
+  if (a.capital !== b.capital) return a.capital ? -1 : 1;
+  if (a.population !== b.population) return b.population - a.population;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+function overlaps(a: Box, b: Box): boolean {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
+
+function candidates({ anchor: { x, y }, width: w, height: h, clearance }: LabelRequest): Box[] {
+  const box = (left: number, top: number) => ({ left, top, right: left + w, bottom: top + h });
+  const dx = clearance.x + GAP;
+  const dy = clearance.y + GAP;
+  return [
+    box(x + dx, y - h / 2),
+    box(x - dx - w, y - h / 2),
+    box(x - w / 2, y - dy - h),
+    box(x - w / 2, y + dy),
+  ];
+}
+
+/**
+ * Places labels in priority order. Each label takes the first of four spots (right,
+ * left, above, below its city's symbol) that stays on screen and clears every label
+ * already placed and every symbol. A label with no free spot is hidden, so zooming
+ * out hides the smaller cities first and names never pile up.
+ */
+export function placeLabels(
+  requests: readonly LabelRequest[],
+  markers: readonly Box[],
+  viewport: Size,
+): Map<string, Box> {
+  const placed = new Map<string, Box>();
+  const taken: Box[] = [];
+  for (const request of [...requests].sort(compare)) {
+    const spot = candidates(request).find(
+      (box) =>
+        box.left >= 0 &&
+        box.top >= 0 &&
+        box.right <= viewport.width &&
+        box.bottom <= viewport.height &&
+        !markers.some((marker) => overlaps(box, marker)) &&
+        !taken.some((other) => overlaps(box, other)),
+    );
+    if (!spot) continue;
+    placed.set(request.id, spot);
+    taken.push({
+      left: spot.left - PADDING,
+      top: spot.top - PADDING,
+      right: spot.right + PADDING,
+      bottom: spot.bottom + PADDING,
+    });
+  }
+  return placed;
+}
