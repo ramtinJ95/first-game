@@ -1,0 +1,26 @@
+#!/bin/sh
+set -u
+cd "$(dirname "$0")/.."
+log=$(mktemp)
+trap 'rm -f "$log"' EXIT
+
+if [ ! -d node_modules ]; then
+	if npm ci --no-audit --no-fund >"$log" 2>&1; then
+		echo "install: 0"
+	else
+		tail -c 4000 "$log"
+		echo "install: failed"
+		exit 75
+	fi
+fi
+
+for step in check test build; do
+	if npm run --silent "$step" >"$log" 2>&1; then
+		echo "$step: 0"
+	else
+		code=$?
+		tail -c 5000 "$log"
+		echo "$step: $code"
+		exit "$code"
+	fi
+done
