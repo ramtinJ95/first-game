@@ -19,6 +19,8 @@ export interface ClockOptions {
   onDay?: (before: DeepReadonly<GameState>, after: DeepReadonly<GameState>) => void;
   /** Tests replace the day's systems. The game runs the default list. */
   systems?: readonly System[];
+  /** The orders the factions the player does not run give on a day, added to that day's tick after the player's. */
+  decide?: (state: DeepReadonly<GameState>) => Order[];
 }
 
 export interface Clock {
@@ -47,6 +49,7 @@ export function createClock({
   onRejected,
   onDay,
   systems,
+  decide,
 }: ClockOptions): Clock {
   let state = initial;
   let previous = initial;
@@ -57,7 +60,8 @@ export function createClock({
   let pending: Order[] = [];
 
   function runTick() {
-    const result = tick(state, pending, world, systems);
+    const orders = decide ? [...pending, ...decide(state)] : pending;
+    const result = tick(state, orders, world, systems);
     pending = [];
     previous = state;
     state = result.state;

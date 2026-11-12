@@ -70,6 +70,8 @@ export default defineScenario({
       'Your army selected: formations, general, activity with days left, stance, halt, and its path on the map',
     );
 
+    // Day 1 again, before the AI marches Carthage's army away from Capua.
+    await load(page, rich);
     await page.mouse.click(view.banner(cityPoint('capua')).x, view.banner(cityPoint('capua')).y);
     await page
       .getByTestId('army-panel')

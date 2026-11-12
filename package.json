@@ -23,7 +23,8 @@
     "sim:movement": "node scripts/movement/report.ts",
     "sim:battles": "node scripts/sim-battles.ts",
     "sim:economy": "node scripts/sim-economy.ts",
-    "sim:sieges": "node scripts/sim-sieges.ts"
+    "sim:sieges": "node scripts/sim-sieges.ts",
+    "sim:ai": "node scripts/sim-ai.ts"
   },
   "dependencies": {
     "pixi.js": "^8.23.0",

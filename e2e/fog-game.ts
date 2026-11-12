@@ -17,10 +17,18 @@ export const IN_SIGHT: MapPoint = { x: 2390, y: 2090 };
 export const macedon = 'macedon' as FactionId;
 export const egypt = 'egypt' as FactionId;
 
-export function march(army: Army, from: MapPoint, to: MapPoint) {
+/**
+ * Sets the army marching from one point to the other as a beaten army does, with every
+ * formation at morale 0, so the faction AI gives it no new order on the way.
+ */
+export function march(state: GameState, army: Army, from: MapPoint, to: MapPoint) {
   const path = landPath(world, from, to);
   if (typeof path === 'string') throw new Error(path);
   army.activity = { kind: 'marching', position: from, waypoints: path };
+  for (const id of army.formations) {
+    const formation = state.formations[id];
+    if (formation) formation.morale = 0;
+  }
 }
 
 /** The new game as Rome, with the Punic army standing at `at`. */

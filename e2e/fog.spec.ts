@@ -118,7 +118,7 @@ test.describe('fog of war', () => {
   test('a foreign army that marches into sight is drawn and can be selected', async ({ page }) => {
     const state = romeWithPunicArmyAt(OUT_OF_SIGHT);
     expect(romeSees(state, IN_SIGHT)).toBe(true);
-    march(armyOf(state, carthage), OUT_OF_SIGHT, IN_SIGHT);
+    march(state, armyOf(state, carthage), OUT_OF_SIGHT, IN_SIGHT);
     await load(page, state);
     await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
     await resume(page);
@@ -151,7 +151,7 @@ test.describe('fog of war', () => {
 
     const leaving = romeWithPunicArmyAt(IN_SIGHT);
     leaving.day = (state.day + 1) as Day;
-    march(armyOf(leaving, carthage), IN_SIGHT, OUT_OF_SIGHT);
+    march(leaving, armyOf(leaving, carthage), IN_SIGHT, OUT_OF_SIGHT);
     await load(page, leaving);
     await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
     await resume(page);
@@ -179,7 +179,7 @@ test.describe('fog of war', () => {
     await load(page, state);
     await resume(page);
     const alerts = page.getByTestId('alerts').getByRole('button');
-    await expect(alerts.filter({ hasText: /Battle .*Carthage/ })).toHaveCount(1, {
+    await expect(alerts.filter({ hasText: /Battle .*Massalia/ })).toHaveCount(1, {
       timeout: 15_000,
     });
     await pause(page);
@@ -194,7 +194,7 @@ test.describe('fog of war', () => {
 
     const mark = view.screen(ours.position);
     await page.mouse.click(mark.x + 1, mark.y + 6);
-    await expect(panels.filter({ hasText: 'Carthage' })).toHaveCount(1);
+    await expect(panels.filter({ hasText: 'Massalia' })).toHaveCount(1);
     await expect(page.getByTestId('city-panel')).toHaveCount(0);
   });
 });

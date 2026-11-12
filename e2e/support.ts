@@ -11,7 +11,7 @@ import {
 } from '../src/render/camera.ts';
 import { BANNER } from '../src/render/markers.ts';
 import { changeCityOwner } from '../src/sim/cities.ts';
-import type { CityId, FactionId } from '../src/sim/ids.ts';
+import type { ArmyId, CityId, FactionId, FormationId } from '../src/sim/ids.ts';
 import { parseMap } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
 import type { Order } from '../src/sim/orders/orders.ts';
@@ -66,14 +66,35 @@ export function setRich(state: GameState) {
   if (stores) Object.assign(stores, { gold: 20_000, food: 5_000, manpower: 6_000 });
 }
 
-/** Rome's army stands at the city with Carthage's 12 km east of it, at war, so they fight the next day. */
+/**
+ * The city's own army holds the minor city, at war with Rome, and Rome's army stands 12 km
+ * east of it, so they fight the next day. A minor keeps its army at home, so the faction
+ * AI does not march it out of the battle.
+ */
 export function battleAt(state: GameState, city: string) {
-  declareWar(state, rome, carthage);
-  const roman = armyOf(state, rome);
-  const punic = armyOf(state, carthage);
-  const at = cityPoint(city);
-  roman.activity = { kind: 'idle', position: at };
-  punic.activity = { kind: 'idle', position: { x: at.x + 12, y: at.y } };
+  const target = state.cities[city as CityId];
+  if (!target) throw new Error(`no city ${city}`);
+  declareWar(state, rome, target.owner);
+  const defenders = `army-${city}` as ArmyId;
+  const formations = [
+    { id: `formation-${city}-spears` as FormationId, troop: 'spearmen', men: 1200 },
+    { id: `formation-${city}-horse` as FormationId, troop: 'lightCavalry', men: 300 },
+  ] as const;
+  for (const { id, troop, men } of formations) {
+    state.formations[id] = { id, army: defenders, troop, men, morale: 1 };
+  }
+  state.armies[defenders] = {
+    id: defenders,
+    owner: target.owner,
+    formations: formations.map(({ id }) => id),
+    stance: 'holdTheLine',
+    generalSkill: 3,
+    activity: { kind: 'idle', position: { ...target.position } },
+  };
+  armyOf(state, rome).activity = {
+    kind: 'idle',
+    position: { x: target.position.x + 12, y: target.position.y },
+  };
 }
 
 /** Rome's army stands at the city, which fell to Rome today, so its fate is open. */

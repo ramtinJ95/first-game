@@ -111,6 +111,16 @@ Known faults in the source data. Check them before you draw or label terrain.
 
 `src/app/clock.ts` turns real time into ticks and queues orders until the next tick. Panels never read the clock or the live state. They read `view.current` from `src/app/view.svelte.ts`, a `$state.raw` snapshot that is published about ten times a second. A click in a panel becomes an order through the clock.
 
+### Faction AI
+
+- `decideOrders(state, world, faction): Order[]` in `src/sim/ai/decide.ts` gives the orders one faction gives today. It takes a `DeepReadonly<GameState>`, never writes it, and draws no random numbers. Ties go to the lower id, so the same state gives the same orders. `decideAll(state, world, skip = [state.player])` gives the orders of every other faction that is not defeated, in faction id order.
+- The clock calls it. `createClock` takes `decide(state)`, and each tick plays the player's queued orders and then `decide(state)` on the day being played. `src/app/main.ts` passes `(state) => decideAll(state, world)`.
+- Every threshold is a named constant in `src/sim/ai/thresholds.ts`. Budget: `RESERVE_DAYS`, `MIN_BALANCE_SHARE`, `TROOP_MIX`. War: `WAR_ODDS`, `PEACE_WAR_ODDS`, `WAR_DISTANCE_KM`, `WAR_REACH_KM`. Offence: `ATTACK_ODDS`, `DEFENDER_KM`, `SEA_KM_FACTOR`, `STORM_MIN_CHANCE`, `STORM_MAX_LOSS`, `MARCH_MORALE`, `RALLY_WAIT_DAYS`. Defence: `RETREAT_ODDS`, `RELIEF_ODDS`, `RELIEF_KM`, `CAPITAL_GUARD_KM`. Fates: `ENSLAVE_BELOW_MANPOWER`. Minors: `MINOR_DEFICIT_DAYS`. The doc comment on each rule's function in `src/sim/ai` states the rule.
+- A great power's day runs in this order: retreats, fates, storms, army movements (capital guard, relief, offence), one recruit, at most one declaration of war. A minor gives orders only at war. It recruits its cheapest troop, keeps its armies at its city, and retreats from a battle it is losing.
+- No order joins two armies. A recruit joins the idle army at its city, so a power gathers by keeping an army at the muster city while recruits train, and sends separate armies at one target so they besiege and fight together.
+- The AI caches each collection's sorted order, each faction's enemies, each army's strength, and the day's balances in `WeakMap`s keyed by the record objects. Never change a state's collections after the AI has read it.
+- `npm run sim:ai [-- --seeds 20 --years 5]` plays the new game with every faction under the AI, then with Rome giving no orders, and prints the tables the thresholds were tuned on.
+
 ### Renderer
 
 - `createRenderer({ canvas, map, onPick })` in `src/render/renderer.ts` is the boundary. `src/app/main.ts` calls `draw({ previous, current, progress, selection, planned, previousSight, sight })` once per animation frame, and the renderer calls `onPick` with what a click points at. It reads the state and never writes it.
@@ -160,6 +170,7 @@ Known faults in the source data. Check them before you draw or label terrain.
 | `npm run sim:movement`                        | Print long routes, their marching days and path times, and the tick time with every army marching               |
 | `npm run map:routes`                          | Draw long routes on the map preview into `captures/movement/`                                                   |
 | `npm run sim:sieges`                          | Play the siege, storm, relief, and fate cases and print the tuning table                                        |
+| `npm run sim:ai [-- --seeds <n> --years <n>]` | Play the new game under the AI, with every faction and with a passive Rome, and print the tuning tables         |
 | `npm run capture [-- <scenario>]`             | Build, then write screenshots, `clip.gif`, video, and trace to `captures/<scenario>/`                           |
 | `npm run capture:publish`                     | Push the PNG and GIF files to the `pr-assets` branch and print Markdown for the pull request                    |
 | `npm run capture:fetch`                       | Pull this branch's media from `pr-assets` into `captures/`, declare it as Nexus outputs, and print the Markdown |
