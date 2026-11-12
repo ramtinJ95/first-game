@@ -1,0 +1,22 @@
+[
+  {
+    "file": "plate.png",
+    "title": "The figures drawn by the same SVG code the map rasterises: spearmen, swordsmen, skirmishers, archers, light and heavy cavalry, the general, and a transport",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The plate of figures: the six troops, the general, and a transport ship, at ease, marching, and fighting, in the colours of Rome and Macedon",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The plate of figures: the six troops, the general, and a transport ship, at ease, marching, and fighting, in the colours of Rome and Macedon (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The plate of figures: the six troops, the general, and a transport ship, at ease, marching, and fighting, in the colours of Rome and Macedon (Playwright trace)",
+    "kind": "trace"
+  }
+]
