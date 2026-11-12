@@ -231,7 +231,7 @@ export default defineScenario({
     /** Takes a shot once every chunk of terrain in view is built and has faded in. */
     const shot = async (name: string, title: string) => {
       await frames(page);
-      await page.locator('canvas[data-terrain="ready"]').waitFor({ timeout: 60_000 });
+      await page.locator('canvas[data-terrain="ready"]').waitFor({ timeout: 180_000 });
       await take(name, title);
     };
     const started = Date.now();

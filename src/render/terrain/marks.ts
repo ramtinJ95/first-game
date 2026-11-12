@@ -158,7 +158,7 @@ export class Land {
       COAST_REACH,
       { seams: false },
     );
-    this.lakes = new AreaIndex(kindOutlines(map, 'lake'), DELTA.lake);
+    this.lakes = new AreaIndex(kindOutlines(map, 'lake'));
     this.mountains = new AreaIndex(kindOutlines(map, 'mountains'), DEPTH_FULL.mountains);
     this.hills = new AreaIndex(kindOutlines(map, 'hills'));
     this.desert = new AreaIndex(kindOutlines(map, 'desert'), VALLEY.desertReach);
@@ -343,7 +343,9 @@ export class Land {
     for (const { line } of map.rivers) {
       const end = line[line.length - 1];
       if (!end || this.desert.distance(end[0], end[1]) >= VALLEY.desertReach) continue;
-      if (this.lakes.distance(end[0], end[1]) < DELTA.lake) continue;
+      const inLake = (a: number) =>
+        this.lakes.inside(end[0] + Math.cos(a) * DELTA.lake, end[1] + Math.sin(a) * DELTA.lake);
+      if ([0, 1, 2, 3, 4, 5, 6, 7].some((n) => inLake((n / 8) * Math.PI * 2))) continue;
       const before = line[Math.max(0, line.length - 6)] ?? end;
       const toward = Math.atan2(end[1] - before[1], end[0] - before[0]);
       let nearest = Infinity;
@@ -372,7 +374,7 @@ export class Land {
     const rect = { left: 0, top: 0, right: map.width, bottom: map.height };
     const points = scatter(
       rect,
-      12,
+      16,
       901,
       (x, y) => {
         if (!this.forest.inside(x, y) || !this.open(x, y) || this.mountains.inside(x, y)) {

@@ -30,7 +30,9 @@ export class AreaIndex {
   readonly #distanceColumns: number;
   readonly #distanceRows: number;
   /** Distance from each cell's centre to the area's edge in km, up to the reach it was built for. */
-  readonly #distance: Float32Array;
+  readonly #reach: number;
+  /** Built on the first question about distance, since some indexes never get one. */
+  #field: Float32Array | undefined;
   readonly bounds: { left: number; top: number; right: number; bottom: number };
 
   /**
@@ -78,7 +80,7 @@ export class AreaIndex {
     for (const edge of edges) {
       if (!seams || this.#outer(edge)) this.#markEdge(edge);
     }
-    this.#distance = this.#distanceField(reach);
+    this.#reach = reach;
   }
 
   /** Marks each cell inside or outside by its centre, one scan line per row of cells. */
@@ -174,6 +176,11 @@ export class AreaIndex {
     return field;
   }
 
+  #distance(): Float32Array {
+    this.#field ??= this.#distanceField(this.#reach);
+    return this.#field;
+  }
+
   #distanceCell(x: number, y: number): number {
     const i = Math.floor((x - this.#left) / DISTANCE_CELL);
     const j = Math.floor((y - this.#top) / DISTANCE_CELL);
@@ -213,8 +220,8 @@ export class AreaIndex {
    */
   distance(x: number, y: number): number {
     const k = this.#distanceCell(x, y);
-    if (k < 0) return this.#distance.length > 0 ? Infinity : 0;
-    return this.#distance[k] ?? 0;
+    if (k < 0) return this.#reach > 0 ? Infinity : 0;
+    return this.#distance()[k] ?? 0;
   }
 
   /**
@@ -224,6 +231,6 @@ export class AreaIndex {
   depth(x: number, y: number): number {
     const k = this.#distanceCell(x, y);
     if (k < 0 || !this.inside(x, y)) return 0;
-    return this.#distance[k] ?? 0;
+    return this.#distance()[k] ?? 0;
   }
 }
