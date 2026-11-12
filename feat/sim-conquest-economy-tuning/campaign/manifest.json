@@ -1,0 +1,32 @@
+[
+  {
+    "file": "campaign-march-ordered.png",
+    "title": "Rome's army selected and sent to Mediolanum by a right click while paused: its path shows faintly until the next day",
+    "kind": "screenshot"
+  },
+  {
+    "file": "campaign-declare-war.png",
+    "title": "The city panel of Mediolanum asks to confirm the declaration of war",
+    "kind": "screenshot"
+  },
+  {
+    "file": "campaign-marching.png",
+    "title": "The days run at speed 3: the army marches along its inked path and the skirmishers train in Roma",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A short campaign through the page: select Rome's army, march it to Mediolanum, declare war on Mediolanum, raise skirmishers in Roma, run the days until the army arrives and besieges the city, and open the alert",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A short campaign through the page: select Rome's army, march it to Mediolanum, declare war on Mediolanum, raise skirmishers in Roma, run the days until the army arrives and besieges the city, and open the alert (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A short campaign through the page: select Rome's army, march it to Mediolanum, declare war on Mediolanum, raise skirmishers in Roma, run the days until the army arrives and besieges the city, and open the alert (Playwright trace)",
+    "kind": "trace"
+  }
+]
