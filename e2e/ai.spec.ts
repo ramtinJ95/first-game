@@ -3,8 +3,8 @@ import { camera, day, map, pause } from './support.ts';
 
 const FOREIGN_POWERS = ['Carthage', 'Macedon', 'Egypt', 'Persia'];
 
-// The map redraws every frame while armies march, and CI draws it in software, so a small
-// page keeps 200 days at the highest speed from starving the tests that run beside it.
+// The map redraws every frame while armies march and CI draws it in software, so on a small
+// page the 200 days at the highest speed run near their real rate.
 test.use({ viewport: { width: 640, height: 360 } });
 
 test('after 200 days at the highest speed a foreign army has marched and taken a minor city', async ({
