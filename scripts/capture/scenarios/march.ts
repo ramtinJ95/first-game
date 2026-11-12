@@ -6,6 +6,7 @@ import {
   pause,
   resume,
   rome,
+  openGame,
 } from '../../../e2e/support.ts';
 import { loadSave, untilDay } from '../../../e2e/watch.ts';
 import { defineScenario } from '../scenario.ts';
@@ -15,8 +16,7 @@ export default defineScenario({
   title:
     "Rome's army marches in column along its road at speed 1, arrives, and makes camp the next day",
   async run({ page, shot }) {
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
     await pause(page);
     const state = marchToCamp();
     await loadSave(page, state);

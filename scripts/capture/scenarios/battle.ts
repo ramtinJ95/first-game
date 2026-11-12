@@ -7,6 +7,7 @@ import {
   playDays,
   resume,
   winnerMarchesOn,
+  openGame,
 } from '../../../e2e/support.ts';
 import { intoNextDay, loadSave, stillAfter } from '../../../e2e/watch.ts';
 import { defineScenario } from '../scenario.ts';
@@ -16,8 +17,7 @@ export default defineScenario({
   title:
     'A battle at the closest zoom outside Roma, from the first contact to the rout of Carthage, at speed 2',
   async run({ page, shot }) {
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
     await pause(page);
     // The battle is joined before the save is dropped: left to itself, the AI would march away.
     const start = playDays(fieldBattle(), 1);
@@ -54,8 +54,7 @@ export default defineScenario({
     // A frame at the closest zoom takes over a second in software, long enough for the
     // clock to play two days in one frame. The day is entered at the widest zoom, where
     // frames are quick, and shown close once the game is paused, when no day can pass.
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
     await pause(page);
     await loadSave(page, winnerMarchesOn());
     await intoNextDay(page, 200);

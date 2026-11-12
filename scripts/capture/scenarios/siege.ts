@@ -6,6 +6,7 @@ import {
   resume,
   stormedCarthago,
   siegeOfCarthago,
+  openGame,
 } from '../../../e2e/support.ts';
 import { intoNextDay, loadSave, stillAfter } from '../../../e2e/watch.ts';
 import { defineScenario } from '../scenario.ts';
@@ -15,8 +16,7 @@ export default defineScenario({
   title:
     'The siege of Carthago: the camp round the city, a storm with ladders at the walls, the fall, and the sack',
   async run({ page, shot }) {
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
     await pause(page);
     const state = siegeOfCarthago();
     await loadSave(page, state);
@@ -36,6 +36,11 @@ export default defineScenario({
       .getByTestId('alerts')
       .getByRole('button', { name: /fell to Rome/ })
       .waitFor({ timeout: 15_000 });
+    // The fall opens the fate prompt over the city. This scenario turns the prompt off,
+    // so the later stills show the city, and leaves the fate to the city panel.
+    const prompt = page.getByTestId('fate-prompt');
+    await prompt.getByRole('checkbox').uncheck();
+    await prompt.getByTestId('fate-occupy').click();
     await page.waitForTimeout(1200);
     await pause(page);
     await page.keyboard.press('Escape');

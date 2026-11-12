@@ -5,7 +5,7 @@ import { provinceAt } from '../src/render/pick.ts';
 import { sightOf } from '../src/sim/sight.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
-import { armyAtRest, armyOf, camera, cityPoint, map, pause, rome } from './support.ts';
+import { armyAtRest, armyOf, camera, cityPoint, map, pause, rome, openGame } from './support.ts';
 import { loadSave } from './watch.ts';
 
 const world = buildWorld(map);
@@ -53,8 +53,7 @@ test.describe('armies drawn as figures', () => {
   test.beforeEach(async ({ page }) => {
     errors.length = 0;
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
     await pause(page);
   });
 

@@ -1,4 +1,11 @@
-import { camera, cityPoint, crossingToCaralis, pause, resume } from '../../../e2e/support.ts';
+import {
+  camera,
+  cityPoint,
+  crossingToCaralis,
+  pause,
+  resume,
+  openGame,
+} from '../../../e2e/support.ts';
 import { loadSave, stillAfter, untilDay } from '../../../e2e/watch.ts';
 import { defineScenario } from '../scenario.ts';
 
@@ -7,8 +14,7 @@ export default defineScenario({
   title:
     "Rome's transports cross the sea to Caralis at speed 2 and land the army, then a column of refugees walks from Roma to Capua",
   async run({ page, shot }) {
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
     await pause(page);
     const state = crossingToCaralis(15);
     await loadSave(page, state);

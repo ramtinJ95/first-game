@@ -8,6 +8,7 @@ import {
   playAi,
   playDays,
   startGame,
+  openGame,
 } from '../../../e2e/support.ts';
 import { loadSave, stillAfter } from '../../../e2e/watch.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
@@ -74,8 +75,7 @@ async function zoomOn(
   point: { x: number; y: number },
   notches: number,
 ) {
-  await page.goto('/');
-  await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+  await openGame(page);
   await pause(page);
   await loadSave(page, state);
   const view = camera(page);

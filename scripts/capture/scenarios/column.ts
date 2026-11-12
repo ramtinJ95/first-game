@@ -1,4 +1,11 @@
-import { camera, cityPoint, pause, refugeesToCapua, resume } from '../../../e2e/support.ts';
+import {
+  camera,
+  cityPoint,
+  pause,
+  refugeesToCapua,
+  resume,
+  openGame,
+} from '../../../e2e/support.ts';
 import { loadSave } from '../../../e2e/watch.ts';
 import { defineScenario } from '../scenario.ts';
 
@@ -6,8 +13,7 @@ export default defineScenario({
   name: 'column',
   title: 'A column of refugees from Roma walks the road to Capua with its carts',
   async run({ page, shot }) {
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
     await pause(page);
     const state = refugeesToCapua();
     await loadSave(page, state);

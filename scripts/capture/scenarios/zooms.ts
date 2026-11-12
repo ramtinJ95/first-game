@@ -1,4 +1,4 @@
-import { armyAtRest, camera, cityPoint, pause } from '../../../e2e/support.ts';
+import { armyAtRest, camera, cityPoint, pause, openGame } from '../../../e2e/support.ts';
 import { loadSave } from '../../../e2e/watch.ts';
 import { defineScenario } from '../scenario.ts';
 
@@ -6,8 +6,7 @@ export default defineScenario({
   name: 'zooms',
   title: "Rome's army of four formations at the widest, a middle, and the closest zoom",
   async run({ page, shot }) {
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
     await pause(page);
     await loadSave(page, armyAtRest());
     await page.waitForTimeout(500);
