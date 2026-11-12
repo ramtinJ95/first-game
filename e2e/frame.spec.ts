@@ -38,6 +38,13 @@ async function load(page: Page, state: GameState) {
   );
 }
 
+/** Puts the state in the browser's autosave slot before the page opens. */
+async function inBrowser(page: Page, state: GameState) {
+  await page.addInitScript((text) => {
+    localStorage.setItem('save:auto', JSON.stringify({ savedAt: 1, day: 1, realm: 'Rome', text }));
+  }, saveGame(state));
+}
+
 /** The page's first screen, with nothing in storage. */
 async function openStart(page: Page) {
   await page.goto('/');
@@ -170,6 +177,46 @@ test.describe('the frame round the game', () => {
     await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
     await defeat.getByRole('button', { name: 'Watch on' }).click();
     await untilDay(page, lost.day + 1);
+  });
+
+  test('Continue on a lost save opens the defeat screen, and Watch on runs the game on', async ({
+    page,
+  }) => {
+    const lost = nextDay(romaFallsTomorrow());
+    expect(outcomeOf(lost, world, rome).kind).toBe('lost');
+    await inBrowser(page, lost);
+    await openStart(page);
+    await page.getByRole('button', { name: 'Continue' }).click();
+    const defeat = page.getByTestId('defeat');
+    await expect(defeat.getByTestId('defeat-text')).toContainText('Your last city has fallen.');
+    await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
+    await defeat.getByRole('button', { name: 'Watch on' }).click();
+    await expect(defeat).toHaveCount(0);
+    await untilDay(page, lost.day + 1);
+  });
+
+  test('Continue on a save with a fate still open asks that fate again', async ({ page }) => {
+    const fallen = nextDay(mediolanumFallsTomorrow());
+    expect(fallen.cities['mediolanum' as CityId]?.fellOn).not.toBeNull();
+    await inBrowser(page, fallen);
+    await openStart(page);
+    await page.getByRole('button', { name: 'Continue' }).click();
+    const prompt = page.getByTestId('fate-prompt');
+    await expect(prompt).toContainText('Mediolanum has fallen to you');
+    await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
+    const number = (text: string | null) => Number((text ?? '').replace(/[^\d]/g, ''));
+    const sack = prompt.getByTestId('fate-sack');
+    const loot = number(/\+([\d,]+) gold/.exec((await sack.textContent()) ?? '')?.[1] ?? null);
+    const gold = number(await page.getByTestId('store-gold-amount').textContent());
+    expect(loot).toBeGreaterThan(0);
+    await sack.click();
+    await expect(prompt).toHaveCount(0);
+    await page.keyboard.press('Space');
+    await untilDay(page, fallen.day + 1);
+    await pause(page);
+    expect(
+      number(await page.getByTestId('store-gold-amount').textContent()),
+    ).toBeGreaterThanOrEqual(gold + loot);
   });
 
   test('meeting the victory rule announces the win once, and the game plays on', async ({

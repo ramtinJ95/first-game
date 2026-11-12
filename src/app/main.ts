@@ -355,12 +355,21 @@ function enter(state: GameState, { pause, focus }: { pause: boolean; focus: bool
   modals =
     outcome.kind === 'lost'
       ? [{ kind: 'lost', on: outcome.on, city: undefined, by: undefined }]
-      : [];
-  resumeOnClose = outcome.kind === 'lost' && !pause && !clock.paused;
-  if (pause || outcome.kind === 'lost') clock.pause();
+      : openFates(state);
+  resumeOnClose = modals.length > 0 && !pause && !clock.paused;
+  if (pause || modals.length > 0) clock.pause();
   const home = focus ? homeOf(state) : undefined;
   if (home) renderer.focus(home);
   view.refresh();
+}
+
+/** The fates a loaded game still waits on, which no day's change would announce. */
+function openFates(state: DeepReadonly<GameState>): Modal[] {
+  if (!pauseOnFate) return [];
+  return Object.values(state.cities)
+    .filter((city) => fateOpen(state, city.id))
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .map((city) => ({ kind: 'fate', city: city.id }));
 }
 
 function loadText(text: string, how: { pause: boolean; focus: boolean }) {
@@ -414,6 +423,12 @@ const frame: FrameActions = {
     view.refresh();
   },
   closeModal,
+  watchOn() {
+    modals = [];
+    resumeOnClose = false;
+    clock.resume();
+    view.refresh();
+  },
   decideFate(order) {
     if (order) clock.issue(order);
     closeModal();
@@ -468,6 +483,15 @@ const actions: Actions = {
   },
   issue(order) {
     clock.issue(order);
+    const front = modals[0];
+    if (
+      front?.kind === 'fate' &&
+      (order.kind === 'sack' || order.kind === 'enslave') &&
+      order.city === front.city
+    ) {
+      closeModal();
+      return;
+    }
     view.refresh();
   },
   select(pick) {

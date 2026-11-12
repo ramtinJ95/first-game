@@ -14,6 +14,8 @@ export interface FrameActions {
   openGuide(): void;
   /** Closes the modal in front. A game that a modal stopped runs again after the last one. */
   closeModal(): void;
+  /** Closes the defeat screen and runs the game on without the player. */
+  watchOn(): void;
   /** Issues the fate's order and closes its prompt. Occupying gives no order. */
   decideFate(order: Order | undefined): void;
   setPauseOnFate(on: boolean): void;

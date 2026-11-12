@@ -46,7 +46,7 @@
         Your armies are gone and your people serve new masters.
       </p>
       <div class="row">
-        <button type="button" onclick={() => actions.closeModal()}>Watch on</button>
+        <button type="button" onclick={() => actions.watchOn()}>Watch on</button>
         {#if latest}
           <button type="button" onclick={() => actions.loadFromBrowser(latest.slot)}
             >Load the save of {dateText(latest.day)}</button

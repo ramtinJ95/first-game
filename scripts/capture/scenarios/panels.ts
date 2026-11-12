@@ -119,6 +119,7 @@ export default defineScenario({
     const fallen = startGame();
     fallenTo(fallen, 'mediolanum');
     await load(page, fallen);
+    await page.getByTestId('fate-occupy').click();
     await view.drag(view.city('mediolanum'), { x: 640, y: 360 });
     const milan = view.city('mediolanum');
     await page.mouse.click(milan.x, milan.y);
