@@ -110,7 +110,7 @@ The map is static data outside the state. Outlines, neighbours, coastline, and r
 - `provinceAt(map, point)` in `src/render/pick.ts` finds the province under a map point, or nothing at sea. `pickAt` checks army banners first and then calls it. Both are pure, so tests and any later rule use the same function.
 - `src/render/camera.ts` holds the pan and zoom maths with no PixiJS import. `drawnArmies` in `src/render/markers.ts` places each banner between the previous and the current day by the clock's progress.
 - The map is drawn as named layers, in this order from the bottom: `paper`, `sea` (fill, water lines, and the moving swell), `land`, `terrain` (empty, for the terrain unit), `washes` (owner colours at 30 % alpha, so terrain under them shows), `borders`, `riversAndCoast`, `grain` (the paper texture, printed over the drawing), `settlements` (`towns`, empty for small settlements, then `cities`), `labels`, `markers`, `selection`. `LAYERS` in `renderer.ts` is that list. Add to a layer and keep the order.
-- City symbols are drawn in code in `src/render/symbols.ts`, one per rank: a great power's capital, its other cities, and a minor city.
+- City symbols are drawn in code in `src/render/symbols.ts`, one per `city.rank`: a great power's capital, its other cities, and a minor city. They grow up to 1.8 times at the closest zoom.
 - The selection lives in `src/app/main.ts` and reaches panels as `view.current.selection`. It is not game state.
 - Dropping a save file on the page loads it through `loadGame` and `clock.load`.
 

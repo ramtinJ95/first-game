@@ -11,7 +11,7 @@ import {
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { ArmyId, CityId, ProvinceId } from '../sim/ids.ts';
 import type { GameMap, MapLine, MultiPolygon } from '../sim/map.ts';
-import type { City } from '../sim/state/city.ts';
+import type { City, CityRank } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import {
   clampCamera,
@@ -41,7 +41,7 @@ import { paperTexture, waterTexture } from './paper.ts';
 import { toPixels } from './lines.ts';
 import { pickAt, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
-import { citySymbols, type CityRank } from './symbols.ts';
+import { citySymbols } from './symbols.ts';
 
 /** What one drawn frame shows: the days either side of now, and the selection. */
 export interface Frame {
@@ -240,9 +240,6 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
   ) as Record<LayerName, Container>;
   const worldLayers = LAYERS.filter((layer) => layer.world).map(({ name }) => layers[name]);
 
-  const capitals = new Set(
-    map.provinces.filter((p) => p.capital && p.owner !== 'independent').map((p) => p.id),
-  );
   const outlines = new Map(map.provinces.map((p) => [p.id, p.outline]));
 
   layers.paper.addChild(new Graphics().rect(0, 0, map.width, map.height).fill(MARGIN));
@@ -365,19 +362,14 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
     }
   }
 
-  function rankOf(state: DeepReadonly<GameState>, city: DeepReadonly<City>): CityRank {
-    if (capitals.has(city.province)) return 'capital';
-    return state.factions[city.owner]?.kind === 'greatPower' ? 'greatPowerCity' : 'minorCity';
-  }
-
   function labelText(city: DeepReadonly<City>): string {
-    return capitals.has(city.province) ? city.name.toUpperCase() : city.name;
+    return city.rank === 'capital' ? city.name.toUpperCase() : city.name;
   }
 
   function syncSettlements(state: DeepReadonly<GameState>) {
     reconcile(cities, Object.values(state.cities), (city) => city.id, {
       create(city) {
-        const rank = rankOf(state, city);
+        const { rank } = city;
         const capital = rank === 'capital';
         const label = new Text({
           text: labelText(city),
@@ -397,7 +389,7 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
         return { symbol, label, rank };
       },
       update(drawn, city) {
-        const rank = rankOf(state, city);
+        const { rank } = city;
         if (drawn.rank !== rank) {
           drawn.symbol.context = symbols[rank];
           drawn.rank = rank;

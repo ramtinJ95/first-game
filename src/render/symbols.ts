@@ -1,8 +1,6 @@
 import { GraphicsContext } from 'pixi.js';
+import type { CityRank } from '../sim/state/city.ts';
 import { INK, PAPER } from './palette.ts';
-
-/** A city's rank decides the size of its drawing. */
-export type CityRank = 'capital' | 'greatPowerCity' | 'minorCity';
 
 const LINE = { color: INK, width: 1, join: 'miter' } as const;
 
