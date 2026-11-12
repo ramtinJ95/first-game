@@ -1,6 +1,8 @@
 import type { GameState } from '../state/game-state.ts';
 import { declareWar } from './declare-war.ts';
+import { evacuate } from './evacuate.ts';
 import { moveArmy } from './move-army.ts';
+import { recruit } from './recruit.ts';
 import { retreat } from './retreat.ts';
 import { setStance } from './set-stance.ts';
 
@@ -13,6 +15,8 @@ const ORDER_HANDLERS = {
   setStance,
   declareWar,
   retreat,
+  recruit,
+  evacuate,
 };
 
 type Handlers = typeof ORDER_HANDLERS;

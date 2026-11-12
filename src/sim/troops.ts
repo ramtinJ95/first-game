@@ -12,6 +12,8 @@ export interface TroopStats {
   discipline: number;
   /** Multiplies its attack against a category. A missing category counts as 1. */
   bonus: Partial<Record<TroopCategory, number>>;
+  /** One recruited formation: its men, which also cost as much manpower, its gold, and its days of training. */
+  recruit: { men: number; gold: number; days: number };
 }
 
 const TABLE = {
@@ -21,14 +23,23 @@ const TABLE = {
     defence: 1.2,
     discipline: 1,
     bonus: { cavalry: 2.5 },
+    recruit: { men: 1000, gold: 2400, days: 15 },
   },
-  swordsmen: { category: 'infantry', attack: 1.4, defence: 1, discipline: 1.1, bonus: {} },
+  swordsmen: {
+    category: 'infantry',
+    attack: 1.4,
+    defence: 1,
+    discipline: 1.1,
+    bonus: {},
+    recruit: { men: 1000, gold: 3200, days: 20 },
+  },
   skirmishers: {
     category: 'missile',
     attack: 0.9,
     defence: 0.7,
     discipline: 0.8,
     bonus: { infantry: 1.2 },
+    recruit: { men: 500, gold: 900, days: 10 },
   },
   archers: {
     category: 'missile',
@@ -36,6 +47,7 @@ const TABLE = {
     defence: 0.6,
     discipline: 0.8,
     bonus: { infantry: 1.3 },
+    recruit: { men: 500, gold: 1200, days: 15 },
   },
   lightCavalry: {
     category: 'cavalry',
@@ -43,6 +55,7 @@ const TABLE = {
     defence: 0.8,
     discipline: 0.9,
     bonus: { missile: 2.5 },
+    recruit: { men: 400, gold: 1800, days: 20 },
   },
   heavyCavalry: {
     category: 'cavalry',
@@ -50,12 +63,13 @@ const TABLE = {
     defence: 1.1,
     discipline: 1.2,
     bonus: { infantry: 1.2, missile: 1.5 },
+    recruit: { men: 400, gold: 2800, days: 30 },
   },
 } satisfies Record<string, TroopStats>;
 
 export type Troop = keyof typeof TABLE;
 
-/** The shared base troops. Every number a battle uses for a troop lives here. */
+/** The shared base troops. Every number a battle or a recruitment uses for a troop lives here. */
 export const TROOPS: Readonly<Record<Troop, TroopStats>> = TABLE;
 
 export const TroopSchema = v.picklist(Object.keys(TABLE) as [Troop, ...Troop[]]);
