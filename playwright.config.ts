@@ -9,9 +9,9 @@ export const SOFTWARE_GL = ['--use-angle=swiftshader', '--enable-unsafe-swiftsha
 export default defineConfig({
   testDir: 'e2e',
   forbidOnly: !!process.env['CI'],
-  // Each Chromium draws with SwiftShader on the CPU. Two at once on a CI runner starve
-  // each other, and the tests that count days per second fail on main as well.
-  workers: process.env['CI'] ? 1 : undefined,
+  // Each Chromium draws with SwiftShader on the CPU. Two at once on a 2-core pylon were
+  // not clearly faster (3.8 against 4.5 minutes) and starved a page for over 5 s.
+  workers: 1,
   reporter: [
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['list'],
