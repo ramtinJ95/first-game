@@ -21,7 +21,7 @@
   },
   {
     "file": "selected-province.png",
-    "title": "Syracusae selected: its outline is inked and the readout names the province, city, owner, and population",
+    "title": "Syracusae selected: its outline is inked and the city panel shows the city, its owner, and its defences",
     "kind": "screenshot"
   },
   {
@@ -116,12 +116,12 @@
   },
   {
     "file": "closest-village.png",
-    "title": "The closest zoom on Morshanskoe, the village farthest from any city",
+    "title": "The closest zoom on Elkharas, the village farthest from any city",
     "kind": "screenshot"
   },
   {
     "file": "pan-frame-time.png",
-    "title": "widest pan at 0.16 px per km: 328 frames, main thread busy 7.5 ms per frame, frame interval median 649.9 ms, p95 1283.3 ms; middle pan at 0.96 px per km: 356 frames, main thread busy 4.6 ms per frame, frame interval median 416.6 ms, p95 900.0 ms; closest pan at 3.88 px per km: 394 frames, main thread busy 3.8 ms per frame, frame interval median 350.1 ms, p95 783.3 ms",
+    "title": "widest pan at 0.16 px per km: 447 frames, main thread busy 5.8 ms per frame, frame interval median 416.6 ms, p95 850.0 ms; middle pan at 0.96 px per km: 335 frames, main thread busy 7.7 ms per frame, frame interval median 300.0 ms, p95 850.0 ms; closest pan at 3.88 px per km: 339 frames, main thread busy 8.8 ms per frame, frame interval median 300.0 ms, p95 733.3 ms",
     "kind": "screenshot"
   },
   {
