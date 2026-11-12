@@ -1,5 +1,5 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { ArmyId, FactionId } from '../sim/ids.ts';
+import type { ArmyId, BattleId, FactionId } from '../sim/ids.ts';
 import type { Army } from '../sim/state/army.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
@@ -24,14 +24,29 @@ export interface DrawnArmy {
   readonly position: MapPoint;
 }
 
-function landPosition(army: DeepReadonly<Army>): MapPoint | undefined {
-  return army.activity.kind === 'embarked' ? undefined : army.activity.position;
+/** The clickable round of a battle marker, in screen pixels from the battle's position. */
+export const BATTLE_HIT_RADIUS = 13;
+
+export interface DrawnBattle {
+  readonly id: BattleId;
+  readonly position: MapPoint;
+}
+
+/** An army at sea is drawn where its convoy is. */
+function shownPosition(
+  state: DeepReadonly<GameState>,
+  army: DeepReadonly<Army>,
+): MapPoint | undefined {
+  const { activity } = army;
+  return activity.kind === 'embarked'
+    ? state.convoys[activity.convoy]?.position
+    : activity.position;
 }
 
 /**
- * Where to draw each army on land, `progress` of the way from where it stood on the
- * previous day to where it stands now. An army that was not on land the day before
- * appears at its current position.
+ * Where to draw each army, `progress` of the way from where it stood on the previous
+ * day to where it stands now. An army missing the day before appears at its current
+ * position.
  */
 export function drawnArmies(
   previous: DeepReadonly<GameState>,
@@ -40,10 +55,10 @@ export function drawnArmies(
 ): DrawnArmy[] {
   const drawn: DrawnArmy[] = [];
   for (const army of Object.values(current.armies)) {
-    const to = landPosition(army);
+    const to = shownPosition(current, army);
     if (!to) continue;
     const before = previous.armies[army.id];
-    const from = (before && landPosition(before)) ?? to;
+    const from = (before && shownPosition(previous, before)) ?? to;
     drawn.push({
       id: army.id,
       owner: army.owner,

@@ -1,10 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function day(page: Page): Promise<number> {
-  const text = await page.getByTestId('time-controls-day').textContent();
-  const match = /^Day (\d+)$/.exec(text?.trim() ?? '');
-  if (!match?.[1]) throw new Error(`unexpected day text: ${text}`);
-  return Number(match[1]);
+  const text = await page.getByTestId('time-controls-day').getAttribute('data-day');
+  if (!text || !/^\d+$/.test(text)) throw new Error(`unexpected day: ${text}`);
+  return Number(text);
 }
 
 async function daysOver(page: Page, ms: number): Promise<number> {

@@ -8,7 +8,7 @@ export default defineScenario({
     await page.getByTestId('time-controls').waitFor({ state: 'visible' });
     await shot(
       'start',
-      'On load: the game runs from the real map, so the panel reads Rome · 80 provinces, Day 1, speed 1',
+      'On load: the top bar reads Rome, its gold, food, and manpower with their daily change, Year 1, day 1, and speed 1',
     );
 
     await page.waitForTimeout(2500);
@@ -16,7 +16,7 @@ export default defineScenario({
 
     await page.keyboard.press('Space');
     await page.getByRole('button', { name: 'Resume' }).waitFor({ state: 'visible' });
-    await shot('paused', 'Space pressed: the panel reads paused and the button offers Resume');
+    await shot('paused', 'Space pressed: the top bar reads Paused and the button offers Resume');
 
     await page.waitForTimeout(2000);
     await shot('still-paused', 'Two seconds later: the day has not moved while paused');

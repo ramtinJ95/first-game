@@ -52,17 +52,16 @@ test.describe('the map', () => {
     expect(errors).toEqual([]);
   });
 
-  test("a click at Roma's position selects its province and the readout shows the name", async ({
+  test("a click at Roma's position selects its province and the city panel shows it", async ({
     page,
   }) => {
     const roma = onScreen(page, cityPoint('roma'));
     await page.mouse.click(roma.x, roma.y);
-    const readout = page.getByTestId('selection-readout');
-    await expect(readout.getByTestId('readout-province')).toHaveText('Roma');
-    await expect(readout.getByTestId('readout-city')).toHaveText('Roma');
-    await expect(readout.getByTestId('readout-owner')).toHaveText('Rome');
+    const panel = page.getByTestId('city-panel');
+    await expect(panel.getByTestId('city-name')).toHaveText('Roma');
+    await expect(panel.getByTestId('city-owner')).toHaveText('Rome (you)');
     const population = Number(
-      (await readout.getByTestId('readout-population').textContent())?.replaceAll(',', ''),
+      (await panel.getByTestId('city-population').textContent())?.replaceAll(',', ''),
     );
     expect(population).toBeGreaterThanOrEqual(STARTING_POPULATION.capital);
   });
@@ -70,34 +69,34 @@ test.describe('the map', () => {
   test('a click on the sea clears the selection', async ({ page }) => {
     const roma = onScreen(page, cityPoint('roma'));
     await page.mouse.click(roma.x, roma.y);
-    await expect(page.getByTestId('selection-readout')).toBeVisible();
+    await expect(page.getByTestId('city-panel')).toBeVisible();
 
     const seaPoint = { x: 2400, y: 2500 };
     expect(provinceAt(map, seaPoint)).toBeUndefined();
     const sea = onScreen(page, seaPoint);
     await page.mouse.click(sea.x, sea.y);
-    await expect(page.getByTestId('selection-readout')).toHaveCount(0);
+    await expect(page.getByTestId('city-panel')).toHaveCount(0);
   });
 
   test('a click on the banner over Roma selects the Roman army', async ({ page }) => {
     const roma = onScreen(page, cityPoint('roma'));
     await page.mouse.click(roma.x + BANNER.flagWidth / 2, roma.y - BANNER.pole + 5);
-    const readout = page.getByTestId('selection-readout');
-    await expect(readout.getByTestId('readout-army-of')).toHaveText('Rome');
-    await expect(readout.getByTestId('readout-men')).toHaveText('1,500');
+    const panel = page.getByTestId('army-panel');
+    await expect(panel.getByRole('heading', { level: 2 })).toHaveText('Army of Rome');
+    await expect(panel.getByTestId('army-men')).toHaveText('1,500 men');
   });
 
   test('a dropped save in which Rome holds Syracusae makes Rome its owner', async ({ page }) => {
     const syracusae = onScreen(page, cityPoint('syracusae'));
     await page.mouse.click(syracusae.x, syracusae.y);
-    const owner = page.getByTestId('readout-owner');
-    await expect(owner).toHaveText('Syracusae');
+    const owner = page.getByTestId('city-owner');
+    await expect(owner).toHaveText('Syracusae, an independent city');
 
     const state = newGame(map, { seed: 1, player: 'rome' });
     const city = state.cities['syracusae' as CityId];
     if (!city) throw new Error('new game lacks Syracusae');
     city.owner = 'rome' as FactionId;
     await dropSave(page, saveGame(state));
-    await expect(owner).toHaveText('Rome');
+    await expect(owner).toHaveText('Rome (you)');
   });
 });

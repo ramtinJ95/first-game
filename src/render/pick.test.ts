@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ArmyId, FactionId, ProvinceId } from '../sim/ids.ts';
+import type { ArmyId, BattleId, FactionId, ProvinceId } from '../sim/ids.ts';
 import { parseMap, type GameMap } from '../sim/map.ts';
 import { fitCamera, mapToScreen, type Camera } from './camera.ts';
-import type { DrawnArmy } from './markers.ts';
+import type { DrawnArmy, DrawnBattle } from './markers.ts';
 import { pickAt, provinceAt } from './pick.ts';
 
 const MAP = parseMap(
@@ -91,5 +91,18 @@ describe('pickAt', () => {
     const fit = fitCamera(viewport, MAP);
     const sea = mapToScreen(fit, viewport, { x: 2400, y: 2500 });
     expect(pickAt(MAP, fit, viewport, [army], sea)).toBeUndefined();
+  });
+
+  it('selects a battle from a click on its marker, and the banner over it before the battle', () => {
+    const battle: DrawnBattle = { id: 'battle-1' as BattleId, position: army.position };
+    expect(
+      pickAt(MAP, camera, viewport, [army], { x: foot.x + 3, y: foot.y - 3 }, [battle]),
+    ).toEqual({ kind: 'battle', battle: battle.id });
+    expect(
+      pickAt(MAP, camera, viewport, [army], { x: foot.x + 8, y: foot.y - 24 }, [battle]),
+    ).toEqual({ kind: 'army', army: army.id });
+    expect(
+      pickAt(MAP, camera, viewport, [army], { x: foot.x + 40, y: foot.y + 40 }, [battle]),
+    ).toEqual({ kind: 'province', province: 'roma' });
   });
 });

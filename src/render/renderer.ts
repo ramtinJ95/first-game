@@ -9,22 +9,24 @@ import {
   TilingSprite,
 } from 'pixi.js';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { ArmyId, CityId, ProvinceId } from '../sim/ids.ts';
+import type { ArmyId, BattleId, CityId, ProvinceId } from '../sim/ids.ts';
 import type { GameMap, MapLine, MultiPolygon } from '../sim/map.ts';
 import type { City, CityRank } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
+import type { MapPoint } from '../sim/state/map-point.ts';
 import {
   clampCamera,
   fitCamera,
   mapToScreen,
   panBy,
+  screenToMap,
   wheelFactor,
   zoomAt,
   type Camera,
   type Size,
 } from './camera.ts';
 import { placeLabels, type Box, type LabelRequest } from './labels.ts';
-import { BANNER, drawnArmies, type DrawnArmy } from './markers.ts';
+import { BANNER, BATTLE_HIT_RADIUS, drawnArmies, type DrawnArmy } from './markers.ts';
 import {
   BORDER,
   factionColour,
@@ -50,6 +52,15 @@ export interface Frame {
   /** How far the clock is from `current` towards the next day, from 0 to 1. */
   readonly progress: number;
   readonly selection: Pick | undefined;
+  /** Paths of orders given but not yet applied, drawn fainter than a march under way. */
+  readonly planned?: readonly (readonly MapPoint[])[];
+}
+
+/** A right click: the map point, what it points at, and where on the canvas it was. */
+export interface Command {
+  readonly point: MapPoint;
+  readonly pick: Pick | undefined;
+  readonly screen: MapPoint;
 }
 
 export interface RendererOptions {
@@ -57,10 +68,13 @@ export interface RendererOptions {
   readonly map: GameMap;
   /** A click that did not drag: what it points at, or nothing at sea. */
   readonly onPick: (pick: Pick | undefined) => void;
+  readonly onCommand?: (command: Command) => void;
 }
 
 export interface Renderer {
   draw(frame: Frame): void;
+  /** Centres the view on a map point, zooming in to at least FOCUS_SCALE. */
+  focus(point: MapPoint): void;
   destroy(): void;
 }
 
@@ -125,6 +139,9 @@ const SYMBOL_GROWTH = { from: 0.6, perDoubling: 0.35, most: 1.8 } as const;
  * the one thing that changes on its own, so its step sets the idle frame rate.
  */
 const SWELL = { bend: 2.2, scale: 2.5, pixelsPerSecond: { x: 7, y: 4 }, stepMs: 80 } as const;
+/** The zoom that an alert's click brings the view to at least, so the place is legible. */
+const FOCUS_SCALE = 0.8;
+const ROUTE_DASH = { dash: 7, gap: 5 } as const;
 
 function mix(from: number, to: number, t: number): number {
   const channel = (shift: number) => {
@@ -180,6 +197,7 @@ function traceLines(
 function sameSelection(a: Pick | undefined, b: Pick | undefined): boolean {
   if (a?.kind === 'province' && b?.kind === 'province') return a.province === b.province;
   if (a?.kind === 'army' && b?.kind === 'army') return a.army === b.army;
+  if (a?.kind === 'battle' && b?.kind === 'battle') return a.battle === b.battle;
   return a === b;
 }
 
@@ -203,6 +221,49 @@ function sameArmies(a: readonly DrawnArmy[], b: readonly DrawnArmy[]): boolean {
   );
 }
 
+/** Strokes a dashed line through screen points, carrying the dash across corners. */
+function dashLine(g: Graphics, points: readonly MapPoint[]): Graphics {
+  const period = ROUTE_DASH.dash + ROUTE_DASH.gap;
+  let along = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1] as MapPoint;
+    const b = points[i] as MapPoint;
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    let t = 0;
+    while (t < length) {
+      const phase = along % period;
+      const step = Math.min(
+        length - t,
+        phase < ROUTE_DASH.dash ? ROUTE_DASH.dash - phase : period - phase,
+      );
+      if (phase < ROUTE_DASH.dash) {
+        g.moveTo(a.x + ((b.x - a.x) * t) / length, a.y + ((b.y - a.y) * t) / length);
+        g.lineTo(
+          a.x + ((b.x - a.x) * (t + step)) / length,
+          a.y + ((b.y - a.y) * (t + step)) / length,
+        );
+      }
+      t += step;
+      along += step;
+    }
+  }
+  return g;
+}
+
+/** Two crossed swords in ink on a paper disc, centred on the battle. */
+function drawBattleMarker(g: Graphics): Graphics {
+  g.circle(0, 0, 11).fill(LABEL_HALO).stroke({ width: 1.5, color: INK });
+  for (const side of [-1, 1]) {
+    g.moveTo(-6 * side, 6)
+      .lineTo(6 * side, -6)
+      .stroke({ width: 2, color: INK, cap: 'round' });
+    g.moveTo(-7.5 * side, 2.5)
+      .lineTo(-2.5 * side, 7.5)
+      .stroke({ width: 1.6, color: INK, cap: 'round' });
+  }
+  return g;
+}
+
 function drawBanner(g: Graphics, colour: number): Graphics {
   const { pole, flagWidth: w, flagHeight: h } = BANNER;
   return g
@@ -217,7 +278,12 @@ function drawBanner(g: Graphics, colour: number): Graphics {
     .stroke({ width: 1, color: INK, join: 'round' });
 }
 
-export async function createRenderer({ canvas, map, onPick }: RendererOptions): Promise<Renderer> {
+export async function createRenderer({
+  canvas,
+  map,
+  onPick,
+  onCommand,
+}: RendererOptions): Promise<Renderer> {
   const app = new Application();
   await app.init({
     canvas,
@@ -305,12 +371,18 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
   const townLayer = new Container({ label: 'towns' });
   layers.settlements.addChild(townLayer, cityLayer);
 
+  const routes = new Graphics();
+  const battleLayer = new Container({ label: 'battles' });
+  const bannerLayer = new Container({ label: 'banners' });
+  layers.markers.addChild(routes, battleLayer, bannerLayer);
+
   const highlight = new Graphics();
   const armyRing = new Graphics();
   layers.selection.addChild(highlight, armyRing);
 
   const cities = new Map<CityId, { symbol: Graphics; label: Text; rank: CityRank }>();
   const banners = new Map<ArmyId, { graphics: Graphics; colour: number }>();
+  const battleMarkers = new Map<BattleId, Graphics>();
 
   let camera: Camera = fitCamera(viewport(), map);
   let cameraMoved = true;
@@ -318,6 +390,7 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
   let shown: DeepReadonly<GameState> | undefined;
   let highlighted: { selection: Pick | undefined; scale: number } | undefined;
   let armies: DrawnArmy[] = [];
+  let plannedShown: Frame['planned'];
   let swellAt = -Infinity;
 
   function restroke(scale: number) {
@@ -465,7 +538,7 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
       create(army) {
         const colour = factionColour(state, army.owner);
         const graphics = drawBanner(new Graphics(), colour);
-        layers.markers.addChild(graphics);
+        bannerLayer.addChild(graphics);
         return { graphics, colour };
       },
       update(banner, army) {
@@ -485,8 +558,8 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
       banner.graphics.position.set(at.x, at.y);
       // pickAt tests banners from the last drawn down, so the drawing order must
       // follow `armies` even when a banner is created after others.
-      if (layers.markers.getChildIndex(banner.graphics) !== index) {
-        layers.markers.setChildIndex(banner.graphics, index);
+      if (bannerLayer.getChildIndex(banner.graphics) !== index) {
+        bannerLayer.setChildIndex(banner.graphics, index);
       }
       if (selection?.kind === 'army' && selection.army === army.id) {
         const cx = at.x + BANNER.flagWidth / 2;
@@ -495,6 +568,61 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
         armyRing.circle(cx, cy, 17).stroke({ width: 2, color: INK });
       }
     }
+  }
+
+  function placeBattles(state: DeepReadonly<GameState>, selection: Pick | undefined) {
+    reconcile(battleMarkers, Object.values(state.battles), (battle) => battle.id, {
+      create() {
+        const graphics = drawBattleMarker(new Graphics());
+        battleLayer.addChild(graphics);
+        return graphics;
+      },
+      update() {},
+      remove: (graphics) => graphics.destroy(),
+    });
+    const view = viewport();
+    for (const battle of Object.values(state.battles)) {
+      const at = mapToScreen(camera, view, battle.position);
+      battleMarkers.get(battle.id)?.position.set(at.x, at.y);
+      if (selection?.kind === 'battle' && selection.battle === battle.id) {
+        armyRing.circle(at.x, at.y, BATTLE_HIT_RADIUS + 3).stroke({ width: 4, color: LABEL_HALO });
+        armyRing.circle(at.x, at.y, BATTLE_HIT_RADIUS + 3).stroke({ width: 2, color: INK });
+      }
+    }
+  }
+
+  /**
+   * The player's marches and crossings from where each army is drawn now, and the
+   * paths of orders still waiting for the next day. Other factions' plans stay hidden.
+   */
+  function drawRoutes(
+    state: DeepReadonly<GameState>,
+    selection: Pick | undefined,
+    planned: Frame['planned'],
+  ) {
+    const view = viewport();
+    const toScreen = (point: MapPoint) => mapToScreen(camera, view, point);
+    routes.clear();
+    const stroke = (points: MapPoint[], width: number, alpha: number) => {
+      if (points.length < 2) return;
+      dashLine(routes, points).stroke({ width: width + 3, color: LABEL_HALO, alpha, cap: 'round' });
+      dashLine(routes, points).stroke({ width, color: INK, alpha, cap: 'round' });
+    };
+    for (const army of armies) {
+      const record = state.armies[army.id];
+      if (!record || record.owner !== state.player) continue;
+      const { activity } = record;
+      const ahead =
+        activity.kind === 'marching'
+          ? activity.waypoints
+          : activity.kind === 'embarked'
+            ? state.convoys[activity.convoy]?.waypoints
+            : undefined;
+      if (!ahead) continue;
+      const selected = selection?.kind === 'army' && selection.army === army.id;
+      stroke([army.position, ...ahead].map(toScreen), selected ? 2.4 : 1.6, selected ? 0.95 : 0.7);
+    }
+    for (const path of planned ?? []) stroke(path.map(toScreen), 1.6, 0.45);
   }
 
   function applyCamera() {
@@ -540,6 +668,8 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
     swell.position.set(-tile + drift.x, -tile + drift.y);
   }
 
+  const battlesShown = () => (shown ? Object.values(shown.battles) : []);
+
   const listening = new AbortController();
   const { signal } = listening;
   const local = (event: MouseEvent) => {
@@ -575,7 +705,8 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
     'pointerup',
     (event) => {
       if (event.pointerId !== drag?.pointer) return;
-      if (!drag.moved) onPick(pickAt(map, camera, viewport(), armies, local(event)));
+      if (!drag.moved)
+        onPick(pickAt(map, camera, viewport(), armies, local(event), battlesShown()));
       drag = undefined;
       canvas.style.cursor = 'grab';
     },
@@ -586,6 +717,20 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
     () => {
       drag = undefined;
       canvas.style.cursor = 'grab';
+    },
+    { signal },
+  );
+  canvas.addEventListener(
+    'contextmenu',
+    (event) => {
+      event.preventDefault();
+      if (!onCommand) return;
+      const screen = local(event);
+      onCommand({
+        point: screenToMap(camera, viewport(), screen),
+        pick: pickAt(map, camera, viewport(), armies, screen, battlesShown()),
+        screen,
+      });
     },
     { signal },
   );
@@ -606,7 +751,7 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
   app.renderer.on('resize', onResize);
 
   return {
-    draw({ previous, current, progress, selection }) {
+    draw({ previous, current, progress, selection, planned }) {
       const now = performance.now();
       let dirty = cameraMoved;
       if (current !== shown) {
@@ -632,14 +777,28 @@ export async function createRenderer({ canvas, map, onPick }: RendererOptions): 
         armies = next;
         dirty = true;
       }
+      if (planned !== plannedShown) {
+        plannedShown = planned;
+        dirty = true;
+      }
       if (now - swellAt >= SWELL.stepMs) {
         swellAt = now;
         dirty = true;
       }
       if (!dirty) return;
       moveSwell(now);
+      drawRoutes(current, selection, planned);
       placeBanners(current, selection);
+      placeBattles(current, selection);
       app.render();
+    },
+    focus(point) {
+      camera = clampCamera(
+        { centre: point, scale: Math.max(camera.scale, FOCUS_SCALE) },
+        viewport(),
+        map,
+      );
+      cameraMoved = true;
     },
     destroy() {
       listening.abort();

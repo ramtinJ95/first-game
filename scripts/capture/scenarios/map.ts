@@ -102,11 +102,11 @@ export default defineScenario({
 
     const syracusae = camera.screen(cityPoint('syracusae'));
     await page.mouse.click(syracusae.x, syracusae.y);
-    await page.getByTestId('readout-province').filter({ hasText: 'Syracusae' }).waitFor();
+    await page.getByTestId('city-name').filter({ hasText: 'Syracusae' }).waitFor();
     await frames(page);
     await shot(
       'selected-province',
-      'Syracusae selected: its outline is inked and the readout names the province, city, owner, and population',
+      'Syracusae selected: its outline is inked and the city panel shows the city, its owner, and its defences',
     );
 
     const state = newGame(map, { seed: 1, player: 'rome' });
@@ -114,7 +114,7 @@ export default defineScenario({
     if (!city) throw new Error('new game lacks Syracusae');
     city.owner = 'rome' as FactionId;
     await dropSave(page, saveGame(state));
-    await page.getByTestId('readout-owner').filter({ hasText: 'Rome' }).waitFor();
+    await page.getByTestId('city-owner').filter({ hasText: 'Rome' }).waitFor();
     await page.waitForTimeout(400);
     await shot(
       'owner-changed',

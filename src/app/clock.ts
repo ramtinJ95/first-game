@@ -15,6 +15,8 @@ export interface ClockOptions {
   now: () => number;
   maxTicksPerFrame?: number;
   onRejected?: (rejected: RejectedOrder[]) => void;
+  /** Called after every tick with the day before and the day after it. */
+  onDay?: (before: DeepReadonly<GameState>, after: DeepReadonly<GameState>) => void;
   /** Tests replace the day's systems. The game runs the default list. */
   systems?: readonly System[];
 }
@@ -25,6 +27,8 @@ export interface Clock {
   readonly speed: Speed;
   readonly paused: boolean;
   readonly progress: number;
+  /** Orders issued since the last tick, in the order they will apply. */
+  readonly pending: readonly Order[];
   issue(order: Order): void;
   pause(): void;
   resume(): void;
@@ -41,6 +45,7 @@ export function createClock({
   now,
   maxTicksPerFrame = 4,
   onRejected,
+  onDay,
   systems,
 }: ClockOptions): Clock {
   let state = initial;
@@ -63,6 +68,7 @@ export function createClock({
       }
     }
     if (result.rejected.length > 0) onRejected?.(result.rejected);
+    onDay?.(previous, state);
   }
 
   // Runs the days that the time since the last call has earned, at the rate it passed
@@ -99,8 +105,11 @@ export function createClock({
     get progress() {
       return progress;
     },
+    get pending() {
+      return pending;
+    },
     issue(order) {
-      pending.push(order);
+      pending = [...pending, order];
     },
     pause() {
       setPaused(true);
