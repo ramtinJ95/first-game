@@ -16,7 +16,10 @@ export const OUTPUT_PER_PERSON: Readonly<Stores> = {
 };
 /** What one man under arms costs his owner each day. */
 export const UPKEEP_PER_MAN = { gold: 0.01, food: 0.01 } as const;
-/** The share of its output that a city produces on the first day of unrest. It rises evenly to 1. */
+/**
+ * The share of its output that a city produces while more than UNREST_DAYS of unrest
+ * are left. It rises evenly to 1 over the last UNREST_DAYS.
+ */
 export const UNREST_OUTPUT = 0.25;
 /**
  * The share of its men that each formation loses each day for each store, gold or
@@ -72,7 +75,7 @@ export function dailyBalances(state: DeepReadonly<GameState>): Map<FactionId, St
 }
 
 function outputShare(city: DeepReadonly<City>): number {
-  return 1 - (1 - UNREST_OUTPUT) * (city.unrestDays / UNREST_DAYS);
+  return 1 - (1 - UNREST_OUTPUT) * Math.min(1, city.unrestDays / UNREST_DAYS);
 }
 
 export function menOf(state: DeepReadonly<GameState>, army: DeepReadonly<Army>): number {

@@ -90,6 +90,16 @@ The map is static data outside the state. Outlines, neighbours, coastline, and r
 - The cost and training days of each troop are its `recruit` row in `TROOPS`. A recruit costs as much manpower as it has men.
 - `npm run sim:economy` plays the new game for three years without orders and prints each great power's stores and balance.
 
+### Sieges
+
+- A city holds its `rank`, `walls`, `garrison`, and `foodDays`. `CITY_DEFENCES` in `src/sim/systems/sieges.ts` gives each rank's full values, which `newGame` sets. A siege's damage stays on the city, and a city not under siege recovers a `1 / RECOVERY_DAYS` share of each full value a day.
+- `sieges` runs after `battles`. An idle army with an unbroken formation within `SIEGE_DISTANCE` of a city whose owner it is at war with besieges it. Later armies join the same siege. `siege.besiegers` is in order of arrival, and the first one's faction takes the city. An army leaves a siege by `moveArmy`, by being pulled into a battle, or when its owner is short of gold or food. `leaveSiege` and `removeArmy` in `src/sim/armies.ts` keep an army and its siege in agreement.
+- Each day the food falls by one day. With no food left, hunger takes `HUNGER_SHARE` of the full garrison. The walls lose `WALL_WEAR_PER_THOUSAND_MEN` for each thousand besiegers. The city falls when its garrison is gone or, once its walls are down, on a `GIVE_UP_CHANCE` roll. The garrison never attacks.
+- `storm` resolves at once in the order. `cityFalls` is the one way a siege takes a city. It calls `changeCityOwner` and opens the fate with `city.fellOn`.
+- `sack` and `enslave` are open for `FATE_DAYS` while an army of the owner stands at the city. Their shares sit in `SACK` and `ENSLAVE` in `src/sim/cities.ts`.
+- `changeCityOwner` calls `defeatFaction(state, faction)` in `src/sim/defeat.ts` when the old owner holds no city left. It removes the faction's armies, convoys, and refugee columns, empties its stores, ends its wars, and sets `defeatedOn`. The record stays. Orders from a defeated faction, and wars declared on it, are refused.
+- `npm run sim:sieges` plays the cases in `scripts/sim-sieges.ts` through `tick` and prints the tuning table.
+
 ### The clock and the panels
 
 `src/app/clock.ts` turns real time into ticks and queues orders until the next tick. Panels never read the clock or the live state. They read `view.current` from `src/app/view.svelte.ts`, a `$state.raw` snapshot that is published about ten times a second. A click in a panel becomes an order through the clock.
@@ -114,6 +124,7 @@ The map is static data outside the state. Outlines, neighbours, coastline, and r
 | `npm run sim:paths`                           | Compare grid and navigation-mesh path finding with the exact shortest path                                      |
 | `npm run sim:movement`                        | Print long routes, their marching days and path times, and the tick time with every army marching               |
 | `npm run map:routes`                          | Draw long routes on the map preview into `captures/movement/`                                                   |
+| `npm run sim:sieges`                          | Play the siege, storm, relief, and fate cases and print the tuning table                                        |
 | `npm run capture [-- <scenario>]`             | Build, then write screenshots, `clip.gif`, video, and trace to `captures/<scenario>/`                           |
 | `npm run capture:publish`                     | Push the PNG and GIF files to the `pr-assets` branch and print Markdown for the pull request                    |
 | `npm run capture:fetch`                       | Pull this branch's media from `pr-assets` into `captures/`, declare it as Nexus outputs, and print the Markdown |

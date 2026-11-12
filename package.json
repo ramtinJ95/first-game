@@ -22,7 +22,8 @@
     "sim:paths": "node scripts/movement/experiment.ts",
     "sim:movement": "node scripts/movement/report.ts",
     "sim:battles": "node scripts/sim-battles.ts",
-    "sim:economy": "node scripts/sim-economy.ts"
+    "sim:economy": "node scripts/sim-economy.ts",
+    "sim:sieges": "node scripts/sim-sieges.ts"
   },
   "dependencies": {
     "pixi.js": "^8.23.0",

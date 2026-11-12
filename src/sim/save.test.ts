@@ -1,7 +1,7 @@
 import type { DeepReadonly } from './deep-readonly.ts';
 import type { GameState } from './state/game-state.ts';
 import { describe, expect, test } from 'vitest';
-import { UNREST_DAYS } from './cities.ts';
+import { MAX_UNREST_DAYS } from './cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from './fixture.ts';
 import { loadGame, SAVE_FORMAT, saveGame } from './save.ts';
 import { warKey } from './state/war.ts';
@@ -47,7 +47,7 @@ describe('save and load', () => {
     const save = JSON.stringify({ format: 99, state: buildFixture() });
     expect(loadGame(save)).toEqual({
       ok: false,
-      error: 'The save has format 99, but this game reads format 4.',
+      error: 'The save has format 99, but this game reads format 5.',
     });
   });
 
@@ -112,6 +112,7 @@ describe('save and load', () => {
       name: 'Odd',
       kind: 'minor',
       stores: { gold: 0, food: 0, manpower: 0 },
+      defeatedOn: null,
     };
     state.wars[warKey(FIXTURE.rome, odd)] = { since: state.day };
     expect(loadGame(saveGame(state))).toEqual({ ok: true, state });
@@ -124,11 +125,11 @@ describe('save and load', () => {
     expect(result).toEqual({ ok: true, state: buildFixture() });
   });
 
-  test('rejects a city with more unrest than a change of owner gives', () => {
+  test('rejects a city with more unrest than any fall gives', () => {
     const state = buildFixture();
     const roma = state.cities[FIXTURE.roma];
     if (!roma) throw new Error('the fixture lacks Roma');
-    roma.unrestDays = UNREST_DAYS + 1;
+    roma.unrestDays = MAX_UNREST_DAYS + 1;
     const result = loadGame(saveGame(state));
     expect(result.ok).toBe(false);
     expect(!result.ok && result.error).toMatch(

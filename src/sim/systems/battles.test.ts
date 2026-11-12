@@ -213,8 +213,20 @@ describe('engagement', () => {
     const state = atWar();
     const egypt = 'egypt' as FactionId;
     const persia = 'persia' as FactionId;
-    state.factions[egypt] = { id: egypt, name: 'Egypt', kind: 'greatPower', stores: STORES };
-    state.factions[persia] = { id: persia, name: 'Persia', kind: 'greatPower', stores: STORES };
+    state.factions[egypt] = {
+      id: egypt,
+      name: 'Egypt',
+      kind: 'greatPower',
+      stores: STORES,
+      defeatedOn: null,
+    };
+    state.factions[persia] = {
+      id: persia,
+      name: 'Persia',
+      kind: 'greatPower',
+      stores: STORES,
+      defeatedOn: null,
+    };
     executeOrder(state, { kind: 'declareWar', faction: egypt, against: FIXTURE.carthage }, world);
     executeOrder(state, { kind: 'declareWar', faction: persia, against: FIXTURE.rome }, world);
     place(state, FIXTURE.romanArmy, { kind: 'idle', position: { x: 2521.3, y: 2340.8 } });

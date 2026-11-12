@@ -2,9 +2,11 @@ import { allocateId, type CityId, type FactionId } from './ids.ts';
 import { POWERS, type GameMap, type PowerId, type Province } from './map.ts';
 import { serialOf } from './references.ts';
 import { seedRng } from './rng.ts';
+import type { CityRank } from './state/city.ts';
 import type { Day } from './state/day.ts';
 import type { FactionKind, Stores } from './state/faction.ts';
 import type { GameState } from './state/game-state.ts';
+import { CITY_DEFENCES } from './systems/sieges.ts';
 
 export interface NewGameOptions {
   seed: number;
@@ -19,12 +21,12 @@ const POWER_NAMES: Record<PowerId, string> = {
   persia: 'Persia',
 };
 
-/** Starting population of a city by its rank. */
-export const STARTING_POPULATION = {
+/** Starting population of a city by its rank. Its walls, garrison, and food are its rank's full `CITY_DEFENCES`. */
+export const STARTING_POPULATION: Readonly<Record<CityRank, number>> = {
   capital: 40_000,
   greatPowerCity: 15_000,
   minorCity: 12_000,
-} as const;
+};
 
 /** The stores each faction starts with, by its kind. */
 export const STARTING_STORES: Readonly<Record<FactionKind, Readonly<Stores>>> = {
@@ -74,6 +76,7 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
       name: POWER_NAMES[power],
       kind: 'greatPower',
       stores: { ...STARTING_STORES.greatPower },
+      defeatedOn: null,
     };
     const capitals = map.provinces.filter((p) => p.owner === power && p.capital);
     const [capital] = capitals;
@@ -109,25 +112,30 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
         name: province.name,
         kind: 'minor',
         stores: { ...STARTING_STORES.minor },
+        defeatedOn: null,
       };
     }
     state.provinces[province.id] = { id: province.id, name: province.name, city };
+    const cityRank = rank(province);
     state.cities[city] = {
       id: city,
       name: province.name,
       province: province.id,
+      rank: cityRank,
       owner,
       position: { x: province.city[0], y: province.city[1] },
-      population: STARTING_POPULATION[rank(province)],
+      population: STARTING_POPULATION[cityRank],
       unrestDays: 0,
       recruits: [],
+      ...CITY_DEFENCES[cityRank],
+      fellOn: null,
     };
   }
 
   return state;
 }
 
-function rank(province: Province): keyof typeof STARTING_POPULATION {
+function rank(province: Province): CityRank {
   if (province.owner === 'independent') return 'minorCity';
   return province.capital ? 'capital' : 'greatPowerCity';
 }

@@ -1,3 +1,4 @@
+import { leaveSiege } from '../armies.ts';
 import type { ArmyId, BattleId } from '../ids.ts';
 import { allocateId } from '../ids.ts';
 import { removeRecord } from '../records.ts';
@@ -69,10 +70,11 @@ function recoverMorale(state: GameState) {
   }
 }
 
-/** An idle or marching army that still has a formation willing to fight. */
+/** An idle, marching, or besieging army that still has a formation willing to fight. */
 function landPosition(state: GameState, army: Army): MapPoint | undefined {
   const { activity } = army;
-  if (activity.kind !== 'idle' && activity.kind !== 'marching') return undefined;
+  if (activity.kind !== 'idle' && activity.kind !== 'marching' && activity.kind !== 'besieging')
+    return undefined;
   return formationsOf(state, army).some(isFighting) ? activity.position : undefined;
 }
 
@@ -91,6 +93,7 @@ function join(state: GameState, army: Army, position: MapPoint, battle: Battle):
   const side = sideToJoin(state, army, battle.attackers, battle.defenders);
   if (!side) return false;
   battle[side].push(army.id);
+  leaveSiege(state, army);
   army.activity = { kind: 'inBattle', position, battle: battle.id };
   return true;
 }
@@ -119,7 +122,8 @@ function sideToJoin(
 /**
  * Pairs each free army, in id order, with the nearest free enemy in range, and lets
  * the free armies in range of the new battle join it before the next pair is made. A marching
- * army attacks an idle one. Otherwise the army whose id sorts first attacks.
+ * army attacks an idle or besieging one, which leaves its siege. Otherwise the army whose
+ * id sorts first attacks.
  */
 function startBattles(state: GameState) {
   const free = sortedValues(state.armies).flatMap((army) => {
@@ -141,7 +145,7 @@ function startBattles(state: GameState) {
     }
     if (!nearest) continue;
     const [attacker, defender] =
-      a.army.activity.kind === 'idle' && nearest.army.activity.kind === 'marching'
+      a.army.activity.kind !== 'marching' && nearest.army.activity.kind === 'marching'
         ? [nearest, a]
         : [a, nearest];
     const id = allocateId(state, 'battle');
@@ -154,6 +158,7 @@ function startBattles(state: GameState) {
     };
     state.battles[id] = battle;
     for (const { army, position } of [attacker, defender]) {
+      leaveSiege(state, army);
       army.activity = { kind: 'inBattle', position, battle: id };
       taken.add(army.id);
     }

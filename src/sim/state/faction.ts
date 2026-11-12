@@ -1,5 +1,6 @@
 import * as v from 'valibot';
 import { FactionIdSchema } from '../ids.ts';
+import { DaySchema } from './day.ts';
 
 export const FACTION_KINDS = ['greatPower', 'minor'] as const;
 
@@ -19,6 +20,8 @@ export const FactionSchema = v.object({
   /** Saves from before minor factions existed hold only great powers. */
   kind: v.optional(v.picklist(FACTION_KINDS), 'greatPower'),
   stores: StoresSchema,
+  /** The day the faction lost its last city and left the game, or null while it plays. */
+  defeatedOn: v.nullable(DaySchema),
 });
 
 export type Faction = v.InferOutput<typeof FactionSchema>;
