@@ -71,6 +71,8 @@ function controls(page: Page) {
       }
     },
     async drag(from: MapPoint, to: MapPoint, steps = 15) {
+      // A press and release that barely moves is a click, which would select a province.
+      if (Math.hypot(to.x - from.x, to.y - from.y) < 8) return;
       await page.mouse.move(from.x, from.y);
       await page.mouse.down();
       await page.mouse.move(to.x, to.y, { steps });
@@ -87,6 +89,7 @@ function controls(page: Page) {
      * steps, so it stays on screen.
      */
     async goTo(point: MapPoint, scale: number, pauseMs = 25) {
+      await page.keyboard.press('Escape');
       const out = Math.ceil(Math.log(camera.scale / fitCamera(viewport, map).scale) / NOTCH);
       if (out > 0) await this.zoom(centre, -out, pauseMs);
       let notches = scale > camera.scale ? Math.round(Math.log(scale / camera.scale) / NOTCH) : 0;
