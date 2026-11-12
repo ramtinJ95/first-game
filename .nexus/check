@@ -9,8 +9,11 @@ show_log() {
 	[ -n "$(tail -c 1 "$log")" ] && echo
 }
 
-if [ ! -d node_modules ]; then
-	if npm ci --no-audit --no-fund >"$log" 2>&1; then
+# npm ci leaves a copy of the lockfile it installed. A node_modules from an older
+# lockfile, such as one baked into a pylon template, lacks it or differs from it.
+stamp=node_modules/.nexus-installed-lock
+if ! cmp -s package-lock.json "$stamp"; then
+	if npm ci --no-audit --no-fund >"$log" 2>&1 && cp package-lock.json "$stamp"; then
 		echo "install: 0"
 	else
 		code=$?
