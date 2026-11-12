@@ -97,6 +97,42 @@ export function battleAt(state: GameState, city: string) {
   };
 }
 
+/**
+ * Rome's army stands beside its own city, at war with Carthage, and a Carthaginian army
+ * of the given men, two thirds spearmen and a third heavy cavalry, stands 10 km east of
+ * it, so they fight the next day.
+ */
+export function outnumberedAt(state: GameState, city: string, enemyMen: number) {
+  const target = state.cities[city as CityId];
+  if (!target || target.owner !== rome) throw new Error(`${city} is not a city of Rome`);
+  declareWar(state, rome, carthage);
+  const at = target.position;
+  armyOf(state, rome).activity = { kind: 'idle', position: { x: at.x + 2, y: at.y } };
+  const invaders = 'army-invaders' as ArmyId;
+  const formations = [
+    { id: 'formation-invaders-spears' as FormationId, troop: 'spearmen', share: 2 / 3 },
+    { id: 'formation-invaders-horse' as FormationId, troop: 'heavyCavalry', share: 1 / 3 },
+  ] as const;
+  for (const { id, troop, share } of formations) {
+    state.formations[id] = {
+      id,
+      army: invaders,
+      troop,
+      men: Math.round(enemyMen * share),
+      morale: 1,
+    };
+  }
+  state.armies[invaders] = {
+    id: invaders,
+    owner: carthage,
+    formations: formations.map(({ id }) => id),
+    stance: 'holdTheLine',
+    generalSkill: 3,
+    activity: { kind: 'idle', position: { x: at.x + 12, y: at.y } },
+  };
+  return invaders;
+}
+
 /** Rome's army stands at the city, which fell to Rome today, so its fate is open. */
 export function fallenTo(state: GameState, id: string) {
   const city = state.cities[id as CityId];

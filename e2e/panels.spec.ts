@@ -290,7 +290,7 @@ test.describe('the panels', () => {
     );
     await army.getByRole('button', { name: /^Retreat/ }).click();
     await resume(page);
-    await expect(army.getByTestId('army-activity')).toHaveText(/^Marching to /);
+    await expect(army.getByTestId('army-activity')).toHaveText(/^Retreating to /);
     await expect(army.getByRole('button', { name: /^Retreat/ })).toHaveCount(0);
     await expect(battle).toHaveCount(0);
   });

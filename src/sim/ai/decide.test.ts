@@ -10,7 +10,7 @@ import { OUTPUT_PER_PERSON, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import { removeRecord } from '../records.ts';
 import { tick } from '../tick.ts';
 import { decideAll, decideOrders } from './decide.ts';
-import { MINOR_DEFICIT_DAYS } from './thresholds.ts';
+import { MARCH_MORALE, MINOR_DEFICIT_DAYS } from './thresholds.ts';
 
 const world = fixtureWorld();
 const f = FIXTURE;
@@ -218,7 +218,7 @@ describe('a great power', () => {
         id: spears,
         army: defenders,
         troop: 'spearmen',
-        men: 2000,
+        men: 1800,
         morale: 1,
       };
       state.armies[defenders] = {
@@ -417,7 +417,7 @@ describe('a minor', () => {
     expect(decide(state, f.syracusaeFaction)).toEqual([]);
   });
 
-  test('at war, brings an army that stands away back to its city', () => {
+  test('at war, brings an army that stands away back to its city once it has rested', () => {
     const state = syracusaeAtWar();
     const minor = state.factions[f.syracusaeFaction];
     if (minor) minor.stores.gold = 0;
@@ -435,9 +435,18 @@ describe('a minor', () => {
     const spears = state.formations[f.citizenSpears];
     if (spears) spears.army = id;
     removeRecord(state.armies, f.punicArmy);
-    expect(decide(state, f.syracusaeFaction)).toEqual([
-      { kind: 'moveArmy', faction: f.syracusaeFaction, army: id, to: { x: 2661.2, y: 2911.3 } },
-    ]);
+    const homeward = {
+      kind: 'moveArmy',
+      faction: f.syracusaeFaction,
+      army: id,
+      to: { x: 2661.2, y: 2911.3 },
+    } as const;
+    expect(decide(state, f.syracusaeFaction)).toEqual([homeward]);
+
+    if (spears) spears.morale = MARCH_MORALE - 0.05;
+    expect(decide(state, f.syracusaeFaction)).toEqual([]);
+    if (spears) spears.morale = MARCH_MORALE;
+    expect(decide(state, f.syracusaeFaction)).toEqual([homeward]);
   });
 });
 

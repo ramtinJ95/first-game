@@ -22,7 +22,8 @@ import {
 } from '../src/sim/ai/thresholds.ts';
 import { RALLY_DISTANCE } from '../src/sim/systems/economy.ts';
 import { distance } from '../src/sim/world/find-path.ts';
-import type { FactionId } from '../src/sim/ids.ts';
+import { recordEvents } from '../src/sim/events.ts';
+import type { ArmyId, FactionId } from '../src/sim/ids.ts';
 import { parseMap, POWERS, type PowerId } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
@@ -74,6 +75,9 @@ interface Game {
   aliveAfterTwo: number;
   warsOnRome: number;
   longestPeace: number;
+  battleDays: number[];
+  /** For each army that lost a battle at least 30 days before the end, whether it was alive 30 days later. */
+  beatenAlive: boolean[];
 }
 
 function citiesOf(state: GameState, faction: string): number {
@@ -113,6 +117,9 @@ function play(seed: number, passive: readonly FactionId[]): Game {
   let warsOnRome = 0;
   const peace = new Map<PowerId, number>();
   let longestPeace = 0;
+  const battleDays: number[] = [];
+  const beatenAlive: boolean[] = [];
+  const beaten = new Map<number, ArmyId[]>();
 
   for (let day = 1; day <= YEARS * DAYS_PER_YEAR; day++) {
     const started = performance.now();
@@ -129,26 +136,25 @@ function play(seed: number, passive: readonly FactionId[]): Game {
     // resolves, before the sieges system can take the city anyway.
     const ticked = performance.now();
     const next = JSON.parse(JSON.stringify(state)) as GameState;
-    const retreated = new Set<string>();
-    for (const order of today) {
-      const refused = executeOrder(next, order, world);
-      if (refused) {
-        const cause = `${order.kind}: ${refused.reason.replace(/[\w-]*\d[\w.,-]*/g, '#')}`;
-        rejected.set(cause, (rejected.get(cause) ?? 0) + 1);
-        continue;
+    const events = recordEvents(next, () => {
+      for (const order of today) {
+        const refused = executeOrder(next, order, world);
+        if (refused) {
+          const cause = `${order.kind}: ${refused.reason.replace(/[\w-]*\d[\w.,-]*/g, '#')}`;
+          rejected.set(cause, (rejected.get(cause) ?? 0) + 1);
+          continue;
+        }
+        const t = tally(order.faction);
+        if (order.kind === 'declareWar') {
+          if (t) t.wars++;
+          if (order.against === 'rome') warsOnRome++;
+        } else if (order.kind === 'storm' && t) {
+          if (next.cities[order.city]?.owner === order.faction) t.stormsWon++;
+          else t.stormsLost++;
+        }
       }
-      const t = tally(order.faction);
-      if (order.kind === 'declareWar') {
-        if (t) t.wars++;
-        if (order.against === 'rome') warsOnRome++;
-      } else if (order.kind === 'storm' && t) {
-        if (next.cities[order.city]?.owner === order.faction) t.stormsWon++;
-        else t.stormsLost++;
-      } else if (order.kind === 'retreat') {
-        retreated.add(order.army);
-      }
-    }
-    for (const system of SYSTEMS) system(next, world);
+      for (const system of SYSTEMS) system(next, world);
+    });
     tickMs.push(performance.now() - ticked);
     for (const city of Object.values(next.cities)) {
       const before = state.cities[city.id]?.owner;
@@ -164,21 +170,29 @@ function play(seed: number, passive: readonly FactionId[]): Game {
       const t = leader && tally(leader.owner);
       if (t) t.sieges++;
     }
-    for (const battle of Object.values(state.battles)) {
-      if (next.battles[battle.id]) continue;
-      for (const side of [battle.attackers, battle.defenders]) {
-        const won = side.some((id) => {
-          const army = next.armies[id];
-          return army && !retreated.has(id) && army.activity.kind !== 'marching';
-        });
-        const owners = new Set(side.flatMap((id) => state.armies[id]?.owner ?? []));
-        for (const owner of owners) {
-          const t = tally(owner);
-          if (t && won) t.battlesWon++;
-          else if (t) t.battlesLost++;
+    const lostToday: ArmyId[] = [];
+    for (const event of events) {
+      if (event.kind === 'battleEnded') {
+        battleDays.push(event.days);
+        for (const side of ['attackers', 'defenders'] as const) {
+          for (const owner of event[side].factions) {
+            const t = tally(owner);
+            if (t && event.winner === side) t.battlesWon++;
+            else if (t) t.battlesLost++;
+          }
         }
+      } else if (event.kind === 'armyRetreated') {
+        lostToday.push(event.army);
+      } else if (
+        event.kind === 'armyDestroyed' &&
+        (event.cause === 'battle' || event.cause === 'surrender')
+      ) {
+        lostToday.push(event.army);
       }
     }
+    if (lostToday.length > 0) beaten.set(day, lostToday);
+    for (const id of beaten.get(day - 30) ?? []) beatenAlive.push(Object.hasOwn(next.armies, id));
+    beaten.delete(day - 30);
     state = next;
     for (const power of POWERS) {
       const faction = power as string as FactionId;
@@ -224,6 +238,8 @@ function play(seed: number, passive: readonly FactionId[]): Game {
     aliveAfterTwo,
     warsOnRome,
     longestPeace,
+    battleDays,
+    beatenAlive,
   };
 }
 
@@ -391,6 +407,16 @@ function table(title: string, passive: readonly FactionId[]) {
   );
   console.log(
     `- Seeds where a great power ends a year with gold or food below zero: ${short}/${SEEDS}.`,
+  );
+  const lengths = games.flatMap((g) => g.battleDays).sort((a, b) => a - b);
+  const at = (q: number) =>
+    lengths[Math.min(lengths.length - 1, Math.floor(q * lengths.length))] ?? 0;
+  console.log(
+    `- Battles: ${fmt(lengths.length)}. Days fought: 10th percentile ${at(0.1)}, median ${at(0.5)}, 90th percentile ${at(0.9)}. Over in one day: ${fmt((100 * lengths.filter((d) => d === 1).length) / Math.max(1, lengths.length), 1)}%.`,
+  );
+  const beaten = games.flatMap((g) => g.beatenAlive);
+  console.log(
+    `- Armies that lost a battle and were still alive 30 days later: ${fmt(beaten.filter(Boolean).length)} of ${fmt(beaten.length)} (${fmt((100 * beaten.filter(Boolean).length) / Math.max(1, beaten.length), 1)}%).`,
   );
   if (passive.length > 0) {
     console.log(

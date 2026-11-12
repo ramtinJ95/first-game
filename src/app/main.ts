@@ -15,7 +15,7 @@ import { buildWorld } from '../sim/world/world.ts';
 import type { Actions } from '../ui/actions.ts';
 import Hud from '../ui/Hud.svelte';
 import '../ui/panels.css';
-import { alertsBetween, type Alert } from './alerts.ts';
+import { alertsOfDay, type Alert } from './alerts.ts';
 import { createClock } from './clock.ts';
 import { planCommand, plannedRoutes, type CommandTarget } from './command.ts';
 import { showFrameMeter } from './frame-meter.ts';
@@ -86,8 +86,12 @@ const clock = createClock({
     const last = own.at(-1);
     if (last) showNotice(refusalText(clock.state, last.reason));
   },
-  onDay(before, after) {
-    const news = alertsInSight(alertsBetween(before, after), sightFor(before), sightFor(after));
+  onDay(before, after, events) {
+    const news = alertsInSight(
+      alertsOfDay(before, after, events),
+      sightFor(before),
+      sightFor(after),
+    );
     if (news.length > 0) alerts = [...news.reverse(), ...alerts].slice(0, ALERTS_KEPT);
   },
 });

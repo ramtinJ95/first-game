@@ -184,14 +184,15 @@ describe('a march on land', () => {
     state.nextSerial = 2;
     const roman = armyOf(state, FIXTURE.romanArmy);
     const punic = armyOf(state, FIXTURE.punicArmy);
-    roman.activity = { kind: 'inBattle', position: positionOf(roman), battle };
-    punic.activity = { kind: 'inBattle', position: positionOf(roman), battle };
+    roman.activity = { kind: 'inBattle', position: positionOf(roman), battle, march: [] };
+    punic.activity = { kind: 'inBattle', position: positionOf(roman), battle, march: [] };
     state.battles[battle] = {
       id: battle,
       position: positionOf(roman),
       attackers: [roman.id],
       defenders: [punic.id],
       startedOn: state.day,
+      sides: { attackers: { factions: [], lost: 0 }, defenders: { factions: [], lost: 0 } },
     };
     const before = structuredClone(state);
     const reason = 'army army-roman is in battle battle-1 and must retreat first';

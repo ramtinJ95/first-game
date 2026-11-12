@@ -12,10 +12,12 @@ export function seesPick(sight: Sight, pick: Pick | undefined): boolean {
 /**
  * The alerts about things the player saw on one of the two days. An alert that points
  * at an army or a battle needs that thing in sight, and one that points only at a
- * place needs the place in sight.
+ * place needs the place in sight. An alert about a battle or an army that is gone is
+ * also kept when the player saw it the day before.
  */
 export function alertsInSight(alerts: readonly Alert[], before: Sight, after: Sight): Alert[] {
-  return alerts.filter(({ focus }) => {
+  return alerts.filter(({ focus, seenAs }) => {
+    if (seenAs && seesPick(before, seenAs)) return true;
     if (!focus) return true;
     if (focus.select) return seesPick(after, focus.select) || seesPick(before, focus.select);
     return after.sees(focus.at) || before.sees(focus.at);

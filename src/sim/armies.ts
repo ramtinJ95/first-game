@@ -1,3 +1,4 @@
+import { emit, type ArmyLoss } from './events.ts';
 import type { ArmyId, SiegeId } from './ids.ts';
 import { removeRecord } from './records.ts';
 import type { Army } from './state/army.ts';
@@ -21,8 +22,21 @@ export function removeBesieger(state: GameState, siegeId: SiegeId, armyId: ArmyI
 }
 
 /** Removes an army and its formations, and takes it off its battle, siege, or convoy. */
-export function removeArmy(state: GameState, army: Army): void {
+export function removeArmy(state: GameState, army: Army, cause: ArmyLoss): void {
   const { activity } = army;
+  const position =
+    activity.kind === 'embarked' ? state.convoys[activity.convoy]?.position : activity.position;
+  if (position) {
+    const men = army.formations.reduce((sum, id) => sum + (state.formations[id]?.men ?? 0), 0);
+    emit(state, {
+      kind: 'armyDestroyed',
+      army: army.id,
+      owner: army.owner,
+      position: { ...position },
+      cause,
+      men,
+    });
+  }
   if (activity.kind === 'inBattle') {
     const battle = state.battles[activity.battle];
     if (battle) {

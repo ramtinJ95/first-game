@@ -1,4 +1,5 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
+import type { DayEvent } from '../sim/events.ts';
 import type { ArmyId } from '../sim/ids.ts';
 import type { Order, OrderKind, RejectedOrder } from '../sim/orders/orders.ts';
 import { findBrokenReferences } from '../sim/references.ts';
@@ -49,8 +50,12 @@ export interface ClockOptions {
   now: () => number;
   maxTicksPerFrame?: number;
   onRejected?: (rejected: RejectedOrder[]) => void;
-  /** Called after every tick with the day before and the day after it. */
-  onDay?: (before: DeepReadonly<GameState>, after: DeepReadonly<GameState>) => void;
+  /** Called after every tick with the day before, the day after it, and what happened between. */
+  onDay?: (
+    before: DeepReadonly<GameState>,
+    after: DeepReadonly<GameState>,
+    events: readonly DayEvent[],
+  ) => void;
   /** Tests replace the day's systems. The game runs the default list. */
   systems?: readonly System[];
   /** The orders the factions the player does not run give on a day, added to that day's tick after the player's. */
@@ -107,7 +112,7 @@ export function createClock({
       }
     }
     if (result.rejected.length > 0) onRejected?.(result.rejected);
-    onDay?.(previous, state);
+    onDay?.(previous, state, result.events);
   }
 
   // Runs the days that the time since the last call has earned, at the rate it passed

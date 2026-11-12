@@ -1,3 +1,4 @@
+import { emit } from '../events.ts';
 import type { FactionId } from '../ids.ts';
 import type { GameState } from '../state/game-state.ts';
 import { warKey } from '../state/war.ts';
@@ -21,5 +22,6 @@ export function declareWar(state: GameState, order: DeclareWarOrder): string | u
     return `${order.faction} is already at war with ${order.against}`;
   }
   state.wars[warKey(order.faction, order.against)] = { since: state.day };
+  emit(state, { kind: 'warDeclared', by: order.faction, against: order.against });
   return undefined;
 }

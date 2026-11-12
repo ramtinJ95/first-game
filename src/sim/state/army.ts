@@ -16,6 +16,8 @@ export type Stance = v.InferOutput<typeof StanceSchema>;
 /**
  * What an army is doing. Each activity is its own variant, so an army cannot be
  * marching and fighting at once. An embarked army has no position: its convoy has one.
+ * A retreating army walks its path like a marching one, but no battle takes it and no
+ * order turns it until it arrives.
  */
 export const ArmyActivitySchema = v.variant('kind', [
   v.object({ kind: v.literal('idle'), position: MapPointSchema }),
@@ -25,7 +27,18 @@ export const ArmyActivitySchema = v.variant('kind', [
     /** The points still ahead on the path, in order. The last one is the destination. */
     waypoints: v.pipe(v.array(MapPointSchema), v.nonEmpty()),
   }),
-  v.object({ kind: v.literal('inBattle'), position: MapPointSchema, battle: BattleIdSchema }),
+  v.object({
+    kind: v.literal('retreating'),
+    position: MapPointSchema,
+    waypoints: v.pipe(v.array(MapPointSchema), v.nonEmpty()),
+  }),
+  v.object({
+    kind: v.literal('inBattle'),
+    position: MapPointSchema,
+    battle: BattleIdSchema,
+    /** The rest of the march the army was on when the battle took it, empty for none. */
+    march: v.array(MapPointSchema),
+  }),
   v.object({ kind: v.literal('besieging'), position: MapPointSchema, siege: SiegeIdSchema }),
   v.object({ kind: v.literal('embarked'), convoy: ConvoyIdSchema }),
 ]);

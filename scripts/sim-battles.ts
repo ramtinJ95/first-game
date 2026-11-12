@@ -22,6 +22,13 @@ const MATCHUPS: Matchup[] = [
     b: { troops: MIX },
   },
   {
+    name: 'mix, 4500 v 3000',
+    a: {
+      troops: Object.fromEntries(Object.entries(MIX).map(([troop, men]) => [troop, men * 1.5])),
+    },
+    b: { troops: MIX },
+  },
+  {
     name: 'spearmen v heavy cavalry, 3000 each',
     a: { troops: { spearmen: 3000 } },
     b: { troops: { heavyCavalry: 3000 } },
@@ -79,25 +86,51 @@ const MATCHUPS: Matchup[] = [
       generalSkill: 0,
     },
   },
+  {
+    name: 'general 10 v 0, 3000 v 3600',
+    a: { troops: MIX, generalSkill: 10 },
+    b: {
+      troops: { spearmen: 1800, swordsmen: 1080, archers: 360, lightCavalry: 360 },
+      generalSkill: 0,
+    },
+  },
+  {
+    name: 'remnant, 3000 v 40 spearmen',
+    a: { troops: MIX },
+    b: { troops: { spearmen: 40 } },
+  },
+  {
+    name: 'small, 3000 v 400 spearmen',
+    a: { troops: MIX },
+    b: { troops: { spearmen: 400 } },
+  },
 ];
 
 const SEEDS = 500;
 
 const mean = (values: number[]) =>
   values.length === 0 ? Number.NaN : values.reduce((sum, value) => sum + value, 0) / values.length;
+const quantile = (values: number[], q: number) => {
+  const sorted = [...values].sort((x, y) => x - y);
+  return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? Number.NaN;
+};
 const percent = (share: number) => (Number.isNaN(share) ? '-' : `${Math.round(share * 100)}%`);
 
 function summarise(matchup: Matchup) {
   const results: TrialResult[] = Array.from({ length: SEEDS }, (_, seed) =>
     playTrial(matchup, seed + 1),
   );
+  const days = results.map((r) => r.days);
   const decided = results.filter((r) => r.winner !== 'none');
   const winnerKept = decided.map((r) => r.kept[r.winner === 'a' ? 'a' : 'b']);
   const loserKept = decided.map((r) => r.kept[r.winner === 'a' ? 'b' : 'a']);
   return {
     matchup: matchup.name,
     'a wins': percent(results.filter((r) => r.winner === 'a').length / SEEDS),
-    days: mean(results.map((r) => r.days)).toFixed(1),
+    'days p10/median/p90': [0.1, 0.5, 0.9].map((q) => quantile(days, q)).join(' / '),
+    'b destroyed on day 1': percent(
+      results.filter((r) => r.days === 1 && r.kept.b === 0).length / SEEDS,
+    ),
     'a keeps': percent(mean(results.map((r) => r.kept.a))),
     'b keeps': percent(mean(results.map((r) => r.kept.b))),
     'winner keeps': percent(mean(winnerKept)),

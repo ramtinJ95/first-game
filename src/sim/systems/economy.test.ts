@@ -1,3 +1,4 @@
+import { STARTING_GENERAL_SKILL } from '../new-game.ts';
 import { describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { FormationId } from '../ids.ts';
@@ -176,7 +177,7 @@ describe('recruitment', () => {
     );
     expect(raised).toHaveLength(1);
     expect(raised[0]).toMatchObject({
-      generalSkill: 0,
+      generalSkill: STARTING_GENERAL_SKILL,
       activity: { kind: 'idle', position: { x: 2638.8, y: 2448.3 } },
     });
     expect(raised[0] && menOf(state, raised[0])).toBe(TROOPS.archers.recruit.men);

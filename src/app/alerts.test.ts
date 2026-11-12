@@ -5,7 +5,10 @@ import type { GameState } from '../sim/state/game-state.ts';
 import { warKey } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import type { Day } from '../sim/state/day.ts';
-import { alertsBetween, type Alert } from './alerts.ts';
+import type { ArmyId, FormationId } from '../sim/ids.ts';
+import { sightOf } from '../sim/sight.ts';
+import { alertsOfDay, type Alert } from './alerts.ts';
+import { alertsInSight } from './sighted.ts';
 
 const world = fixtureWorld();
 const f = FIXTURE;
@@ -15,8 +18,8 @@ function play(state: GameState, orders: Order[], done: (state: GameState) => boo
   const alerts: Alert[] = [];
   let current = state;
   for (let i = 0; i < days; i++) {
-    const next = tick(current, i === 0 ? orders : [], world).state;
-    alerts.push(...alertsBetween(current, next));
+    const { state: next, events } = tick(current, i === 0 ? orders : [], world);
+    alerts.push(...alertsOfDay(current, next, events));
     current = next;
     if (done(current)) break;
   }
@@ -47,7 +50,7 @@ function facingOff(romanMen: number, punicMen: number) {
 
 const ofKind = (alerts: Alert[], kind: Alert['kind']) => alerts.filter((a) => a.kind === kind);
 
-describe('alertsBetween', () => {
+describe('alertsOfDay', () => {
   it('tells of a battle that began against the player, and selects it', () => {
     const { state, alerts } = play(facingOff(1500, 1500), [], () => true);
     const [battle] = Object.values(state.battles);
@@ -71,14 +74,24 @@ describe('alertsBetween', () => {
     );
     expect(Object.keys(state.battles)).toEqual([]);
     const ended = ofKind(alerts, 'battleEnded');
-    expect(ended.map((a) => [a.text, a.tone])).toEqual([['You held the field at Roma', 'good']]);
+    expect(ended.map((a) => a.tone)).toEqual(['good']);
+    expect(ended[0]?.text).toMatch(
+      /^You held the field at Roma after \d+ days?\. You lost \d+ men, Carthage lost \d+\.$/,
+    );
     expect(ended[0]?.focus?.select).toEqual({ kind: 'army', army: f.romanArmy });
   });
 
   it('tells which enemy held the field when the player broke', () => {
     const { alerts } = play(facingOff(900, 1500), [], (s) => Object.keys(s.battles).length === 0);
-    expect(ofKind(alerts, 'battleEnded').map((a) => [a.text, a.tone])).toEqual([
-      ['Carthage held the field at Roma', 'bad'],
+    const ended = ofKind(alerts, 'battleEnded');
+    expect(ended.map((a) => a.tone)).toEqual(['bad']);
+    expect(ended[0]?.text).toMatch(
+      /^Carthage held the field at Roma after \d+ days?\. You lost \d+ men, Carthage lost \d+\.$/,
+    );
+    expect(ofKind(alerts, 'armyRetreated').map((a) => a.text)).toEqual([
+      expect.stringMatching(
+        /^Your army broke at Roma, losing \d+ men to the pursuit, and falls back /,
+      ),
     ]);
   });
 
@@ -101,36 +114,168 @@ describe('alertsBetween', () => {
       world,
     ).state;
     expect(halted.armies[f.romanArmy]?.activity.kind).toBe('idle');
-    expect(alertsBetween(marching, halted)).toEqual([]);
+    expect(alertsOfDay(marching, halted, [])).toEqual([]);
   });
 
-  it('does not call a retreat holding the field, even once it reached a home close by', () => {
-    const state = facingOff(1500, 1500);
+  it('tells of a battle that began and ended inside one day, and of the army it destroyed', () => {
+    const { state, alerts } = play(facingOff(1500, 40), [], () => true);
+    expect(state.armies[f.punicArmy]).toBeUndefined();
+    expect(Object.keys(state.battles)).toEqual([]);
+    expect(alerts.map((a) => [a.kind, a.text])).toEqual([
+      ['battleBegan', 'Battle at Roma against Carthage'],
+      [
+        'armyDestroyed',
+        expect.stringMatching(/^An army of Carthage was destroyed in battle (at|near) Roma$/),
+      ],
+      [
+        'battleEnded',
+        expect.stringMatching(
+          /^You held the field at Roma after 1 day\. You lost \d+ men, Carthage lost 40\.$/,
+        ),
+      ],
+    ]);
+    expect(alerts[0]?.focus).toEqual({ at: expect.any(Object) });
+  });
+
+  it("tells of the player's own army destroyed in a battle of one day", () => {
+    const { alerts } = play(facingOff(40, 1500), [], () => true);
+    expect(ofKind(alerts, 'armyDestroyed').map((a) => [a.text, a.tone])).toEqual([
+      ['Your army was destroyed in battle at Roma', 'bad'],
+    ]);
+  });
+
+  it('tells that a beaten army with no safe city of its own falls back into the field', () => {
+    const state = facingOff(900, 1500);
+    for (const city of Object.values(state.cities)) city.owner = f.carthage;
+    const { alerts } = play(state, [], (s) => Object.keys(s.battles).length === 0);
+    expect(ofKind(alerts, 'armyRetreated').map((a) => a.text)).toEqual([
+      expect.stringMatching(/, and falls back into the field (near|in the field)/),
+    ]);
+  });
+
+  it('tells the end of a battle between others that the player saw, though its centre lies out of sight', () => {
+    const state = buildFixture();
+    atWar(state, f.carthage, f.syracusaeFaction);
     const roman = state.armies[f.romanArmy];
-    if (roman?.activity.kind !== 'idle') throw new Error('fixture changed');
-    const home = state.cities[f.roma]?.position;
-    if (!home) throw new Error('fixture changed');
-    const field = { x: home.x + 2, y: home.y };
-    roman.activity = { kind: 'idle', position: field };
     const punic = state.armies[f.punicArmy];
-    if (punic) punic.activity = { kind: 'idle', position: { x: field.x + 5, y: field.y } };
-    const fighting = tick(state, [], world).state;
-    expect(fighting.armies[f.romanArmy]?.activity.kind).toBe('inBattle');
-    const retreated = tick(
-      fighting,
-      [{ kind: 'retreat', faction: f.rome, army: f.romanArmy }],
-      world,
-    ).state;
-    expect(Object.keys(retreated.battles)).toEqual([]);
-    const reachedHome = structuredClone(retreated);
-    const back = reachedHome.armies[f.romanArmy];
-    if (!back) throw new Error('the army surrendered');
-    back.activity = { kind: 'idle', position: { ...home } };
-    for (const after of [retreated, reachedHome]) {
-      expect(ofKind(alertsBetween(fighting, after), 'battleEnded').map((a) => a.text)).toEqual([
-        'Carthage held the field at Roma',
-      ]);
+    if (!roman || !punic) throw new Error('fixture changed');
+    roman.activity = { kind: 'idle', position: { x: 2069.9, y: 2895.1 } };
+    punic.activity = { kind: 'idle', position: { x: 2164.9, y: 2895.1 } };
+    const greek = 'army-greek' as ArmyId;
+    const spears = 'formation-greek' as FormationId;
+    state.formations[spears] = { id: spears, army: greek, troop: 'spearmen', men: 900, morale: 1 };
+    state.armies[greek] = {
+      id: greek,
+      owner: f.syracusaeFaction,
+      formations: [spears],
+      stance: 'holdTheLine',
+      generalSkill: 3,
+      activity: { kind: 'idle', position: { x: 2184.9, y: 2895.1 } },
+    };
+    let current = state;
+    const told: Alert[] = [];
+    for (let day = 0; day < 30 && told.length === 0; day++) {
+      const { state: next, events } = tick(current, [], world);
+      const seen = alertsInSight(
+        alertsOfDay(current, next, events),
+        sightOf(current, world, f.rome),
+        sightOf(next, world, f.rome),
+      );
+      told.push(...ofKind(seen, 'battleEnded'));
+      current = next;
     }
+    const [battle] = told;
+    expect(battle?.text).toMatch(
+      /^Carthage beat Syracusae .+ after \d+ days?\. Carthage lost \d+, Syracusae lost \d+\.$/,
+    );
+    expect(
+      battle && sightOf(current, world, f.rome).sees(battle.focus?.at ?? roman.activity.position),
+    ).toBe(false);
+  });
+
+  it('tells when a power declares war on the player, and when the player declares one', () => {
+    const declared = play(
+      buildFixture(),
+      [{ kind: 'declareWar', faction: f.carthage, against: f.rome }],
+      () => true,
+    );
+    expect(declared.alerts).toEqual([
+      { kind: 'warDeclared', day: 2, tone: 'bad', text: 'Carthage declared war on you' },
+    ]);
+    const declaring = play(
+      buildFixture(),
+      [{ kind: 'declareWar', faction: f.rome, against: f.syracusaeFaction }],
+      () => true,
+    );
+    expect(declaring.alerts.map((a) => a.text)).toEqual(['You declared war on Syracusae']);
+  });
+
+  it('tells of a battle between others that ended with neither side on the field, with both losses', () => {
+    const state = buildFixture();
+    const alerts = alertsOfDay(state, state, [
+      {
+        kind: 'battleEnded',
+        battle: 'battle-1' as never,
+        position: { x: 2229.9, y: 2865.1 },
+        startedOn: 1 as Day,
+        days: 4,
+        winner: 'none',
+        standing: [],
+        attackers: { factions: [f.carthage], lost: 700 },
+        defenders: { factions: [f.syracusaeFaction], lost: 650 },
+      },
+    ]);
+    expect(alerts.map((a) => a.text)).toEqual([
+      'The battle at Carthago ended with neither side holding the field after 4 days. Carthage lost 700, Syracusae lost 650.',
+    ]);
+  });
+
+  it("tells when men first desert another faction's army in sight, and not out of sight", () => {
+    const deserting = (romanAt: { x: number; y: number }) => {
+      const state = buildFixture();
+      const stores = state.factions[f.carthage]?.stores;
+      const spears = state.formations[f.citizenSpears];
+      const roman = state.armies[f.romanArmy];
+      if (!stores || !spears || !roman) throw new Error('fixture changed');
+      stores.gold = 0;
+      spears.men = 50_000;
+      roman.activity = { kind: 'idle', position: romanAt };
+      const told: Alert[] = [];
+      let current = state;
+      for (let day = 0; day < 3; day++) {
+        const { state: next, events } = tick(current, [], world);
+        told.push(
+          ...alertsInSight(
+            ofKind(alertsOfDay(current, next, events), 'armyDeserted'),
+            sightOf(current, world, f.rome),
+            sightOf(next, world, f.rome),
+          ),
+        );
+        current = next;
+      }
+      return told.map((a) => [a.day, a.tone, a.text]);
+    };
+    expect(deserting({ x: 2164.9, y: 2895.1 })).toEqual([
+      [2, 'neutral', expect.stringMatching(/^\d+ men deserted an army of Carthage at Carthago$/)],
+    ]);
+    const roma = buildFixture().cities[f.roma]?.position;
+    if (!roma) throw new Error('fixture changed');
+    expect(deserting(roma)).toEqual([]);
+  });
+
+  it('tells when men first desert an army of the player, and not each day after', () => {
+    const state = buildFixture();
+    const stores = state.factions[f.rome]?.stores;
+    const hastati = state.formations[f.hastati];
+    if (!stores || !hastati) throw new Error('fixture changed');
+    stores.gold = 0;
+    hastati.men = 50_000;
+    const { alerts } = play(state, [], () => false, 5);
+    const deserted = ofKind(alerts, 'armyDeserted');
+    expect(deserted.map((a) => [a.day, a.focus?.select])).toEqual([
+      [2, { kind: 'army', army: f.romanArmy }],
+    ]);
+    expect(deserted[0]?.text).toMatch(/^\d+ men deserted your army at Roma$/);
   });
 
   it('tells of an arrival from a march shorter than a day, which is never seen marching', () => {
@@ -144,7 +289,7 @@ describe('alertsBetween', () => {
       world,
     ).state;
     expect(after.armies[f.romanArmy]?.activity.kind).toBe('idle');
-    expect(ofKind(alertsBetween(before, after), 'armyArrived')).toHaveLength(1);
+    expect(ofKind(alertsOfDay(before, after, []), 'armyArrived')).toHaveLength(1);
   });
 
   it('tells that a raised formation mustered, at its city', () => {
@@ -164,7 +309,7 @@ describe('alertsBetween', () => {
     if (!capua || !syracusae) throw new Error('fixture changed');
     capua.owner = f.carthage;
     syracusae.owner = f.carthage;
-    expect(alertsBetween(before, after)).toEqual([
+    expect(alertsOfDay(before, after, [])).toEqual([
       {
         kind: 'cityChangedOwner',
         day: 2,
@@ -173,7 +318,7 @@ describe('alertsBetween', () => {
         focus: { at: capua.position, select: { kind: 'province', province: f.campania } },
       },
     ]);
-    expect(alertsBetween(after, before).map((a) => [a.text, a.tone])).toEqual([
+    expect(alertsOfDay(after, before, []).map((a) => [a.text, a.tone])).toEqual([
       ['Capua fell to Rome', 'good'],
     ]);
   });
@@ -198,10 +343,10 @@ describe('alertsBetween', () => {
     if (!stores) throw new Error('fixture changed');
     stores.gold = -4;
     stores.manpower = 0;
-    expect(alertsBetween(before, after).map((a) => [a.kind, a.text, a.focus])).toEqual([
+    expect(alertsOfDay(before, after, []).map((a) => [a.kind, a.text, a.focus])).toEqual([
       ['storeRanOut', 'Gold ran out: your formations desert each day', undefined],
       ['storeRanOut', 'Manpower ran out: no troops can be raised', undefined],
     ]);
-    expect(alertsBetween(after, after)).toEqual([]);
+    expect(alertsOfDay(after, after, [])).toEqual([]);
   });
 });
