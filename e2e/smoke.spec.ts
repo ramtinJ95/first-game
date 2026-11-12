@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 
 const map = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../data/map/map.json'), 'utf8'),
-) as { provinces: unknown[] };
+) as { version: number; provinces: unknown[] };
 
 test('the skeleton renders the map and the time controls without errors', async ({ page }) => {
   const errors: string[] = [];
@@ -40,9 +40,9 @@ test('a map that fails to parse stops the page with the parse error on screen', 
   await page.goto('/');
 
   await expect(page.getByRole('alert')).toHaveText(
-    'The game cannot start. map.version: expected 1',
+    `The game cannot start. map.version: expected ${map.version}`,
   );
   await expect(page.locator('canvas')).toHaveCount(0);
   await expect(page.getByTestId('time-controls')).toHaveCount(0);
-  expect(errors).toEqual([expect.stringContaining('map.version: expected 1')]);
+  expect(errors).toEqual([expect.stringContaining(`map.version: expected ${map.version}`)]);
 });

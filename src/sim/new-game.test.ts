@@ -135,6 +135,7 @@ describe('newGame on the committed map', () => {
     const id = 'city-99' as typeof old;
     first.id = id;
     for (const p of renamed.provinces) p.neighbours = p.neighbours.map((n) => (n === old ? id : n));
+    for (const s of renamed.settlements) if (s.province === old) s.province = id;
     const state = newGame(parseMap(renamed), { seed: 7, player: 'rome' });
     expect(loadGame(saveGame(state)).ok).toBe(true);
     expectConsistent(state);
