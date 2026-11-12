@@ -8,8 +8,11 @@ const ALBERS = {
   parallels: [29, 52],
 } as const;
 
+// The deep Sahara west of the Nile holds no city, so the extent stops at 27°N there.
 export const EXTENT_CORNERS: readonly LonLat[] = [
-  [-11, 23],
+  [-11, 27],
+  [28, 27],
+  [28, 23],
   [66, 23],
   [66, 42],
   [22, 55],

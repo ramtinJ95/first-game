@@ -210,16 +210,6 @@
     "port": false
   },
   {
-    "id": "tarentum",
-    "name": "Tarentum",
-    "pleiadesId": 442810,
-    "lon": 17.2330416,
-    "lat": 40.4737866,
-    "owner": "independent",
-    "capital": false,
-    "port": true
-  },
-  {
     "id": "syracusae",
     "name": "Syracusae",
     "pleiadesId": 462503,
@@ -320,6 +310,16 @@
     "port": true
   },
   {
+    "id": "cidamus",
+    "name": "Cidamus",
+    "pleiadesId": 344341,
+    "lon": 9.500314,
+    "lat": 30.136314,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
     "id": "cyrene",
     "name": "Cyrene",
     "pleiadesId": 373778,
@@ -380,11 +380,31 @@
     "port": false
   },
   {
+    "id": "ammon",
+    "name": "Ammon",
+    "pleiadesId": 716520,
+    "lon": 25.5435073558627,
+    "lat": 29.205173796098382,
+    "owner": "independent",
+    "capital": false,
+    "port": false
+  },
+  {
     "id": "salona",
     "name": "Salona",
     "pleiadesId": 197488,
     "lon": 16.483426,
     "lat": 43.539561,
+    "owner": "independent",
+    "capital": false,
+    "port": true
+  },
+  {
+    "id": "epidamnos",
+    "name": "Epidamnos",
+    "pleiadesId": 481818,
+    "lon": 19.447355,
+    "lat": 41.3163425,
     "owner": "independent",
     "capital": false,
     "port": true
@@ -448,16 +468,6 @@
     "owner": "independent",
     "capital": false,
     "port": true
-  },
-  {
-    "id": "sparta",
-    "name": "Sparta",
-    "pleiadesId": 570685,
-    "lon": 22.424672282445528,
-    "lat": 37.0817824552019,
-    "owner": "independent",
-    "capital": false,
-    "port": false
   },
   {
     "id": "ambrakia",
