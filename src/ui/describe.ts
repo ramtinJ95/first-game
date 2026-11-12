@@ -1,10 +1,12 @@
 import { factionName, nearestCity, placeName } from '../app/names.ts';
 import { factionColour } from '../render/palette.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { FactionId } from '../sim/ids.ts';
+import type { Pick } from '../render/pick.ts';
+import type { BattleId, FactionId } from '../sim/ids.ts';
 import { CONVOY_KM_PER_DAY, MARCH_KM_PER_DAY } from '../sim/march.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { Army } from '../sim/state/army.ts';
+import type { Battle } from '../sim/state/battle.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 
@@ -91,4 +93,25 @@ export function pendingOrder<K extends Order['kind']>(
 export function signed(value: number): string {
   const text = Math.abs(value) >= 100 ? Math.round(value).toLocaleString('en') : value.toFixed(1);
   return value >= 0 ? `+${text}` : text.replace('-', '−');
+}
+
+/**
+ * The battles the side column shows: the selected battle, or the battle of the
+ * selected army, while it lasts. Otherwise every battle one of the player's armies is
+ * in, so a fight is never out of sight.
+ */
+export function shownBattles(state: State, selection: Pick | undefined): DeepReadonly<Battle>[] {
+  let chosen: BattleId | undefined;
+  if (selection?.kind === 'battle') chosen = selection.battle;
+  if (selection?.kind === 'army') {
+    const activity = state.armies[selection.army]?.activity;
+    if (activity?.kind === 'inBattle') chosen = activity.battle;
+  }
+  const selected = chosen && state.battles[chosen];
+  if (selected) return [selected];
+  return Object.values(state.battles).filter((battle) =>
+    [...battle.attackers, ...battle.defenders].some(
+      (id) => state.armies[id]?.owner === state.player,
+    ),
+  );
 }

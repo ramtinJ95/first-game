@@ -135,6 +135,29 @@ test.describe('the panels', () => {
     );
   });
 
+  test('a right click on a port covered by a battle marker still offers the crossing by sea', async ({
+    page,
+  }) => {
+    const state = startGame();
+    const macedon = 'macedon' as FactionId;
+    declareWar(state, carthage, macedon);
+    const salona = cityPoint('salona');
+    armyOf(state, carthage).activity = { kind: 'idle', position: salona };
+    armyOf(state, macedon).activity = { kind: 'idle', position: { x: salona.x, y: salona.y } };
+    await load(page, state);
+    await page.getByTestId('time-controls-day').and(page.locator('[data-day="2"]')).waitFor();
+    await pause(page);
+    const view = camera(page);
+    const at = view.city('salona');
+    await page.mouse.click(at.x, at.y);
+    await expect(page.getByTestId('battle-panel')).toBeVisible();
+    await page.mouse.click(view.banner(cityPoint('roma')).x, view.banner(cityPoint('roma')).y);
+    await page.mouse.click(at.x, at.y, { button: 'right' });
+    await expect(
+      page.getByTestId('command-menu').getByRole('menuitem', { name: 'Sail from Roma to Salona' }),
+    ).toBeVisible();
+  });
+
   test('a foreign army shows its facts and no orders, and the panel declares war on its owner after a confirmation', async ({
     page,
   }) => {

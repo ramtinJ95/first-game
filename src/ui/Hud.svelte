@@ -1,12 +1,12 @@
 <script lang="ts">
   import type { View } from '../app/view.svelte.ts';
-  import type { BattleId } from '../sim/ids.ts';
   import type { Actions } from './actions.ts';
   import AlertList from './AlertList.svelte';
   import ArmyPanel from './ArmyPanel.svelte';
   import BattlePanel from './BattlePanel.svelte';
   import CityPanel from './CityPanel.svelte';
   import CommandMenu from './CommandMenu.svelte';
+  import { shownBattles } from './describe.ts';
   import NoticeToast from './NoticeToast.svelte';
   import TopBar from './TopBar.svelte';
 
@@ -21,24 +21,7 @@
     return id && game.cities[id];
   });
 
-  /**
-   * The selected battle, or the battle of the selected army. With neither, every
-   * battle one of the player's armies is in, so a fight is never out of sight.
-   */
-  const battles = $derived.by(() => {
-    let ids: BattleId[];
-    if (selection?.kind === 'battle') ids = [selection.battle];
-    else if (army?.activity.kind === 'inBattle') ids = [army.activity.battle];
-    else
-      ids = Object.values(game.battles)
-        .filter((battle) =>
-          [...battle.attackers, ...battle.defenders].some(
-            (id) => game.armies[id]?.owner === game.player,
-          ),
-        )
-        .map((battle) => battle.id);
-    return ids.flatMap((id) => game.battles[id] ?? []);
-  });
+  const battles = $derived(shownBattles(game, selection));
 
   function onkeydown(event: KeyboardEvent) {
     if (event.key !== 'Escape') return;

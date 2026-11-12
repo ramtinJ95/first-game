@@ -1,6 +1,6 @@
 import { mount } from 'svelte';
 import mapUrl from '../../data/map/map.json?url';
-import type { Pick } from '../render/pick.ts';
+import { provinceAt, type Pick } from '../render/pick.ts';
 import { createRenderer, type Command } from '../render/renderer.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { CityId } from '../sim/ids.ts';
@@ -117,7 +117,7 @@ function portOf(
  * A right click with one of the player's armies selected marches it to the point. On
  * a port city, while the army stands at one of the player's ports, it offers the sea.
  */
-function command({ point, pick, screen }: Command) {
+function command({ point, screen }: Command) {
   menu = undefined;
   const state = clock.state;
   const army = selection?.kind === 'army' ? state.armies[selection.army] : undefined;
@@ -126,8 +126,9 @@ function command({ point, pick, screen }: Command) {
     return;
   }
   const march: Order = { kind: 'moveArmy', faction: state.player, army: army.id, to: point };
-  const target: CityId | undefined =
-    pick?.kind === 'province' ? state.provinces[pick.province]?.city : undefined;
+  // The land under the click, not the pick: a banner or battle marker may cover a port.
+  const province = provinceAt(map, point);
+  const target: CityId | undefined = province && state.provinces[province]?.city;
   const city = target && state.cities[target];
   const from = portOf(state, army);
   if (city && from && city.id !== from.id && world.harbours.has(city.id)) {
