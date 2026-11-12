@@ -16,17 +16,21 @@ export interface LabelRequest {
   readonly clearance: { readonly x: number; readonly y: number };
   readonly width: number;
   readonly height: number;
-  readonly capital: boolean;
+  /** Lower places first: see `LABEL_PRIORITY`. */
+  readonly priority: number;
   readonly population: number;
 }
+
+/** Which kind of name wins a place: a great power's capital, then any city, a peak, a town, a village. */
+export const LABEL_PRIORITY = { capital: 0, city: 1, peak: 2, town: 3, village: 4 } as const;
 
 /** Space between a city's symbol and its label. */
 const GAP = 3;
 const PADDING = 2;
 
-/** Great-power capitals first, then the larger city, then by name so the order is stable. */
+/** By priority, then the larger place, then by name so the order is stable. */
 function compare(a: LabelRequest, b: LabelRequest): number {
-  if (a.capital !== b.capital) return a.capital ? -1 : 1;
+  if (a.priority !== b.priority) return a.priority - b.priority;
   if (a.population !== b.population) return b.population - a.population;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }

@@ -1,0 +1,363 @@
+import { GraphicsContext } from 'pixi.js';
+import type { MultiPolygon, Peak } from '../../sim/map.ts';
+import { INK, PAPER } from '../palette.ts';
+import type { Crop, Mark, Tier, Wood } from './marks.ts';
+import { stream } from './random.ts';
+
+export function mix(from: number, to: number, t: number): number {
+  const channel = (shift: number) => {
+    const a = (from >> shift) & 0xff;
+    const b = (to >> shift) & 0xff;
+    return Math.round(a + (b - a) * t) << shift;
+  };
+  return channel(16) | channel(8) | channel(0);
+}
+
+const SEPIA = 0x5b3f22;
+export const TERRAIN_COLOURS = {
+  reliefInk: mix(INK, SEPIA, 0.35),
+  reliefLight: mix(PAPER, 0xfff8e6, 0.45),
+  reliefShade: mix(PAPER, SEPIA, 0.42),
+  reliefDeep: mix(PAPER, SEPIA, 0.6),
+  hillShade: mix(PAPER, SEPIA, 0.2),
+  desert: 0xf3d597,
+  dune: mix(0xf3d597, 0x8a5a26, 0.62),
+  stipple: mix(0xf3d597, 0x6e4a24, 0.7),
+  woodEdge: mix(PAPER, 0x8a9e5e, 0.2),
+  wood: mix(PAPER, 0x8a9e5e, 0.36),
+  crown: mix(PAPER, 0x5f7a3c, 0.62),
+  conifer: mix(PAPER, 0x43603a, 0.7),
+  cypress: mix(PAPER, 0x3a5230, 0.75),
+  crownShade: mix(PAPER, 0x2f4423, 0.7),
+  treeInk: mix(INK, 0x2f3a1e, 0.4),
+  furrow: mix(PAPER, SEPIA, 0.42),
+  track: mix(PAPER, SEPIA, 0.62),
+} as const;
+
+const CROP_COLOURS: Record<Crop, number> = {
+  grain: mix(PAPER, 0xd9b04a, 0.62),
+  stubble: mix(PAPER, 0xb08a50, 0.5),
+  green: mix(PAPER, 0x8ea455, 0.62),
+  fallow: mix(PAPER, 0x8c6a46, 0.42),
+};
+
+/**
+ * Ink widths in km for each tier. A tier shows over about a fourfold range of zoom, so
+ * a width in km reads as about one pixel in the middle of that range.
+ */
+const INK_KM: Record<Tier, number> = { wide: 2.6, middle: 0.95, close: 0.4 };
+
+function mountain(g: GraphicsContext, m: Extract<Mark, { kind: 'mountain' }>, tier: Tier) {
+  const { x, y, width: w, height: h, high } = m;
+  const random = stream(m.seed);
+  const sx = x + (random() - 0.5) * 0.2 * w;
+  const sy = y - h;
+  const twin = high > 0.45 && random() < 0.35;
+  const lx = x - w * (0.2 + 0.1 * random());
+  const ly = y - h * (twin ? 0.78 : 0.4 + 0.2 * random());
+  const rx = x + w * (0.17 + 0.12 * random());
+  const ry = y - h * (0.36 + 0.2 * random());
+  const left = x - w / 2;
+  const right = x + w / 2;
+  const ink = INK_KM[tier] * (0.75 + 0.6 * high);
+  const outline = twin
+    ? [
+        left,
+        y,
+        lx - w * 0.06,
+        ly + h * 0.06,
+        lx,
+        ly,
+        (lx + sx) / 2,
+        y - h * 0.6,
+        sx,
+        sy,
+        rx,
+        ry,
+        right,
+        y,
+      ]
+    : [left, y, lx, ly, sx, sy, rx, ry, right, y];
+  g.poly(outline).fill(TERRAIN_COLOURS.reliefLight);
+  const spurX = sx + w * (0.05 + 0.06 * random());
+  const spurY = y - h * (0.3 + 0.15 * random());
+  g.poly([sx, sy, rx, ry, right, y, spurX + w * 0.08, y, spurX, spurY]).fill(
+    high > 0.55 ? TERRAIN_COLOURS.reliefDeep : TERRAIN_COLOURS.reliefShade,
+  );
+  if (tier !== 'wide') {
+    const hatches = tier === 'close' ? 4 + Math.floor(random() * 3) : 2;
+    for (let n = 1; n <= hatches; n++) {
+      const t = n / (hatches + 1);
+      const px = sx + (lx - sx) * t;
+      const py = sy + (ly - sy) * t;
+      g.moveTo(px, py).lineTo(px + w * 0.05, py + h * (0.16 + 0.1 * random()));
+    }
+    g.stroke({ width: ink * 0.45, color: TERRAIN_COLOURS.reliefInk, alpha: 0.55, cap: 'round' });
+  }
+  for (let n = 0; n < outline.length - 2; n += 2) {
+    if (n === 0) g.moveTo(outline[0] as number, outline[1] as number);
+    g.lineTo(outline[n + 2] as number, outline[n + 3] as number);
+  }
+  g.stroke({ width: ink, color: TERRAIN_COLOURS.reliefInk, join: 'round', cap: 'round' });
+  if (tier !== 'wide') {
+    g.moveTo(sx, sy)
+      .lineTo(spurX, spurY)
+      .stroke({ width: ink * 0.6, color: TERRAIN_COLOURS.reliefInk, alpha: 0.75, cap: 'round' });
+  }
+}
+
+function hill(g: GraphicsContext, m: Extract<Mark, { kind: 'hill' }>, tier: Tier) {
+  const { x, y, width: w, height: h } = m;
+  const left = x - w / 2;
+  const right = x + w / 2;
+  const ink = INK_KM[tier] * 0.75;
+  g.moveTo(x, y - h)
+    .quadraticCurveTo(x + w * 0.4, y - h * 0.8, right, y)
+    .quadraticCurveTo(x + w * 0.2, y - h * 0.3, x, y - h)
+    .fill(TERRAIN_COLOURS.hillShade);
+  g.moveTo(left, y)
+    .bezierCurveTo(x - w * 0.3, y - h * 1.3, x + w * 0.25, y - h * 1.35, right, y)
+    .stroke({ width: ink, color: TERRAIN_COLOURS.reliefInk, alpha: 0.7, cap: 'round' });
+  if (tier === 'close') {
+    const random = stream(m.seed);
+    for (let n = 0; n < 3; n++) {
+      const px = x + w * (0.1 + 0.11 * n);
+      const py = y - h * (0.95 - 0.22 * n);
+      g.moveTo(px, py).lineTo(px + w * 0.03, py + h * (0.35 + 0.15 * random()));
+    }
+    g.stroke({ width: ink * 0.6, color: TERRAIN_COLOURS.reliefInk, alpha: 0.5, cap: 'round' });
+  }
+}
+
+function tree(g: GraphicsContext, m: Extract<Mark, { kind: 'tree' }>, tier: Tier) {
+  const { x, y, size: s, shape } = m;
+  const ink = INK_KM[tier] * 0.7;
+  const line = { width: ink, color: TERRAIN_COLOURS.treeInk, cap: 'round', join: 'round' } as const;
+  if (shape === 'conifer') {
+    g.moveTo(x, y)
+      .lineTo(x, y - s * 0.25)
+      .stroke(line);
+    g.poly([x - s * 0.27, y - s * 0.2, x, y - s * 1.1, x + s * 0.27, y - s * 0.2])
+      .fill(TERRAIN_COLOURS.conifer)
+      .stroke(line);
+    return;
+  }
+  if (shape === 'cypress') {
+    g.moveTo(x, y)
+      .quadraticCurveTo(x - s * 0.2, y - s * 0.45, x, y - s * 1.2)
+      .quadraticCurveTo(x + s * 0.2, y - s * 0.45, x, y)
+      .fill(TERRAIN_COLOURS.cypress)
+      .stroke(line);
+    return;
+  }
+  const r = s * 0.4;
+  const cy = y - s * 0.62;
+  g.moveTo(x, y)
+    .lineTo(x, cy + r * 0.6)
+    .stroke(line);
+  g.circle(x, cy, r).fill(TERRAIN_COLOURS.crown);
+  if (tier === 'close') {
+    g.moveTo(x + r * 0.15, cy - r * 0.98)
+      .arc(x, cy, r, -Math.PI / 2 + 0.15, Math.PI / 2 + 0.2)
+      .quadraticCurveTo(x + r * 0.6, cy, x + r * 0.15, cy - r * 0.98)
+      .fill(TERRAIN_COLOURS.crownShade);
+  }
+  g.circle(x, cy, r).stroke(line);
+}
+
+function dune(g: GraphicsContext, m: Extract<Mark, { kind: 'dune' }>, tier: Tier) {
+  const { x, y, length, angle } = m;
+  const ux = Math.cos(angle) * (length / 2);
+  const uy = Math.sin(angle) * (length / 2);
+  const bend = 0.28;
+  const nx = -uy * bend;
+  const ny = ux * bend;
+  const ink = INK_KM[tier] * 0.8;
+  g.moveTo(x - ux, y - uy)
+    .quadraticCurveTo(x + nx * 2, y + ny * 2, x + ux, y + uy)
+    .stroke({ width: ink, color: TERRAIN_COLOURS.dune, alpha: 0.85, cap: 'round' });
+  if (tier === 'close') {
+    g.moveTo(x - ux * 0.6 + nx * 0.9, y - uy * 0.6 + ny * 0.9)
+      .quadraticCurveTo(
+        x + nx * 2.6,
+        y + ny * 2.6,
+        x + ux * 0.6 + nx * 0.9,
+        y + uy * 0.6 + ny * 0.9,
+      )
+      .stroke({ width: ink * 0.6, color: TERRAIN_COLOURS.dune, alpha: 0.55, cap: 'round' });
+  }
+}
+
+function stipple(g: GraphicsContext, m: Extract<Mark, { kind: 'stipple' }>, tier: Tier) {
+  const random = stream(m.seed);
+  const dot = INK_KM[tier] * 0.7;
+  const count = 3 + Math.floor(random() * 4);
+  for (let n = 0; n < count; n++) {
+    const a = random() * Math.PI * 2;
+    const d = m.spread * Math.sqrt(random());
+    g.rect(m.x + Math.cos(a) * d - dot / 2, m.y + Math.sin(a) * d - dot / 2, dot, dot);
+  }
+  g.fill(TERRAIN_COLOURS.stipple);
+}
+
+function corners(x: number, y: number, w: number, d: number, angle: number): number[] {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const at = (u: number, v: number) => [x + u * c - v * s, y + u * s + v * c];
+  return [...at(-w / 2, -d / 2), ...at(w / 2, -d / 2), ...at(w / 2, d / 2), ...at(-w / 2, d / 2)];
+}
+
+function field(g: GraphicsContext, m: Extract<Mark, { kind: 'field' }>) {
+  const { x, y, width: w, depth: d, angle } = m;
+  g.poly(corners(x, y, w, d, angle)).fill(CROP_COLOURS[m.crop]);
+  if (m.crop === 'fallow') return;
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const rows = Math.max(2, Math.round(d / 0.32));
+  for (let n = 1; n < rows; n++) {
+    const v = -d / 2 + (d * n) / rows;
+    g.moveTo(x - (w / 2) * c * 0.92 - v * s, y - (w / 2) * s * 0.92 + v * c).lineTo(
+      x + (w / 2) * c * 0.92 - v * s,
+      y + (w / 2) * s * 0.92 + v * c,
+    );
+  }
+  g.stroke({ width: 0.12, color: TERRAIN_COLOURS.furrow, alpha: 0.85 });
+}
+
+function orchard(g: GraphicsContext, m: Extract<Mark, { kind: 'orchard' }>) {
+  const { x, y, width: w, depth: d, angle } = m;
+  g.poly(corners(x, y, w, d, angle)).fill(mix(PAPER, CROP_COLOURS.green, 0.6));
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const step = 0.55;
+  for (let u = -w / 2 + step / 2; u < w / 2; u += step) {
+    for (let v = -d / 2 + step / 2; v < d / 2; v += step) {
+      g.circle(x + u * c - v * s, y + u * s + v * c, 0.17);
+    }
+  }
+  g.fill(TERRAIN_COLOURS.crown);
+}
+
+function track(g: GraphicsContext, m: Extract<Mark, { kind: 'track' }>) {
+  const [first, ...rest] = m.points;
+  if (!first) return;
+  g.moveTo(first[0], first[1]);
+  for (const [px, py] of rest) g.lineTo(px, py);
+  g.stroke({ width: 0.22, color: TERRAIN_COLOURS.track, alpha: 0.9, cap: 'round', join: 'round' });
+}
+
+/** Draws marks of one tier into a new context, in the order given. */
+export function drawMarks(marks: readonly Mark[], tier: Tier): GraphicsContext {
+  const g = new GraphicsContext();
+  for (const m of marks) {
+    switch (m.kind) {
+      case 'mountain':
+        mountain(g, m, tier);
+        break;
+      case 'hill':
+        hill(g, m, tier);
+        break;
+      case 'tree':
+        tree(g, m, tier);
+        break;
+      case 'dune':
+        dune(g, m, tier);
+        break;
+      case 'stipple':
+        stipple(g, m, tier);
+        break;
+      case 'field':
+        field(g, m);
+        break;
+      case 'orchard':
+        orchard(g, m);
+        break;
+      case 'track':
+        track(g, m);
+        break;
+    }
+  }
+  return g;
+}
+
+/** A named peak: a taller mountain with darker shading, and a snow line at the top. */
+export function drawPeaks(peaks: readonly Peak[], tier: Tier): GraphicsContext {
+  const g = new GraphicsContext();
+  const ink = INK_KM[tier];
+  const base = tier === 'close' ? 10 : 15;
+  for (const peak of peaks) {
+    const [x, y] = peak.at;
+    const w = base * (0.55 + 0.6 * Math.min(1, peak.height / 4800));
+    const h = w * 0.85;
+    const foot = y + h * 0.3;
+    const sy = foot - h;
+    g.poly([
+      x - w / 2,
+      foot,
+      x - w * 0.18,
+      foot - h * 0.55,
+      x,
+      sy,
+      x + w * 0.2,
+      foot - h * 0.6,
+      x + w / 2,
+      foot,
+    ]).fill(TERRAIN_COLOURS.reliefLight);
+    g.poly([
+      x,
+      sy,
+      x + w * 0.2,
+      foot - h * 0.6,
+      x + w / 2,
+      foot,
+      x + w * 0.1,
+      foot,
+      x + w * 0.04,
+      foot - h * 0.45,
+    ]).fill(mix(TERRAIN_COLOURS.reliefShade, SEPIA, 0.25));
+    g.poly([
+      x - w * 0.11,
+      sy + h * 0.2,
+      x,
+      sy,
+      x + w * 0.09,
+      sy + h * 0.17,
+      x + w * 0.02,
+      sy + h * 0.24,
+    ]).fill(0xfffaf0);
+    g.moveTo(x - w / 2, foot)
+      .lineTo(x - w * 0.18, foot - h * 0.55)
+      .lineTo(x, sy)
+      .lineTo(x + w * 0.2, foot - h * 0.6)
+      .lineTo(x + w / 2, foot)
+      .stroke({ width: ink * 1.4, color: INK, join: 'round', cap: 'round' });
+    g.moveTo(x - w * 0.11, sy + h * 0.2)
+      .lineTo(x + w * 0.02, sy + h * 0.24)
+      .lineTo(x + w * 0.09, sy + h * 0.17)
+      .stroke({ width: ink * 0.6, color: INK, alpha: 0.7, join: 'round' });
+  }
+  return g;
+}
+
+/** The pale, warm ground of the deserts. */
+export function drawDesert(outlines: readonly MultiPolygon[]): GraphicsContext {
+  const g = new GraphicsContext();
+  for (const outline of outlines) {
+    for (const [outer, ...holes] of outline) {
+      if (!outer) continue;
+      g.poly(outer.flat()).fill(TERRAIN_COLOURS.desert);
+      for (const hole of holes) g.poly(hole.flat()).cut();
+    }
+  }
+  return g;
+}
+
+/** The green ground of the woods, with a paler rim so a wood's edge is soft. */
+export function drawWoods(woods: readonly Wood[]): GraphicsContext {
+  const g = new GraphicsContext();
+  for (const wood of woods) for (const l of wood.lobes) g.circle(l.x, l.y, l.r * 1.18);
+  g.fill(TERRAIN_COLOURS.woodEdge);
+  for (const wood of woods) for (const l of wood.lobes) g.circle(l.x, l.y, l.r);
+  g.fill(TERRAIN_COLOURS.wood);
+  return g;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeLabels, type Box, type LabelRequest } from './labels.ts';
+import { LABEL_PRIORITY, placeLabels, type Box, type LabelRequest } from './labels.ts';
 
 const viewport = { width: 1000, height: 600 };
 
@@ -10,7 +10,7 @@ function label(id: string, x: number, y: number, extra: Partial<LabelRequest> = 
     width: 60,
     height: 14,
     clearance: { x: 5, y: 5 },
-    capital: false,
+    priority: 1,
     population: 8000,
     ...extra,
   };
@@ -49,13 +49,31 @@ describe('placeLabels', () => {
     const crowd = [
       label('small', 300, 300, { population: 8000 }),
       label('large', 301, 300, { population: 15_000 }),
-      label('capital', 302, 300, { population: 1000, capital: true }),
+      label('capital', 302, 300, { population: 1000, priority: 0 }),
     ];
     const blockers: Box[] = [
       { left: 0, top: 0, right: 1000, bottom: 280 },
       { left: 0, top: 320, right: 1000, bottom: 600 },
     ];
     expect([...placeLabels(crowd, blockers, viewport).keys()]).toEqual(['capital', 'large']);
+  });
+
+  it('lets a city name win over a peak, a peak over a town, and a town over a village', () => {
+    const onlyRightFree: Box[] = [
+      { left: 0, top: 0, right: 1000, bottom: 280 },
+      { left: 0, top: 320, right: 1000, bottom: 600 },
+      { left: 0, top: 280, right: 299, bottom: 320 },
+    ];
+    const order = ['city', 'peak', 'town', 'village'] as const;
+    for (const [i, higher] of order.entries()) {
+      for (const lower of order.slice(i + 1)) {
+        const crowd = [
+          label(lower, 300, 300, { priority: LABEL_PRIORITY[lower], population: 90_000 }),
+          label(higher, 300, 300, { priority: LABEL_PRIORITY[higher], population: 0 }),
+        ];
+        expect([...placeLabels(crowd, onlyRightFree, viewport).keys()]).toEqual([higher]);
+      }
+    }
   });
 
   it('keeps a name off the markers of other cities and off the screen edge', () => {

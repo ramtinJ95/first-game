@@ -29,7 +29,7 @@ import {
 } from './camera.ts';
 import type { DrawOptions } from './draw-options.ts';
 import { createFog, fogCircles } from './fog.ts';
-import { placeLabels, type Box, type LabelRequest } from './labels.ts';
+import { LABEL_PRIORITY, placeLabels, type Box, type LabelRequest } from './labels.ts';
 import { BANNER, BATTLE_HIT_RADIUS, drawnArmies, type DrawnArmy } from './markers.ts';
 import {
   BORDER,
@@ -48,6 +48,9 @@ import { toPixels } from './lines.ts';
 import { cityAt, pickAt, type DrawnCity, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
 import { citySymbols } from './symbols.ts';
+import { createLife } from './terrain/life.ts';
+import { createPlaces } from './terrain/places-layer.ts';
+import { createTerrain } from './terrain/terrain-layer.ts';
 
 /** What one drawn frame shows: the days either side of now, and the selection. */
 export interface Frame {
@@ -366,6 +369,8 @@ export async function createRenderer({
   for (const province of map.provinces) fillOutline(land, province.outline, PAPER);
   layers.land.addChild(land);
 
+  const terrain = createTerrain(map, layers.terrain);
+
   const washes = new Map<ProvinceId, Graphics>();
   for (const province of map.provinces) {
     const wash = fillOutline(new Graphics(), province.outline, 0xffffff);
@@ -380,7 +385,7 @@ export async function createRenderer({
   // A stencil mask here cost over a third of each frame drawn without a graphics card.
   const inkLines = new Graphics();
   const frame = new Graphics();
-  layers.riversAndCoast.addChild(inkLines, frame);
+  layers.riversAndCoast.addChild(terrain.lakes, inkLines, frame);
 
   const fog = createFog(app.renderer, map);
   layers.fog.addChild(fog.root);
@@ -401,7 +406,10 @@ export async function createRenderer({
   ) as Record<CityRank, { halfWidth: number; halfHeight: number }>;
   const cityLayer = new Container({ label: 'cities' });
   const townLayer = new Container({ label: 'towns' });
-  layers.settlements.addChild(townLayer, cityLayer);
+  const lifeLayer = new Container({ label: 'life' });
+  layers.settlements.addChild(townLayer, cityLayer, lifeLayer);
+  const places = createPlaces(map, townLayer, layers.labels);
+  const life = createLife(map, terrain.land, lifeLayer);
 
   const routes = new Graphics();
   const battleLayer = new Container({ label: 'battles' });
@@ -457,6 +465,7 @@ export async function createRenderer({
       0.75,
     ).stroke({ width: 1.1, color: RIVER, alpha: 0.9, ...round });
     traceLines(inkLines, map.coastline, scale, 0.75).stroke({ width: 1.5, color: INK, ...round });
+    terrain.restroke(scale);
     frame.clear();
     frame.poly(toPixels(map.extent, scale, 0)).stroke({ width: 2.5, color: INK, join: 'round' });
     for (const line of [waterLines, borders, inkLines, frame]) line.scale.set(1 / scale);
@@ -545,11 +554,17 @@ export async function createRenderer({
         clearance: { x: halfWidth, y: halfHeight },
         width: label.width,
         height: label.height,
-        capital: rank === 'capital',
+        priority: rank === 'capital' ? LABEL_PRIORITY.capital : LABEL_PRIORITY.city,
         population: city.population,
       });
     }
-    const placed = placeLabels(requests, symbolBoxes, view);
+    const settled = places.layout(camera, view, symbolBoxes);
+    const placed = placeLabels(
+      [...requests, ...settled.requests],
+      [...symbolBoxes, ...settled.boxes],
+      view,
+    );
+    places.placeLabels(placed);
     for (const [id, box] of placed) {
       const label = cities.get(id as CityId)?.label;
       if (!label) continue;
@@ -825,6 +840,7 @@ export async function createRenderer({
         dirty = true;
       }
       if (cameraMoved) applyCamera();
+      if (terrain.update(camera, viewport(), now)) dirty = true;
       if (dirty) layoutCities(current);
       if (
         !highlighted ||
@@ -854,7 +870,9 @@ export async function createRenderer({
         swellAt = now;
         dirty = true;
       }
+      if (places.step(now)) dirty = true;
       if (!dirty) return false;
+      life.update(camera, viewport(), now);
       moveSwell(now);
       drawRoutes(current, selection, planned, replaced);
       placeBanners(current, selection);

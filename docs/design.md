@@ -51,6 +51,8 @@ The game is original. Civilization 5, Knights of Honor 2, and Rome: Total War 2 
 
 A flat, top-down map in the style of an old atlas. The base is parchment-toned with soft shaded relief. Coasts and rivers are inked lines. Each faction's land carries a translucent colour wash. Cities, armies, refugee columns, caravans, and ships are icons with banners.
 
+The map shows mountains, hills, forests, deserts, lakes, towns, and villages as ink drawings that gain detail as you zoom in, from whole ranges and woods on the full map to single peaks, trees, and the fields around each village up close. At a close zoom a little ambient movement, such as smoke over the cities and boats off the ports, makes the world feel inhabited.
+
 ### Out of scope until asked for
 
 Multiplayer, religion, culture, characters and dynasties, spies, detailed population groups, and supply lines.
@@ -117,17 +119,19 @@ The Svelte panels do not hold the live state. The live state stays plain data ou
 
 ### A build script makes the map
 
-A Node script builds the map data file from a curated list of cities and from free geographic data. The script projects the coordinates with a regional projection, seeds one province for each city, clips the provinces to the land, and writes the province shapes, the neighbours of each province, and the city positions. The game loads the output file. Nobody draws provinces by hand, and a change to the city list rebuilds the map.
+A Node script builds the map data file from a curated list of cities and from free geographic data. The script projects the coordinates with a regional projection, seeds one province for each city, clips the provinces to the land, and writes the province shapes, the neighbours of each province, and the city positions. It also writes terrain areas (mountains, hills, desert, forest, and lake), named peaks, and towns and villages. The game loads the output file. Nobody draws provinces by hand, and a change to the city list rebuilds the map.
 
-The pathfinding method for free movement over terrain is not chosen yet. A small experiment during stage one decides between a terrain-cost grid and a navigation mesh.
+Free movement uses a navigation mesh: a constrained Delaunay triangulation of the land and the sea, built from the map when the game starts, on which armies, convoys, and refugee columns find their paths. Terrain does not change movement speed yet.
 
 ### Data sources
 
 | Source | Use | Licence |
 | --- | --- | --- |
-| Natural Earth | Land, coastlines, rivers, relief | Public domain |
-| Pleiades | Ancient city names and locations | CC BY 3.0, attribution required |
-| Itiner-e | Roman roads | CC BY 4.0, attribution required |
+| Natural Earth | Land, coastlines, rivers, lakes, desert outlines, and the names of ranges and peaks | Public domain |
+| ETOPO1 (NOAA) | The outlines of mountains and hills | Public domain |
+| RESOLVE Ecoregions 2017 | Forest outlines | CC BY 4.0, attribution required |
+| Pleiades | The names and locations of ancient cities, towns, and villages | CC BY 3.0, attribution required |
+| Itiner-e | Roman roads. Not used yet, because the build cannot reach its hosts | CC BY 4.0, attribution required |
 
 The game does not use AWMC geodata (ODbL) or historical-basemaps (GPL-3.0), because both carry share-alike terms. Modern coastlines and rivers differ from the ancient ones in places such as river deltas. The first builds accept that difference.
 
