@@ -3,6 +3,7 @@ import { allocateId } from '../ids.ts';
 import { removeRecord } from '../records.ts';
 import { nextRandom } from '../rng.ts';
 import type { Army, Stance } from '../state/army.ts';
+import type { Battle } from '../state/battle.ts';
 import type { Formation } from '../state/formation.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
@@ -45,13 +46,12 @@ type Side = 'attackers' | 'defenders';
 
 /**
  * Adds armies that come up to a running battle, starts battles between armies at
- * war that meet, adds the armies left over to those new battles, plays one day of every battle, and lets idle armies regain morale.
+ * war that meet, plays one day of every battle, and lets idle armies regain morale.
  */
 export function battles(state: GameState): void {
   recoverMorale(state);
   joinBattles(state);
   startBattles(state);
-  joinBattles(state);
   for (const battle of sortedValues(state.battles)) {
     fightOneDay(state, battle.id);
     settle(state, battle.id);
@@ -79,14 +79,18 @@ function joinBattles(state: GameState) {
     const position = landPosition(state, army);
     if (!position) continue;
     for (const battle of sortedValues(state.battles)) {
-      if (distance(position, battle.position) > ENGAGEMENT_DISTANCE) continue;
-      const side = sideToJoin(state, army, battle.attackers, battle.defenders);
-      if (!side) continue;
-      battle[side].push(army.id);
-      army.activity = { kind: 'inBattle', position, battle: battle.id };
-      break;
+      if (join(state, army, position, battle)) break;
     }
   }
+}
+
+function join(state: GameState, army: Army, position: MapPoint, battle: Battle): boolean {
+  if (distance(position, battle.position) > ENGAGEMENT_DISTANCE) return false;
+  const side = sideToJoin(state, army, battle.attackers, battle.defenders);
+  if (!side) return false;
+  battle[side].push(army.id);
+  army.activity = { kind: 'inBattle', position, battle: battle.id };
+  return true;
 }
 
 /**
@@ -111,7 +115,8 @@ function sideToJoin(
 }
 
 /**
- * Pairs each free army, in id order, with the nearest free enemy in range. A marching
+ * Pairs each free army, in id order, with the nearest free enemy in range, and lets
+ * the free armies in range of the new battle join it before the next pair is made. A marching
  * army attacks an idle one. Otherwise the army whose id sorts first attacks.
  */
 function startBattles(state: GameState) {
@@ -138,16 +143,20 @@ function startBattles(state: GameState) {
         ? [nearest, a]
         : [a, nearest];
     const id = allocateId(state, 'battle');
-    state.battles[id] = {
+    const battle: Battle = {
       id,
       position: midpoint(attacker.position, defender.position),
       attackers: [attacker.army.id],
       defenders: [defender.army.id],
       startedOn: state.day,
     };
+    state.battles[id] = battle;
     for (const { army, position } of [attacker, defender]) {
       army.activity = { kind: 'inBattle', position, battle: id };
       taken.add(army.id);
+    }
+    for (const { army, position } of free) {
+      if (!taken.has(army.id) && join(state, army, position, battle)) taken.add(army.id);
     }
   }
 }
