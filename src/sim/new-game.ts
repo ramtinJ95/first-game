@@ -1,5 +1,6 @@
 import { allocateId, type CityId, type FactionId } from './ids.ts';
 import { POWERS, type GameMap, type PowerId, type Province } from './map.ts';
+import { serialOf } from './references.ts';
 import { seedRng } from './rng.ts';
 import type { Day } from './state/day.ts';
 import type { GameState } from './state/game-state.ts';
@@ -41,7 +42,7 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
   const state: GameState = {
     day: 1 as Day,
     rng: seedRng(seed),
-    nextSerial: 1,
+    nextSerial: 1 + Math.max(0, ...map.provinces.map(({ id }) => serialOf(id) ?? 0)),
     player: player as FactionId,
     factions: {},
     provinces: {},

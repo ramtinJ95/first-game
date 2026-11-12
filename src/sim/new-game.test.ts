@@ -119,6 +119,19 @@ describe('newGame on the committed map', () => {
     expectConsistent(state);
   });
 
+  test('a map province id shaped like a counter id keeps the counter above it', () => {
+    const renamed = structuredClone(map);
+    const [first] = renamed.provinces;
+    if (!first) throw new Error('the map has no provinces');
+    const old = first.id;
+    const id = 'city-99' as typeof old;
+    first.id = id;
+    for (const p of renamed.provinces) p.neighbours = p.neighbours.map((n) => (n === old ? id : n));
+    const state = newGame(parseMap(renamed), { seed: 7, player: 'rome' });
+    expect(loadGame(saveGame(state)).ok).toBe(true);
+    expectConsistent(state);
+  });
+
   test('365 ticks from the new game run with no broken link', () => {
     let state = start();
     for (let day = 0; day < 365; day++) {
