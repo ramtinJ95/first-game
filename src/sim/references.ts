@@ -1,6 +1,12 @@
 import type { DeepReadonly } from './deep-readonly.ts';
 import type { GameState } from './state/game-state.ts';
 
+/** The counter number in an id shaped like one `allocateId` hands out, such as `army-3`. */
+export function serialOf(id: string): number | undefined {
+  const serial = /^[a-zA-Z]+-(\d+)$/.exec(id)?.[1];
+  return serial === undefined ? undefined : Number(serial);
+}
+
 /**
  * Lists every id in the state that points at a missing record or at a record that
  * does not point back. An empty list means the records agree with each other.
@@ -34,9 +40,9 @@ export function findBrokenReferences(state: DeepReadonly<GameState>): string[] {
   for (const [name, records] of Object.entries(collections)) {
     for (const [key, record] of Object.entries(records)) {
       expect(record.id === key, `${name}.${key} holds a record with id ${record.id}`);
-      const serial = /^[a-zA-Z]+-(\d+)$/.exec(key)?.[1];
+      const serial = serialOf(key);
       expect(
-        serial === undefined || Number(serial) < state.nextSerial,
+        serial === undefined || serial < state.nextSerial,
         `${name}.${key} is not below nextSerial ${state.nextSerial}, so a new id could repeat it`,
       );
     }

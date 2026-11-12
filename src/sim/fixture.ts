@@ -32,8 +32,8 @@ export function buildFixture(seed = 1): GameState {
     nextSerial: 1,
     player: f.rome,
     factions: {
-      [f.rome]: { id: f.rome, name: 'Rome' },
-      [f.carthage]: { id: f.carthage, name: 'Carthage' },
+      [f.rome]: { id: f.rome, name: 'Rome', kind: 'greatPower' },
+      [f.carthage]: { id: f.carthage, name: 'Carthage', kind: 'greatPower' },
     },
     provinces: {
       [f.latium]: { id: f.latium, name: 'Latium', city: f.roma },
