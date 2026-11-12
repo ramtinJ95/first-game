@@ -1,0 +1,52 @@
+[
+  {
+    "file": "whole-map.png",
+    "title": "The widest zoom shows the whole map, from Britain to the Iranian plateau",
+    "kind": "screenshot"
+  },
+  {
+    "file": "italy.png",
+    "title": "Italy at 0.53 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "selected-province.png",
+    "title": "Syracusae selected: its outline is inked and the city panel shows the city, its owner, and its defences",
+    "kind": "screenshot"
+  },
+  {
+    "file": "owner-changed.png",
+    "title": "After a save in which Rome holds Syracusae is dropped on the page, Sicily takes the Roman wash",
+    "kind": "screenshot"
+  },
+  {
+    "file": "persia.png",
+    "title": "Persia and the Iranian plateau at 0.43 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "closest-roma.png",
+    "title": "The closest zoom, 4.0 px per km, on Roma and the Roman army's banner",
+    "kind": "screenshot"
+  },
+  {
+    "file": "pan-frame-time.png",
+    "title": "Pan over the map at 0.99 px per km: 396 frames, frame interval median 416.8 ms, p95 1216.6 ms, main thread busy 8.5 ms per frame; idle frame interval median NaN ms",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The atlas map: zoom toward Italy, pan, hold while the sea moves, select Syracusae, load a save in which Rome holds it, zoom out",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The atlas map: zoom toward Italy, pan, hold while the sea moves, select Syracusae, load a save in which Rome holds it, zoom out (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The atlas map: zoom toward Italy, pan, hold while the sea moves, select Syracusae, load a save in which Rome holds it, zoom out (Playwright trace)",
+    "kind": "trace"
+  }
+]
