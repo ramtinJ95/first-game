@@ -11,7 +11,7 @@
   },
   {
     "file": "selected-province.png",
-    "title": "Syracusae selected: its outline is inked and the readout names the province, city, owner, and population",
+    "title": "Syracusae selected: its outline is inked and the city panel shows the city, its owner, and its defences",
     "kind": "screenshot"
   },
   {
@@ -31,7 +31,7 @@
   },
   {
     "file": "pan-frame-time.png",
-    "title": "Pan over the map at 0.99 px per km: 387 frames, frame interval median 300.0 ms, p95 683.3 ms, main thread busy 5.2 ms per frame; idle frame interval median 16.7 ms",
+    "title": "Pan over the map at 0.99 px per km: 429 frames, frame interval median 349.9 ms, p95 916.7 ms, main thread busy 5.5 ms per frame; idle frame interval median 16.7 ms",
     "kind": "screenshot"
   },
   {
