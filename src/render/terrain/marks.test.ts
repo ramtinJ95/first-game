@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { parseMap } from '../../sim/map.ts';
-import { Land, placeFields, placeRelief, TIERS, type Mark, type Tier } from './marks.ts';
+import { Land, placeFields, placeRelief, TIERS, WOOD_RIM, type Mark, type Tier } from './marks.ts';
 
 const map = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../../../data/map/map.json'), 'utf8')),
@@ -85,6 +85,22 @@ describe('placing the terrain', () => {
         }
       }
     }
+  });
+
+  it('keeps every wood, rim included, on land', () => {
+    const atSea: string[] = [];
+    for (const wood of land.woods) {
+      for (const lobe of wood.lobes) {
+        for (let k = 0; k < 12; k++) {
+          const a = (k / 12) * Math.PI * 2;
+          const x = lobe.x + Math.cos(a) * lobe.r * WOOD_RIM;
+          const y = lobe.y + Math.sin(a) * lobe.r * WOOD_RIM;
+          if (!land.land.inside(x, y)) atSea.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+        }
+      }
+    }
+    expect(land.woods.length).toBeGreaterThan(300);
+    expect(atSea).toEqual([]);
   });
 
   it('draws the higher mountains larger', () => {

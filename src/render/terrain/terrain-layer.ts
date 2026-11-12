@@ -10,8 +10,13 @@ import type { Rect } from './scatter.ts';
 
 /** A chunk fades in over this long once it is built, so a late chunk does not pop. */
 const CHUNK_FADE_MS = 260;
-/** Spare time in a frame for building chunks, and the most chunks built in one frame. */
-const BUILD_BUDGET_MS = 8;
+/**
+ * One chunk is built a frame at most. Once the camera has rested this long, the chunks
+ * around the view, and those of a tier that is within this zoom factor of fading in, are
+ * built ahead, so a pan or a zoom finds most of its chunks ready.
+ */
+const PREFETCH_AFTER_MS = 250;
+const PREFETCH_ZOOM = 1.6;
 /** Lake water lines in screen pixels from the shore, like the sea's but closer. */
 const LAKE_LINES = [
   { distance: 9, strength: 0.16 },
@@ -125,6 +130,9 @@ export function createTerrain(map: GameMap, parent: Container): Terrain {
     return g;
   }
 
+  let lastCamera: Camera = { centre: { x: NaN, y: NaN }, scale: NaN };
+  let stillSince = 0;
+
   return {
     lakes,
     land,
@@ -148,55 +156,53 @@ export function createTerrain(map: GameMap, parent: Container): Terrain {
     },
     update(camera, viewport, now) {
       const view = visibleRect(camera, viewport);
+      const centre = { x: (view.left + view.right) / 2, y: (view.top + view.bottom) / 2 };
+      const moved =
+        camera.scale !== lastCamera.scale ||
+        camera.centre.x !== lastCamera.centre.x ||
+        camera.centre.y !== lastCamera.centre.y;
+      if (moved) stillSince = now;
+      lastCamera = camera;
+      const still = now - stillSince > PREFETCH_AFTER_MS;
       let fading = false;
-      const started = performance.now();
+      let next: { layer: Layer; key: number; distance: number; needed: boolean } | undefined;
       for (const layer of layers) {
         const alpha = detailAlpha(layer.band, camera.scale);
         layer.container.alpha = alpha;
         layer.container.visible = alpha > 0.002;
-        if (!layer.container.visible) continue;
+        const soon = camera.scale > layer.band.in[0] / PREFETCH_ZOOM;
+        if (!layer.container.visible && !(still && soon)) continue;
         const { size } = layer;
-        const margin = size * 0.25;
         const wanted = new Set<number>();
-        const i0 = Math.max(0, Math.floor((view.left - margin) / size));
-        const j0 = Math.max(0, Math.floor((view.top - margin) / size));
-        const i1 = Math.floor((view.right + margin) / size);
-        const j1 = Math.floor((view.bottom + margin) / size);
-        const centre = { x: (view.left + view.right) / 2, y: (view.top + view.bottom) / 2 };
-        const missing: number[] = [];
+        const ring = still ? size : 0;
+        const i0 = Math.max(0, Math.floor((view.left - ring) / size));
+        const j0 = Math.max(0, Math.floor((view.top - ring) / size));
+        const i1 = Math.floor((view.right + ring) / size);
+        const j1 = Math.floor((view.bottom + ring) / size);
         for (let i = i0; i <= i1; i++) {
           for (let j = j0; j <= j1; j++) {
             const key = i * 4096 + j;
-            wanted.add(key);
-            if (!layer.chunks.has(key)) missing.push(key);
+            const rect = rectOf(size, key);
+            const inView =
+              layer.container.visible &&
+              rect.right > view.left &&
+              rect.left < view.right &&
+              rect.bottom > view.top &&
+              rect.top < view.bottom;
+            if (inView) wanted.add(key);
+            if (layer.chunks.has(key)) continue;
+            const distance = Math.hypot(
+              (rect.left + rect.right) / 2 - centre.x,
+              (rect.top + rect.bottom) / 2 - centre.y,
+            );
+            if (
+              !next ||
+              (inView && !next.needed) ||
+              (inView === next.needed && distance < next.distance)
+            ) {
+              next = { layer, key, distance, needed: inView };
+            }
           }
-        }
-        missing.sort((a, b) => {
-          const ra = rectOf(size, a);
-          const rb = rectOf(size, b);
-          const da = Math.hypot(
-            (ra.left + ra.right) / 2 - centre.x,
-            (ra.top + ra.bottom) / 2 - centre.y,
-          );
-          const db = Math.hypot(
-            (rb.left + rb.right) / 2 - centre.x,
-            (rb.top + rb.bottom) / 2 - centre.y,
-          );
-          return da - db;
-        });
-        for (const key of missing) {
-          if (performance.now() - started > BUILD_BUDGET_MS) {
-            fading = true;
-            break;
-          }
-          const graphics = layer.build(rectOf(size, key));
-          graphics.alpha = 0;
-          layer.chunks.set(key, { graphics, bornAt: now });
-          const row = key % 4096;
-          const before = [...layer.chunks.entries()].filter(
-            ([other]) => other !== key && other % 4096 <= row,
-          ).length;
-          layer.container.addChildAt(graphics, Math.min(before, layer.container.children.length));
         }
         for (const [key, chunk] of layer.chunks) {
           const shown = wanted.has(key);
@@ -206,6 +212,18 @@ export function createTerrain(map: GameMap, parent: Container): Terrain {
           chunk.graphics.alpha = age;
           if (age < 1) fading = true;
         }
+      }
+      if (next) {
+        const { layer, key } = next;
+        const graphics = layer.build(rectOf(layer.size, key));
+        graphics.alpha = 0;
+        graphics.visible = next.needed;
+        layer.chunks.set(key, { graphics, bornAt: now });
+        const row = key % 4096;
+        let before = 0;
+        for (const other of layer.chunks.keys()) if (other !== key && other % 4096 <= row) before++;
+        layer.container.addChildAt(graphics, Math.min(before, layer.container.children.length));
+        fading = true;
       }
       return fading;
     },

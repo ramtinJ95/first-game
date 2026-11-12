@@ -1,7 +1,7 @@
 import { GraphicsContext } from 'pixi.js';
 import type { MultiPolygon, Peak } from '../../sim/map.ts';
 import { INK, PAPER } from '../palette.ts';
-import type { Crop, Mark, Tier, Wood } from './marks.ts';
+import { WOOD_RIM, type Crop, type Mark, type Tier, type Wood } from './marks.ts';
 import { stream } from './random.ts';
 
 export function mix(from: number, to: number, t: number): number {
@@ -355,7 +355,7 @@ export function drawDesert(outlines: readonly MultiPolygon[]): GraphicsContext {
 /** The green ground of the woods, with a paler rim so a wood's edge is soft. */
 export function drawWoods(woods: readonly Wood[]): GraphicsContext {
   const g = new GraphicsContext();
-  for (const wood of woods) for (const l of wood.lobes) g.circle(l.x, l.y, l.r * 1.18);
+  for (const wood of woods) for (const l of wood.lobes) g.circle(l.x, l.y, l.r * WOOD_RIM);
   g.fill(TERRAIN_COLOURS.woodEdge);
   for (const wood of woods) for (const l of wood.lobes) g.circle(l.x, l.y, l.r);
   g.fill(TERRAIN_COLOURS.wood);

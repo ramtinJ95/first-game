@@ -121,32 +121,33 @@ export class AreaIndex {
     const field = new Float32Array(length);
     for (let k = 0; k < length; k++) field[k] = this.#cells[k] === EDGE ? 0 : reach;
     const w = this.#columns;
+    const h = this.#rows;
     const straight = CELL;
     const diagonal = CELL * Math.SQRT2;
-    const relax = (k: number, other: number, step: number) => {
-      const via = (field[other] as number) + step;
-      if (via < (field[k] as number)) field[k] = via;
-    };
-    for (let j = 0; j < this.#rows; j++) {
+    for (let j = 0; j < h; j++) {
       for (let i = 0; i < w; i++) {
         const k = j * w + i;
-        if (i > 0) relax(k, k - 1, straight);
+        let d = field[k] as number;
+        if (i > 0) d = Math.min(d, (field[k - 1] as number) + straight);
         if (j > 0) {
-          relax(k, k - w, straight);
-          if (i > 0) relax(k, k - w - 1, diagonal);
-          if (i < w - 1) relax(k, k - w + 1, diagonal);
+          d = Math.min(d, (field[k - w] as number) + straight);
+          if (i > 0) d = Math.min(d, (field[k - w - 1] as number) + diagonal);
+          if (i < w - 1) d = Math.min(d, (field[k - w + 1] as number) + diagonal);
         }
+        field[k] = d;
       }
     }
-    for (let j = this.#rows - 1; j >= 0; j--) {
+    for (let j = h - 1; j >= 0; j--) {
       for (let i = w - 1; i >= 0; i--) {
         const k = j * w + i;
-        if (i < w - 1) relax(k, k + 1, straight);
-        if (j < this.#rows - 1) {
-          relax(k, k + w, straight);
-          if (i < w - 1) relax(k, k + w + 1, diagonal);
-          if (i > 0) relax(k, k + w - 1, diagonal);
+        let d = field[k] as number;
+        if (i < w - 1) d = Math.min(d, (field[k + 1] as number) + straight);
+        if (j < h - 1) {
+          d = Math.min(d, (field[k + w] as number) + straight);
+          if (i < w - 1) d = Math.min(d, (field[k + w + 1] as number) + diagonal);
+          if (i > 0) d = Math.min(d, (field[k + w - 1] as number) + diagonal);
         }
+        field[k] = d;
       }
     }
     return field;

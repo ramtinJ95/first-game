@@ -84,13 +84,26 @@ async function dropSave(page: Page, text: string) {
   await page.dispatchEvent('canvas', 'drop', { dataTransfer });
 }
 
-/** The village that lies farthest from any city, so its closest view shows no city. */
+function distanceToFrame(x: number, y: number): number {
+  let best = Infinity;
+  const ring = map.extent;
+  for (const [i, [ax, ay]] of ring.entries()) {
+    const [bx, by] = ring[(i + 1) % ring.length] ?? ring[0] ?? [ax, ay];
+    const dx = bx - ax;
+    const dy = by - ay;
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)));
+    best = Math.min(best, Math.hypot(ax + t * dx - x, ay + t * dy - y));
+  }
+  return best;
+}
+
+/** The village farthest from any city, among those well inside the map's frame. */
 function remoteVillage(): MapPoint & { name: string } {
   let best: (MapPoint & { name: string; distance: number }) | undefined;
   for (const s of map.settlements) {
     if (s.rank !== 'village') continue;
     const [x, y] = s.at;
-    if (x < 300 || y < 300 || x > map.width - 300 || y > map.height - 300) continue;
+    if (distanceToFrame(x, y) < 150) continue;
     const distance = Math.min(
       ...map.provinces.map((p) => Math.hypot(p.city[0] - x, p.city[1] - y)),
     );

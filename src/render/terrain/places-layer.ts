@@ -9,7 +9,10 @@ import { approach, claimSymbols } from './places.ts';
 
 type Rank = 'town' | 'village';
 
-/** A symbol or name fades in or out over this long when it gains or loses its place. */
+/**
+ * A symbol or name fades in over this long when it gains its place. One that loses its
+ * place hides at once, since the name or symbol that took the place is already there.
+ */
 const FADE_MS = 220;
 const SERIF = [
   'Palatino Linotype',
@@ -66,8 +69,6 @@ interface Drawn {
   readonly name: string;
   readonly symbol: Graphics | undefined;
   label: Text | undefined;
-  /** Where the name sits from the place's point on screen, once it has been placed. */
-  offset: { x: number; y: number };
   symbolAlpha: number;
   symbolWanted: boolean;
   labelAlpha: number;
@@ -114,7 +115,6 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
     ...d,
     symbol: d.kind === 'peak' ? undefined : new Graphics(symbols[d.kind]),
     label: undefined,
-    offset: { x: 0, y: 0 },
     symbolAlpha: 0,
     symbolWanted: false,
     labelAlpha: 0,
@@ -180,7 +180,6 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
             : { x: HALF[d.kind].x * grow, y: HALF[d.kind].y * grow };
         d.symbol?.position.set(at.x, at.y);
         d.symbol?.scale.set(grow);
-        d.label?.position.set(at.x + d.offset.x, at.y + d.offset.y);
         onScreen.push({
           d,
           at,
@@ -234,7 +233,6 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
         const d = byId.get(id);
         if (!d?.label) continue;
         d.labelWanted = true;
-        d.offset = { x: box.left - d.label.x + d.offset.x, y: box.top - d.label.y + d.offset.y };
         d.label.position.set(box.left, box.top);
       }
     },
@@ -245,14 +243,14 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
       let fading = false;
       for (const d of all) {
         if (d.symbol) {
-          d.symbolAlpha = approach(d.symbolAlpha, d.symbolWanted ? 1 : 0, delta);
+          d.symbolAlpha = d.symbolWanted ? approach(d.symbolAlpha, 1, delta) : 0;
           const band = d.kind === 'town' ? bands.towns : bands.villages;
           d.symbol.alpha = d.symbolAlpha * band;
           d.symbol.visible = d.symbol.alpha > 0.01;
           if (d.symbolAlpha !== (d.symbolWanted ? 1 : 0)) fading = true;
         }
         if (d.label) {
-          d.labelAlpha = approach(d.labelAlpha, d.labelWanted ? 1 : 0, delta);
+          d.labelAlpha = d.labelWanted ? approach(d.labelAlpha, 1, delta) : 0;
           const band =
             d.kind === 'peak'
               ? bands.peakNames

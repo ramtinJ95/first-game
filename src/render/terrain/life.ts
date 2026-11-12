@@ -37,13 +37,7 @@ interface Boat {
  * Finds open water off a port: the sea point within 25 km of the city with the most sea
  * around it, and a heading along the shore from which the boat stays at sea.
  */
-function boatSpot(
-  land: Land,
-  map: GameMap,
-  x: number,
-  y: number,
-  phase: number,
-): Boat | undefined {
+function boatSpot(land: Land, map: GameMap, x: number, y: number, phase: number): Boat | undefined {
   const sea = (px: number, py: number) =>
     px > 0 &&
     py > 0 &&

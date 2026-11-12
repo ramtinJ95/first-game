@@ -46,8 +46,8 @@ export type Tier = 'wide' | 'middle' | 'close';
 /** Spacing of each kind of drawing in km, and the side of a chunk, per tier. */
 export const TIERS = {
   wide: { chunk: 2048, mountain: 26, ridge: 0, hill: 62, tree: 0, dune: 0, stipple: 0 },
-  middle: { chunk: 512, mountain: 9, ridge: 24, hill: 22, tree: 4.6, dune: 13, stipple: 7 },
-  close: { chunk: 128, mountain: 4.6, ridge: 13, hill: 9, tree: 1.7, dune: 5.5, stipple: 2.8 },
+  middle: { chunk: 256, mountain: 9, ridge: 24, hill: 22, tree: 4.6, dune: 13, stipple: 7 },
+  close: { chunk: 64, mountain: 4.6, ridge: 13, hill: 9, tree: 1.7, dune: 5.5, stipple: 2.8 },
 } as const satisfies Record<Tier, Record<string, number>>;
 
 /** A great power's capital, a city, a town, and a village keep this much land clear, in km. */
@@ -68,8 +68,12 @@ const FIELD_SIZE: Record<PlaceRank, readonly [number, number]> = {
 };
 const TRACK_REACH = 34;
 const WOOD_SPACING = { edge: 62, middle: 30 } as const;
+/** A wood's pale rim reaches this far beyond its lobes. */
+export const WOOD_RIM = 1.18;
 const DEPTH_FULL = { mountains: 45, forest: 90 } as const;
 const PEAK_REACH = 45;
+/** How far from the coast the land index measures, so a wood can keep off the sea. */
+const COAST_REACH = 40;
 
 /** Names of the deserts that are seas of dunes rather than stone and gravel. */
 const SAND_SEA = /erg|sand sea|nafud|rub' al khali|karakum|kyzyl|registan|calanshio|libyan/i;
@@ -118,7 +122,10 @@ export class Land {
   readonly #woodGrid = new Map<number, Wood['lobes'][number][]>();
 
   constructor(map: GameMap) {
-    this.land = new AreaIndex(map.provinces.map((p) => p.outline));
+    this.land = new AreaIndex(
+      map.provinces.map((p) => p.outline),
+      COAST_REACH,
+    );
     this.lakes = new AreaIndex(kindOutlines(map, 'lake'));
     this.mountains = new AreaIndex(kindOutlines(map, 'mountains'), DEPTH_FULL.mountains);
     this.hills = new AreaIndex(kindOutlines(map, 'hills'));
@@ -267,7 +274,11 @@ export class Land {
       const clear = lobes
         .map((lobe) => ({
           ...lobe,
-          r: Math.min(lobe.r, this.mountains.distance(lobe.x, lobe.y) - 2),
+          r: Math.min(
+            lobe.r,
+            this.mountains.distance(lobe.x, lobe.y) - 2,
+            this.land.distance(lobe.x, lobe.y) / WOOD_RIM - 1,
+          ),
         }))
         .filter((lobe) => lobe.r > size * 0.25 && !this.mountains.inside(lobe.x, lobe.y));
       return clear.length > 0 ? [{ x, y, lobes: clear }] : [];
@@ -382,15 +393,16 @@ function desert(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
       if (!land.desert.inside(x, y) || !land.open(x, y) || land.cleared(x, y, tier))
         return undefined;
       const sand = land.sand.inside(x, y);
-      if (!sand && valueNoise(x, y, 60, salt + 31) < 0.62) return undefined;
-      return dune * (sand ? 1 : 1.5);
+      const field = valueNoise(x, y, 60, salt + 31);
+      if (field < (sand ? 0.3 : 0.62)) return undefined;
+      return dune * (sand ? 1.6 - field : 1.5);
     },
     dune * 1.5,
   )) {
     const random = stream(seed);
     const angle =
       DUNE_ANGLE + (valueNoise(x, y, 200, salt + 32) - 0.5) * 0.6 + (random() - 0.5) * 0.25;
-    marks.push({ kind: 'dune', x, y, length: radius * (0.9 + 0.5 * random()), angle, seed });
+    marks.push({ kind: 'dune', x, y, length: radius * (0.7 + 0.8 * random()), angle, seed });
   }
   for (const { x, y, radius, seed } of scatter(
     rect,
