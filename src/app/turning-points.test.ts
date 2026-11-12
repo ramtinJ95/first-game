@@ -48,6 +48,17 @@ describe('turningPoints', () => {
     expectConsistent(after);
   });
 
+  it('names no last city when several fell on the same day', () => {
+    const before = buildFixture();
+    const after = structuredClone(before);
+    changeCityOwner(after, f.capua, f.syracusaeFaction);
+    changeCityOwner(after, f.roma, f.carthage);
+    expect(turningPoints(before, after, world)).toEqual([
+      { kind: 'lost', on: before.day, city: undefined, by: undefined },
+    ]);
+    expectConsistent(after);
+  });
+
   it('tells of the win on the day the rule is first met', () => {
     const before = newGame(world.map, { seed: 1, player: 'rome' });
     for (const id of ['carthago', 'alexandria'] as CityId[]) changeCityOwner(before, id, f.rome);

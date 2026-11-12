@@ -26,10 +26,11 @@ export function turningPoints(before: State, after: State, world: World): Turnin
   const was = outcomeOf(before, world, player);
   const is = outcomeOf(after, world, player);
   if (is.kind === 'lost' && was.kind !== 'lost') {
-    const last = Object.values(after.cities)
-      .filter((city) => before.cities[city.id]?.owner === player && city.owner !== player)
-      .sort((a, b) => (a.id < b.id ? -1 : 1))
-      .at(-1);
+    // The day does not record which of several cities fell last, so only a lone one is named.
+    const lost = Object.values(after.cities).filter(
+      (city) => before.cities[city.id]?.owner === player && city.owner !== player,
+    );
+    const last = lost.length === 1 ? lost[0] : undefined;
     points.push({ kind: 'lost', on: is.on, city: last?.id, by: last?.owner });
     return points;
   }
