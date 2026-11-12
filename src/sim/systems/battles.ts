@@ -44,11 +44,12 @@ const STANCE_EFFECTS: Record<Stance, { dealt: number; taken: number; morale: num
 type Side = 'attackers' | 'defenders';
 
 /**
- * Starts battles between armies at war that meet, adds armies that come up to a
- * battle, the new ones included, plays one day of every battle, and lets idle armies regain morale.
+ * Adds armies that come up to a running battle, starts battles between armies at
+ * war that meet, adds the armies left over to those new battles, plays one day of every battle, and lets idle armies regain morale.
  */
 export function battles(state: GameState): void {
   recoverMorale(state);
+  joinBattles(state);
   startBattles(state);
   joinBattles(state);
   for (const battle of sortedValues(state.battles)) {

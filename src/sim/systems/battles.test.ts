@@ -138,6 +138,29 @@ describe('engagement', () => {
     expectConsistent(state);
   });
 
+  test('reserves of both sides that reach a running battle together join it', () => {
+    let state = atWar();
+    place(state, FIXTURE.punicArmy, { kind: 'idle', position: { x: 1250, y: 615 } });
+    state = tick(state, []).state;
+    const [battle] = Object.values(state.battles);
+    if (!battle) throw new Error('no battle started');
+    const roman = addArmy(state, 'roman-reserve', 500, { kind: 'idle', position: battle.position });
+    const punic = addArmy(
+      state,
+      'punic-reserve',
+      500,
+      { kind: 'idle', position: battle.position },
+      FIXTURE.carthage,
+    );
+    state = tick(state, []).state;
+    expect(Object.keys(state.battles)).toEqual([battle.id]);
+    expect(state.battles[battle.id]).toMatchObject({
+      attackers: [FIXTURE.punicArmy, punic],
+      defenders: [FIXTURE.romanArmy, roman],
+    });
+    expectConsistent(state);
+  });
+
   test('a reserve beside a battle that starts today joins it on its first day', () => {
     const state = atWar();
     place(state, FIXTURE.punicArmy, { kind: 'idle', position: { x: 1245, y: 615 } });
