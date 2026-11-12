@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test } from 'vitest';
-import { parseMap, type GameMap, type Province } from './map.ts';
+import { parseMap, type GameMap, type Province, type Settlement, type TerrainArea } from './map.ts';
 
 const committed: unknown = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../../data/map/map.json'), 'utf8'),
@@ -12,9 +12,12 @@ test('parseMap accepts the committed map and returns its data unchanged', () => 
 });
 
 const first = (map: GameMap) => map.provinces[0] as Province;
+const firstTerrain = (map: GameMap) => map.terrain[0] as TerrainArea;
+const firstSettlement = (map: GameMap) => map.settlements[0] as Settlement;
 
 test.each<[string, (map: GameMap) => void, RegExp]>([
   ['a newer version', (map) => Object.assign(map, { version: 3 }), /^map\.version:/],
+  ['the previous version', (map) => Object.assign(map, { version: 1 }), /^map\.version:/],
   [
     'an unknown owner',
     (map) => Object.assign(first(map), { owner: 'atlantis' }),
@@ -53,6 +56,21 @@ test.each<[string, (map: GameMap) => void, RegExp]>([
     'a duplicate province id',
     (map) => map.provinces.push(structuredClone(first(map))),
     /duplicate id/,
+  ],
+  [
+    'an unknown terrain kind',
+    (map) => Object.assign(firstTerrain(map), { kind: 'swamp' }),
+    /^map\.terrain\[0\]\.kind: unknown terrain kind swamp/,
+  ],
+  [
+    'a settlement in a province that does not exist',
+    (map) => Object.assign(firstSettlement(map), { province: 'atlantis' }),
+    /^map\.settlements\[0\]\.province: unknown province atlantis/,
+  ],
+  [
+    'a duplicate settlement id',
+    (map) => map.settlements.push(structuredClone(firstSettlement(map))),
+    /^map\.settlements\[\d+\]\.id: duplicate id s-\d+/,
   ],
 ])('parseMap rejects %s and names the field', (_, breakIt, message) => {
   const broken = structuredClone(parseMap(committed));

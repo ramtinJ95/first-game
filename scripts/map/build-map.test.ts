@@ -1,14 +1,35 @@
 import { readFileSync } from 'node:fs';
 import { beforeAll, expect, test } from 'vitest';
-import { parseMap, POWERS, type GameMap, type MultiPolygon } from '../../src/sim/map.ts';
+import {
+  parseMap,
+  POWERS,
+  TERRAIN_KINDS,
+  type GameMap,
+  type MultiPolygon,
+} from '../../src/sim/map.ts';
 import type { ProvinceId } from '../../src/sim/ids.ts';
 import { buildMap, landInExtent, MAP_FILE, MAX_CITY_MOVE_KM, serializeMap } from './build-map.ts';
 import { readCities, type City } from './cities.ts';
 import { COASTAL_MIN_SEA_KM, NEIGHBOUR_MIN_BORDER_KM } from './provinces.ts';
-import { area, boxesOverlap, boxOf, contains, intersection, union, xor } from './geometry.ts';
+import {
+  area,
+  boxesOverlap,
+  boxOf,
+  contains,
+  difference,
+  distance,
+  intersection,
+  perimeter,
+  union,
+  xor,
+} from './geometry.ts';
+import { MIN_CITY_SPACING_KM, MIN_SPACING_KM, quotaOf } from './settlements.ts';
 import { loadSources, type Sources } from './sources.ts';
+import { MIN_PEAK_M } from './terrain.ts';
 
 const BUILD_TIMEOUT_MS = 60_000;
+/** Rounding a vertex to the 0.1 km grid moves it by at most this, so an edge sweeps this times its length. */
+const ROUNDING_KM = 0.071;
 
 let sources: Sources;
 let committedText: string;
@@ -175,3 +196,101 @@ test(
   },
   BUILD_TIMEOUT_MS,
 );
+
+test(
+  'every terrain area has a known kind, a unique kind and name, and lies on the land inside the extent',
+  () => {
+    const parts = land.map((polygon) => ({ polygon, box: boxOf([polygon]) }));
+    const problems = map.terrain.flatMap(({ kind, name, outline }) => {
+      const box = boxOf(outline);
+      const near = parts.filter((part) => boxesOverlap(part.box, box)).map((part) => part.polygon);
+      const off = area(difference(outline, near));
+      const bound = ROUNDING_KM * perimeter(outline);
+      return off > bound
+        ? [`${kind} ${name}: ${off.toFixed(1)} km² off the land, bound ${bound.toFixed(1)}`]
+        : [];
+    });
+    expect(problems).toEqual([]);
+    expect(map.terrain.filter(({ kind }) => !TERRAIN_KINDS.includes(kind))).toEqual([]);
+    const keys = map.terrain.map(({ kind, name }) => `${kind}/${name}`);
+    expect(keys.filter((key, i) => keys.indexOf(key) !== i)).toEqual([]);
+  },
+  BUILD_TIMEOUT_MS,
+);
+
+test.each(TERRAIN_KINDS)(
+  '%s areas overlap each other only in slivers that rounding to 0.1 km explains',
+  (kind) => {
+    const areas = map.terrain.filter((terrain) => terrain.kind === kind);
+    const boxes = areas.map((terrain) => boxOf(terrain.outline));
+    let overlap = 0;
+    let bound = 0;
+    areas.forEach((a, i) => {
+      areas.slice(i + 1).forEach((b, k) => {
+        const [boxA, boxB] = [boxes[i], boxes[i + 1 + k]];
+        if (boxA && boxB && boxesOverlap(boxA, boxB)) {
+          const shared = intersection(a.outline, b.outline);
+          overlap += area(shared);
+          bound += ROUNDING_KM * perimeter(shared);
+        }
+      });
+    });
+    expect(overlap).toBeLessThanOrEqual(bound);
+  },
+  BUILD_TIMEOUT_MS,
+);
+
+test('there are mountains, hills, desert, forest, and lakes, and the Alps are named', () => {
+  for (const kind of TERRAIN_KINDS) {
+    expect(
+      map.terrain.some((terrain) => terrain.kind === kind),
+      kind,
+    ).toBe(true);
+  }
+  expect(map.terrain.some(({ kind, name }) => kind === 'mountains' && name === 'Alps')).toBe(true);
+});
+
+test(`every peak lies on the land inside the extent and is at least ${MIN_PEAK_M} m high`, () => {
+  expect(map.peaks.length).toBeGreaterThan(0);
+  const wrong = map.peaks
+    .filter((peak) => !contains(land, peak.at) || peak.height < MIN_PEAK_M)
+    .map((peak) => peak.name);
+  expect(wrong).toEqual([]);
+});
+
+test('every settlement lies inside its own province and on the land (exact test, no tolerance)', () => {
+  expect(map.settlements.length).toBeGreaterThan(0);
+  const outlineOf = new Map(map.provinces.map((province) => [province.id, province.outline]));
+  const misplaced = map.settlements.flatMap((settlement) => {
+    const problems = [];
+    if (!contains(outlineOf.get(settlement.province) ?? [], settlement.at)) {
+      problems.push(`outside ${settlement.province}`);
+    }
+    if (!contains(land, settlement.at)) problems.push('off the land');
+    return problems.map((problem) => `${settlement.id}: ${problem}`);
+  });
+  expect(misplaced).toEqual([]);
+});
+
+test(`settlements are at least ${MIN_SPACING_KM} km apart and at least ${MIN_CITY_SPACING_KM} km from every city`, () => {
+  const crowded = map.settlements.flatMap((settlement, i) => [
+    ...map.settlements
+      .slice(i + 1)
+      .filter((other) => distance(settlement.at, other.at) < MIN_SPACING_KM)
+      .map((other) => `${settlement.id} / ${other.id}`),
+    ...map.provinces
+      .filter((province) => distance(settlement.at, province.city) < MIN_CITY_SPACING_KM)
+      .map((province) => `${settlement.id} / city ${province.id}`),
+  ]);
+  expect(crowded).toEqual([]);
+});
+
+test('no province holds more settlements than its quota, and no city is also a settlement', () => {
+  const over = map.provinces.flatMap((province) => {
+    const count = map.settlements.filter((s) => s.province === province.id).length;
+    return count > quotaOf(province.area) ? [`${province.id}: ${count}`] : [];
+  });
+  expect(over).toEqual([]);
+  const cityIds = new Set(map.provinces.map((province) => province.pleiadesId));
+  expect(map.settlements.filter((s) => cityIds.has(s.pleiadesId)).map((s) => s.id)).toEqual([]);
+});
