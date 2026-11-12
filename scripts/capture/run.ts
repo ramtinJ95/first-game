@@ -180,7 +180,9 @@ async function main(names: string[]): Promise<number> {
       for (const scenario of scenarios) {
         console.log(`capturing ${scenario.name}`);
         const result = await captureScenario(browser, `http://127.0.0.1:${port}`, scenario);
-        for (const failure of result.failures) console.error(`${scenario.name}: ${failure}`);
+        for (const failure of result.failures) {
+          console.error(`::error::${scenario.name}: ${failure.replaceAll('\n', ' | ')}`);
+        }
         results.push(result);
       }
     } finally {
