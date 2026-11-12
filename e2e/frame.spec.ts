@@ -20,6 +20,7 @@ import {
   openGame,
   pause,
   playDays,
+  resume,
   romaFallsTomorrow,
   rome,
   romeWinsTomorrow,
@@ -29,8 +30,12 @@ import {
 
 const world = buildWorld(map);
 
-/** Drops the save and waits until the page shows its day and has drawn it, since a click picks what the map last drew. */
+/**
+ * Pauses, drops the save, and waits until the page shows its day and has drawn it, since
+ * a click picks what the map last drew.
+ */
 async function load(page: Page, state: GameState) {
+  await pause(page);
   await dropSave(page, state);
   await expect(page.getByTestId('time-controls-day')).toHaveAttribute(
     'data-day',
@@ -259,7 +264,6 @@ test.describe('the frame round the game', () => {
     if (spearmen) spearmen.men = 1234;
     await openGame(page);
     await load(page, state);
-    await pause(page);
     const saved = await day(page);
 
     const army = page.getByTestId('army-panel');
@@ -298,6 +302,7 @@ test.describe('the frame round the game', () => {
   }) => {
     await openGame(page);
     await load(page, playDays(startGame(), 57));
+    await resume(page);
     await untilDay(page, 62);
     await pause(page);
     await page.goto('/');
@@ -310,7 +315,6 @@ test.describe('the frame round the game', () => {
     await openGame(page);
     const state = playDays(startGame(), 44);
     await load(page, state);
-    await pause(page);
     const exported = await day(page);
 
     const menu = await gameMenu(page);

@@ -3,6 +3,7 @@ import {
   armyOf,
   camera,
   dropSave,
+  openGame,
   outnumberedAt,
   pause,
   resume,
@@ -22,8 +23,7 @@ export default defineScenario({
     const roman = armyOf(state, rome).id;
     const began = firstDayWhen(state, (s) => s.armies[roman]?.activity.kind === 'inBattle');
     const broke = firstDayWhen(state, (s) => s.armies[roman]?.activity.kind === 'retreating');
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
     await pause(page);
     await dropSave(page, state);
     await page.getByTestId('time-controls-day').filter({ hasText: 'day 1' }).waitFor();

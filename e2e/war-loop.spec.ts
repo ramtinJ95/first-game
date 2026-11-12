@@ -3,6 +3,7 @@ import { firstDayWhen } from './fog-game.ts';
 import {
   armyOf,
   dropSave,
+  openGame,
   outnumberedAt,
   pause,
   resume,
@@ -16,8 +17,7 @@ test('a beaten army beside its own city retreats to safety, is alive 30 days on,
 }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto('/');
-  await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+  await openGame(page);
   await pause(page);
   const state = startGame();
   outnumberedAt(state, 'capua', 4500);
