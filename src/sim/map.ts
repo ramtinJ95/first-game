@@ -87,8 +87,9 @@ const RiverSchema = v.object({ name: v.string('expected a string'), line: MapLin
 export const TERRAIN_KINDS = ['mountains', 'hills', 'desert', 'forest', 'lake'] as const;
 
 /**
- * At most one area per kind and name, and areas of one kind never overlap. Areas of different
- * kinds may overlap, as a forested mountain is both. `name` is empty where the source names none.
+ * At most one area per kind and name. Areas of one kind overlap only in slivers left by rounding
+ * vertices to 0.1 km. Areas of different kinds may overlap, as a forested mountain is both. `name`
+ * is empty where the source names none.
  */
 const TerrainAreaSchema = v.object({
   kind: v.picklist(TERRAIN_KINDS, (issue) => `unknown terrain kind ${String(issue.input)}`),

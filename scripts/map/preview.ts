@@ -168,7 +168,12 @@ export function previewSvg(map: GameMap): string {
     ),
     ...TERRAIN_ORDER.map((kind) => {
       const outlines = map.terrain.filter((terrain) => terrain.kind === kind);
-      return `<path d="${outlines.map((terrain) => area(terrain.outline)).join('')}" ${terrainSwatch(kind)} fill-rule="evenodd"/>`;
+      return outlines
+        .map(
+          (terrain) =>
+            `<path d="${area(terrain.outline)}" ${terrainSwatch(kind)} fill-rule="evenodd"/>`,
+        )
+        .join('');
     }),
     `<path d="${map.provinces.map((province) => area(province.outline)).join('')}" fill="none" stroke="#5b4636" stroke-width="0.9" stroke-linejoin="round" stroke-opacity="0.85"/>`,
     `<path d="${lines(map.rivers.map((river) => river.line))}" fill="none" stroke="#3f7fb6" stroke-width="1.1" stroke-linejoin="round"/>`,
