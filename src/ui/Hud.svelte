@@ -85,7 +85,9 @@
       <AlertList alerts={view.current.alerts} day={game.day} {actions} />
     </div>
   </div>
-  <CommandMenu menu={view.current.menu} {actions} />
+  {#if !modal}
+    <CommandMenu menu={view.current.menu} {actions} />
+  {/if}
 
   {#if modal?.kind === 'guide'}
     <Guide {game} frame={view.current.frame} actions={frame} />

@@ -378,6 +378,11 @@ test.describe('the frame round the game', () => {
       await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
       await page.keyboard.press('Space');
       await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
+      await page.getByRole('button', { name: 'Guide' }).click();
+      await page.keyboard.press('Space');
+      await page.keyboard.press('Escape');
+      await expect(prompt).toBeVisible();
+      await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
       const choice = prompt.getByTestId(`fate-${fate}`);
       const unrest = Number(/Unrest for (\d+) days/.exec((await choice.textContent()) ?? '')?.[1]);
       if (fate === 'sack') await expect(choice).toContainText(/\+[\d,]+ gold/);

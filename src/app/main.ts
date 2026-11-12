@@ -467,8 +467,7 @@ const frame: FrameActions = {
 
 /** A fate to choose, a loss, or a win holds the game until the player answers it. */
 function held(): boolean {
-  const kind = modals[0]?.kind;
-  return kind === 'fate' || kind === 'lost' || kind === 'won';
+  return modals.some(({ kind }) => kind === 'fate' || kind === 'lost' || kind === 'won');
 }
 
 const actions: Actions = {
