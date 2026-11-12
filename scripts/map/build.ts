@@ -1,9 +1,13 @@
 import { writeFileSync } from 'node:fs';
 import { relative } from 'node:path';
+import { parseArgs } from 'node:util';
 import { POWERS, type GameMap, type StartingOwner } from '../../src/sim/map.ts';
 import { buildMap, MAP_FILE, serializeMap, type MapBuild } from './build-map.ts';
 import { readCities } from './cities.ts';
+import { writePreview } from './preview.ts';
 import { loadNaturalEarth } from './sources.ts';
+
+const { values } = parseArgs({ options: { preview: { type: 'boolean', default: false } } });
 
 const started = performance.now();
 const cities = readCities();
@@ -19,6 +23,7 @@ console.log(
   `\nwrote ${relative(process.cwd(), MAP_FILE)}: ${(Buffer.byteLength(text) / 1024).toFixed(0)} KiB, ` +
     `build ${((built - loaded) / 1000).toFixed(1)} s, total ${((performance.now() - started) / 1000).toFixed(1)} s`,
 );
+if (values.preview) console.log(`wrote ${relative(process.cwd(), await writePreview(build.map))}`);
 
 function report({ map, moves, merges, joins }: MapBuild): void {
   const km2 = (value: number) => `${Math.round(value).toLocaleString('en')} km²`;
