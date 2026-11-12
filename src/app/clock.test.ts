@@ -23,6 +23,44 @@ function run(clock: { frame(): void }, time: ReturnType<typeof fakeTime>, totalM
 }
 
 describe('clock', () => {
+  it("asks the AI once a day for orders and plays them in the same tick as the player's", () => {
+    const time = fakeTime();
+    const asked: number[] = [];
+    const clock = createClock({
+      world,
+      state: buildFixture(),
+      now: time.now,
+      decide: (state) => {
+        asked.push(state.day);
+        return state.day === 1
+          ? [
+              {
+                kind: 'setStance',
+                faction: FIXTURE.carthage,
+                army: FIXTURE.punicArmy,
+                stance: 'skirmishAndWithdraw',
+              },
+            ]
+          : [];
+      },
+    });
+    clock.issue({
+      kind: 'setStance',
+      faction: FIXTURE.rome,
+      army: FIXTURE.romanArmy,
+      stance: 'allOutAssault',
+    });
+    run(clock, time, 1000);
+
+    expect(clock.state.day).toBe(2);
+    expect(asked).toEqual([1]);
+    expect(clock.state.armies[FIXTURE.romanArmy]?.stance).toBe('allOutAssault');
+    expect(clock.state.armies[FIXTURE.punicArmy]?.stance).toBe('skirmishAndWithdraw');
+
+    run(clock, time, 2000);
+    expect(asked).toEqual([1, 2, 3]);
+  });
+
   it('runs no tick while paused, and applies an order issued in the pause on the first tick after resume', () => {
     const time = fakeTime();
     const clock = createClock({ world, state: buildFixture(), now: time.now });

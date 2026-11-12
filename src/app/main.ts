@@ -2,6 +2,7 @@ import { mount } from 'svelte';
 import mapUrl from '../../data/map/map.json?url';
 import { provinceAt, type Pick } from '../render/pick.ts';
 import { createRenderer, type Command } from '../render/renderer.ts';
+import { decideAll } from '../sim/ai/decide.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { CityId } from '../sim/ids.ts';
 import { landPath } from '../sim/march.ts';
@@ -83,6 +84,7 @@ const clock = createClock({
   state: newGame(map, { seed: Date.now(), player: 'rome' }),
   world,
   now: () => performance.now(),
+  decide: (state) => decideAll(state, world),
   onRejected(rejected) {
     const own = rejected.filter(({ order }) => order.faction === clock.state.player);
     const last = own.at(-1);
