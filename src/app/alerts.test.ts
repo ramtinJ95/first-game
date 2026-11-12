@@ -27,7 +27,7 @@ function atWar(state: GameState, a = f.rome, b = f.carthage) {
   state.wars[warKey(a, b)] = { since: state.day };
 }
 
-/** Puts Carthage's army 15 km from Rome's, at war, with the given strength on each side. */
+/** Puts Carthage's army 5 km west of Rome's, at war, with the given strength on each side. */
 function facingOff(romanMen: number, punicMen: number) {
   const state = buildFixture();
   atWar(state);
@@ -35,7 +35,7 @@ function facingOff(romanMen: number, punicMen: number) {
   const roman = state.armies[f.romanArmy];
   if (!punic || !roman || roman.activity.kind !== 'idle') throw new Error('fixture changed');
   const at = roman.activity.position;
-  punic.activity = { kind: 'idle', position: { x: at.x + 15, y: at.y } };
+  punic.activity = { kind: 'idle', position: { x: at.x - 5, y: at.y } };
   for (const id of roman.formations) {
     const formation = state.formations[id];
     if (formation) formation.men = Math.round(romanMen / roman.formations.length);
@@ -110,10 +110,10 @@ describe('alertsBetween', () => {
     if (roman?.activity.kind !== 'idle') throw new Error('fixture changed');
     const home = state.cities[f.roma]?.position;
     if (!home) throw new Error('fixture changed');
-    const field = { x: home.x + 8, y: home.y };
+    const field = { x: home.x + 2, y: home.y };
     roman.activity = { kind: 'idle', position: field };
     const punic = state.armies[f.punicArmy];
-    if (punic) punic.activity = { kind: 'idle', position: { x: field.x + 10, y: field.y } };
+    if (punic) punic.activity = { kind: 'idle', position: { x: field.x + 5, y: field.y } };
     const fighting = tick(state, [], world).state;
     expect(fighting.armies[f.romanArmy]?.activity.kind).toBe('inBattle');
     const retreated = tick(

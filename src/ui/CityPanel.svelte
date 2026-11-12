@@ -3,6 +3,7 @@
   import { ENSLAVE, FATE_DAYS, SACK } from '../sim/cities.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { CityId } from '../sim/ids.ts';
+  import type { GameMap } from '../sim/map.ts';
   import type { Order } from '../sim/orders/orders.ts';
   import type { Sight } from '../sim/sight.ts';
   import type { City } from '../sim/state/city.ts';
@@ -11,17 +12,20 @@
   import { CITY_DEFENCES } from '../sim/systems/sieges.ts';
   import { TROOPS, type Troop } from '../sim/troops.ts';
   import type { Actions } from './actions.ts';
-  import { cssColour, ownerLine } from './describe.ts';
+  import ArmiesHere from './ArmiesHere.svelte';
+  import { armiesAt, cssColour, ownerLine, rankText } from './describe.ts';
   import WarStatus from './WarStatus.svelte';
 
   let {
     game,
+    map,
     city,
     sight,
     pending,
     actions,
   }: {
     game: DeepReadonly<GameState>;
+    map: DeepReadonly<GameMap>;
     city: DeepReadonly<City>;
     sight: Sight;
     pending: readonly Order[];
@@ -29,7 +33,6 @@
   } = $props();
 
   const SHARES = [0.1, 0.25, 0.5] as const;
-  const RANKS = { capital: 'Capital', greatPowerCity: 'City', minorCity: 'Independent city' };
 
   let share = $state<number>(0.25);
   let chosen = $state<CityId | undefined>();
@@ -99,7 +102,7 @@
   <div class="head">
     <span class="swatch" style:background={cssColour(game, city.owner)}></span>
     <h2 data-testid="city-name">{city.name}</h2>
-    <span class="muted">{RANKS[city.rank]}</span>
+    <span class="muted" data-testid="city-rank">{rankText(game, map, city)}</span>
   </div>
   <p data-testid="city-owner">{ownerLine(game, city.owner)}</p>
   <table>
@@ -156,6 +159,8 @@
       </div>
     {/if}
   {/if}
+
+  <ArmiesHere {game} armies={armiesAt(game, sight, city.position)} {actions} />
 
   {#if fateDaysLeft >= 0}
     <h3>Fate of the city · {fateDaysLeft} days to choose</h3>

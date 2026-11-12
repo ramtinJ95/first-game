@@ -1,18 +1,26 @@
 <script lang="ts">
   import { factionName, placeName, STANCE_NAMES, whole } from '../app/names.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
+  import type { Order } from '../sim/orders/orders.ts';
   import type { Battle } from '../sim/state/battle.ts';
   import type { GameState } from '../sim/state/game-state.ts';
   import { menOf } from '../sim/systems/economy.ts';
   import type { Actions } from './actions.ts';
   import { cssColour } from './describe.ts';
   import Formations from './Formations.svelte';
+  import StanceControls from './StanceControls.svelte';
 
   let {
     game,
     battle,
+    pending,
     actions,
-  }: { game: DeepReadonly<GameState>; battle: DeepReadonly<Battle>; actions: Actions } = $props();
+  }: {
+    game: DeepReadonly<GameState>;
+    battle: DeepReadonly<Battle>;
+    pending: readonly Order[];
+    actions: Actions;
+  } = $props();
 
   const sides = $derived(
     (['attackers', 'defenders'] as const).map((side) => {
@@ -38,26 +46,30 @@
       {title}{ours ? ' (you)' : ''} · {whole(men)} men
     </h3>
     {#each armies as army (army.id)}
-      <button
-        type="button"
-        class="army"
-        onclick={() => actions.select({ kind: 'army', army: army.id })}
-      >
-        <span class="swatch" style:background={cssColour(game, army.owner)}></span>
-        {factionName(game, army.owner)} · {STANCE_NAMES[army.stance]}
-      </button>
-      <Formations {game} ids={army.formations} />
+      <div class="army" data-testid="battle-army">
+        <button
+          type="button"
+          class="pick"
+          onclick={() => actions.select({ kind: 'army', army: army.id })}
+        >
+          <span class="swatch" style:background={cssColour(game, army.owner)}></span>
+          <span class="who"
+            >{factionName(game, army.owner)} · {STANCE_NAMES[army.stance]} · {whole(
+              menOf(game, army),
+            )} men</span
+          >
+        </button>
+        <Formations {game} ids={army.formations} />
+        {#if army.owner === game.player}
+          <StanceControls player={game.player} {army} {pending} {actions} />
+        {/if}
+      </div>
     {/each}
   {/each}
 </section>
 
 <style>
-  .army {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    padding: 0 !important;
-    font-weight: bold;
-    border: none !important;
+  .army + .army {
+    margin-top: 6px;
   }
 </style>

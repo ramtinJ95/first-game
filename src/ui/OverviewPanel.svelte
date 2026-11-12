@@ -1,0 +1,78 @@
+<script lang="ts">
+  import { whole } from '../app/names.ts';
+  import type { DeepReadonly } from '../sim/deep-readonly.ts';
+  import type { Sight } from '../sim/sight.ts';
+  import type { GameState } from '../sim/state/game-state.ts';
+  import type { Actions } from './actions.ts';
+  import { cssColour, overviewOf } from './describe.ts';
+
+  let { game, sight, actions }: { game: DeepReadonly<GameState>; sight: Sight; actions: Actions } =
+    $props();
+
+  const overview = $derived(overviewOf(game, sight));
+  const colour = $derived(cssColour(game, game.player));
+</script>
+
+<section class="panel overview" id="overview" data-testid="overview" aria-label="Overview">
+  <h2>Overview</h2>
+
+  <h3>Cities</h3>
+  <ul class="pick-list" data-testid="overview-cities">
+    {#each overview.cities as row (row.city)}
+      <li>
+        <button type="button" class="pick" onclick={() => actions.show(row.pick, row.at)}>
+          <span class="swatch" style:background={colour}></span>
+          <span class="who"
+            >{row.name} <span class="count">{whole(row.population)} people</span></span
+          >
+          <span class="what">{row.status}</span>
+        </button>
+      </li>
+    {/each}
+  </ul>
+
+  <h3>Armies</h3>
+  {#if overview.armies.length === 0}
+    <p class="muted">You have no army. Raise troops in a city.</p>
+  {/if}
+  <ul class="pick-list" data-testid="overview-armies">
+    {#each overview.armies as row (row.army)}
+      <li>
+        <button type="button" class="pick" onclick={() => actions.show(row.pick, row.at)}>
+          <span class="swatch" style:background={colour}></span>
+          <span class="who">{row.activity}</span>
+          <span class="what">{whole(row.men)} men</span>
+        </button>
+      </li>
+    {/each}
+  </ul>
+
+  <h3>Wars</h3>
+  <ul class="wars" data-testid="overview-wars">
+    {#each overview.wars as war (war.against)}
+      <li class="bad">At war with {war.name} since day {war.since}</li>
+    {:else}
+      <li>At peace with everyone</li>
+    {/each}
+  </ul>
+</section>
+
+<style>
+  .overview {
+    width: 320px;
+    max-width: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .count {
+    font-weight: normal;
+    color: var(--muted);
+  }
+
+  .wars {
+    margin: 0;
+    padding-left: 1.1em;
+  }
+</style>

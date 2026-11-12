@@ -3,6 +3,7 @@ import type { CityId, FactionId } from '../sim/ids.ts';
 import type { Stance } from '../sim/state/army.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
+import { SIEGE_DISTANCE } from '../sim/systems/sieges.ts';
 import type { Troop } from '../sim/troops.ts';
 
 export const TROOP_NAMES: Record<Troop, string> = {
@@ -20,8 +21,11 @@ export const STANCE_NAMES: Record<Stance, string> = {
   skirmishAndWithdraw: 'Skirmish and withdraw',
 };
 
-/** A point this close to a city is at it rather than near it, in km. */
-const AT_CITY_KM = 15;
+/**
+ * A point this close to a city is at it rather than near it, in km. It is the siege
+ * distance, so an army the panel calls "at" an enemy city is one that besieges it.
+ */
+export const AT_CITY_KM = SIEGE_DISTANCE;
 
 export function factionName(state: DeepReadonly<GameState>, faction: FactionId): string {
   return state.factions[faction]?.name ?? faction;
@@ -68,6 +72,11 @@ export function reasonText(state: DeepReadonly<GameState>, reason: string): stri
       return faction?.name ?? word;
     })
     .replace(/^./, (first) => first.toUpperCase());
+}
+
+/** What the player reads when the rules refuse an order. */
+export function refusalText(state: DeepReadonly<GameState>, reason: string): string {
+  return `Order refused. ${reasonText(state, reason)}.`;
 }
 
 /** Year 1 starts on day 1. A year is 365 days. */

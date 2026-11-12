@@ -18,6 +18,7 @@
   border: 1px solid var(--rule);
   border-radius: 4px;
   box-shadow: 0 1px 4px rgb(59 42 26 / 18%);
+  pointer-events: auto;
 }
 
 .panel h2 {
@@ -81,8 +82,13 @@
   cursor: pointer;
 }
 
-.panel button:hover:not(:disabled) {
+.panel button:hover:not(:disabled, [aria-pressed='true'], [aria-expanded='true']) {
   background: rgb(122 75 42 / 12%);
+}
+
+.panel button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
 }
 
 .panel button:disabled {
@@ -91,7 +97,8 @@
   border-color: rgb(122 75 42 / 40%);
 }
 
-.panel button[aria-pressed='true'] {
+.panel button[aria-pressed='true'],
+.panel button[aria-expanded='true'] {
   color: var(--paper-solid);
   background: var(--rule);
 }
@@ -107,6 +114,40 @@
   gap: 4px;
   align-items: center;
   margin-top: 6px;
+}
+
+.panel .pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.panel button.pick {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 0 6px;
+  align-items: center;
+  width: 100%;
+  padding: 2px 6px;
+  text-align: left;
+  border-color: transparent;
+}
+
+.panel button.pick:hover {
+  border-color: var(--rule);
+}
+
+.panel .pick .who {
+  font-weight: bold;
+}
+
+.panel .pick .what {
+  grid-column: 2;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .panel table {

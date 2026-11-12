@@ -5,7 +5,7 @@
   let { alerts, day, actions }: { alerts: readonly Alert[]; day: number; actions: Actions } =
     $props();
 
-  /** Alerts older than this many days fade, so fresh news stands out. */
+  /** The day of an alert at most this many days old stands out, so fresh news shows. */
   const FRESH_DAYS = 10;
 </script>
 
@@ -16,7 +16,7 @@
         <button
           type="button"
           class="panel {alert.tone}"
-          class:stale={day - alert.day > FRESH_DAYS}
+          class:fresh={day - alert.day <= FRESH_DAYS}
           disabled={!alert.focus}
           onclick={() => actions.openAlert(alert)}
         >
@@ -30,16 +30,18 @@
 
 <style>
   .alerts {
-    position: fixed;
-    bottom: 12px;
-    left: 12px;
     display: flex;
     flex-direction: column;
     gap: 4px;
     width: 300px;
+    max-width: 100%;
+    min-height: 0;
     margin: 0;
     padding: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     list-style: none;
+    pointer-events: auto;
   }
 
   button.panel {
@@ -66,13 +68,14 @@
     border-left-color: var(--bad);
   }
 
-  .stale {
-    opacity: 0.6;
-  }
-
   .day {
     flex: none;
     font-size: 12px;
     color: var(--muted);
+  }
+
+  .fresh .day {
+    font-weight: bold;
+    color: var(--ink);
   }
 </style>

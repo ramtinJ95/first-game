@@ -45,7 +45,7 @@ import {
 } from './palette.ts';
 import { paperTexture, waterTexture } from './paper.ts';
 import { toPixels } from './lines.ts';
-import { pickAt, type Pick } from './pick.ts';
+import { cityAt, pickAt, type DrawnCity, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
 import { citySymbols } from './symbols.ts';
 
@@ -58,6 +58,8 @@ export interface Frame {
   readonly selection: Pick | undefined;
   /** Paths of orders given but not yet applied, drawn fainter than a march under way. */
   readonly planned?: readonly (readonly MapPoint[])[];
+  /** The player's armies whose waiting order replaces the march they are on, which is then not drawn. */
+  readonly replaced?: ReadonlySet<ArmyId>;
   /** What the player sees on each of the two days. Only armies and battles in `sight` are drawn. */
   readonly previousSight: Sight;
   readonly sight: Sight;
@@ -67,6 +69,8 @@ export interface Frame {
 export interface Command {
   readonly point: MapPoint;
   readonly pick: Pick | undefined;
+  /** The city whose drawn symbol or name the click is on or close to. */
+  readonly city: CityId | undefined;
   readonly screen: MapPoint;
 }
 
@@ -418,6 +422,7 @@ export async function createRenderer({
   let shown: DeepReadonly<GameState> | undefined;
   let highlighted: { selection: Pick | undefined; scale: number } | undefined;
   let armies: DrawnArmy[] = [];
+  let drawnCities: DrawnCity[] = [];
   let plannedShown: Frame['planned'];
   let seenBy: Sight | undefined;
   let seenBattles: DeepReadonly<Battle>[] = [];
@@ -544,12 +549,18 @@ export async function createRenderer({
         population: city.population,
       });
     }
-    for (const [id, box] of placeLabels(requests, symbolBoxes, view)) {
+    const placed = placeLabels(requests, symbolBoxes, view);
+    for (const [id, box] of placed) {
       const label = cities.get(id as CityId)?.label;
       if (!label) continue;
       label.visible = true;
       label.position.set(box.left, box.top);
     }
+    drawnCities = requests.map(({ id }, i) => ({
+      id: id as CityId,
+      symbol: symbolBoxes[i] as Box,
+      label: placed.get(id),
+    }));
   }
 
   function drawHighlight(selection: Pick | undefined) {
@@ -629,6 +640,7 @@ export async function createRenderer({
     state: DeepReadonly<GameState>,
     selection: Pick | undefined,
     planned: Frame['planned'],
+    replaced: Frame['replaced'],
   ) {
     const view = viewport();
     const toScreen = (point: MapPoint) => mapToScreen(camera, view, point);
@@ -640,7 +652,7 @@ export async function createRenderer({
     };
     for (const army of armies) {
       const record = state.armies[army.id];
-      if (!record || record.owner !== state.player) continue;
+      if (!record || record.owner !== state.player || replaced?.has(army.id)) continue;
       const { activity } = record;
       const ahead =
         activity.kind === 'marching'
@@ -775,6 +787,7 @@ export async function createRenderer({
       onCommand({
         point: screenToMap(camera, viewport(), screen),
         pick: pickAt(map, camera, viewport(), armies, screen, battlesShown()),
+        city: cityAt(drawnCities, screen),
         screen,
       });
     },
@@ -797,7 +810,7 @@ export async function createRenderer({
   app.renderer.on('resize', onResize);
 
   return {
-    draw({ previous, current, progress, selection, planned, previousSight, sight }) {
+    draw({ previous, current, progress, selection, planned, replaced, previousSight, sight }) {
       const now = performance.now();
       let dirty = cameraMoved;
       if (current !== shown) {
@@ -843,7 +856,7 @@ export async function createRenderer({
       }
       if (!dirty) return false;
       moveSwell(now);
-      drawRoutes(current, selection, planned);
+      drawRoutes(current, selection, planned, replaced);
       placeBanners(current, selection);
       placeBattles(selection);
       if (fogShown) fog.paint();

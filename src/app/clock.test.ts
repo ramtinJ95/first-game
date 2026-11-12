@@ -272,6 +272,86 @@ describe('clock', () => {
     expect(clock.state.armies[FIXTURE.romanArmy]?.stance).toBe('holdTheLine');
   });
 
+  describe('keeps one waiting order per army for each slot', () => {
+    const fixture = buildFixture();
+    const capua = fixture.cities[FIXTURE.capua]?.position;
+    const roma = fixture.cities[FIXTURE.roma]?.position;
+    if (!capua || !roma) throw new Error('fixture lacks Capua or Roma');
+    const march = (army: typeof FIXTURE.romanArmy, to: { x: number; y: number }) =>
+      ({ kind: 'moveArmy', faction: FIXTURE.rome, army, to }) as const;
+    const stance = (value: 'allOutAssault' | 'skirmishAndWithdraw') =>
+      ({
+        kind: 'setStance',
+        faction: FIXTURE.rome,
+        army: FIXTURE.romanArmy,
+        stance: value,
+      }) as const;
+    const recruit = {
+      kind: 'recruit',
+      faction: FIXTURE.rome,
+      city: FIXTURE.roma,
+      troop: 'spearmen',
+    } as const;
+
+    it('marches the army to the last of many destinations given in a pause', () => {
+      const time = fakeTime();
+      const clock = createClock({ world, state: buildFixture(), now: time.now });
+      clock.pause();
+      for (let i = 0; i < 20; i++)
+        clock.issue(march(FIXTURE.romanArmy, { x: roma.x + i, y: roma.y + 40 }));
+      clock.issue(march(FIXTURE.romanArmy, capua));
+      expect(clock.pending).toEqual([march(FIXTURE.romanArmy, capua)]);
+
+      clock.resume();
+      run(clock, time, 1000);
+      const activity = clock.state.armies[FIXTURE.romanArmy]?.activity;
+      expect(activity?.kind).toBe('marching');
+      expect(activity?.kind === 'marching' && activity.waypoints.at(-1)).toEqual(capua);
+    });
+
+    it('lets a halt, an embarkation, or a retreat replace a waiting march of the same army', () => {
+      const clock = createClock({ world, state: buildFixture(), now: fakeTime().now });
+      const halt = { kind: 'halt', faction: FIXTURE.rome, army: FIXTURE.romanArmy } as const;
+      const embark = {
+        kind: 'embark',
+        faction: FIXTURE.rome,
+        army: FIXTURE.romanArmy,
+        to: FIXTURE.carthago,
+      } as const;
+      const retreat = { kind: 'retreat', faction: FIXTURE.rome, army: FIXTURE.romanArmy } as const;
+      for (const order of [halt, embark, retreat]) {
+        clock.issue(march(FIXTURE.romanArmy, capua));
+        clock.issue(order);
+        expect(clock.pending).toEqual([order]);
+      }
+    });
+
+    it('keeps the latest stance beside the latest march, and the orders of other armies apart', () => {
+      const time = fakeTime();
+      const clock = createClock({ world, state: buildFixture(), now: time.now });
+      clock.issue(stance('allOutAssault'));
+      clock.issue(march(FIXTURE.romanArmy, roma));
+      clock.issue(march(FIXTURE.punicArmy, roma));
+      clock.issue(stance('skirmishAndWithdraw'));
+      clock.issue(march(FIXTURE.romanArmy, capua));
+      expect(clock.pending).toEqual([
+        march(FIXTURE.punicArmy, roma),
+        stance('skirmishAndWithdraw'),
+        march(FIXTURE.romanArmy, capua),
+      ]);
+
+      run(clock, time, 1000);
+      expect(clock.state.armies[FIXTURE.romanArmy]?.stance).toBe('skirmishAndWithdraw');
+    });
+
+    it('queues orders that name no army side by side', () => {
+      const clock = createClock({ world, state: buildFixture(), now: fakeTime().now });
+      clock.issue(recruit);
+      clock.issue(recruit);
+      expect(clock.pending).toEqual([recruit, recruit]);
+    });
+  });
+
   it('hands onDay each day before and after its tick, and keeps issued orders pending until then', () => {
     const time = fakeTime();
     const days: [number, number][] = [];
