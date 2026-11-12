@@ -91,7 +91,9 @@ test.describe('the panels', () => {
 
     const target = view.city('mediolanum');
     await page.mouse.click(target.x, target.y, { button: 'right' });
-    await expect(page.getByTestId('orders-waiting')).toHaveText('1 order waits for the next day');
+    await expect(page.getByTestId('orders-waiting')).toHaveText(
+      '1 army has orders for the next day',
+    );
     await resume(page);
     await expect(panel.getByTestId('army-activity')).toHaveText(
       /^Marching to Mediolanum · \d+ days left$/,
@@ -129,8 +131,8 @@ test.describe('the panels', () => {
     await page.mouse.click(salona.x, salona.y, { button: 'right' });
     const menu = page.getByTestId('command-menu');
     await expect(menu.getByRole('menuitem')).toHaveText([
-      'Sail from Roma to Salona',
-      'March to Salona',
+      /^Sail from Roma to Salona \d+ days$/,
+      /^March to Salona \d+ days$/,
       'Cancel',
     ]);
     await menu.getByRole('menuitem', { name: 'Sail from Roma to Salona' }).click();
@@ -280,7 +282,7 @@ test.describe('the panels', () => {
     await battle.getByRole('button', { name: /^Rome ·/ }).click();
     const army = page.getByTestId('army-panel');
     await expect(army.getByTestId('army-activity')).toHaveText(
-      /^In battle at Mediolanum · day \d+$/,
+      /^In battle (at|near) Mediolanum · day \d+$/,
     );
     await army.getByRole('button', { name: /^Retreat/ }).click();
     await resume(page);
