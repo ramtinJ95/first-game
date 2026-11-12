@@ -191,28 +191,7 @@ describe('a great power', () => {
       const rome = state.factions[f.rome];
       if (!rome) throw new Error('no Rome');
       rome.stores.gold = 0;
-      const second = 'army-roman-2' as never;
-      const spears = 'formation-second-spears' as FormationId;
-      state.formations[spears] = {
-        id: spears,
-        army: second,
-        troop: 'spearmen',
-        men: 1200,
-        morale: 1,
-      };
-      const horse = 'formation-second-horse' as FormationId;
-      state.formations[horse] = {
-        id: horse,
-        army: second,
-        troop: 'lightCavalry',
-        men: 300,
-        morale: 1,
-      };
-      state.armies[second] = {
-        ...army(state, f.romanArmy),
-        id: second,
-        formations: [spears, horse],
-      };
+      const second = addSecondRomanArmy(state);
       const orders = decide(state, f.rome);
       expect(orders).toContainEqual({
         kind: 'moveArmy',
@@ -221,6 +200,55 @@ describe('a great power', () => {
         to: CAPUA,
       });
       expect(orders).toContainEqual({ kind: 'moveArmy', faction: f.rome, army: second, to: CAPUA });
+    });
+
+    test('takes two armies that win only together from inland to their port, across the sea, and on to the target', () => {
+      let state = buildFixture();
+      declare(state, f.rome, f.syracusaeFaction);
+      setMen(state, f.citizenSpears, 50_000);
+      const rome = state.factions[f.rome];
+      if (!rome) throw new Error('no Rome');
+      rome.stores.gold = 0;
+      const second = addSecondRomanArmy(state);
+      place(state, f.romanArmy, CAPUA);
+      place(state, second, CAPUA);
+      const defenders = 'army-syracusan' as never;
+      const spears = 'formation-syracusan' as FormationId;
+      state.formations[spears] = {
+        id: spears,
+        army: defenders,
+        troop: 'spearmen',
+        men: 2000,
+        morale: 1,
+      };
+      state.armies[defenders] = {
+        id: defenders,
+        owner: f.syracusaeFaction,
+        formations: [spears],
+        stance: 'holdTheLine',
+        generalSkill: 0,
+        activity: { kind: 'idle', position: city(state, f.syracusae).position },
+      };
+
+      const romans = [f.romanArmy, second];
+      const embarked = new Set<string>();
+      const reachedSyracusae = new Set<string>();
+      for (let day = 0; day < 90 && reachedSyracusae.size < 2; day++) {
+        const orders = decideOrders(state, world, f.rome);
+        expect(orders).not.toContainEqual(expect.objectContaining({ kind: 'moveArmy', to: CAPUA }));
+        const result = tick(state, orders, world);
+        expect(result.rejected).toEqual([]);
+        state = result.state;
+        for (const id of romans) {
+          const roman = state.armies[id as never];
+          if (roman?.activity.kind === 'embarked') embarked.add(id);
+          const at = roman && roman.activity.kind !== 'embarked' && roman.activity.position;
+          if (at && Math.hypot(at.x - 2661.2, at.y - 2911.3) <= 25) reachedSyracusae.add(id);
+        }
+      }
+      expectConsistent(state);
+      expect([...embarked].sort()).toEqual([...romans].sort());
+      expect([...reachedSyracusae].sort()).toEqual([...romans].sort());
     });
 
     test('embarks at its port for an enemy city across the sea', () => {
@@ -412,6 +440,17 @@ describe('a minor', () => {
     ]);
   });
 });
+
+/** A second Roman army as strong as the first, standing beside it. */
+function addSecondRomanArmy(state: GameState): string {
+  const second = 'army-roman-2' as never;
+  const spears = 'formation-second-spears' as FormationId;
+  state.formations[spears] = { id: spears, army: second, troop: 'spearmen', men: 1200, morale: 1 };
+  const horse = 'formation-second-horse' as FormationId;
+  state.formations[horse] = { id: horse, army: second, troop: 'lightCavalry', men: 300, morale: 1 };
+  state.armies[second] = { ...army(state, f.romanArmy), id: second, formations: [spears, horse] };
+  return second;
+}
 
 /** Rome's army besieges the city, which Carthage or Syracusae holds, and Rome is at war with its owner. */
 function besieging(target: CityId): GameState {

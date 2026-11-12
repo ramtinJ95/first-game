@@ -135,8 +135,8 @@ interface Mover {
  * they are strong enough to relieve. The rest go on the offence: an army that marches on
  * a target it is still strong enough for keeps its course, and the others take the
  * cheapest such target by road and sea. Armies too weak alone form groups that can win
- * together: a group that stands assembled marches on its target at once, and the others
- * gather at the muster city first. The rest wait at the muster city.
+ * together: a group that stands assembled marches on its target at once and keeps to its
+ * route, port and sea included, and the others gather at the muster city first. The rest wait at the muster city.
  */
 export function movements(context: Context, muster: CityView | undefined): Order[] {
   const { state, world, faction, enemies } = context;
@@ -305,11 +305,20 @@ export function movements(context: Context, muster: CityView | undefined): Order
   while (rest.length > 1) {
     const group = groupFor(rest);
     if (!group) break;
+    const routes = new Map(
+      group.members.map((m) => [m, context.router.routeTo(m.at, group.city)] as const),
+    );
+    // A group already on its way, such as one marching to its port to embark, keeps going.
+    const onTheWay = group.members.every((m) => {
+      const step = routes.get(m)?.step;
+      return step?.kind === 'march' && marchingTo(m.army, step.to);
+    });
     const assembled =
-      group.members.every((m) => m.army.activity.kind === 'idle') &&
-      group.members.every((m) => distance(m.at, group.members[0]?.at ?? m.at) <= RALLY_DISTANCE);
+      onTheWay ||
+      (group.members.every((m) => m.army.activity.kind === 'idle') &&
+        group.members.every((m) => distance(m.at, group.members[0]?.at ?? m.at) <= RALLY_DISTANCE));
     for (const mover of group.members) {
-      const route = assembled && context.router.routeTo(mover.at, group.city);
+      const route = assembled && routes.get(mover);
       if (route) send(mover, route.step);
       else {
         const to = meeting ?? (group.members[0] as Mover).at;
