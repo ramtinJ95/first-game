@@ -169,6 +169,8 @@ test.describe('the panels', () => {
   test('a foreign army shows its facts and no orders, and the panel declares war on its owner after a confirmation', async ({
     page,
   }) => {
+    // Paused before the first day, so the AI cannot march Carthage's army away from Capua.
+    await pause(page);
     const state = startGame();
     punicArmyAtCapua(state);
     await load(page, state);
@@ -382,6 +384,7 @@ test.describe('the panels', () => {
     const state = startGame();
     declareWar(state, rome, carthage);
     punicArmyAtCapua(state);
+    await pause(page);
     await load(page, state);
     const view = camera(page);
     const capua = view.banner(cityPoint('capua'));

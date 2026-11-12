@@ -2,8 +2,7 @@ import type { Page } from '@playwright/test';
 import { defineScenario } from '../scenario.ts';
 
 async function day(page: Page): Promise<number> {
-  const text = await page.getByTestId('time-controls-day').textContent();
-  return Number(/Day (\d+)/.exec(text ?? '')?.[1] ?? 0);
+  return Number(await page.getByTestId('time-controls-day').getAttribute('data-day'));
 }
 
 async function until(page: Page, target: number) {
@@ -17,7 +16,7 @@ export default defineScenario({
   viewport: { width: 1280, height: 720 },
   async run({ page, shot }) {
     await page.goto('/');
-    await page.getByTestId('time-controls').waitFor({ state: 'visible' });
+    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
     await shot('start', 'Day 1: every power stands at its capital and the minor cities are free');
     await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
     for (const [target, title] of [
