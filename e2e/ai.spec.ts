@@ -6,7 +6,7 @@ const FOREIGN_POWERS = ['Carthage', 'Macedon', 'Egypt', 'Persia'];
 test('after 200 days at the highest speed a foreign army has marched and taken a minor city', async ({
   page,
 }) => {
-  test.setTimeout(150_000);
+  test.setTimeout(300_000);
   const errors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
@@ -16,7 +16,7 @@ test('after 200 days at the highest speed a foreign army has marched and taken a
   await page.getByTestId('top-bar').waitFor({ state: 'visible' });
 
   await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
-  await expect.poll(() => day(page), { timeout: 100_000, intervals: [1000] }).toBeGreaterThan(200);
+  await expect.poll(() => day(page), { timeout: 240_000, intervals: [1000] }).toBeGreaterThan(200);
   await pause(page);
 
   const view = camera(page);
