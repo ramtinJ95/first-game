@@ -1,0 +1,6 @@
+dist
+captures
+playwright-report
+test-results
+package-lock.json
+docs/design.md
