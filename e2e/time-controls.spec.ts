@@ -6,10 +6,12 @@ async function day(page: Page): Promise<number> {
   return Number(text);
 }
 
-async function daysOver(page: Page, ms: number): Promise<number> {
-  const start = await day(page);
-  await page.waitForTimeout(ms);
-  return (await day(page)) - start;
+/**
+ * Waits until the day passes `after`. The rate of the days at each speed is the clock's
+ * unit test, so a browser test waits for a day and never counts days in real seconds.
+ */
+async function nextDay(page: Page, after: number) {
+  await expect.poll(() => day(page)).toBeGreaterThan(after);
 }
 
 test.describe('time controls', () => {
@@ -30,40 +32,41 @@ test.describe('time controls', () => {
   });
 
   test('the day advances while the game runs', async ({ page }) => {
-    await expect.poll(() => day(page), { timeout: 5000 }).toBeGreaterThanOrEqual(3);
+    await nextDay(page, await day(page));
   });
 
   test('Space pauses the day and Space resumes it', async ({ page }) => {
-    await expect.poll(() => day(page)).toBeGreaterThanOrEqual(2);
+    await nextDay(page, 1);
     await page.keyboard.press('Space');
     await expect(page.getByRole('button', { name: 'Resume' })).toBeVisible();
-    expect(await daysOver(page, 1500)).toBe(0);
+    await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
 
+    const paused = await day(page);
     await page.keyboard.press('Space');
     await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
-    expect(await daysOver(page, 1500)).toBeGreaterThanOrEqual(1);
+    await expect(page.getByTestId('time-controls-speed')).toHaveText('Speed 1');
+    await nextDay(page, paused);
   });
 
-  test('speed 3 advances days faster than speed 1 and shows as pressed', async ({ page }) => {
+  test('speed 3 sets the clock to speed 3, shows as pressed, and the days run on', async ({
+    page,
+  }) => {
     const speed1 = page.getByRole('button', { name: 'Speed 1', exact: true });
     const speed3 = page.getByRole('button', { name: 'Speed 3', exact: true });
     await expect(speed1).toHaveAttribute('aria-pressed', 'true');
-    const slow = await daysOver(page, 2000);
 
     await speed3.click();
     await expect(speed3).toHaveAttribute('aria-pressed', 'true');
     await expect(speed1).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.getByTestId('time-controls-speed')).toContainText('Speed 3');
-    const fast = await daysOver(page, 2000);
-
-    expect(fast).toBeGreaterThan(slow * 2);
+    await expect(page.getByTestId('time-controls-speed')).toHaveText('Speed 3');
+    await nextDay(page, await day(page));
   });
 
   test('Space toggles pause once after a speed button is clicked', async ({ page }) => {
     await page.getByRole('button', { name: 'Speed 2', exact: true }).click();
     await page.keyboard.press('Space');
     await expect(page.getByRole('button', { name: 'Resume' })).toBeVisible();
-    expect(await daysOver(page, 1200)).toBe(0);
+    await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
   });
 
   test('Space toggles pause once while the pause button has focus', async ({ page }) => {
@@ -75,7 +78,7 @@ test.describe('time controls', () => {
 
     await page.keyboard.press('Space');
     await expect(resume).toBeVisible();
-    expect(await daysOver(page, 1200)).toBe(0);
+    await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
   });
 
   test('Space toggles pause once while a button has keyboard focus', async ({ page }) => {

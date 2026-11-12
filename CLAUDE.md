@@ -155,6 +155,8 @@ Known faults in the source data. Check them before you draw or label terrain.
 - Write a comment only for a reason the code cannot show.
 - Tests assert behaviour that a player or a caller can observe, not internals.
 
+Browser tests draw the test drawing, because a browser test checks behaviour and not the picture, and CI draws in software. `playwright.config.ts` stores `draw=test` in the page's local storage, and `?draw=test` does the same by hand. `TEST_DRAWING` in `src/render/draw-options.ts` lists what it leaves out: the paper grain, the moving swell, and antialiasing, and it draws at half resolution, so a page draws only when something changes and a frame costs a fifth of the full one in software. A page opened with `?draw=full` draws everything, as the game and `npm run capture` do, and the smoke test does so. A browser test waits for the state it needs, such as a day, a panel, or a text, and never for a fixed time or a count of days in a count of seconds. To know the day by which something happens, play the state forward with the rules in the test, as `firstDayWhen` in `e2e/fog-game.ts` does. `?frames` shows the frame interval and the time of each drawn frame, median and p95 over 5 s, and `node e2e/frame-bench.ts` prints that for each layer and switch (`hide=<layer>`, `swell=off`, `antialias=off`, `resolution=<n>`) after `npm run build`.
+
 ## Commands
 
 | Command                                       | Does                                                                                                            |

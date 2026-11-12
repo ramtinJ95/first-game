@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import type { System } from '../sim/systems.ts';
-import { createClock } from './clock.ts';
+import { createClock, type Speed } from './clock.ts';
 
 const world = fixtureWorld();
 
@@ -88,8 +88,8 @@ describe('clock', () => {
     expect(clock.state.armies[FIXTURE.romanArmy]?.stance).toBe('allOutAssault');
   });
 
-  it('runs exactly twice the ticks at speed 2 as at speed 1 over the same time', () => {
-    const daysAfter = (speed: 1 | 2) => {
+  it('runs the days of each speed over the same time, five times as many at speed 3 as at speed 1', () => {
+    const daysAfter = (speed: Speed) => {
       const time = fakeTime();
       const clock = createClock({ world, state: buildFixture(), now: time.now });
       clock.setSpeed(speed);
@@ -98,6 +98,9 @@ describe('clock', () => {
     };
     expect(daysAfter(1)).toBe(10);
     expect(daysAfter(2)).toBe(20);
+    // 625 frames of 0.08 days add up to a hair under 50 in floating point.
+    expect(daysAfter(3)).toBeGreaterThanOrEqual(49);
+    expect(daysAfter(3)).toBeLessThanOrEqual(50);
   });
 
   it('counts time before a speed change at the old speed', () => {

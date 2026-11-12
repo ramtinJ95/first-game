@@ -1,5 +1,6 @@
 import { mount } from 'svelte';
 import mapUrl from '../../data/map/map.json?url';
+import { parseDrawOptions } from '../render/draw-options.ts';
 import { provinceAt, type Pick } from '../render/pick.ts';
 import { createRenderer, type Command } from '../render/renderer.ts';
 import { decideAll } from '../sim/ai/decide.ts';
@@ -23,6 +24,7 @@ import Hud from '../ui/Hud.svelte';
 import '../ui/panels.css';
 import { alertsBetween, type Alert } from './alerts.ts';
 import { createClock } from './clock.ts';
+import { showFrameMeter } from './frame-meter.ts';
 import { reasonText } from './names.ts';
 import { alertsInSight, seesPick } from './sighted.ts';
 import { createView, type CommandMenu, type Notice } from './view.svelte.ts';
@@ -191,6 +193,23 @@ function plannedPaths(): MapPoint[][] {
   return planned;
 }
 
+/**
+ * The page's query, with `draw` taken from local storage when the query leaves it out.
+ * playwright.config.ts stores `draw=test`, so every page a browser test opens draws less.
+ */
+function drawQuery(): string {
+  const query = new URLSearchParams(location.search);
+  try {
+    const stored = localStorage.getItem('draw');
+    if (stored && !query.has('draw')) query.set('draw', stored);
+  } catch {
+    // Storage can be blocked. The page then draws what its query says.
+  }
+  return query.toString();
+}
+
+/** `?frames` shows the frame readout, which needs each drawn frame finished to time it. */
+const metering = new URLSearchParams(location.search).has('frames');
 const canvas = document.createElement('canvas');
 canvas.dataset['testid'] = 'map';
 host.appendChild(canvas);
@@ -203,8 +222,10 @@ const renderer = await createRenderer({
     view.refresh();
   },
   onCommand: command,
-  fog: new URLSearchParams(location.search).get('fog') !== 'off',
+  drawing: parseDrawOptions(drawQuery()),
+  waitForGpu: metering,
 });
+const meter = metering ? showFrameMeter(host) : undefined;
 
 function loop() {
   clock.frame();
@@ -213,7 +234,8 @@ function loop() {
     selection = undefined;
     view.refresh();
   }
-  renderer.draw({
+  const start = performance.now();
+  const drew = renderer.draw({
     previous: clock.previous,
     current: clock.state,
     progress: clock.progress,
@@ -222,6 +244,7 @@ function loop() {
     previousSight: sightFor(clock.previous),
     sight,
   });
+  if (drew) meter?.drew(performance.now() - start);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

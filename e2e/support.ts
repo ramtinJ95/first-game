@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import {
   fitCamera,
   mapToScreen,
@@ -168,4 +168,9 @@ export async function resume(page: Page) {
 
 export async function day(page: Page): Promise<number> {
   return Number(await page.getByTestId('time-controls-day').getAttribute('data-day'));
+}
+
+/** Waits until the page shows `target` or a later day. */
+export async function untilDay(page: Page, target: number) {
+  await expect.poll(() => day(page)).toBeGreaterThanOrEqual(target);
 }

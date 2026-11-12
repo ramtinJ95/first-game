@@ -6,14 +6,19 @@ const map = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../data/map/map.json'), 'utf8'),
 ) as { version: number; provinces: unknown[] };
 
-test('the skeleton renders the map and the time controls without errors', async ({ page }) => {
+test('the skeleton renders the full drawing of the map and the time controls without errors', async ({
+  page,
+}) => {
   const errors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
   });
   page.on('pageerror', (error) => errors.push(error.message));
 
-  await page.goto('/');
+  await page.goto('/?draw=full');
+  // The canvas appears once the map is parsed and the world built, which a slow machine
+  // takes seconds over, so wait for the game to start as every other spec does.
+  await page.getByTestId('top-bar').waitFor({ state: 'visible' });
 
   const canvas = page.locator('canvas');
   await expect(canvas).toBeVisible();
