@@ -1,7 +1,7 @@
 import type { Pick } from '../render/pick.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { ArmyId, FactionId } from '../sim/ids.ts';
-import type { Army } from '../sim/state/army.ts';
+import type { Army, ArmyActivity } from '../sim/state/army.ts';
 import type { Battle } from '../sim/state/battle.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { Stores } from '../sim/state/faction.ts';
@@ -66,7 +66,7 @@ export function alertsBetween(before: State, after: State): Alert[] {
     const ours = sideOf(before, battle, player);
     const theirs = ours === 'attackers' ? 'defenders' : 'attackers';
     const where = placeName(before, battle.position);
-    const standing = battle[ours ?? 'attackers'].find((id) => heldField(after, id));
+    const standing = battle[ours ?? 'attackers'].find((id) => heldField(before, after, id));
     if (standing) {
       add({
         kind: 'battleEnded',
@@ -74,7 +74,7 @@ export function alertsBetween(before: State, after: State): Alert[] {
         text: `You held the field ${where}`,
         focus: { at: battle.position, select: { kind: 'army', army: standing } },
       });
-    } else if (battle[theirs].some((id) => heldField(after, id))) {
+    } else if (battle[theirs].some((id) => heldField(before, after, id))) {
       add({
         kind: 'battleEnded',
         tone: 'bad',
@@ -104,16 +104,13 @@ export function alertsBetween(before: State, after: State): Alert[] {
         text: `Your army landed ${placeName(after, at)}`,
         focus: { at, select },
       });
-    } else if (was.activity.kind === 'marching' && army.activity.kind !== 'marching') {
-      const end = was.activity.waypoints.at(-1);
-      if (end && Math.hypot(end.x - at.x, end.y - at.y) <= ARRIVED_KM) {
-        add({
-          kind: 'armyArrived',
-          tone: 'neutral',
-          text: `Your army arrived ${placeName(after, at)}`,
-          focus: { at, select },
-        });
-      }
+    } else if (army.activity.kind !== 'marching' && arrived(was.activity, at)) {
+      add({
+        kind: 'armyArrived',
+        tone: 'neutral',
+        text: `Your army arrived ${placeName(after, at)}`,
+        focus: { at, select },
+      });
     }
   }
 
@@ -200,10 +197,30 @@ function sideOf(
   return undefined;
 }
 
-/** A beaten army marches home or is gone. One that stayed on the field held it. */
-function heldField(after: State, id: ArmyId): boolean {
-  const army = after.armies[id];
-  return !!army && army.activity.kind !== 'marching';
+/**
+ * A beaten army is gone, marches home, or has already reached a home close by. An
+ * army still standing where it fought held the field.
+ */
+function heldField(before: State, after: State, id: ArmyId): boolean {
+  const was = before.armies[id]?.activity;
+  const is = after.armies[id]?.activity;
+  if (!was || !is || was.kind === 'embarked' || is.kind === 'embarked') return false;
+  return is.kind !== 'marching' && distanceKm(was.position, is.position) <= ARRIVED_KM;
+}
+
+/**
+ * The army reached the end of its march. A march shorter than a day starts and ends
+ * between two days and is never seen, so an army that stands somewhere new arrived too.
+ */
+function arrived(was: DeepReadonly<ArmyActivity>, at: MapPoint): boolean {
+  if (was.kind === 'embarked') return false;
+  if (was.kind !== 'marching') return distanceKm(was.position, at) > ARRIVED_KM;
+  const end = was.waypoints.at(-1);
+  return !!end && distanceKm(end, at) <= ARRIVED_KM;
+}
+
+function distanceKm(a: MapPoint, b: MapPoint): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 function ownersOf(state: State, armies: readonly ArmyId[]): string {

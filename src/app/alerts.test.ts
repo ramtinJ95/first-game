@@ -104,6 +104,49 @@ describe('alertsBetween', () => {
     expect(alertsBetween(marching, halted)).toEqual([]);
   });
 
+  it('does not call a retreat holding the field, even once it reached a home close by', () => {
+    const state = facingOff(1500, 1500);
+    const roman = state.armies[f.romanArmy];
+    if (roman?.activity.kind !== 'idle') throw new Error('fixture changed');
+    const home = state.cities[f.roma]?.position;
+    if (!home) throw new Error('fixture changed');
+    const field = { x: home.x + 8, y: home.y };
+    roman.activity = { kind: 'idle', position: field };
+    const punic = state.armies[f.punicArmy];
+    if (punic) punic.activity = { kind: 'idle', position: { x: field.x + 10, y: field.y } };
+    const fighting = tick(state, [], world).state;
+    expect(fighting.armies[f.romanArmy]?.activity.kind).toBe('inBattle');
+    const retreated = tick(
+      fighting,
+      [{ kind: 'retreat', faction: f.rome, army: f.romanArmy }],
+      world,
+    ).state;
+    expect(Object.keys(retreated.battles)).toEqual([]);
+    const reachedHome = structuredClone(retreated);
+    const back = reachedHome.armies[f.romanArmy];
+    if (!back) throw new Error('the army surrendered');
+    back.activity = { kind: 'idle', position: { ...home } };
+    for (const after of [retreated, reachedHome]) {
+      expect(ofKind(alertsBetween(fighting, after), 'battleEnded').map((a) => a.text)).toEqual([
+        'Carthage held the field at Roma',
+      ]);
+    }
+  });
+
+  it('tells of an arrival from a march shorter than a day, which is never seen marching', () => {
+    const roman = buildFixture().armies[f.romanArmy];
+    if (roman?.activity.kind !== 'idle') throw new Error('fixture changed');
+    const to = { x: roman.activity.position.x + 8, y: roman.activity.position.y + 4 };
+    const before = buildFixture();
+    const after = tick(
+      before,
+      [{ kind: 'moveArmy', faction: f.rome, army: f.romanArmy, to }],
+      world,
+    ).state;
+    expect(after.armies[f.romanArmy]?.activity.kind).toBe('idle');
+    expect(ofKind(alertsBetween(before, after), 'armyArrived')).toHaveLength(1);
+  });
+
   it('tells that a raised formation mustered, at its city', () => {
     const recruit: Order = { kind: 'recruit', faction: f.rome, city: f.roma, troop: 'skirmishers' };
     const { alerts } = play(buildFixture(), [recruit], () => false, 12);

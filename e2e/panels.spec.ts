@@ -240,8 +240,7 @@ test.describe('the panels', () => {
     await expect(page.getByTestId('city-panel')).toHaveCount(0);
     await expect(page.getByTestId('army-panel')).toHaveCount(0);
 
-    const banner = view.banner(cityPoint('mediolanum'));
-    await page.mouse.click(banner.x, banner.y);
+    await battle.getByRole('button', { name: /^Rome ·/ }).click();
     const army = page.getByTestId('army-panel');
     await expect(army.getByTestId('army-activity')).toHaveText(
       /^In battle at Mediolanum · day \d+$/,

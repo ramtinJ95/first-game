@@ -23,7 +23,7 @@
   const waiting = $derived(view.current.paused ? view.current.pending.length : 0);
 
   function warning(amount: number, change: number): string | undefined {
-    if (amount <= 0 && change <= 0) return 'Ran out: formations desert';
+    if (amount <= 0) return 'Ran out: formations desert';
     if (change >= 0) return undefined;
     const days = Math.floor(amount / -change);
     return days <= WARN_DAYS ? `Runs out in ${days} days` : undefined;

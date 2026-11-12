@@ -152,10 +152,11 @@ export default defineScenario({
       'The battle marker selected: both sides with their formations, men, morale, and the day count',
     );
 
-    await page.mouse.click(
-      view.banner(cityPoint('mediolanum')).x,
-      view.banner(cityPoint('mediolanum')).y,
-    );
+    await page
+      .getByTestId('battle-panel')
+      .getByRole('button', { name: /^Rome ·/ })
+      .click();
+
     await page.getByTestId('army-panel').waitFor();
     await resume(page);
     await page.waitForTimeout(400);
