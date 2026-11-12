@@ -3,6 +3,7 @@ import { POWERS, type GameMap, type PowerId, type Province } from './map.ts';
 import { serialOf } from './references.ts';
 import { seedRng } from './rng.ts';
 import type { Day } from './state/day.ts';
+import type { FactionKind, Stores } from './state/faction.ts';
 import type { GameState } from './state/game-state.ts';
 
 export interface NewGameOptions {
@@ -18,12 +19,18 @@ const POWER_NAMES: Record<PowerId, string> = {
   persia: 'Persia',
 };
 
-/** Starting population of a city by its rank. The cities unit tunes these. */
+/** Starting population of a city by its rank. */
 export const STARTING_POPULATION = {
   capital: 40_000,
   greatPowerCity: 15_000,
-  minorCity: 8_000,
+  minorCity: 12_000,
 } as const;
+
+/** The stores each faction starts with, by its kind. */
+export const STARTING_STORES: Readonly<Record<FactionKind, Readonly<Stores>>> = {
+  greatPower: { gold: 600, food: 600, manpower: 300 },
+  minor: { gold: 100, food: 100, manpower: 100 },
+};
 
 /** Every power's starting general has this skill, on the 0 to 10 scale. */
 export const STARTING_GENERAL_SKILL = 3;
@@ -62,7 +69,12 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
 
   for (const power of POWERS) {
     const faction = power as FactionId;
-    state.factions[faction] = { id: faction, name: POWER_NAMES[power], kind: 'greatPower' };
+    state.factions[faction] = {
+      id: faction,
+      name: POWER_NAMES[power],
+      kind: 'greatPower',
+      stores: { ...STARTING_STORES.greatPower },
+    };
     const capitals = map.provinces.filter((p) => p.owner === power && p.capital);
     const [capital] = capitals;
     if (!capital || capitals.length > 1) {
@@ -92,7 +104,12 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
       if (Object.hasOwn(state.factions, owner)) {
         throw new Error(`independent province ${province.id} shares its id with a great power`);
       }
-      state.factions[owner] = { id: owner, name: province.name, kind: 'minor' };
+      state.factions[owner] = {
+        id: owner,
+        name: province.name,
+        kind: 'minor',
+        stores: { ...STARTING_STORES.minor },
+      };
     }
     state.provinces[province.id] = { id: province.id, name: province.name, city };
     state.cities[city] = {
@@ -102,6 +119,8 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
       owner,
       position: { x: province.city[0], y: province.city[1] },
       population: STARTING_POPULATION[rank(province)],
+      unrestDays: 0,
+      recruits: [],
     };
   }
 

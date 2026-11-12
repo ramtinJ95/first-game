@@ -66,6 +66,15 @@ The map is static data outside the state. Outlines, neighbours, coastline, and r
 - `src/sim/systems/battles.ts` names `ENGAGEMENT_DISTANCE`, the stance effects, and the tuning numbers at its top. `retreatFromBattle` is the one way out of a battle, so a lane that pulls an army out calls it.
 - A beaten army marches home with every formation at morale 0. An army without an unbroken formation does not start or join a battle. Only idle armies regain morale.
 
+### Cities
+
+- Each faction holds `stores` of gold, food, and manpower. Gold and food go below zero when upkeep outruns them. While a store is below zero, each formation of the owner loses 1% of its men a day for each short store, and while food is short its cities shrink.
+- `economy` in `src/sim/systems/economy.ts` musters finished recruits, adds each city's output to its owner, and takes army upkeep. Its rates sit at its top. `dailyBalances(state)` gives each faction's income less upkeep for budgeting.
+- `population` in `src/sim/systems/population.ts` grows or shrinks each city, counts unrest down, and settles each refugee column that stands at its destination.
+- `changeCityOwner(state, city, owner)` in `src/sim/cities.ts` is the one way a city changes owner. It starts `UNREST_DAYS` of unrest and drops the recruits the old owner was raising there. A city in unrest produces less and cannot recruit.
+- The cost and training days of each troop are its `recruit` row in `TROOPS`. A recruit costs as much manpower as it has men.
+- `npm run sim:economy` plays the new game for three years without orders and prints each great power's stores and balance.
+
 ### The clock and the panels
 
 `src/app/clock.ts` turns real time into ticks and queues orders until the next tick. Panels never read the clock or the live state. They read `view.current` from `src/app/view.svelte.ts`, a `$state.raw` snapshot that is published about ten times a second. A click in a panel becomes an order through the clock.
@@ -86,6 +95,7 @@ The map is static data outside the state. Outlines, neighbours, coastline, and r
 | `npm test`                                    | Vitest unit tests                                                                                               |
 | `npm run e2e`                                 | Playwright tests against the built page, Chromium only                                                          |
 | `npm run sim:battles [-- --log <row> <seed>]` | Play the battle matchups over many seeds and print the tuning table, or one battle day by day                   |
+| `npm run sim:economy`                         | Play the new game for three years without orders and print each great power's economy at the end of each year   |
 | `npm run capture [-- <scenario>]`             | Build, then write screenshots, `clip.gif`, video, and trace to `captures/<scenario>/`                           |
 | `npm run capture:publish`                     | Push the PNG and GIF files to the `pr-assets` branch and print Markdown for the pull request                    |
 | `npm run capture:fetch`                       | Pull this branch's media from `pr-assets` into `captures/`, declare it as Nexus outputs, and print the Markdown |

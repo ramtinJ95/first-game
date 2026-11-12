@@ -4,13 +4,16 @@ import * as v from 'valibot';
 import { describe, expect, test } from 'vitest';
 import type { CityId, FactionId } from './ids.ts';
 import { parseMap, POWERS, type PowerId } from './map.ts';
-import { newGame, STARTING_GENERAL_SKILL } from './new-game.ts';
+import { newGame, STARTING_GENERAL_SKILL, STARTING_STORES } from './new-game.ts';
 import type { Order } from './orders/orders.ts';
 import { expectConsistent } from './references.ts';
 import { seedRng } from './rng.ts';
 import { loadGame, saveGame } from './save.ts';
 import { GameStateSchema, type GameState } from './state/game-state.ts';
+import { UNREST_DAYS } from './cities.ts';
+import { dailyBalances, menOf, UPKEEP_PER_MAN } from './systems/economy.ts';
 import { tick } from './tick.ts';
+import { TROOPS, type Troop } from './troops.ts';
 
 const map = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../../data/map/map.json'), 'utf8')),
@@ -159,6 +162,68 @@ describe('newGame on the committed map', () => {
     expect(state.battles).toEqual({});
     expect(state.day).toBe(366);
     expect(state.cities['roma' as CityId]?.owner).toBe('rome');
+    expectConsistent(state);
+  });
+});
+
+describe('the economy of the new game meets its tuning targets', () => {
+  const armyOf = (state: GameState, power: PowerId) => {
+    const army = Object.values(state.armies).find((a) => a.owner === power);
+    if (!army) throw new Error(`${power} has no army`);
+    return army;
+  };
+
+  test('each faction starts with the stores of its kind and calm cities with no recruits', () => {
+    const state = start();
+    for (const faction of Object.values(state.factions)) {
+      expect(faction.stores).toEqual(STARTING_STORES[faction.kind]);
+    }
+    for (const city of Object.values(state.cities)) {
+      expect(city).toMatchObject({ unrestDays: 0, recruits: [] });
+    }
+    expectConsistent(state);
+  });
+
+  test('a great power income keeps its starting army and about one more, and no more', () => {
+    const state = start();
+    for (const power of POWERS) {
+      const upkeep = menOf(state, armyOf(state, power)) * UPKEEP_PER_MAN.gold;
+      const income = (dailyBalances(state).get(power as FactionId)?.gold ?? 0) + upkeep;
+      expect(income / upkeep).toBeGreaterThan(1.8);
+      expect(income / upkeep).toBeLessThan(2.1);
+    }
+    expectConsistent(state);
+  });
+
+  test('after a year without recruiting a great power can pay for two to three formations', () => {
+    let state = start();
+    for (let day = 0; day < 365; day++) state = tick(state, []).state;
+    for (const power of POWERS) {
+      const stores = state.factions[power as FactionId]?.stores;
+      if (!stores) throw new Error(`${power} is missing`);
+      const { gold, men } = TROOPS.spearmen.recruit;
+      const affordable = Math.min(stores.gold / gold, stores.manpower / men);
+      expect(affordable).toBeGreaterThanOrEqual(2);
+      expect(affordable).toBeLessThan(3);
+    }
+    const roma = state.cities['roma' as CityId]?.population ?? 0;
+    expect(roma / 40_000).toBeCloseTo(1.02, 6);
+    expectConsistent(state);
+  });
+
+  test('a minor state can keep a small army, a formation takes 10 to 30 days, unrest 60 to 120', () => {
+    const state = start();
+    for (const faction of Object.values(state.factions)) {
+      if (faction.kind !== 'minor') continue;
+      const gold = dailyBalances(state).get(faction.id)?.gold ?? 0;
+      expect(gold / UPKEEP_PER_MAN.gold).toBeGreaterThanOrEqual(400);
+    }
+    for (const troop of Object.keys(TROOPS) as Troop[]) {
+      expect(TROOPS[troop].recruit.days).toBeGreaterThanOrEqual(10);
+      expect(TROOPS[troop].recruit.days).toBeLessThanOrEqual(30);
+    }
+    expect(UNREST_DAYS).toBeGreaterThanOrEqual(60);
+    expect(UNREST_DAYS).toBeLessThanOrEqual(120);
     expectConsistent(state);
   });
 });

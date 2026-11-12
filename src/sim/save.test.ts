@@ -35,7 +35,7 @@ describe('save and load', () => {
     const save = JSON.stringify({ format: 99, state: buildFixture() });
     expect(loadGame(save)).toEqual({
       ok: false,
-      error: 'The save has format 99, but this game reads format 2.',
+      error: 'The save has format 99, but this game reads format 3.',
     });
   });
 
@@ -95,7 +95,12 @@ describe('save and load', () => {
   test('a war with a faction whose id holds any character saves and loads', () => {
     const state = buildFixture();
     const odd = 'x|y"]' as typeof FIXTURE.rome;
-    state.factions[odd] = { id: odd, name: 'Odd', kind: 'minor' };
+    state.factions[odd] = {
+      id: odd,
+      name: 'Odd',
+      kind: 'minor',
+      stores: { gold: 0, food: 0, manpower: 0 },
+    };
     state.wars[warKey(FIXTURE.rome, odd)] = { since: state.day };
     expect(loadGame(saveGame(state))).toEqual({ ok: true, state });
   });

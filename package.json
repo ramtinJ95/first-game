@@ -18,7 +18,8 @@
     "capture:publish": "node scripts/capture/publish.ts",
     "capture:fetch": "node scripts/capture/fetch.ts",
     "map:cities": "node scripts/map/pleiades.ts",
-    "sim:battles": "node scripts/sim-battles.ts"
+    "sim:battles": "node scripts/sim-battles.ts",
+    "sim:economy": "node scripts/sim-economy.ts"
   },
   "dependencies": {
     "pixi.js": "^8.23.0",

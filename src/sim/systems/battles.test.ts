@@ -12,6 +12,7 @@ import { ENGAGEMENT_DISTANCE, MORALE_RECOVERY } from './battles.ts';
 
 const CAPUA = { x: 1300, y: 660 };
 const CARTHAGO = { x: 1150, y: 900 };
+const STORES = { gold: 10_000, food: 10_000, manpower: 0 };
 const FAR_AWAY: ArmyActivity = { kind: 'idle', position: { x: 0, y: 0 } };
 
 function atWar(seed = 1): GameState {
@@ -205,8 +206,8 @@ describe('engagement', () => {
     const state = atWar();
     const egypt = 'egypt' as FactionId;
     const persia = 'persia' as FactionId;
-    state.factions[egypt] = { id: egypt, name: 'Egypt', kind: 'greatPower' };
-    state.factions[persia] = { id: persia, name: 'Persia', kind: 'greatPower' };
+    state.factions[egypt] = { id: egypt, name: 'Egypt', kind: 'greatPower', stores: STORES };
+    state.factions[persia] = { id: persia, name: 'Persia', kind: 'greatPower', stores: STORES };
     executeOrder(state, { kind: 'declareWar', faction: egypt, against: FIXTURE.carthage });
     executeOrder(state, { kind: 'declareWar', faction: persia, against: FIXTURE.rome });
     place(state, FIXTURE.romanArmy, { kind: 'idle', position: { x: 1250, y: 615 } });

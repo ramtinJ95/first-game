@@ -32,8 +32,18 @@ export function buildFixture(seed = 1): GameState {
     nextSerial: 1,
     player: f.rome,
     factions: {
-      [f.rome]: { id: f.rome, name: 'Rome', kind: 'greatPower' },
-      [f.carthage]: { id: f.carthage, name: 'Carthage', kind: 'greatPower' },
+      [f.rome]: {
+        id: f.rome,
+        name: 'Rome',
+        kind: 'greatPower',
+        stores: { gold: 5000, food: 1000, manpower: 2000 },
+      },
+      [f.carthage]: {
+        id: f.carthage,
+        name: 'Carthage',
+        kind: 'greatPower',
+        stores: { gold: 3000, food: 1000, manpower: 1000 },
+      },
     },
     provinces: {
       [f.latium]: { id: f.latium, name: 'Latium', city: f.roma },
@@ -48,6 +58,8 @@ export function buildFixture(seed = 1): GameState {
         owner: f.rome,
         position: { x: 1240, y: 610 },
         population: 40_000,
+        unrestDays: 0,
+        recruits: [],
       },
       [f.capua]: {
         id: f.capua,
@@ -56,6 +68,8 @@ export function buildFixture(seed = 1): GameState {
         owner: f.rome,
         position: { x: 1300, y: 660 },
         population: 18_000,
+        unrestDays: 0,
+        recruits: [],
       },
       [f.carthago]: {
         id: f.carthago,
@@ -64,6 +78,8 @@ export function buildFixture(seed = 1): GameState {
         owner: f.carthage,
         position: { x: 1150, y: 900 },
         population: 50_000,
+        unrestDays: 0,
+        recruits: [],
       },
     },
     armies: {
