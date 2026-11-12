@@ -60,16 +60,21 @@ export function createClock({
     if (result.rejected.length > 0) onRejected?.(result.rejected);
   }
 
-  // Counts the time since the last call at the rate it passed at, so a later change
-  // of speed or pause does not rewrite time that has already gone by.
-  function accrue() {
+  // Runs the days that the time since the last call has earned, at the rate it passed
+  // at, so a later change of speed or pause neither rewrites that time nor leaves a
+  // whole day owed. Afterwards progress is below 1.
+  function catchUp() {
     const at = now();
     if (!paused) progress += ((at - lastFrameAt) * DAYS_PER_SECOND[speed]) / 1000;
     lastFrameAt = at;
+    const owed = Math.floor(progress);
+    const ticks = Math.min(owed, maxTicksPerFrame);
+    for (let i = 0; i < ticks; i++) runTick();
+    progress = owed > maxTicksPerFrame ? progress % 1 : progress - ticks;
   }
 
   function setPaused(next: boolean) {
-    accrue();
+    catchUp();
     paused = next;
   }
 
@@ -102,16 +107,11 @@ export function createClock({
       setPaused(!paused);
     },
     setSpeed(next) {
-      accrue();
+      catchUp();
       speed = next;
     },
     frame() {
-      accrue();
-      if (paused) return;
-      const owed = Math.floor(progress);
-      const ticks = Math.min(owed, maxTicksPerFrame);
-      for (let i = 0; i < ticks; i++) runTick();
-      progress = owed > maxTicksPerFrame ? progress % 1 : progress - ticks;
+      catchUp();
     },
   };
 }

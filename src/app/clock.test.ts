@@ -75,19 +75,47 @@ describe('clock', () => {
     expect(clock.progress).toBeCloseTo(0.4);
   });
 
-  it('counts time before a pause, and runs no tick until resume', () => {
+  it('runs the day a delayed pause owes, then runs no tick until resume', () => {
     const time = fakeTime();
     const clock = createClock({ state: buildFixture(), now: time.now });
     time.advance(1500);
     clock.pause();
-    clock.frame();
-    expect(clock.state.day).toBe(1);
+    expect(clock.state.day).toBe(2);
+    expect(clock.progress).toBeCloseTo(0.5);
 
     time.advance(5000);
-    clock.resume();
     clock.frame();
     expect(clock.state.day).toBe(2);
     expect(clock.progress).toBeCloseTo(0.5);
+
+    clock.resume();
+    expect(clock.progress).toBeCloseTo(0.5);
+    time.advance(500);
+    clock.frame();
+    expect(clock.state.day).toBe(3);
+    expect(clock.progress).toBeCloseTo(0);
+  });
+
+  it('keeps progress below 1 after any control action', () => {
+    const time = fakeTime();
+    const clock = createClock({ state: buildFixture(), now: time.now, maxTicksPerFrame: 4 });
+    const actions = [
+      () => clock.setSpeed(3),
+      () => clock.pause(),
+      () => clock.resume(),
+      () => clock.setSpeed(1),
+      () => clock.togglePause(),
+      () => clock.togglePause(),
+      () => clock.frame(),
+    ];
+    for (const delay of [0, 300, 999, 1000, 1700, 10_000]) {
+      for (const action of actions) {
+        time.advance(delay);
+        action();
+        expect(clock.progress).toBeGreaterThanOrEqual(0);
+        expect(clock.progress).toBeLessThan(1);
+      }
+    }
   });
 
   it('throws with the day and the broken links when a system updates one side of a link', () => {

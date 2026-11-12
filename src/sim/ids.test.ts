@@ -8,10 +8,13 @@ test('consecutive ids are distinct', () => {
   expect([allocateId(state, 'army'), allocateId(state, 'army')]).toEqual(['army-1', 'army-2']);
 });
 
-test('the highest counter a save may hold hands out one id, then refuses rather than repeat it', () => {
-  const loaded = loadGame(saveGame({ ...buildFixture(), nextSerial: MAX_SERIAL }));
+test('the last id leaves a state that still saves and loads, and the spent counter refuses rather than repeat', () => {
+  const loaded = loadGame(saveGame({ ...buildFixture(), nextSerial: MAX_SERIAL - 1 }));
   if (!loaded.ok) throw new Error(loaded.error);
-  const state = loaded.state;
-  expect(allocateId(state, 'battle')).toBe(`battle-${MAX_SERIAL}`);
-  expect(() => allocateId(state, 'battle')).toThrow('The id counter is exhausted.');
+  expect(allocateId(loaded.state, 'battle')).toBe(`battle-${MAX_SERIAL - 1}`);
+
+  const reloaded = loadGame(saveGame(loaded.state));
+  if (!reloaded.ok) throw new Error(reloaded.error);
+  expect(reloaded.state.nextSerial).toBe(MAX_SERIAL);
+  expect(() => allocateId(reloaded.state, 'battle')).toThrow('The id counter is exhausted.');
 });
