@@ -1,5 +1,5 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { CityId } from '../sim/ids.ts';
+import type { ArmyId, CityId } from '../sim/ids.ts';
 import { CONVOY_KM_PER_DAY, MARCH_KM_PER_DAY } from '../sim/march.ts';
 import { AT_PORT_KM, type EmbarkOrder } from '../sim/orders/embark.ts';
 import type { MoveArmyOrder } from '../sim/orders/move-army.ts';
@@ -11,6 +11,7 @@ import type { MapPoint } from '../sim/state/map-point.ts';
 import { areAtWar } from '../sim/wars.ts';
 import { distance } from '../sim/world/find-path.ts';
 import type { World } from '../sim/world/world.ts';
+import { movedArmy } from './clock.ts';
 import { factionName, refusalText } from './names.ts';
 
 type State = DeepReadonly<GameState>;
@@ -167,4 +168,23 @@ export function planCommand(
     return { kind: 'refuse', notice: refusalText(state, reason) };
   }
   return { kind: 'issue', order: march, notice };
+}
+
+/**
+ * The paths that the player's waiting march and sail orders will take, and the armies
+ * whose movement a waiting order replaces, so their current march is no longer drawn.
+ */
+export function plannedRoutes(
+  state: State,
+  world: World,
+  pending: readonly Order[],
+): { readonly paths: readonly (readonly MapPoint[])[]; readonly replaced: ReadonlySet<ArmyId> } {
+  const mine = pending.filter((order) => order.faction === state.player);
+  const replaced = new Set(mine.flatMap((order) => movedArmy(order) ?? []));
+  const paths = mine.flatMap((order) => {
+    if (order.kind !== 'moveArmy' && order.kind !== 'embark') return [];
+    const way = route(state, world, order);
+    return typeof way === 'string' ? [] : [way.path];
+  });
+  return { paths, replaced };
 }

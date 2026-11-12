@@ -11,14 +11,13 @@ import type { Order } from '../sim/orders/orders.ts';
 import { loadGame } from '../sim/save.ts';
 import { sightOf, type Sight } from '../sim/sight.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import type { MapPoint } from '../sim/state/map-point.ts';
 import { buildWorld } from '../sim/world/world.ts';
 import type { Actions } from '../ui/actions.ts';
 import Hud from '../ui/Hud.svelte';
 import '../ui/panels.css';
 import { alertsBetween, type Alert } from './alerts.ts';
 import { createClock } from './clock.ts';
-import { planCommand, route, type CommandTarget } from './command.ts';
+import { planCommand, plannedRoutes, type CommandTarget } from './command.ts';
 import { showFrameMeter } from './frame-meter.ts';
 import { refusalText } from './names.ts';
 import { alertsInSight, seesPick } from './sighted.ts';
@@ -128,19 +127,13 @@ function command({ point, city, screen }: Command) {
 }
 
 let plannedFor: readonly Order[] | undefined;
-let planned: (readonly MapPoint[])[] = [];
+let planned: ReturnType<typeof plannedRoutes> = { paths: [], replaced: new Set() };
 
-/** The paths that the player's waiting march and sail orders will take. */
-function plannedPaths(): (readonly MapPoint[])[] {
-  if (clock.pending === plannedFor) return planned;
-  plannedFor = clock.pending;
-  const state = clock.state;
-  planned = clock.pending.flatMap((order) => {
-    if (order.faction !== state.player) return [];
-    if (order.kind !== 'moveArmy' && order.kind !== 'embark') return [];
-    const way = route(state, world, order);
-    return typeof way === 'string' ? [] : [way.path];
-  });
+function plannedNow(): ReturnType<typeof plannedRoutes> {
+  if (clock.pending !== plannedFor) {
+    plannedFor = clock.pending;
+    planned = plannedRoutes(clock.state, world, clock.pending);
+  }
   return planned;
 }
 
@@ -191,7 +184,8 @@ function loop() {
     current: clock.state,
     progress: clock.progress,
     selection,
-    planned: plannedPaths(),
+    planned: plannedNow().paths,
+    replaced: plannedNow().replaced,
     previousSight: sightFor(clock.previous),
     sight,
   });

@@ -10,7 +10,7 @@ import type { MapPoint } from '../sim/state/map-point.ts';
 import { warKey } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import type { World } from '../sim/world/world.ts';
-import { planCommand, route, type CommandTarget } from './command.ts';
+import { planCommand, plannedRoutes, route, type CommandTarget } from './command.ts';
 
 const world = fixtureWorld();
 const f = FIXTURE;
@@ -255,5 +255,47 @@ describe('route', () => {
       world.harbours.get(f.roma),
       world.harbours.get(f.carthago),
     ]);
+  });
+});
+
+describe('plannedRoutes', () => {
+  it('draws only the waiting order of an army already marching, and hides its old march', () => {
+    const state = buildFixture();
+    const roma = cityOf(state, f.roma).position;
+    const capua = cityOf(state, f.capua).position;
+    const marching = tick(
+      state,
+      [{ kind: 'moveArmy', faction: f.rome, army: f.romanArmy, to: capua }],
+      world,
+    ).state;
+    expect(armyOf(marching).activity.kind).toBe('marching');
+    const back: Order = {
+      kind: 'moveArmy',
+      faction: f.rome,
+      army: f.romanArmy,
+      to: { x: roma.x, y: roma.y },
+    };
+    const { paths, replaced } = plannedRoutes(marching, world, [back]);
+    expect(paths).toHaveLength(1);
+    expect(paths[0]?.at(-1)).toEqual({ x: roma.x, y: roma.y });
+    expect([...replaced]).toEqual([f.romanArmy]);
+    expectConsistent(marching);
+  });
+
+  it('hides the march of an army whose halt waits, and leaves other armies alone', () => {
+    const state = buildFixture();
+    const capua = cityOf(state, f.capua).position;
+    const marching = tick(
+      state,
+      [{ kind: 'moveArmy', faction: f.rome, army: f.romanArmy, to: capua }],
+      world,
+    ).state;
+    const halt: Order = { kind: 'halt', faction: f.rome, army: f.romanArmy };
+    expect(plannedRoutes(marching, world, [halt])).toEqual({
+      paths: [],
+      replaced: new Set([f.romanArmy]),
+    });
+    expect(plannedRoutes(marching, world, []).replaced.size).toBe(0);
+    expectConsistent(marching);
   });
 });

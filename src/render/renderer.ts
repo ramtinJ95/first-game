@@ -58,6 +58,8 @@ export interface Frame {
   readonly selection: Pick | undefined;
   /** Paths of orders given but not yet applied, drawn fainter than a march under way. */
   readonly planned?: readonly (readonly MapPoint[])[];
+  /** The player's armies whose waiting order replaces the march they are on, which is then not drawn. */
+  readonly replaced?: ReadonlySet<ArmyId>;
   /** What the player sees on each of the two days. Only armies and battles in `sight` are drawn. */
   readonly previousSight: Sight;
   readonly sight: Sight;
@@ -638,6 +640,7 @@ export async function createRenderer({
     state: DeepReadonly<GameState>,
     selection: Pick | undefined,
     planned: Frame['planned'],
+    replaced: Frame['replaced'],
   ) {
     const view = viewport();
     const toScreen = (point: MapPoint) => mapToScreen(camera, view, point);
@@ -649,7 +652,7 @@ export async function createRenderer({
     };
     for (const army of armies) {
       const record = state.armies[army.id];
-      if (!record || record.owner !== state.player) continue;
+      if (!record || record.owner !== state.player || replaced?.has(army.id)) continue;
       const { activity } = record;
       const ahead =
         activity.kind === 'marching'
@@ -807,7 +810,7 @@ export async function createRenderer({
   app.renderer.on('resize', onResize);
 
   return {
-    draw({ previous, current, progress, selection, planned, previousSight, sight }) {
+    draw({ previous, current, progress, selection, planned, replaced, previousSight, sight }) {
       const now = performance.now();
       let dirty = cameraMoved;
       if (current !== shown) {
@@ -853,7 +856,7 @@ export async function createRenderer({
       }
       if (!dirty) return false;
       moveSwell(now);
-      drawRoutes(current, selection, planned);
+      drawRoutes(current, selection, planned, replaced);
       placeBanners(current, selection);
       placeBattles(selection);
       if (fogShown) fog.paint();

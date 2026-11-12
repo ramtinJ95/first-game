@@ -33,6 +33,11 @@ const SLOTS: {
   enslave: undefined,
 };
 
+/** The army whose movement the order changes, or nothing for an order of another slot. */
+export function movedArmy(order: Order): ArmyId | undefined {
+  return SLOTS[order.kind] === 'movement' && 'army' in order ? order.army : undefined;
+}
+
 function slotOf(order: Order): string | undefined {
   const slot = SLOTS[order.kind];
   return slot && 'army' in order ? `${slot} ${order.army}` : undefined;
