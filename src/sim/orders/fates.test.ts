@@ -82,16 +82,34 @@ describe('the fate of a fallen city', () => {
     expectConsistent(state);
   });
 
-  test('enslaved captives go to the capital even when another city of the owner is larger', () => {
+  test('enslaved captives go to the owner own capital even when a captured capital is larger', () => {
     const state = capuaFallen();
-    const syracusae = state.cities[FIXTURE.syracusae];
-    if (!syracusae) throw new Error('the fixture lacks Syracusae');
-    syracusae.owner = FIXTURE.carthage;
-    syracusae.population = 200_000;
+    const roma = state.cities[FIXTURE.roma];
+    if (!roma) throw new Error('the fixture lacks Roma');
+    roma.owner = FIXTURE.carthage;
+    roma.population = 200_000;
     const capital = state.cities[FIXTURE.carthago]?.population ?? 0;
     expect(executeOrder(state, enslave, world)).toBeUndefined();
-    expect(syracusae.population).toBe(200_000);
+    expect(roma.population).toBe(200_000);
     expect(state.cities[FIXTURE.carthago]?.population).toBeGreaterThan(capital);
+    expectConsistent(state);
+  });
+
+  test('a faction that lost its own capital takes captives to its most populous other city', () => {
+    const state = capuaFallen();
+    const carthago = state.cities[FIXTURE.carthago];
+    const syracusae = state.cities[FIXTURE.syracusae];
+    const roma = state.cities[FIXTURE.roma];
+    if (!carthago || !syracusae || !roma) throw new Error('the fixture is missing cities');
+    syracusae.owner = FIXTURE.carthage;
+    roma.owner = FIXTURE.carthage;
+    carthago.owner = FIXTURE.rome;
+    const people = { carthago: carthago.population, syracusae: syracusae.population };
+    const before = roma.population;
+    expect(executeOrder(state, enslave, world)).toBeUndefined();
+    expect(roma.population).toBeGreaterThan(before);
+    expect(carthago.population).toBe(people.carthago);
+    expect(syracusae.population).toBe(people.syracusae);
     expectConsistent(state);
   });
 
