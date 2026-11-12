@@ -1,6 +1,6 @@
 # Game design
 
-Status on 2026-11-12: the design below is agreed. No game code exists yet. The game has no name yet.
+Status on 2026-11-12: the design below is agreed and the foundation is being built. The game has no name yet.
 
 This document records what we decided, why, and what we set aside. Change it when a decision changes.
 
@@ -94,7 +94,9 @@ Later work splits the coarse provinces into finer ones.
 
 The game state is one tree of plain typed records. The tree has one collection for each kind of thing: factions, provinces, cities, armies, formations, convoys, refugee columns, battles, and sieges. Each record has a typed id, and records refer to each other by id.
 
-The rules advance the state one game day at a time. One tick takes the current state and the orders issued since the last tick, and produces the next state. Inside a tick, systems run in a fixed order: orders, movement, battles, sieges, economy, population, and AI.
+The rules advance the state one game day at a time. One tick takes the current state and the orders issued since the last tick, and produces the next state. Inside a tick, the orders apply first, and then the systems run in a fixed order: movement, battles, sieges, economy, and population.
+
+The AI is not a system. The AI is a pure function from the state to a list of orders, and the clock adds those orders to the next tick.
 
 Four rules keep the module testable and movable:
 
@@ -155,12 +157,6 @@ Parallel threads need a shared base, so the work starts in sequence.
 | Panels | Time controls, city panel, army panel, alerts | Foundation 2 and Renderer |
 | AI | Faction AI that plays through the order list | Movement, Battles, Cities, Sieges |
 
-Each rules lane owns one system file and its tests. The state types are the one shared file. A lane that needs a new field adds the field in its own pull request.
+Each rules lane owns one system file and its tests. The state has one file for each kind of record. A lane that needs a new field adds the field to that kind's file in its own pull request.
 
 After the lanes merge, the coordinator plays the stage-one build and tunes the numbers against the tuning target.
-
-### Open before the build starts
-
-- The repository has no commits and no GitHub remote. Nexus needs both.
-- Nexus has no project for this repository. The project needs access to the npm registry.
-- The review policy for pull requests is not chosen. The choices are that a person reviews each one, that Nexus reviews each one, or that Nexus reviews and lands each one.
