@@ -82,6 +82,19 @@ describe('shortage', () => {
     expectConsistent(second);
   });
 
+  test('a small formation keeps deserting through a long debt but never empties', () => {
+    const state = buildFixture();
+    const equites = state.formations[FIXTURE.equites];
+    if (!equites) throw new Error('the fixture lacks the equites');
+    equites.men = 99;
+    stores(state).gold = -1_000_000;
+    const first = tick(state, []).state;
+    expect(first.formations[FIXTURE.equites]?.men).toBe(98);
+    const later = play(first, 365);
+    expect(later.formations[FIXTURE.equites]?.men).toBe(1);
+    expectConsistent(later);
+  });
+
   test('short of both stores, armies desert twice as fast', () => {
     const state = buildFixture();
     stores(state).gold = -1000;

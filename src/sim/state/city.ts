@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { UNREST_DAYS } from '../cities.ts';
 import { CityIdSchema, FactionIdSchema, ProvinceIdSchema } from '../ids.ts';
 import { TroopSchema } from '../troops.ts';
 import { DaySchema } from './day.ts';
@@ -17,7 +18,7 @@ export const CitySchema = v.object({
   /** A fraction of a person is kept, so slow daily growth adds up. */
   population: v.pipe(v.number(), v.finite(), v.minValue(0)),
   /** Days of unrest left. 0 is a calm city. */
-  unrestDays: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  unrestDays: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(UNREST_DAYS)),
   recruits: v.array(RecruitSchema),
 });
 

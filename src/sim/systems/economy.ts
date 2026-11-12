@@ -20,7 +20,8 @@ export const UPKEEP_PER_MAN = { gold: 0.01, food: 0.01 } as const;
 export const UNREST_OUTPUT = 0.25;
 /**
  * The share of its men that each formation loses each day for each store, gold or
- * food, that its owner is short of. It rounds down, so no formation deserts to nothing.
+ * food, that its owner is short of. It rounds up, but the last man stays, so no
+ * formation deserts to nothing.
  */
 export const DESERTION = 0.01;
 /** A recruit joins an idle army of its owner this close to the city, in kilometres. */
@@ -130,7 +131,9 @@ function desert(state: GameState) {
     if (shortages === 0) continue;
     for (const id of army.formations) {
       const formation = state.formations[id];
-      if (formation) formation.men -= Math.floor(formation.men * DESERTION * shortages);
+      if (!formation) continue;
+      const deserters = Math.ceil(formation.men * DESERTION * shortages);
+      formation.men -= Math.min(deserters, formation.men - 1);
     }
   }
 }

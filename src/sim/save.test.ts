@@ -1,6 +1,7 @@
 import type { DeepReadonly } from './deep-readonly.ts';
 import type { GameState } from './state/game-state.ts';
 import { describe, expect, test } from 'vitest';
+import { UNREST_DAYS } from './cities.ts';
 import { buildFixture, FIXTURE } from './fixture.ts';
 import { loadGame, SAVE_FORMAT, saveGame } from './save.ts';
 import { warKey } from './state/war.ts';
@@ -110,5 +111,17 @@ describe('save and load', () => {
     save.state['cheat'] = true;
     const result = loadGame(JSON.stringify(save));
     expect(result).toEqual({ ok: true, state: buildFixture() });
+  });
+
+  test('rejects a city with more unrest than a change of owner gives', () => {
+    const state = buildFixture();
+    const roma = state.cities[FIXTURE.roma];
+    if (!roma) throw new Error('the fixture lacks Roma');
+    roma.unrestDays = UNREST_DAYS + 1;
+    const result = loadGame(saveGame(state));
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error).toMatch(
+      /^The save's game state is malformed at state\.cities\.roma\.unrestDays/,
+    );
   });
 });
