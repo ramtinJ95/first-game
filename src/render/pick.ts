@@ -27,24 +27,37 @@ function gap(box: Box, { x, y }: MapPoint): number {
   );
 }
 
-/**
- * The city whose symbol or name is under `screen` or within CITY_HIT_MARGIN of either.
- * The nearest wins, and between symbols that overlap, the one centred nearer.
- */
-export function cityAt(cities: readonly DrawnCity[], screen: MapPoint): CityId | undefined {
+function nearest(
+  cities: readonly DrawnCity[],
+  screen: MapPoint,
+  boxOf: (city: DrawnCity) => Box | undefined,
+): CityId | undefined {
   let best: { id: CityId; gap: number; centre: number } | undefined;
-  for (const { id, symbol, label } of cities) {
-    const near = Math.min(gap(symbol, screen), label ? gap(label, screen) : Infinity);
+  for (const city of cities) {
+    const box = boxOf(city);
+    if (!box) continue;
+    const near = gap(box, screen);
     if (near > CITY_HIT_MARGIN) continue;
     const centre = Math.hypot(
-      screen.x - (symbol.left + symbol.right) / 2,
-      screen.y - (symbol.top + symbol.bottom) / 2,
+      screen.x - (box.left + box.right) / 2,
+      screen.y - (box.top + box.bottom) / 2,
     );
     if (!best || near < best.gap || (near === best.gap && centre < best.centre)) {
-      best = { id, gap: near, centre };
+      best = { id: city.id, gap: near, centre };
     }
   }
   return best?.id;
+}
+
+/**
+ * The city whose symbol is under `screen` or within CITY_HIT_MARGIN of it, and failing
+ * that, the city whose name is. A name can end beside another city's symbol, and the
+ * symbol is what a player aims at. Among symbols that overlap, the one centred nearer wins.
+ */
+export function cityAt(cities: readonly DrawnCity[], screen: MapPoint): CityId | undefined {
+  return (
+    nearest(cities, screen, (city) => city.symbol) ?? nearest(cities, screen, (city) => city.label)
+  );
 }
 
 function insideRing(ring: Ring, { x, y }: MapPoint): boolean {
