@@ -872,7 +872,7 @@ export async function createRenderer({
       }
       if (places.step(now)) dirty = true;
       if (!dirty) return false;
-      life.update(camera, viewport(), now);
+      life.update(camera, viewport(), now, sight);
       moveSwell(now);
       drawRoutes(current, selection, planned, replaced);
       placeBanners(current, selection);

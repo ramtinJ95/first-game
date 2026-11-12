@@ -1,5 +1,6 @@
 import { Container, Graphics } from 'pixi.js';
 import type { GameMap } from '../../sim/map.ts';
+import type { Sight } from '../../sim/sight.ts';
 import { mapToScreen, type Camera, type Size } from '../camera.ts';
 import { INK, PAPER } from '../palette.ts';
 import { DETAIL, detailAlpha } from './detail.ts';
@@ -80,8 +81,11 @@ function boatSpot(land: Land, map: GameMap, x: number, y: number, phase: number)
 }
 
 export interface Life {
-  /** Draws the smoke and the boats for this moment. Returns true while they show. */
-  update(camera: Camera, viewport: Size, now: number): boolean;
+  /**
+   * Draws the smoke and the boats for this moment, only where the player sees, so a
+   * boat in the fog never passes for a hidden convoy. Returns true while they show.
+   */
+  update(camera: Camera, viewport: Size, now: number, sight: Pick<Sight, 'sees'>): boolean;
 }
 
 /**
@@ -110,7 +114,7 @@ export function createLife(map: GameMap, land: Land, parent: Container): Life {
   let boats: Boat[] | undefined;
 
   return {
-    update(camera, viewport, now) {
+    update(camera, viewport, now, sight) {
       const alpha = detailAlpha(DETAIL.life, camera.scale);
       graphics.clear();
       graphics.visible = alpha > 0;
@@ -127,7 +131,7 @@ export function createLife(map: GameMap, land: Land, parent: Container): Life {
         at.x > -40 && at.y > -60 && at.x < viewport.width + 40 && at.y < viewport.height + 20;
       for (const hearth of hearths) {
         const at = mapToScreen(camera, viewport, hearth);
-        if (!inView(at)) continue;
+        if (!inView(at) || !sight.sees(hearth)) continue;
         const top = at.y - hearth.rise * grow;
         for (let n = 0; n < PUFFS; n++) {
           const t = (seconds / PUFF_SECONDS + hearth.phase + n / PUFFS) % 1;
@@ -145,7 +149,7 @@ export function createLife(map: GameMap, land: Land, parent: Container): Life {
           y: boat.y + boat.dy * boat.reach * sway,
         };
         const at = mapToScreen(camera, viewport, km);
-        if (!inView(at)) continue;
+        if (!inView(at) || !sight.sees(km)) continue;
         const bob = Math.sin(seconds * 1.7 + boat.phase * 20) * 0.6;
         const facing =
           Math.cos(((seconds / SAIL_SECONDS + boat.phase) % 1) * Math.PI * 2) * boat.dx >= 0
