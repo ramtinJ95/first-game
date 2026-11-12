@@ -119,7 +119,15 @@ export interface SceneInput {
 type State = DeepReadonly<GameState>;
 type Mode =
   | { kind: 'line'; anchor: MapPoint; facing: MapPoint; camp: boolean }
-  | { kind: 'march'; trail: MapPoint[]; heading: MapPoint; beaten: boolean }
+  | {
+      kind: 'march';
+      trail: MapPoint[];
+      heading: MapPoint;
+      /** Beaten and falling back: the ranks are loose. */
+      beaten: boolean;
+      /** Left a battle today, and runs before it falls into a walk. */
+      fled: boolean;
+    }
   | {
       kind: 'battle';
       battle: DeepReadonly<Battle>;
@@ -242,26 +250,32 @@ class Context {
             before.position.y === activity.position.y;
         return { kind: 'line', anchor: activity.position, facing: RIGHT, camp };
       }
-      case 'marching': {
+      case 'marching':
+      case 'retreating': {
         if (isPrevious) {
           const next = activity.waypoints[0] ?? activity.position;
           return {
             kind: 'march',
             trail: [activity.position, next],
             heading: unit(activity.position, next),
-            beaten: false,
+            beaten: activity.kind === 'retreating',
+            fled: false,
           };
         }
         const before = other.armies[army.id]?.activity;
         const from = before && before.kind !== 'embarked' ? before.position : activity.position;
-        const ahead = before?.kind === 'marching' ? before.waypoints : [activity.position];
+        const ahead =
+          before?.kind === 'marching' || before?.kind === 'retreating'
+            ? before.waypoints
+            : [activity.position];
         const trail = dayPath(from, ahead, activity.position);
-        const beaten = before?.kind === 'inBattle';
+        const beaten = activity.kind === 'retreating' || before?.kind === 'inBattle';
         return {
           kind: 'march',
           trail: trail.length > 1 ? trail : [from, activity.waypoints[0] ?? from],
           heading: unit(activity.position, activity.waypoints[0] ?? activity.position),
           beaten,
+          fled: before?.kind === 'inBattle',
         };
       }
       case 'inBattle': {
@@ -447,7 +461,7 @@ class Context {
     // up, so it does not cut across from where it stood to where it rests.
     let arrival: Layout | undefined;
     if (
-      before?.activity.kind === 'marching' &&
+      (before?.activity.kind === 'marching' || before?.activity.kind === 'retreating') &&
       now &&
       now.activity.kind !== 'embarked' &&
       (modeNow?.kind === 'line' || modeNow?.kind === 'siege')
@@ -462,7 +476,7 @@ class Context {
       arrival = this.layout(
         previous,
         before,
-        { kind: 'march', trail, heading, beaten: false },
+        { kind: 'march', trail, heading, beaten: false, fled: false },
         'before',
       );
     }
@@ -1458,7 +1472,7 @@ class ColumnLayout implements Layout {
       x: base.x + r.x * across * ctx.h,
       y: base.y + r.y * across * ctx.h * GROUND_Y,
       facing: on.heading.x < 0 ? -1 : 1,
-      motion: length > 0.01 ? (mode.beaten && progress < 0.6 ? 'run' : 'march') : 'stand',
+      motion: length > 0.01 ? (mode.fled && progress < 0.6 ? 'run' : 'march') : 'stand',
       side: 0,
       front: false,
       cavalryLoop: false,

@@ -250,3 +250,21 @@ describe('a refugee column', () => {
     expect(sprites.filter((s) => s.key.startsWith('cart.'))).toHaveLength(1);
   });
 });
+
+describe('a retreating army', () => {
+  test('walks its path like a march, and runs only on the day it leaves a battle', () => {
+    const [previous, current] = marching({ x: 2700, y: 2340.8 });
+    const before = previous.armies[FIXTURE.romanArmy];
+    const now = current.armies[FIXTURE.romanArmy];
+    if (!before || before.activity.kind !== 'marching' || !now || now.activity.kind !== 'marching')
+      throw new Error('fixture lacks the marching Roman army');
+    before.activity = { ...before.activity, kind: 'retreating' };
+    now.activity = { ...now.activity, kind: 'retreating' };
+    const figures = figuresOf(
+      buildScene(input(previous, current, { progress: 0.3 })),
+      FIXTURE.romanArmy,
+    );
+    expect(figures.length).toBeGreaterThan(0);
+    expect(figures.every((s) => s.key.includes('.march.') && !s.mirror)).toBe(true);
+  });
+});
