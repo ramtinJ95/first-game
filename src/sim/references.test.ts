@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { buildFixture, FIXTURE } from './fixture.ts';
 import type { BattleId, ConvoyId } from './ids.ts';
-import { findBrokenReferences } from './references.ts';
+import { expectConsistent, findBrokenReferences } from './references.ts';
 import type { Day } from './state/day.ts';
 
 test('an army in a battle that does not list it is reported', () => {
@@ -92,4 +92,13 @@ test('an allocated id at or above nextSerial is reported', () => {
   expect(findBrokenReferences(state)).toEqual([
     'convoys.convoy-1 is not below nextSerial 1, so a new id could repeat it',
   ]);
+});
+
+test('expectConsistent passes a valid state and throws with the list for a broken one', () => {
+  const state = buildFixture();
+  expect(() => expectConsistent(state)).not.toThrow();
+  state.armies[FIXTURE.punicArmy]?.formations.push(FIXTURE.hastati);
+  expect(() => expectConsistent(state)).toThrow(
+    'The state has broken links: army army-punic lists formation formation-hastati, which does not name it back',
+  );
 });

@@ -6,6 +6,7 @@ import {
   ConvoyIdSchema,
   FactionIdSchema,
   FormationIdSchema,
+  MAX_SERIAL,
   ProvinceIdSchema,
   RefugeeColumnIdSchema,
   SiegeIdSchema,
@@ -29,7 +30,7 @@ import { SiegeSchema } from './siege.ts';
 export const GameStateSchema = v.object({
   day: DaySchema,
   rng: RngStateSchema,
-  nextSerial: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  nextSerial: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(MAX_SERIAL)),
   player: FactionIdSchema,
   factions: v.record(FactionIdSchema, FactionSchema),
   provinces: v.record(ProvinceIdSchema, ProvinceSchema),

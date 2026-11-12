@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE } from './fixture.ts';
 import type { Order } from './orders/orders.ts';
+import { expectConsistent } from './references.ts';
 import { nextInt } from './rng.ts';
 import { loadGame, saveGame } from './save.ts';
 import type { GameState } from './state/game-state.ts';
@@ -45,7 +46,9 @@ function play(state: GameState, days: number): GameState {
 
 describe('determinism', () => {
   test('the same seed and the same orders give an identical save after 500 ticks', () => {
-    const first = saveGame(play(buildFixture(7), 500));
+    const end = play(buildFixture(7), 500);
+    expectConsistent(end);
+    const first = saveGame(end);
     const second = saveGame(play(buildFixture(7), 500));
     expect(second).toBe(first);
     expect(play(buildFixture(7), 500).day).toBe(501);
@@ -64,7 +67,9 @@ describe('determinism', () => {
 
 describe('tick', () => {
   test('advances the day by one', () => {
-    expect(tick(buildFixture(), []).state.day).toBe(2);
+    const { state } = tick(buildFixture(), []);
+    expect(state.day).toBe(2);
+    expectConsistent(state);
   });
 
   test('leaves its input state unchanged and returns a new one', () => {
@@ -81,6 +86,7 @@ describe('tick', () => {
     expect(before).toEqual(snapshot);
     expect(state).not.toBe(before);
     expect(state.armies[FIXTURE.romanArmy]?.stance).toBe('allOutAssault');
+    expectConsistent(state);
   });
 
   test('rejects an order for an army the faction does not own and changes nothing else', () => {
@@ -96,6 +102,7 @@ describe('tick', () => {
       { order, reason: 'army army-roman belongs to rome, not carthage' },
     ]);
     expect(withOrder.state).toEqual(withoutOrder.state);
+    expectConsistent(withOrder.state);
   });
 
   test('applies orders in the order given, before the systems run', () => {

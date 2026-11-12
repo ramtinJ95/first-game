@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE } from '../fixture.ts';
 import type { FactionId, SiegeId } from '../ids.ts';
+import { expectConsistent } from '../references.ts';
 import { executeOrder, type Order } from './orders.ts';
 
 describe('moveArmy', () => {
@@ -19,6 +20,7 @@ describe('moveArmy', () => {
       position: { x: 1245, y: 615 },
       destination: { x: 1300, y: 660 },
     });
+    expectConsistent(state);
   });
 
   test('is rejected for a besieging army, which keeps its siege', () => {
@@ -66,6 +68,7 @@ describe('setStance', () => {
       stance: 'skirmishAndWithdraw',
     });
     expect(state.armies[FIXTURE.punicArmy]?.stance).toBe('skirmishAndWithdraw');
+    expectConsistent(state);
   });
 });
 
@@ -87,6 +90,7 @@ describe('every order', () => {
         reason: 'army army-punic belongs to carthage, not rome',
       });
       expect(state).toEqual(buildFixture());
+      expectConsistent(state);
     }
   });
 

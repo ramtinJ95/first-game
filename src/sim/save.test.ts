@@ -71,6 +71,15 @@ describe('save and load', () => {
     });
   });
 
+  test('rejects an id counter that could no longer count up exactly', () => {
+    const save = JSON.parse(saveGame(buildFixture())) as { state: { nextSerial: number } };
+    save.state.nextSerial = 2 ** 53;
+    const result = loadGame(JSON.stringify(save));
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error).toMatch(/^The save's game state is malformed at state\.nextSerial: /);
+  });
+
   test('drops fields the state does not know', () => {
     const save = JSON.parse(saveGame(buildFixture())) as { state: Record<string, unknown> };
     save.state['cheat'] = true;

@@ -1,6 +1,8 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { Order, RejectedOrder } from '../sim/orders/orders.ts';
+import { findBrokenReferences } from '../sim/references.ts';
 import type { GameState } from '../sim/state/game-state.ts';
+import type { System } from '../sim/systems.ts';
 import { tick } from '../sim/tick.ts';
 
 export const DAYS_PER_SECOND = { 1: 1, 2: 2, 3: 5 } as const;
@@ -11,6 +13,8 @@ export interface ClockOptions {
   now: () => number;
   maxTicksPerFrame?: number;
   onRejected?: (rejected: RejectedOrder[]) => void;
+  /** Tests replace the day's systems. The game runs the default list. */
+  systems?: readonly System[];
 }
 
 export interface Clock {
@@ -32,6 +36,7 @@ export function createClock({
   now,
   maxTicksPerFrame = 4,
   onRejected,
+  systems,
 }: ClockOptions): Clock {
   let state = initial;
   let previous = initial;
@@ -42,17 +47,30 @@ export function createClock({
   let pending: Order[] = [];
 
   function runTick() {
-    const result = tick(state, pending);
+    const result = tick(state, pending, systems);
     pending = [];
     previous = state;
     state = result.state;
+    if (import.meta.env.DEV) {
+      const broken = findBrokenReferences(state);
+      if (broken.length > 0) {
+        throw new Error(`Day ${previous.day} left broken links: ${broken.join('; ')}`);
+      }
+    }
     if (result.rejected.length > 0) onRejected?.(result.rejected);
   }
 
-  function resume() {
-    if (!paused) return;
-    paused = false;
-    lastFrameAt = now();
+  // Counts the time since the last call at the rate it passed at, so a later change
+  // of speed or pause does not rewrite time that has already gone by.
+  function accrue() {
+    const at = now();
+    if (!paused) progress += ((at - lastFrameAt) * DAYS_PER_SECOND[speed]) / 1000;
+    lastFrameAt = at;
+  }
+
+  function setPaused(next: boolean) {
+    accrue();
+    paused = next;
   }
 
   return {
@@ -75,22 +93,21 @@ export function createClock({
       pending.push(order);
     },
     pause() {
-      paused = true;
+      setPaused(true);
     },
-    resume,
+    resume() {
+      setPaused(false);
+    },
     togglePause() {
-      if (paused) resume();
-      else paused = true;
+      setPaused(!paused);
     },
     setSpeed(next) {
+      accrue();
       speed = next;
     },
     frame() {
-      const at = now();
-      const elapsedMs = at - lastFrameAt;
-      lastFrameAt = at;
+      accrue();
       if (paused) return;
-      progress += (elapsedMs * DAYS_PER_SECOND[speed]) / 1000;
       const owed = Math.floor(progress);
       const ticks = Math.min(owed, maxTicksPerFrame);
       for (let i = 0; i < ticks; i++) runTick();

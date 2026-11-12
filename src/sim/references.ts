@@ -157,3 +157,9 @@ export function findBrokenReferences(state: DeepReadonly<GameState>): string[] {
 
   return problems;
 }
+
+/** Throws with every broken link. Every system test and order test ends with it. */
+export function expectConsistent(state: DeepReadonly<GameState>): void {
+  const broken = findBrokenReferences(state);
+  if (broken.length > 0) throw new Error(`The state has broken links: ${broken.join('; ')}`);
+}

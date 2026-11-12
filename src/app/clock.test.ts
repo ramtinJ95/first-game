@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildFixture, FIXTURE } from '../sim/fixture.ts';
+import type { System } from '../sim/systems.ts';
 import { createClock } from './clock.ts';
 
 function fakeTime() {
@@ -57,6 +58,48 @@ describe('clock', () => {
     };
     expect(daysAfter(1)).toBe(10);
     expect(daysAfter(2)).toBe(20);
+  });
+
+  it('counts time before a speed change at the old speed', () => {
+    const time = fakeTime();
+    const clock = createClock({ state: buildFixture(), now: time.now });
+    time.advance(900);
+    clock.setSpeed(3);
+    clock.frame();
+    expect(clock.state.day).toBe(1);
+    expect(clock.progress).toBeCloseTo(0.9);
+
+    time.advance(100);
+    clock.frame();
+    expect(clock.state.day).toBe(2);
+    expect(clock.progress).toBeCloseTo(0.4);
+  });
+
+  it('counts time before a pause, and runs no tick until resume', () => {
+    const time = fakeTime();
+    const clock = createClock({ state: buildFixture(), now: time.now });
+    time.advance(1500);
+    clock.pause();
+    clock.frame();
+    expect(clock.state.day).toBe(1);
+
+    time.advance(5000);
+    clock.resume();
+    clock.frame();
+    expect(clock.state.day).toBe(2);
+    expect(clock.progress).toBeCloseTo(0.5);
+  });
+
+  it('throws with the day and the broken links when a system updates one side of a link', () => {
+    const linkOneSide: System = (state) => {
+      state.armies[FIXTURE.romanArmy]?.formations.push(FIXTURE.citizenSpears);
+    };
+    const time = fakeTime();
+    const clock = createClock({ state: buildFixture(), now: time.now, systems: [linkOneSide] });
+    time.advance(1000);
+    expect(() => clock.frame()).toThrow(
+      'Day 1 left broken links: army army-roman lists formation formation-citizen-spears, which does not name it back',
+    );
   });
 
   it('runs at most maxTicksPerFrame ticks in a long frame and does not catch up afterwards', () => {

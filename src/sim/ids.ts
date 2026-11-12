@@ -32,11 +32,15 @@ interface IdOfKind {
   siege: SiegeId;
 }
 
+/** The last counter value that can still be incremented without losing precision. */
+export const MAX_SERIAL = Number.MAX_SAFE_INTEGER - 1;
+
 /** Hands out a fresh id from the counter in the state, so new records stay deterministic. */
 export function allocateId<K extends keyof IdOfKind>(
   state: { nextSerial: number },
   kind: K,
 ): IdOfKind[K] {
+  if (state.nextSerial > MAX_SERIAL) throw new Error('The id counter is exhausted.');
   const id = `${kind}-${state.nextSerial}`;
   state.nextSerial += 1;
   return id as IdOfKind[K];

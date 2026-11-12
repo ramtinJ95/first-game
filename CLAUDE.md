@@ -23,7 +23,7 @@ Read `docs/design.md` before any work. It is the agreed design. When a task conf
 
 - `src/sim/state/` holds one file per kind of record. Each file defines a valibot schema and derives the type from it, so the schema is the one source of the shape and also the check that loading a save runs. `game-state.ts` gathers the collections. Each collection maps an id to its record.
 - An army's `activity` is a tagged union (idle, marching, in battle, besieging, embarked). Add a variant instead of an optional field.
-- Records that point at each other must agree. `findBrokenReferences` in `src/sim/references.ts` lists every disagreement. Loading rejects a save that has any. Assert an empty list in the tests of a system that creates or links records.
+- Records that point at each other must agree: an army and its formations, a battle or a siege and its armies, a convoy and its armies, a province and its city. `findBrokenReferences` in `src/sim/references.ts` lists every disagreement. Loading rejects a save that has any. Every system test and every order test ends with `expectConsistent(state)`, which throws with that list. In development builds and in tests, the clock runs the same check after every tick and throws with the day. Production builds leave it out.
 - New records get their ids from `allocateId` in `src/sim/ids.ts`, which counts in the state.
 - Randomness comes from `nextRandom` and `nextInt` in `src/sim/rng.ts`, which advance `state.rng`. Never call `Math.random`.
 - `buildFixture()` in `src/sim/fixture.ts` returns a fresh tiny valid state, and `FIXTURE` names its ids. Use it in tests.
@@ -36,7 +36,9 @@ Read `docs/design.md` before any work. It is the agreed design. When a task conf
 
 1. Write `src/sim/systems/<name>.ts`, which exports a `System`, `(state: GameState) => void`. It changes the state it is given.
 2. Add it to `SYSTEMS` in `src/sim/systems.ts`, at its place in the day: movement, battles, sieges, economy, population. `advanceDay` stays last.
-3. Write `src/sim/systems/<name>.test.ts`, which starts from `buildFixture()`.
+3. Write `src/sim/systems/<name>.test.ts`, which starts from `buildFixture()` and ends each test with `expectConsistent(state)`.
+
+The AI is not a system. It is a pure function from the state to a list of orders, and the clock adds those orders to the next tick.
 
 A field that only your system needs goes into the kind's schema in `src/sim/state/`. A field that old saves lack needs a default with `v.optional(schema, default)`, or a raise of `SAVE_FORMAT` in `src/sim/save.ts`.
 
