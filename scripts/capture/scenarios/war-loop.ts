@@ -1,4 +1,15 @@
-import { camera, dropSave, outnumberedAt, pause, resume, startGame } from '../../../e2e/support.ts';
+import { firstDayWhen } from '../../../e2e/fog-game.ts';
+import {
+  armyOf,
+  camera,
+  dropSave,
+  outnumberedAt,
+  pause,
+  resume,
+  rome,
+  startGame,
+  untilDay,
+} from '../../../e2e/support.ts';
 import { defineScenario } from '../scenario.ts';
 
 export default defineScenario({
@@ -8,6 +19,9 @@ export default defineScenario({
   async run({ page, shot }) {
     const state = startGame();
     outnumberedAt(state, 'capua', 3000);
+    const roman = armyOf(state, rome).id;
+    const began = firstDayWhen(state, (s) => s.armies[roman]?.activity.kind === 'inBattle');
+    const broke = firstDayWhen(state, (s) => s.armies[roman]?.activity.kind === 'retreating');
     await page.goto('/');
     await page.getByTestId('top-bar').waitFor({ state: 'visible' });
     await pause(page);
@@ -18,14 +32,12 @@ export default defineScenario({
     await page.getByRole('button', { name: 'Speed 1', exact: true }).click();
     await resume(page);
 
-    const alerts = page.getByTestId('alerts');
-    await alerts.getByRole('button', { name: /Battle (at|near) Capua/ }).waitFor();
+    await untilDay(page, began);
     await shot(
       'war-loop-battle-began',
-      'Day 2: the armies lock together beside Capua and the alert tells of the battle',
+      'The first day: the armies lock together beside Capua and the alert tells of the battle',
     );
-    const ended = alerts.getByRole('button', { name: /held the field (at|near) Capua/ });
-    await ended.waitFor({ timeout: 20_000 });
+    for (let day = began + 1; day <= broke; day++) await untilDay(page, day);
     await pause(page);
     await shot(
       'war-loop-battle-ended',
@@ -36,7 +48,6 @@ export default defineScenario({
       .getByRole('button', { name: /Your army broke/ })
       .click();
     await page.getByTestId('army-panel').waitFor();
-    await page.waitForTimeout(400);
     await shot(
       'war-loop-retreating',
       "A click on the retreat alert selects Rome's army, which is retreating to Roma, the nearest city of Rome that no enemy threatens",
