@@ -1,3 +1,5 @@
+import type { DeepReadonly } from './deep-readonly.ts';
+import type { GameState } from './state/game-state.ts';
 import { describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE } from './fixture.ts';
 import { loadGame, SAVE_FORMAT, saveGame } from './save.ts';
@@ -10,6 +12,11 @@ describe('save and load', () => {
     ]).state;
     const loaded = loadGame(saveGame(state));
     expect(loaded).toEqual({ ok: true, state });
+  });
+
+  test('a read-only state, as the clock hands it out, can be saved', () => {
+    const view: DeepReadonly<GameState> = buildFixture();
+    expect(loadGame(saveGame(view))).toEqual({ ok: true, state: buildFixture() });
   });
 
   test('the save names its format version', () => {

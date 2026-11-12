@@ -26,7 +26,7 @@ export interface RejectedOrder {
 
 /** Applies one order to the state, or returns why it was rejected. */
 export function executeOrder(state: GameState, order: Order): RejectedOrder | undefined {
-  if (!state.factions[order.faction])
+  if (!Object.hasOwn(state.factions, order.faction))
     return { order, reason: `faction ${order.faction} does not exist` };
   const handler = ORDER_HANDLERS[order.kind] as (
     state: GameState,

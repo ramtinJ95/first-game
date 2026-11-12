@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import type { DeepReadonly } from './deep-readonly.ts';
 import { findBrokenReferences } from './references.ts';
 import { GameStateSchema, type GameState } from './state/game-state.ts';
 
@@ -7,7 +8,7 @@ export const SAVE_FORMAT = 1;
 
 export type LoadResult = { ok: true; state: GameState } | { ok: false; error: string };
 
-export function saveGame(state: GameState): string {
+export function saveGame(state: DeepReadonly<GameState>): string {
   return JSON.stringify({ format: SAVE_FORMAT, state });
 }
 

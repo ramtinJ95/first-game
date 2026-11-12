@@ -14,6 +14,9 @@ export interface MoveArmyOrder {
 export function moveArmy(state: GameState, order: MoveArmyOrder): string | undefined {
   const army = ownedArmy(state, order.faction, order.army);
   if (typeof army === 'string') return army;
+  if (!Number.isFinite(order.to.x) || !Number.isFinite(order.to.y)) {
+    return `destination ${order.to.x}, ${order.to.y} is not a point on the map`;
+  }
   const { activity } = army;
   switch (activity.kind) {
     case 'idle':

@@ -4,7 +4,7 @@ import type { GameState } from '../state/game-state.ts';
 
 /** Finds an army the faction may command, or the reason it may not. */
 export function ownedArmy(state: GameState, faction: FactionId, id: ArmyId): Army | string {
-  const army = state.armies[id];
+  const army = Object.hasOwn(state.armies, id) ? state.armies[id] : undefined;
   if (!army) return `army ${id} does not exist`;
   if (army.owner !== faction) return `army ${id} belongs to ${army.owner}, not ${faction}`;
   return army;

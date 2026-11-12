@@ -40,6 +40,20 @@ describe('moveArmy', () => {
     });
     expect(state).toEqual(before);
   });
+
+  test('is rejected for a destination that is not a finite point', () => {
+    const state = buildFixture();
+    const order: Order = {
+      kind: 'moveArmy',
+      faction: FIXTURE.rome,
+      army: FIXTURE.romanArmy,
+      to: { x: Number.NaN, y: Number.POSITIVE_INFINITY },
+    };
+    expect(executeOrder(state, order)?.reason).toBe(
+      'destination NaN, Infinity is not a point on the map',
+    );
+    expect(state).toEqual(buildFixture());
+  });
 });
 
 describe('setStance', () => {
