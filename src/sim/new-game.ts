@@ -25,6 +25,9 @@ export const STARTING_POPULATION = {
   minorCity: 8_000,
 } as const;
 
+/** Every power's starting general has this skill, on the 0 to 10 scale. */
+export const STARTING_GENERAL_SKILL = 3;
+
 export const STARTING_FORMATIONS = [
   { troop: 'spearmen', men: 1200 },
   { troop: 'lightCavalry', men: 300 },
@@ -33,7 +36,8 @@ export const STARTING_FORMATIONS = [
 /**
  * Builds the first day of a game from the static map. City ids are their province's
  * id, a minor faction's id is the id of the province of its one city, and armies and
- * formations take ids from the counter. The map stays outside the state.
+ * formations take ids from the counter. Every faction starts at peace. The map stays
+ * outside the state.
  */
 export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameState {
   if (!(POWERS as readonly string[]).includes(player)) {
@@ -53,6 +57,7 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
     refugeeColumns: {},
     battles: {},
     sieges: {},
+    wars: {},
   };
 
   for (const power of POWERS) {
@@ -74,6 +79,7 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
       owner: faction,
       formations,
       stance: 'holdTheLine',
+      generalSkill: STARTING_GENERAL_SKILL,
       activity: { kind: 'idle', position: { x: capital.city[0], y: capital.city[1] } },
     };
   }

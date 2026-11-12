@@ -95,7 +95,7 @@ describe('save and load', () => {
   test('a war with a faction whose id holds any character saves and loads', () => {
     const state = buildFixture();
     const odd = 'x|y"]' as typeof FIXTURE.rome;
-    state.factions[odd] = { id: odd, name: 'Odd' };
+    state.factions[odd] = { id: odd, name: 'Odd', kind: 'minor' };
     state.wars[warKey(FIXTURE.rome, odd)] = { since: state.day };
     expect(loadGame(saveGame(state))).toEqual({ ok: true, state });
   });
