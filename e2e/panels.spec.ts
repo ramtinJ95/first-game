@@ -11,6 +11,7 @@ import {
   declareWar,
   dropSave,
   fallenTo,
+  openGame,
   pause,
   playDays,
   resume,
@@ -51,8 +52,7 @@ test.describe('the panels', () => {
       if (message.type() === 'error') errors.push(message.text());
     });
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
   });
 
   test.afterEach(() => {

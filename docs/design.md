@@ -48,7 +48,7 @@ The game is original. Civilization 5, Knights of Honor 2, and Rome: Total War 2 
 - **Unrest.** A freshly conquered city has a period of unrest.
 - **Diplomacy.** Factions are at war or at peace. They can sign a trade agreement, a non-aggression pact, an alliance, and a tribute or vassal treaty. A peace deal can transfer provinces or gold. Each AI faction holds an opinion of you that moves with your actions.
 - **Progression.** A tree of 20 to 30 advances in three branches, which are military, economy, and statecraft. You research one advance at a time with research income from cities and buildings. All advances stay inside the classical era.
-- **Victory.** You win when you hold a set share of all provinces, including your own capital and several great capitals such as Rome, Carthage, Alexandria, and Persepolis. The game announces the win and lets you continue. You lose when your last city falls.
+- **Victory.** You win when you hold 40% of all provinces, which is 32 of the 80, and 3 of the 5 great capitals, your own among them. The great capitals are Roma, Carthago, Pella, Alexandria, and Persepolis. The game announces the win once and lets you continue. You lose when your last city falls, and the game then stops on a defeat screen. The AI powers settle at 16 to 18 cities each, so the share asks for war on the great powers and not only on the minor cities.
 
 ### Look
 
@@ -83,7 +83,7 @@ Later work splits the coarse provinces into finer ones.
 | Interface | Svelte 5, without SvelteKit | Svelte updates single values on the page when they change, which suits state that changes every tick. A one-screen game needs no routing or server rendering. |
 | Rules | Plain typed data and pure functions | See the next section. |
 | Tests | Vitest for rules, Playwright for the running game | Rules are tested without a browser. Features are checked in a real browser. |
-| Saves | Browser storage, with export to and import from a file | The whole game state is plain data, so a save is that data written as JSON. |
+| Saves | Browser storage, with export to and import from a file | The whole game state is plain data, so a save is that data written as JSON. The browser keeps one save the player writes and one the game writes at the start of each 30-day month. |
 | Hosting | None yet | The build output is a static folder that any static host can serve. |
 
 ### Alternatives we set aside

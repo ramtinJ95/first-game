@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
+import { standingOf } from '../sim/outcome.ts';
 import { sightOf } from '../sim/sight.ts';
 import type { Speed } from './clock.ts';
 import { createView, type Snapshot } from './view.svelte.ts';
@@ -24,6 +25,13 @@ describe('view', () => {
       notice: undefined,
       menu: undefined,
       sight: sightOf(state, fixtureWorld(), FIXTURE.rome),
+      frame: {
+        powers: [],
+        modal: undefined,
+        saves: {},
+        pauseOnFate: true,
+        standing: standingOf(state, fixtureWorld(), FIXTURE.rome),
+      },
     };
     return {
       read: () => snapshot,

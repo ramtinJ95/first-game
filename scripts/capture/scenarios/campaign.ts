@@ -3,6 +3,7 @@ import {
   camera,
   cityPoint,
   dropSave,
+  openGame,
   pause,
   playDays,
   resume,
@@ -21,8 +22,7 @@ export default defineScenario({
   async run({ page, shot }) {
     // Day 36 of a game played without orders, so Rome has saved enough to raise a troop.
     const save = playDays(startGame(), 35);
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
     await pause(page);
     await dropSave(page, save);
     await page.getByTestId('time-controls-day').filter({ hasText: 'day 36' }).waitFor();

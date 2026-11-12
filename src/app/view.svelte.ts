@@ -1,13 +1,18 @@
 import { flushSync } from 'svelte';
 import type { Pick } from '../render/pick.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
+import type { PowerId } from '../sim/map.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { Sight } from '../sim/sight.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
+import type { Standing } from '../sim/outcome.ts';
 import type { Alert } from './alerts.ts';
 import type { Speed } from './clock.ts';
 import type { OrderMenu } from './command.ts';
+import type { FateChoice } from './fates.ts';
+import type { Modal } from './modals.ts';
+import type { Saved, Slot } from './saves.ts';
 
 /** A choice of orders offered at a right click, at its place on the screen. */
 export interface CommandMenu extends OrderMenu {
@@ -18,6 +23,29 @@ export interface CommandMenu extends OrderMenu {
 export interface Notice {
   readonly id: number;
   readonly text: string;
+}
+
+/** The modal in front, with a fate's choices worked out for the day. */
+export type ShownModal =
+  | Exclude<Modal, { kind: 'fate' }>
+  | (Extract<Modal, { kind: 'fate' }> & { readonly choices: readonly FateChoice[] });
+
+/** A great power as the start screen offers it, from the map. */
+export interface PowerCard {
+  readonly power: PowerId;
+  readonly name: string;
+  readonly capital: string;
+  /** Its starting cities, the capital first. */
+  readonly cities: readonly string[];
+}
+
+/** The page round the game: its screens, its saves, and how far the player is from winning. */
+export interface Frame {
+  readonly powers: readonly PowerCard[];
+  readonly modal: ShownModal | undefined;
+  readonly saves: Readonly<Partial<Record<Slot, Saved>>>;
+  readonly pauseOnFate: boolean;
+  readonly standing: Standing;
 }
 
 export interface Snapshot {
@@ -34,6 +62,7 @@ export interface Snapshot {
   menu: CommandMenu | undefined;
   /** What the player sees. A panel or an alert shows nothing outside it. */
   sight: Sight;
+  frame: Frame;
 }
 
 export interface View {

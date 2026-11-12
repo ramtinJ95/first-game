@@ -26,6 +26,7 @@ import {
   declareWar,
   dropSave,
   map,
+  openGame,
   pause,
   playDays,
   resume,
@@ -94,8 +95,7 @@ test.describe('fog of war', () => {
       if (message.type() === 'error') errors.push(message.text());
     });
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.goto('/');
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+    await openGame(page);
     await pause(page);
   });
 

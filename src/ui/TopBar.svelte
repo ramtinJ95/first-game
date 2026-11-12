@@ -5,14 +5,23 @@
   import { dailyBalances } from '../sim/systems/economy.ts';
   import type { Actions } from './actions.ts';
   import { cssColour, ordersWaitingText, signed } from './describe.ts';
+  import type { FrameActions } from './frame-actions.ts';
+  import FrameControls from './FrameControls.svelte';
   import TimeControls from './TimeControls.svelte';
 
   let {
     view,
     actions,
+    frame,
     overview,
     toggleOverview,
-  }: { view: View; actions: Actions; overview: boolean; toggleOverview: () => void } = $props();
+  }: {
+    view: View;
+    actions: Actions;
+    frame: FrameActions;
+    overview: boolean;
+    toggleOverview: () => void;
+  } = $props();
 
   /** A store that runs out within this many days at today's balance is marked. */
   const WARN_DAYS = 60;
@@ -64,6 +73,7 @@
   <button type="button" aria-expanded={overview} aria-controls="overview" onclick={toggleOverview}
     >Overview</button
   >
+  <FrameControls frame={view.current.frame} actions={frame} />
   {#if waiting}
     <span class="muted" data-testid="orders-waiting">{waiting}</span>
   {/if}

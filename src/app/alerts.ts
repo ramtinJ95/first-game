@@ -1,4 +1,5 @@
 import type { Pick } from '../render/pick.ts';
+import { FATE_DAYS } from '../sim/cities.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { BattleSideOutcome, DayEvent } from '../sim/events.ts';
 import type { ArmyId, FactionId } from '../sim/ids.ts';
@@ -21,7 +22,8 @@ export type AlertKind =
   | 'formationMustered'
   | 'cityChangedOwner'
   | 'siegeBegan'
-  | 'storeRanOut';
+  | 'storeRanOut'
+  | 'fateLapsed';
 
 export interface Alert {
   readonly kind: AlertKind;
@@ -128,6 +130,18 @@ export function alertsOfDay(
       text: ours
         ? `Your army besieges ${city.name}`
         : `${ownersOf(after, siege.besiegers)} besieges ${city.name}`,
+      focus: { at: city.position, select: { kind: 'province', province: city.province } },
+    });
+  }
+
+  for (const city of Object.values(after.cities)) {
+    if (city.owner !== player || city.fellOn === null) continue;
+    if (after.day - city.fellOn !== FATE_DAYS + 1) continue;
+    if (before.cities[city.id]?.fellOn !== city.fellOn) continue;
+    add({
+      kind: 'fateLapsed',
+      tone: 'neutral',
+      text: `No fate was chosen for ${city.name}: you occupy it as it stands`,
       focus: { at: city.position, select: { kind: 'province', province: city.province } },
     });
   }

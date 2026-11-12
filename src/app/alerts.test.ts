@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { changeCityOwner, FATE_DAYS } from '../sim/cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
@@ -348,5 +349,29 @@ describe('alertsOfDay', () => {
       ['storeRanOut', 'Manpower ran out: no troops can be raised', undefined],
     ]);
     expect(alertsOfDay(after, after, [])).toEqual([]);
+  });
+
+  it('tells once that a captured city is occupied when its days to choose a fate pass, and not after a sack', () => {
+    const fallen = () => {
+      const state = buildFixture();
+      const roman = state.armies[f.romanArmy];
+      const syracusae = state.cities[f.syracusae];
+      if (!roman || !syracusae) throw new Error('fixture changed');
+      roman.activity = { kind: 'idle', position: { ...syracusae.position } };
+      changeCityOwner(state, f.syracusae, f.rome);
+      syracusae.fellOn = state.day;
+      return state;
+    };
+    const left = play(fallen(), [], () => false, FATE_DAYS + 5);
+    expect(ofKind(left.alerts, 'fateLapsed').map((a) => [a.day, a.text])).toEqual([
+      [FATE_DAYS + 2, 'No fate was chosen for Syracusae: you occupy it as it stands'],
+    ]);
+    const sacked = play(
+      fallen(),
+      [{ kind: 'sack', faction: f.rome, city: f.syracusae }],
+      () => false,
+      FATE_DAYS + 5,
+    );
+    expect(ofKind(sacked.alerts, 'fateLapsed')).toEqual([]);
   });
 });

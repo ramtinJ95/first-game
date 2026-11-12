@@ -1,11 +1,11 @@
 import { defineScenario } from '../scenario.ts';
+import { openGame } from '../../../e2e/support.ts';
 
 export default defineScenario({
   name: 'time-controls',
   title: 'Time controls: the day counter runs, pauses on Space, and runs faster at speed 3',
   async run({ page, shot }) {
-    await page.goto('/');
-    await page.getByTestId('time-controls').waitFor({ state: 'visible' });
+    await openGame(page);
     await shot(
       'start',
       'On load: the top bar reads Rome, its gold, food, and manpower with their daily change, Year 1, day 1, and speed 1',

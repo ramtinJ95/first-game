@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openGame } from './support.ts';
 
 async function day(page: Page): Promise<number> {
   const text = await page.getByTestId('time-controls-day').getAttribute('data-day');
@@ -23,8 +24,7 @@ test.describe('time controls', () => {
       if (message.type() === 'error') errors.push(message.text());
     });
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.goto('/');
-    await page.getByTestId('time-controls').waitFor({ state: 'visible' });
+    await openGame(page);
   });
 
   test.afterEach(() => {
