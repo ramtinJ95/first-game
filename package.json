@@ -1,0 +1,43 @@
+{
+  "name": "first-game",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.sim.json --noEmit && eslint . && prettier --check .",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "capture": "vite build && node scripts/capture/run.ts",
+    "capture:publish": "node scripts/capture/publish.ts"
+  },
+  "dependencies": {
+    "pixi.js": "^8.23.0",
+    "svelte": "^5.57.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@types/node": "^26.6.6",
+    "@types/pngjs": "^6.0.5",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-svelte": "^3.24.1",
+    "gifenc": "^1.0.3",
+    "globals": "^17.14.0",
+    "pngjs": "^7.0.0",
+    "prettier": "^3.10.1",
+    "prettier-plugin-svelte": "^4.1.1",
+    "svelte-check": "^4.7.8",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}
