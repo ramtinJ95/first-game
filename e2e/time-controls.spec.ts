@@ -1,15 +1,52 @@
 import { expect, test, type Page } from '@playwright/test';
 
-async function day(page: Page): Promise<number> {
-  const text = await page.getByTestId('time-controls-day').getAttribute('data-day');
-  if (!text || !/^\d+$/.test(text)) throw new Error(`unexpected day: ${text}`);
-  return Number(text);
+/** The day the page shows, and the page's clock in ms when it showed it. */
+async function reading(page: Page): Promise<{ day: number; at: number }> {
+  const read = await page.getByTestId('time-controls-day').evaluate((el) => ({
+    day: el.getAttribute('data-day'),
+    at: performance.now(),
+  }));
+  if (!read.day || !/^\d+$/.test(read.day)) throw new Error(`unexpected day: ${read.day}`);
+  return { day: Number(read.day), at: read.at };
 }
 
+async function day(page: Page): Promise<number> {
+  return (await reading(page)).day;
+}
+
+/** Waits until the day passes `after`, whatever the speed of the machine. */
+async function nextDay(page: Page, after: number) {
+  await expect.poll(() => day(page)).toBeGreaterThan(after);
+}
+
+/**
+ * Days that pass while the page's clock runs `ms`, counted after two more animation
+ * frames, so the clock has had its chance to run the days that time owes. Only a
+ * check that no day passes waits for a time, because nothing happening has no state.
+ */
 async function daysOver(page: Page, ms: number): Promise<number> {
   const start = await day(page);
-  await page.waitForTimeout(ms);
+  await page.evaluate(
+    (ms) =>
+      new Promise<void>((done) => {
+        const until = performance.now() + ms;
+        const frame = () =>
+          performance.now() < until
+            ? requestAnimationFrame(frame)
+            : requestAnimationFrame(() => requestAnimationFrame(() => done()));
+        requestAnimationFrame(frame);
+      }),
+    ms,
+  );
   return (await day(page)) - start;
+}
+
+/** Game days per second of the page's own clock, over the time `days` days take. */
+async function daysPerSecond(page: Page, days: number): Promise<number> {
+  const start = await reading(page);
+  await expect.poll(() => day(page)).toBeGreaterThanOrEqual(start.day + days);
+  const end = await reading(page);
+  return (end.day - start.day) / ((end.at - start.at) / 1000);
 }
 
 test.describe('time controls', () => {
@@ -30,31 +67,32 @@ test.describe('time controls', () => {
   });
 
   test('the day advances while the game runs', async ({ page }) => {
-    await expect.poll(() => day(page), { timeout: 5000 }).toBeGreaterThanOrEqual(3);
+    await nextDay(page, await day(page));
   });
 
   test('Space pauses the day and Space resumes it', async ({ page }) => {
-    await expect.poll(() => day(page)).toBeGreaterThanOrEqual(2);
+    await nextDay(page, 1);
     await page.keyboard.press('Space');
     await expect(page.getByRole('button', { name: 'Resume' })).toBeVisible();
     expect(await daysOver(page, 1500)).toBe(0);
 
+    const paused = await day(page);
     await page.keyboard.press('Space');
     await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
-    expect(await daysOver(page, 1500)).toBeGreaterThanOrEqual(1);
+    await nextDay(page, paused);
   });
 
   test('speed 3 advances days faster than speed 1 and shows as pressed', async ({ page }) => {
     const speed1 = page.getByRole('button', { name: 'Speed 1', exact: true });
     const speed3 = page.getByRole('button', { name: 'Speed 3', exact: true });
     await expect(speed1).toHaveAttribute('aria-pressed', 'true');
-    const slow = await daysOver(page, 2000);
+    const slow = await daysPerSecond(page, 2);
 
     await speed3.click();
     await expect(speed3).toHaveAttribute('aria-pressed', 'true');
     await expect(speed1).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByTestId('time-controls-speed')).toContainText('Speed 3');
-    const fast = await daysOver(page, 2000);
+    const fast = await daysPerSecond(page, 5);
 
     expect(fast).toBeGreaterThan(slow * 2);
   });

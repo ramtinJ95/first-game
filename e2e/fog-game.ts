@@ -4,6 +4,8 @@ import { sightOf } from '../src/sim/sight.ts';
 import type { Army } from '../src/sim/state/army.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import type { MapPoint } from '../src/sim/state/map-point.ts';
+import { decideAll } from '../src/sim/ai/decide.ts';
+import { tick } from '../src/sim/tick.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 import { armyOf, carthage, map, startGame } from './support.ts';
 
@@ -40,4 +42,21 @@ export function romeWithPunicArmyAt(at: MapPoint): GameState {
 
 export function romeSees(state: GameState, point: MapPoint): boolean {
   return sightOf(state, world, state.player).sees(point);
+}
+
+/**
+ * The first day on which `holds` is true of the game played on from `state` as the page
+ * plays it with no orders from the player: with the faction AI's orders each day.
+ */
+export function firstDayWhen(state: GameState, holds: (state: GameState) => boolean): number {
+  let current = structuredClone(state);
+  for (let days = 0; days < 100; days++) {
+    if (holds(current)) return current.day;
+    current = tick(current, decideAll(current, world), world).state;
+  }
+  throw new Error('the game never reached the state within 100 days');
+}
+
+export function romeSeesArmy(state: GameState, army: Army): boolean {
+  return sightOf(state, world, state.player).armies.has(army.id);
 }

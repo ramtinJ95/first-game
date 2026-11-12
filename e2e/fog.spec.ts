@@ -9,11 +9,13 @@ import type { GameState } from '../src/sim/state/game-state.ts';
 import type { MapPoint } from '../src/sim/state/map-point.ts';
 import {
   egypt,
+  firstDayWhen,
   IN_SIGHT,
   macedon,
   march,
   OUT_OF_SIGHT,
   romeSees,
+  romeSeesArmy,
   romeWithPunicArmyAt,
 } from './fog-game.ts';
 import {
@@ -27,6 +29,7 @@ import {
   pause,
   playDays,
   resume,
+  untilDay,
 } from './support.ts';
 
 async function load(page: Page, state: GameState) {
@@ -83,7 +86,6 @@ async function punicPixels(page: Page, point: MapPoint): Promise<number> {
 }
 
 test.describe('fog of war', () => {
-  test.describe.configure({ timeout: 90_000 });
   const errors: string[] = [];
 
   test.beforeEach(async ({ page }) => {
@@ -119,23 +121,18 @@ test.describe('fog of war', () => {
     const state = romeWithPunicArmyAt(OUT_OF_SIGHT);
     expect(romeSees(state, IN_SIGHT)).toBe(true);
     march(state, armyOf(state, carthage), OUT_OF_SIGHT, IN_SIGHT);
+    // The day after it halts, the banner stands still on IN_SIGHT between both days.
+    const halted = firstDayWhen(state, (s) => armyOf(s, carthage).activity.kind === 'idle');
     await load(page, state);
     await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
     await resume(page);
+    await untilDay(page, halted + 1);
+    await pause(page);
 
     const flag = camera(page).banner(IN_SIGHT);
+    await page.mouse.click(flag.x, flag.y);
     const heading = page.getByTestId('army-panel').getByRole('heading', { level: 2 });
-    await expect
-      .poll(
-        async () => {
-          await page.mouse.click(flag.x, flag.y);
-          return heading.count();
-        },
-        { timeout: 40_000, intervals: [250] },
-      )
-      .toBe(1);
     await expect(heading).toHaveText('Army of Carthage');
-    await pause(page);
     expect(await punicPixels(page, IN_SIGHT)).toBeGreaterThan(20);
   });
 
@@ -152,11 +149,13 @@ test.describe('fog of war', () => {
     const leaving = romeWithPunicArmyAt(IN_SIGHT);
     leaving.day = (state.day + 1) as Day;
     march(leaving, armyOf(leaving, carthage), IN_SIGHT, OUT_OF_SIGHT);
+    const gone = firstDayWhen(leaving, (s) => !romeSeesArmy(s, armyOf(s, carthage)));
     await load(page, leaving);
     await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
     await resume(page);
-    await expect(panel).toHaveCount(0, { timeout: 30_000 });
+    await untilDay(page, gone);
     await pause(page);
+    await expect(panel).toHaveCount(0);
     expect(await punicPixels(page, OUT_OF_SIGHT)).toBe(0);
   });
 
@@ -178,11 +177,10 @@ test.describe('fog of war', () => {
 
     await load(page, state);
     await resume(page);
-    const alerts = page.getByTestId('alerts').getByRole('button');
-    await expect(alerts.filter({ hasText: /Battle .*Massalia/ })).toHaveCount(1, {
-      timeout: 15_000,
-    });
+    await untilDay(page, state.day + 1);
     await pause(page);
+    const alerts = page.getByTestId('alerts').getByRole('button');
+    await expect(alerts.filter({ hasText: /Battle .*Massalia/ })).toHaveCount(1);
     await expect(alerts.filter({ hasText: /Macedon|Egypt/ })).toHaveCount(0);
 
     const view = camera(page);

@@ -27,6 +27,7 @@ import {
   type Camera,
   type Size,
 } from './camera.ts';
+import type { DrawOptions } from './draw-options.ts';
 import { createFog, fogCircles } from './fog.ts';
 import { placeLabels, type Box, type LabelRequest } from './labels.ts';
 import { BANNER, BATTLE_HIT_RADIUS, drawnArmies, type DrawnArmy } from './markers.ts';
@@ -75,12 +76,18 @@ export interface RendererOptions {
   /** A click that did not drag: what it points at, or nothing at sea. */
   readonly onPick: (pick: Pick | undefined) => void;
   readonly onCommand?: (command: Command) => void;
-  /** Draws the fog layer. Leaving it out shows the map as if the player saw it all. */
-  readonly fog?: boolean;
+  /** What to leave out of the picture. Leaving it out draws all of it. */
+  readonly drawing?: DrawOptions;
+  /**
+   * Waits after each drawn frame until the graphics card has finished it, so the time
+   * `draw` takes is the frame's whole cost. For measuring only: it stalls the pipeline.
+   */
+  readonly waitForGpu?: boolean;
 }
 
 export interface Renderer {
-  draw(frame: Frame): void;
+  /** Draws the frame if anything in it changed, and says whether it did. */
+  draw(frame: Frame): boolean;
   /** Centres the view on a map point, zooming in to at least FOCUS_SCALE. */
   focus(point: MapPoint): void;
   destroy(): void;
@@ -91,7 +98,7 @@ export interface Renderer {
  * and are drawn in km. The others are drawn in screen pixels, so symbols, names, and
  * banners keep their size at every zoom. Later units add to a layer and keep the order.
  */
-const LAYERS = [
+export const LAYERS = [
   { name: 'paper', world: true },
   { name: 'sea', world: false },
   { name: 'land', world: true },
@@ -106,7 +113,7 @@ const LAYERS = [
   { name: 'markers', world: false },
   { name: 'selection', world: false },
 ] as const;
-type LayerName = (typeof LAYERS)[number]['name'];
+export type LayerName = (typeof LAYERS)[number]['name'];
 
 /** System serif faces, so the page fetches no font. */
 const SERIF = [
@@ -292,15 +299,16 @@ export async function createRenderer({
   map,
   onPick,
   onCommand,
-  fog: showFog = true,
+  drawing,
+  waitForGpu = false,
 }: RendererOptions): Promise<Renderer> {
   const app = new Application();
   await app.init({
     canvas,
     resizeTo: window,
-    antialias: true,
+    antialias: drawing?.antialias ?? true,
     autoDensity: true,
-    resolution: window.devicePixelRatio || 1,
+    resolution: drawing?.resolution ?? (window.devicePixelRatio || 1),
     background: MARGIN,
     autoStart: false,
   });
@@ -310,6 +318,7 @@ export async function createRenderer({
   const layers = Object.fromEntries(
     LAYERS.map(({ name }) => {
       const layer = new Container({ label: name });
+      layer.visible = !drawing?.hidden.has(name);
       app.stage.addChild(layer);
       return [name, layer];
     }),
@@ -341,8 +350,13 @@ export async function createRenderer({
   const swell = new Sprite(waterTexture());
   swell.scale.set(SWELL.scale);
   layers.sea.addChild(seaSprite, swell);
-  layers.sea.filters = [new DisplacementFilter({ sprite: swell, scale: SWELL.bend })];
-  layers.sea.filterArea = app.screen;
+  const swellOn = drawing?.swell ?? true;
+  if (swellOn) {
+    layers.sea.filters = [new DisplacementFilter({ sprite: swell, scale: SWELL.bend })];
+    layers.sea.filterArea = app.screen;
+  } else {
+    swell.visible = false;
+  }
 
   const land = new Graphics();
   for (const province of map.provinces) fillOutline(land, province.outline, PAPER);
@@ -358,15 +372,14 @@ export async function createRenderer({
 
   const borders = new Graphics();
   layers.borders.addChild(borders);
+  // The map build clips rivers and the coastline to the extent, so they need no mask.
+  // A stencil mask here cost over a third of each frame drawn without a graphics card.
   const inkLines = new Graphics();
-  const inkMask = new Graphics().poly(map.extent.flat()).fill(0xffffff);
-  inkLines.mask = inkMask;
   const frame = new Graphics();
-  layers.riversAndCoast.addChild(inkLines, inkMask, frame);
+  layers.riversAndCoast.addChild(inkLines, frame);
 
   const fog = createFog(app.renderer, map);
   layers.fog.addChild(fog.root);
-  layers.fog.visible = showFog;
 
   const grain = new TilingSprite({ texture: paperTexture(), width: 1, height: 1 });
   layers.grain.addChild(grain);
@@ -685,6 +698,13 @@ export async function createRenderer({
     swell.position.set(-tile + drift.x, -tile + drift.y);
   }
 
+  const pixel = new Uint8Array(4);
+  function finish() {
+    if ('gl' in app.renderer) {
+      app.renderer.gl.readPixels(0, 0, 1, 1, WebGLRenderingContext.RGBA, WebGLRenderingContext.UNSIGNED_BYTE, pixel);
+    }
+  }
+
   const battlesShown = () => seenBattles;
 
   const listening = new AbortController();
@@ -806,17 +826,19 @@ export async function createRenderer({
         plannedShown = planned;
         dirty = true;
       }
-      if (now - swellAt >= SWELL.stepMs) {
+      if (swellOn && now - swellAt >= SWELL.stepMs) {
         swellAt = now;
         dirty = true;
       }
-      if (!dirty) return;
+      if (!dirty) return false;
       moveSwell(now);
       drawRoutes(current, selection, planned);
       placeBanners(current, selection);
       placeBattles(selection);
       fog.paint();
       app.render();
+      if (waitForGpu) finish();
+      return true;
     },
     focus(point) {
       camera = clampCamera(
