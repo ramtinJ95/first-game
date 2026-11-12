@@ -54,6 +54,10 @@ async function load(page: Page, state: GameState) {
     'data-day',
     String(state.day),
   );
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+  );
 }
 
 /** Selects Rome's army where a new game starts it. The selection outlasts a loaded save. */

@@ -31,6 +31,10 @@ async function load(page: Page, state: GameState) {
     'data-day',
     String(state.day),
   );
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+  );
 }
 
 /** Rome sees foreign armies only in its sight, so the Punic army visits Capua. */
