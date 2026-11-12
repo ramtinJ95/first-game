@@ -14,7 +14,8 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "capture": "vite build && node scripts/capture/run.ts",
-    "capture:publish": "node scripts/capture/publish.ts"
+    "capture:publish": "node scripts/capture/publish.ts",
+    "capture:fetch": "node scripts/capture/fetch.ts"
   },
   "dependencies": {
     "pixi.js": "^8.23.0",
