@@ -15,6 +15,7 @@ import {
   resume,
   rome,
   startGame,
+  untilDay,
 } from './support.ts';
 
 /** A click picks among the banners last drawn, so this waits for a frame of the loaded day. */
@@ -330,10 +331,7 @@ for (const viewport of [
       await clickCity(page, 'roma');
       await expect(page.getByTestId('city-panel').getByTestId('city-name')).toHaveText('Roma');
       await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
-      await expect(page.getByTestId('time-controls-day')).toHaveAttribute(
-        'data-day',
-        /^(1[3-9]|[2-9]\d|\d{3,})$/,
-      );
+      await untilDay(page, 13);
       await pause(page);
 
       const alerts = page.getByTestId('alerts');
