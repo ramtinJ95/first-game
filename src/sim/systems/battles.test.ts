@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { playTrial, type ArmySpec, type Matchup } from '../battle-trial.ts';
 import { buildFixture, FIXTURE } from '../fixture.ts';
-import type { ArmyId, FormationId } from '../ids.ts';
+import type { ArmyId, FactionId, FormationId } from '../ids.ts';
 import { executeOrder } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
 import { saveGame } from '../save.ts';
@@ -32,13 +32,19 @@ function place(state: GameState, id: ArmyId, activity: ArmyActivity) {
   army(state, id).activity = activity;
 }
 
-function addRomanArmy(state: GameState, id: string, men: number, activity: ArmyActivity) {
+function addArmy(
+  state: GameState,
+  id: string,
+  men: number,
+  activity: ArmyActivity,
+  owner: FactionId = FIXTURE.rome,
+) {
   const armyId = id as ArmyId;
   const formation = `${id}-spearmen` as FormationId;
   state.formations[formation] = { id: formation, army: armyId, troop: 'spearmen', men, morale: 1 };
   state.armies[armyId] = {
     id: armyId,
-    owner: FIXTURE.rome,
+    owner,
     formations: [formation],
     stance: 'holdTheLine',
     generalSkill: 3,
@@ -121,7 +127,7 @@ describe('engagement', () => {
     state = tick(state, []).state;
     const [battle] = Object.values(state.battles);
     if (!battle) throw new Error('no battle started');
-    const reserve = addRomanArmy(state, 'reserve', 800, {
+    const reserve = addArmy(state, 'reserve', 800, {
       kind: 'marching',
       position: { x: battle.position.x, y: battle.position.y + ENGAGEMENT_DISTANCE },
       destination: battle.position,
@@ -131,12 +137,60 @@ describe('engagement', () => {
     expect(army(state, reserve).activity).toMatchObject({ kind: 'inBattle', battle: battle.id });
     expectConsistent(state);
   });
+
+  test('a reserve beside a battle that starts today joins it on its first day', () => {
+    const state = atWar();
+    place(state, FIXTURE.punicArmy, { kind: 'idle', position: { x: 1245, y: 615 } });
+    const reserve = addArmy(state, 'reserve', 3000, {
+      kind: 'idle',
+      position: { x: 1245, y: 615 },
+    });
+    const next = tick(state, []).state;
+    const [battle] = Object.values(next.battles);
+    expect([...(battle?.attackers ?? []), ...(battle?.defenders ?? [])].sort()).toEqual(
+      [FIXTURE.punicArmy, FIXTURE.romanArmy, reserve].sort(),
+    );
+    expectConsistent(next);
+  });
+
+  test('a third army joins only a side whose enemies are all its enemies', () => {
+    const state = atWar();
+    const egypt = 'egypt' as FactionId;
+    const persia = 'persia' as FactionId;
+    state.factions[egypt] = { id: egypt, name: 'Egypt' };
+    state.factions[persia] = { id: persia, name: 'Persia' };
+    executeOrder(state, { kind: 'declareWar', faction: egypt, against: FIXTURE.carthage });
+    executeOrder(state, { kind: 'declareWar', faction: persia, against: FIXTURE.rome });
+    place(state, FIXTURE.romanArmy, { kind: 'idle', position: { x: 1250, y: 615 } });
+    place(state, FIXTURE.punicArmy, { kind: 'idle', position: { x: 1250, y: 615 } });
+    const egyptian = addArmy(
+      state,
+      'egyptian',
+      1000,
+      { kind: 'idle', position: { x: 1255, y: 615 } },
+      egypt,
+    );
+    const persian = addArmy(
+      state,
+      'persian',
+      1000,
+      { kind: 'idle', position: { x: 1255, y: 615 } },
+      persia,
+    );
+    const next = tick(state, []).state;
+    expect(Object.values(next.battles)[0]).toMatchObject({
+      attackers: [FIXTURE.punicArmy],
+      defenders: [FIXTURE.romanArmy, egyptian],
+    });
+    expect(army(next, persian).activity.kind).toBe('idle');
+    expectConsistent(next);
+  });
 });
 
 describe('the end of a battle', () => {
   test('the winner stays idle where it stood and the beaten army marches to its nearest own city', () => {
     let state = atWar();
-    const outnumbered = addRomanArmy(state, 'outnumbered', 400, {
+    const outnumbered = addArmy(state, 'outnumbered', 400, {
       kind: 'idle',
       position: { x: 1295, y: 655 },
     });
@@ -160,7 +214,7 @@ describe('the end of a battle', () => {
 
   test('a beaten army does not turn and fight again while it marches away', () => {
     let state = atWar();
-    const outnumbered = addRomanArmy(state, 'outnumbered', 400, {
+    const outnumbered = addArmy(state, 'outnumbered', 400, {
       kind: 'idle',
       position: { x: 1250, y: 620 },
     });
@@ -175,7 +229,7 @@ describe('the end of a battle', () => {
 
   test('an army with no men left is removed with its formations', () => {
     let state = atWar();
-    const doomed = addRomanArmy(state, 'doomed', 3, {
+    const doomed = addArmy(state, 'doomed', 3, {
       kind: 'idle',
       position: { x: 1250, y: 620 },
     });
@@ -194,7 +248,7 @@ describe('the end of a battle', () => {
     let state = atWar();
     const carthago = state.cities[FIXTURE.carthago];
     if (carthago) carthago.owner = FIXTURE.rome;
-    addRomanArmy(state, 'legion', 4000, { kind: 'idle', position: { x: 1250, y: 620 } });
+    addArmy(state, 'legion', 4000, { kind: 'idle', position: { x: 1250, y: 620 } });
     place(state, FIXTURE.punicArmy, { kind: 'idle', position: { x: 1250, y: 620 } });
     state = playUntilPeace(tick(state, []).state);
     expect(state.armies[FIXTURE.punicArmy]).toBeUndefined();

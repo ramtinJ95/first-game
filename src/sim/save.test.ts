@@ -3,6 +3,7 @@ import type { GameState } from './state/game-state.ts';
 import { describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE } from './fixture.ts';
 import { loadGame, SAVE_FORMAT, saveGame } from './save.ts';
+import { warKey } from './state/war.ts';
 import { tick } from './tick.ts';
 
 describe('save and load', () => {
@@ -84,11 +85,19 @@ describe('save and load', () => {
     const save = JSON.parse(saveGame(buildFixture())) as {
       state: { wars: Record<string, unknown> };
     };
-    save.state.wars['rome|rome'] = { since: 1 };
+    save.state.wars['["rome","rome"]'] = { since: 1 };
     const result = loadGame(JSON.stringify(save));
     expect(result.ok).toBe(false);
     if (!result.ok)
       expect(result.error).toMatch(/^The save's game state is malformed at state\.wars/);
+  });
+
+  test('a war with a faction whose id holds any character saves and loads', () => {
+    const state = buildFixture();
+    const odd = 'x|y"]' as typeof FIXTURE.rome;
+    state.factions[odd] = { id: odd, name: 'Odd' };
+    state.wars[warKey(FIXTURE.rome, odd)] = { since: state.day };
+    expect(loadGame(saveGame(state))).toEqual({ ok: true, state });
   });
 
   test('drops fields the state does not know', () => {

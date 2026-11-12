@@ -45,12 +45,12 @@ type Side = 'attackers' | 'defenders';
 
 /**
  * Starts battles between armies at war that meet, adds armies that come up to a
- * running battle, plays one day of every battle, and lets idle armies regain morale.
+ * battle, the new ones included, plays one day of every battle, and lets idle armies regain morale.
  */
 export function battles(state: GameState): void {
   recoverMorale(state);
-  joinBattles(state);
   startBattles(state);
+  joinBattles(state);
   for (const battle of sortedValues(state.battles)) {
     fightOneDay(state, battle.id);
     settle(state, battle.id);
@@ -88,22 +88,25 @@ function joinBattles(state: GameState) {
   }
 }
 
-/** The side whose enemies the army is at war with, if it is at war with only one side. */
+/**
+ * The side the army can join: it is at war with every army on the other side and
+ * with none on this one, so every pair of armies that strike each other is at war.
+ */
 function sideToJoin(
   state: GameState,
   army: Army,
   attackers: readonly ArmyId[],
   defenders: readonly ArmyId[],
 ): Side | undefined {
-  const hostile = (ids: readonly ArmyId[]) =>
-    ids.some((id) => {
-      const other = state.armies[id];
-      return !!other && areAtWar(state, army.owner, other.owner);
-    });
-  const againstAttackers = hostile(attackers);
-  const againstDefenders = hostile(defenders);
-  if (againstAttackers === againstDefenders) return undefined;
-  return againstAttackers ? 'defenders' : 'attackers';
+  const atWarWith = (id: ArmyId) => {
+    const other = state.armies[id];
+    return !!other && areAtWar(state, army.owner, other.owner);
+  };
+  const canJoin = (own: readonly ArmyId[], enemy: readonly ArmyId[]) =>
+    enemy.length > 0 && enemy.every(atWarWith) && !own.some(atWarWith);
+  if (canJoin(defenders, attackers)) return 'defenders';
+  if (canJoin(attackers, defenders)) return 'attackers';
+  return undefined;
 }
 
 /**

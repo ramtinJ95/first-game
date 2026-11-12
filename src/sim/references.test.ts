@@ -98,16 +98,18 @@ test('an allocated id at or above nextSerial is reported', () => {
 test('a war with a faction that does not exist is reported', () => {
   const state = buildFixture();
   state.wars[warKey(FIXTURE.rome, 'sparta' as typeof FIXTURE.rome)] = { since: 1 as Day };
-  expect(findBrokenReferences(state)).toEqual(['war rome|sparta names unknown faction sparta']);
+  expect(findBrokenReferences(state)).toEqual([
+    'war ["rome","sparta"] names unknown faction sparta',
+  ]);
 });
 
 test('a war key out of order or with one faction twice is reported', () => {
   const state = buildFixture();
-  state.wars['rome|carthage' as WarKey] = { since: 1 as Day };
-  state.wars['rome|rome' as WarKey] = { since: 1 as Day };
+  state.wars['["rome","carthage"]' as WarKey] = { since: 1 as Day };
+  state.wars['["rome","rome"]' as WarKey] = { since: 1 as Day };
   expect(findBrokenReferences(state)).toEqual([
-    'war rome|carthage does not name two different factions in ascending order',
-    'war rome|rome does not name two different factions in ascending order',
+    'war ["rome","carthage"] does not name two different factions in ascending order',
+    'war ["rome","rome"] does not name two different factions in ascending order',
   ]);
 });
 
