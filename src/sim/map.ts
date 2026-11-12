@@ -14,13 +14,15 @@ export function isStartingOwner(value: unknown): value is StartingOwner {
   return v.is(StartingOwnerSchema, value);
 }
 
-export const MAP_VERSION = 1;
+export const MAP_VERSION = 2;
 
 const FiniteSchema = v.pipe(
   v.number('expected a finite number'),
   v.finite('expected a finite number'),
 );
 const PositiveSchema = v.pipe(FiniteSchema, v.gtValue(0, 'expected a positive number'));
+const NameSchema = v.pipe(v.string('expected a string'), v.nonEmpty('expected a name'));
+const IntegerSchema = v.pipe(v.number('expected a number'), v.integer('expected an integer'));
 
 /** Map plane coordinates in km: x grows east, y grows south, origin at the top-left corner. */
 const PointSchema = v.strictTuple([FiniteSchema, FiniteSchema], 'expected a point [x, y]');
@@ -67,7 +69,7 @@ const MapProvinceIdSchema = v.pipe(
 const ProvinceSchema = v.object({
   id: MapProvinceIdSchema,
   name: v.string('expected a string'),
-  pleiadesId: v.pipe(v.number('expected a number'), v.integer('expected an integer')),
+  pleiadesId: IntegerSchema,
   owner: StartingOwnerSchema,
   capital: v.boolean('expected a boolean'),
   port: v.boolean('expected a boolean'),
@@ -82,6 +84,42 @@ const ProvinceSchema = v.object({
 
 const RiverSchema = v.object({ name: v.string('expected a string'), line: MapLineSchema });
 
+export const TERRAIN_KINDS = ['mountains', 'hills', 'desert', 'forest', 'lake'] as const;
+
+/**
+ * At most one area per kind and name, and areas of one kind never overlap. Areas of different
+ * kinds may overlap, as a forested mountain is both. `name` is empty where the source names none.
+ */
+const TerrainAreaSchema = v.object({
+  kind: v.picklist(TERRAIN_KINDS, (issue) => `unknown terrain kind ${String(issue.input)}`),
+  name: v.string('expected a string'),
+  outline: MultiPolygonSchema,
+});
+
+const PeakSchema = v.object({
+  name: NameSchema,
+  /** Metres above sea level. */
+  height: IntegerSchema,
+  at: PointSchema,
+});
+
+/** `s-<pleiadesId>`. */
+const SettlementIdSchema = v.pipe(
+  v.string('expected a string'),
+  v.regex(/^s-[0-9]+$/, (issue) => `expected an id s-<pleiadesId>, got ${String(issue.input)}`),
+  v.brand('SettlementId'),
+);
+
+/** A named ancient place between the cities. It has no people and no rules yet. */
+const SettlementSchema = v.object({
+  id: SettlementIdSchema,
+  name: NameSchema,
+  pleiadesId: IntegerSchema,
+  at: PointSchema,
+  province: ProvinceIdSchema,
+  rank: v.picklist(['town', 'village'], (issue) => `unknown rank ${String(issue.input)}`),
+});
+
 /** Static map data, built by `npm run build:map`. It is not part of the game state. */
 const GameMapSchema = v.object({
   version: v.literal(MAP_VERSION, `expected ${MAP_VERSION}`),
@@ -93,6 +131,9 @@ const GameMapSchema = v.object({
   provinces: v.array(ProvinceSchema, 'expected an array'),
   coastline: v.array(MapLineSchema, 'expected an array'),
   rivers: v.array(RiverSchema, 'expected an array'),
+  terrain: v.array(TerrainAreaSchema, 'expected an array'),
+  peaks: v.array(PeakSchema, 'expected an array'),
+  settlements: v.array(SettlementSchema, 'expected an array'),
 });
 
 export type Point = v.InferOutput<typeof PointSchema>;
@@ -103,6 +144,11 @@ export type MapLine = v.InferOutput<typeof MapLineSchema>;
 export type Projection = v.InferOutput<typeof ProjectionSchema>;
 export type Province = v.InferOutput<typeof ProvinceSchema>;
 export type River = v.InferOutput<typeof RiverSchema>;
+export type TerrainKind = (typeof TERRAIN_KINDS)[number];
+export type TerrainArea = v.InferOutput<typeof TerrainAreaSchema>;
+export type Peak = v.InferOutput<typeof PeakSchema>;
+export type SettlementId = v.InferOutput<typeof SettlementIdSchema>;
+export type Settlement = v.InferOutput<typeof SettlementSchema>;
 export type GameMap = v.InferOutput<typeof GameMapSchema>;
 
 export function parseMap(raw: unknown): GameMap {
@@ -124,6 +170,12 @@ export function parseMap(raw: unknown): GameMap {
       if (!ids.has(neighbour)) fail(path, `unknown province ${neighbour}`);
       if (neighbour === id) fail(path, 'a province cannot neighbour itself');
     }
+  }
+  const settlements = new Set<SettlementId>();
+  for (const [i, { id, province }] of map.settlements.entries()) {
+    if (settlements.has(id)) fail(`.settlements[${i}].id`, `duplicate id ${id}`);
+    settlements.add(id);
+    if (!ids.has(province)) fail(`.settlements[${i}].province`, `unknown province ${province}`);
   }
   return map;
 }

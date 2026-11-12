@@ -6,21 +6,21 @@ import { buildMap, landInExtent, MAP_FILE, MAX_CITY_MOVE_KM, serializeMap } from
 import { readCities, type City } from './cities.ts';
 import { COASTAL_MIN_SEA_KM, NEIGHBOUR_MIN_BORDER_KM } from './provinces.ts';
 import { area, boxesOverlap, boxOf, contains, intersection, union, xor } from './geometry.ts';
-import { loadNaturalEarth, type NaturalEarth } from './sources.ts';
+import { loadSources, type Sources } from './sources.ts';
 
 const BUILD_TIMEOUT_MS = 60_000;
 
-let naturalEarth: NaturalEarth;
+let sources: Sources;
 let committedText: string;
 let map: GameMap;
 let land: MultiPolygon;
 let landArea: number;
 
 beforeAll(async () => {
-  naturalEarth = await loadNaturalEarth();
+  sources = await loadSources();
   committedText = readFileSync(MAP_FILE, 'utf8');
   map = parseMap(JSON.parse(committedText));
-  land = landInExtent(naturalEarth.land);
+  land = landInExtent(sources.land);
   landArea = area(land);
 }, BUILD_TIMEOUT_MS);
 
@@ -28,8 +28,8 @@ test(
   'two builds serialize byte for byte the same, and match the committed data/map/map.json',
   () => {
     const cities = readCities();
-    const first = serializeMap(buildMap(cities, naturalEarth.land, naturalEarth.rivers).map);
-    const second = serializeMap(buildMap(cities, naturalEarth.land, naturalEarth.rivers).map);
+    const first = serializeMap(buildMap(cities, sources).map);
+    const second = serializeMap(buildMap(cities, sources).map);
     expect(second === first, 'second build differs from the first').toBe(true);
     expect(
       first === committedText,
@@ -171,7 +171,7 @@ test(
       port: true,
     };
     const cities = [...readCities(), atSea];
-    expect(() => buildMap(cities, naturalEarth.land, naturalEarth.rivers)).toThrow(/atlantis/);
+    expect(() => buildMap(cities, sources)).toThrow(/atlantis/);
   },
   BUILD_TIMEOUT_MS,
 );

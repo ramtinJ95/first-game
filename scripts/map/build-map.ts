@@ -27,7 +27,9 @@ import {
 } from './geometry.ts';
 import { mapPlane, touchesExtent, type Plane } from './projection.ts';
 import { onExtentEdge, partition, relations } from './provinces.ts';
-import type { LonLat, LonLatPolygon, NaturalEarthRiver } from './sources.ts';
+import { chooseSettlements } from './settlements.ts';
+import type { LonLat, LonLatPolygon, NaturalEarthRiver, Sources } from './sources.ts';
+import { peaksOnLand, terrainAreas } from './terrain.ts';
 
 export const MAP_FILE = resolve(import.meta.dirname, '../../data/map/map.json');
 
@@ -63,13 +65,9 @@ export interface MapBuild {
   joins: IslandJoinLog[];
 }
 
-export function buildMap(
-  cities: City[],
-  land: LonLatPolygon[],
-  rivers: NaturalEarthRiver[],
-): MapBuild {
+export function buildMap(cities: City[], sources: Sources): MapBuild {
   const plane = mapPlane();
-  const landArea = landInExtent(land, plane);
+  const landArea = landInExtent(sources.land, plane);
 
   const projected = cities.map((city) => plane.toPlane([city.lon, city.lat]));
   const placed = projected.map((point) => placeOnLand(point, landArea));
@@ -120,7 +118,10 @@ export function buildMap(
       extent: roundRing(plane.extent)[0] ?? [],
       provinces,
       coastline: coastline(landArea, plane.extent).flatMap(roundLine),
-      rivers: riverLines(rivers, plane),
+      rivers: riverLines(sources.rivers, plane),
+      terrain: terrainAreas(sources, plane, landArea),
+      peaks: peaksOnLand(sources.elevationPoints, plane, landArea),
+      settlements: chooseSettlements(sources.settlementCandidates, provinces, plane, landArea),
     },
     moves,
     merges: merges.map((merge) => ({
@@ -210,7 +211,7 @@ function riverLines(rivers: NaturalEarthRiver[], plane: Plane): River[] {
     .sort((a, b) => compare(a.name, b.name) || comparePoints(a.line[0], b.line[0]));
 }
 
-/** One top-level key, province, line, or river per line, so diffs of the file stay readable. */
+/** One top-level key or one item of a list per line, so diffs of the file stay readable. */
 export function serializeMap(map: GameMap): string {
   const items = (values: unknown[]) =>
     values.length === 0
@@ -226,6 +227,9 @@ export function serializeMap(map: GameMap): string {
     ['provinces', items(map.provinces)],
     ['coastline', items(map.coastline)],
     ['rivers', items(map.rivers)],
+    ['terrain', items(map.terrain)],
+    ['peaks', items(map.peaks)],
+    ['settlements', items(map.settlements)],
   ];
   return `{\n${fields.map(([key, value]) => `  "${key}": ${value}`).join(',\n')}\n}\n`;
 }

@@ -14,7 +14,7 @@ test('parseMap accepts the committed map and returns its data unchanged', () => 
 const first = (map: GameMap) => map.provinces[0] as Province;
 
 test.each<[string, (map: GameMap) => void, RegExp]>([
-  ['a newer version', (map) => Object.assign(map, { version: 2 }), /^map\.version:/],
+  ['a newer version', (map) => Object.assign(map, { version: 3 }), /^map\.version:/],
   [
     'an unknown owner',
     (map) => Object.assign(first(map), { owner: 'atlantis' }),
