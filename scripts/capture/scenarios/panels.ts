@@ -3,6 +3,7 @@ import {
   armyOf,
   battleAt,
   camera,
+  carthage,
   cityPoint,
   declareWar,
   dropSave,
@@ -55,6 +56,7 @@ export default defineScenario({
 
     const rich = startGame();
     setRich(rich);
+    armyOf(rich, carthage).activity = { kind: 'idle', position: cityPoint('capua') };
     await load(page, rich);
     const banner = view.banner(cityPoint('roma'));
     await page.mouse.click(banner.x, banner.y);
@@ -68,10 +70,7 @@ export default defineScenario({
       'Your army selected: formations, general, activity with days left, stance, halt, and its path on the map',
     );
 
-    await page.mouse.click(
-      view.banner(cityPoint('carthago')).x,
-      view.banner(cityPoint('carthago')).y,
-    );
+    await page.mouse.click(view.banner(cityPoint('capua')).x, view.banner(cityPoint('capua')).y);
     await page
       .getByTestId('army-panel')
       .getByRole('button', { name: 'Declare war on Carthage' })

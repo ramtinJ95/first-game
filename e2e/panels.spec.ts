@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { changeCityOwner } from '../src/sim/cities.ts';
 import type { CityId, FactionId } from '../src/sim/ids.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import {
@@ -30,6 +31,11 @@ async function load(page: Page, state: GameState) {
     'data-day',
     String(state.day),
   );
+}
+
+/** Rome sees foreign armies only in its sight, so the Punic army visits Capua. */
+function punicArmyAtCapua(state: GameState) {
+  armyOf(state, carthage).activity = { kind: 'idle', position: cityPoint('capua') };
 }
 
 test.describe('the panels', () => {
@@ -144,6 +150,8 @@ test.describe('the panels', () => {
     const salona = cityPoint('salona');
     armyOf(state, carthage).activity = { kind: 'idle', position: salona };
     armyOf(state, macedon).activity = { kind: 'idle', position: { x: salona.x, y: salona.y } };
+    // Rome sees a foreign battle only in its sight, so Salona is Roman here.
+    changeCityOwner(state, 'salona' as CityId, rome);
     await load(page, state);
     await page.getByTestId('time-controls-day').and(page.locator('[data-day="2"]')).waitFor();
     await pause(page);
@@ -161,9 +169,12 @@ test.describe('the panels', () => {
   test('a foreign army shows its facts and no orders, and the panel declares war on its owner after a confirmation', async ({
     page,
   }) => {
+    const state = startGame();
+    punicArmyAtCapua(state);
+    await load(page, state);
     const view = camera(page);
-    const carthago = view.banner(cityPoint('carthago'));
-    await page.mouse.click(carthago.x, carthago.y);
+    const capua = view.banner(cityPoint('capua'));
+    await page.mouse.click(capua.x, capua.y);
     const panel = page.getByTestId('army-panel');
     await expect(panel.getByRole('heading', { level: 2 })).toHaveText('Army of Carthage');
     await expect(panel.getByTestId('formation')).toHaveCount(2);
@@ -370,10 +381,11 @@ test.describe('the panels', () => {
   test("a foreign army's panel shows a war under way with its owner", async ({ page }) => {
     const state = startGame();
     declareWar(state, rome, carthage);
+    punicArmyAtCapua(state);
     await load(page, state);
     const view = camera(page);
-    const carthago = view.banner(cityPoint('carthago'));
-    await page.mouse.click(carthago.x, carthago.y);
+    const capua = view.banner(cityPoint('capua'));
+    await page.mouse.click(capua.x, capua.y);
     await expect(page.getByTestId('war-status')).toHaveText(/At war with Carthage since day 1/);
   });
 });

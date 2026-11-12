@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildFixture } from '../sim/fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
+import { sightOf } from '../sim/sight.ts';
 import type { Speed } from './clock.ts';
 import { createView, type Snapshot } from './view.svelte.ts';
 
@@ -12,8 +13,9 @@ describe('view', () => {
   });
 
   function source() {
+    const state = buildFixture();
     let snapshot: Snapshot = {
-      state: buildFixture(),
+      state,
       speed: 1,
       paused: false,
       selection: undefined,
@@ -21,6 +23,7 @@ describe('view', () => {
       alerts: [],
       notice: undefined,
       menu: undefined,
+      sight: sightOf(state, fixtureWorld(), FIXTURE.rome),
     };
     return {
       read: () => snapshot,
