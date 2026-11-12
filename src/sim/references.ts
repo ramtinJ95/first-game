@@ -1,5 +1,6 @@
 import type { DeepReadonly } from './deep-readonly.ts';
 import type { GameState } from './state/game-state.ts';
+import { warSides } from './state/war.ts';
 
 /** The counter number in an id shaped like one `allocateId` hands out, such as `army-3`. */
 export function serialOf(id: string): number | undefined {
@@ -157,6 +158,17 @@ export function findBrokenReferences(state: DeepReadonly<GameState>): string[] {
       expect(
         activity?.kind === 'besieging' && activity.siege === siege.id,
         `siege ${siege.id} lists army ${id}, which is not besieging in it`,
+      );
+    }
+  }
+
+  for (const key of Object.keys(state.wars)) {
+    const sides = warSides(key);
+    expect(!!sides, `war ${key} does not name two different factions in ascending order`);
+    for (const faction of sides ?? []) {
+      expect(
+        get(state.factions, faction) !== undefined,
+        `war ${key} names unknown faction ${faction}`,
       );
     }
   }

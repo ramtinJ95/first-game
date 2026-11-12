@@ -31,6 +31,8 @@ export const ArmySchema = v.object({
   owner: FactionIdSchema,
   formations: v.array(FormationIdSchema),
   stance: StanceSchema,
+  /** The general's skill, from 0 for none to 10 for the best. */
+  generalSkill: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10)),
   activity: ArmyActivitySchema,
 });
 

@@ -4,7 +4,7 @@ import { findBrokenReferences } from './references.ts';
 import { GameStateSchema, type GameState } from './state/game-state.ts';
 
 /** Raise this when a change to the state makes older saves unreadable. */
-export const SAVE_FORMAT = 1;
+export const SAVE_FORMAT = 2;
 
 export type LoadResult = { ok: true; state: GameState } | { ok: false; error: string };
 

@@ -34,7 +34,7 @@ describe('save and load', () => {
     const save = JSON.stringify({ format: 99, state: buildFixture() });
     expect(loadGame(save)).toEqual({
       ok: false,
-      error: 'The save has format 99, but this game reads format 1.',
+      error: 'The save has format 99, but this game reads format 2.',
     });
   });
 
@@ -78,6 +78,17 @@ describe('save and load', () => {
     expect(result.ok).toBe(false);
     if (!result.ok)
       expect(result.error).toMatch(/^The save's game state is malformed at state\.nextSerial: /);
+  });
+
+  test('rejects a war that names one faction twice', () => {
+    const save = JSON.parse(saveGame(buildFixture())) as {
+      state: { wars: Record<string, unknown> };
+    };
+    save.state.wars['rome|rome'] = { since: 1 };
+    const result = loadGame(JSON.stringify(save));
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error).toMatch(/^The save's game state is malformed at state\.wars/);
   });
 
   test('drops fields the state does not know', () => {

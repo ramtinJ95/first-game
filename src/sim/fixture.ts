@@ -22,7 +22,7 @@ export const FIXTURE = {
 
 /**
  * A tiny valid game: Rome holds Latium and Campania, Carthage holds Africa, and each
- * side has one idle army. Every call returns a fresh copy.
+ * side has one idle army. The two are at peace. Every call returns a fresh copy.
  */
 export function buildFixture(seed = 1): GameState {
   const f = FIXTURE;
@@ -72,6 +72,7 @@ export function buildFixture(seed = 1): GameState {
         owner: f.rome,
         formations: [f.hastati, f.equites],
         stance: 'holdTheLine',
+        generalSkill: 3,
         activity: { kind: 'idle', position: { x: 1245, y: 615 } },
       },
       [f.punicArmy]: {
@@ -79,6 +80,7 @@ export function buildFixture(seed = 1): GameState {
         owner: f.carthage,
         formations: [f.citizenSpears],
         stance: 'holdTheLine',
+        generalSkill: 3,
         activity: { kind: 'idle', position: { x: 1155, y: 895 } },
       },
     },
@@ -97,5 +99,6 @@ export function buildFixture(seed = 1): GameState {
     refugeeColumns: {},
     battles: {},
     sieges: {},
+    wars: {},
   };
 }

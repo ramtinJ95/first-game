@@ -22,6 +22,7 @@ import { FormationSchema } from './formation.ts';
 import { ProvinceSchema } from './province.ts';
 import { RefugeeColumnSchema } from './refugee-column.ts';
 import { SiegeSchema } from './siege.ts';
+import { WarKeySchema, WarSchema } from './war.ts';
 
 /**
  * The whole game as plain data. Each collection maps a record's id to the record.
@@ -41,6 +42,8 @@ export const GameStateSchema = v.object({
   refugeeColumns: v.record(RefugeeColumnIdSchema, RefugeeColumnSchema),
   battles: v.record(BattleIdSchema, BattleSchema),
   sieges: v.record(SiegeIdSchema, SiegeSchema),
+  /** Each pair of factions at war, once. Factions missing from it are at peace. */
+  wars: v.record(WarKeySchema, WarSchema),
 });
 
 export type GameState = v.InferOutput<typeof GameStateSchema>;
