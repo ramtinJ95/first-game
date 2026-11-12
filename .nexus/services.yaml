@@ -1,0 +1,7 @@
+services:
+  web:
+    command: npm run dev -- --host 127.0.0.1 --port $PORT --strictPort
+    health: /
+    preview:
+      title: Game
+      description: Vite dev server of this branch
