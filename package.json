@@ -19,7 +19,8 @@
   },
   "dependencies": {
     "pixi.js": "^8.23.0",
-    "svelte": "^5.57.3"
+    "svelte": "^5.57.3",
+    "valibot": "1.5.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
