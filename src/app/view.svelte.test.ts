@@ -17,6 +17,10 @@ describe('view', () => {
       speed: 1,
       paused: false,
       selection: undefined,
+      pending: [],
+      alerts: [],
+      notice: undefined,
+      menu: undefined,
     };
     return {
       read: () => snapshot,

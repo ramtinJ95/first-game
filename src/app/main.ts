@@ -1,15 +1,33 @@
 import { mount } from 'svelte';
 import mapUrl from '../../data/map/map.json?url';
 import type { Pick } from '../render/pick.ts';
-import { createRenderer } from '../render/renderer.ts';
+import { createRenderer, type Command } from '../render/renderer.ts';
+import type { DeepReadonly } from '../sim/deep-readonly.ts';
+import type { CityId } from '../sim/ids.ts';
+import { landPath } from '../sim/march.ts';
 import { parseMap, type GameMap } from '../sim/map.ts';
 import { newGame } from '../sim/new-game.ts';
+import { AT_PORT_KM } from '../sim/orders/embark.ts';
+import type { Order } from '../sim/orders/orders.ts';
 import { loadGame } from '../sim/save.ts';
+import type { Army } from '../sim/state/army.ts';
+import type { City } from '../sim/state/city.ts';
+import type { GameState } from '../sim/state/game-state.ts';
+import type { MapPoint } from '../sim/state/map-point.ts';
+import { distance, findPath } from '../sim/world/find-path.ts';
 import { buildWorld } from '../sim/world/world.ts';
-import SelectionReadout from '../ui/SelectionReadout.svelte';
-import TimeControls from '../ui/TimeControls.svelte';
+import type { Actions } from '../ui/actions.ts';
+import Hud from '../ui/Hud.svelte';
+import '../ui/panels.css';
+import { alertsBetween, type Alert } from './alerts.ts';
 import { createClock } from './clock.ts';
-import { createView } from './view.svelte.ts';
+import { reasonText } from './names.ts';
+import { createView, type CommandMenu, type Notice } from './view.svelte.ts';
+
+/** The alerts the list keeps, newest first. */
+const ALERTS_KEPT = 6;
+/** How long a refused order's reason stays on screen. */
+const NOTICE_MS = 4000;
 
 const host = document.getElementById('app');
 if (!host) throw new Error('#app element missing from index.html');
@@ -31,21 +49,130 @@ async function loadMap(host: HTMLElement): Promise<GameMap> {
 
 const map = await loadMap(host);
 
-const clock = createClock({
-  state: newGame(map, { seed: Date.now(), player: 'rome' }),
-  world: buildWorld(map),
-  now: () => performance.now(),
-  onRejected: (rejected) => console.warn('orders rejected', rejected),
-});
+const world = buildWorld(map);
 
 let selection: Pick | undefined;
+let alerts: readonly Alert[] = [];
+let notice: Notice | undefined;
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+let menu: CommandMenu | undefined;
 
-const view = createView(() => ({
-  state: clock.state,
-  speed: clock.speed,
-  paused: clock.paused,
-  selection,
-}));
+function showNotice(text: string) {
+  notice = { id: (notice?.id ?? 0) + 1, text };
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => {
+    notice = undefined;
+    view.refresh();
+  }, NOTICE_MS);
+}
+
+const clock = createClock({
+  state: newGame(map, { seed: Date.now(), player: 'rome' }),
+  world,
+  now: () => performance.now(),
+  onRejected(rejected) {
+    const own = rejected.filter(({ order }) => order.faction === clock.state.player);
+    const last = own.at(-1);
+    if (last) showNotice(`Order refused. ${reasonText(clock.state, last.reason)}.`);
+  },
+  onDay(before, after) {
+    const news = alertsBetween(before, after);
+    if (news.length > 0) alerts = [...news.reverse(), ...alerts].slice(0, ALERTS_KEPT);
+  },
+});
+
+const view = createView(
+  () => ({
+    state: clock.state,
+    speed: clock.speed,
+    paused: clock.paused,
+    selection,
+    pending: clock.pending,
+    alerts,
+    notice,
+    menu,
+  }),
+  100,
+  'panels',
+);
+
+/** The port city of its owner that the army stands at, as the embark order judges it. */
+function portOf(
+  state: DeepReadonly<GameState>,
+  army: DeepReadonly<Army>,
+): DeepReadonly<City> | undefined {
+  if (army.activity.kind !== 'idle' && army.activity.kind !== 'marching') return undefined;
+  const at = army.activity.position;
+  return Object.values(state.cities).find((city) => {
+    const harbour = world.harbours.get(city.id);
+    return (
+      city.owner === army.owner &&
+      harbour &&
+      Math.min(distance(at, city.position), distance(at, harbour)) <= AT_PORT_KM
+    );
+  });
+}
+
+/**
+ * A right click with one of the player's armies selected marches it to the point. On
+ * a port city, while the army stands at one of the player's ports, it offers the sea.
+ */
+function command({ point, pick, screen }: Command) {
+  menu = undefined;
+  const state = clock.state;
+  const army = selection?.kind === 'army' ? state.armies[selection.army] : undefined;
+  if (!army || army.owner !== state.player) {
+    view.refresh();
+    return;
+  }
+  const march: Order = { kind: 'moveArmy', faction: state.player, army: army.id, to: point };
+  const target: CityId | undefined =
+    pick?.kind === 'province' ? state.provinces[pick.province]?.city : undefined;
+  const city = target && state.cities[target];
+  const from = portOf(state, army);
+  if (city && from && city.id !== from.id && world.harbours.has(city.id)) {
+    menu = {
+      screen,
+      options: [
+        {
+          label: `Sail from ${from.name} to ${city.name}`,
+          order: { kind: 'embark', faction: state.player, army: army.id, to: city.id },
+        },
+        { label: `March to ${city.name}`, order: march },
+      ],
+    };
+  } else {
+    clock.issue(march);
+  }
+  view.refresh();
+}
+
+let plannedFor: readonly Order[] | undefined;
+let planned: MapPoint[][] = [];
+
+/** The paths that the player's waiting march and sail orders will take. */
+function plannedPaths(): MapPoint[][] {
+  if (clock.pending === plannedFor) return planned;
+  plannedFor = clock.pending;
+  const state = clock.state;
+  planned = clock.pending.flatMap((order) => {
+    if (order.faction !== state.player) return [];
+    const army = (order.kind === 'moveArmy' || order.kind === 'embark') && state.armies[order.army];
+    if (!army || army.activity.kind === 'embarked') return [];
+    const at = army.activity.position;
+    if (order.kind === 'moveArmy') {
+      const path = landPath(world, at, order.to);
+      return typeof path === 'string' ? [] : [[at, ...path]];
+    }
+    if (order.kind !== 'embark') return [];
+    const from = portOf(state, army);
+    const harbour = from && world.harbours.get(from.id);
+    const landing = world.harbours.get(order.to);
+    const path = harbour && landing && findPath(world.mesh, harbour, landing, 'sea');
+    return path ? [[at, harbour, ...path]] : [];
+  });
+  return planned;
+}
 
 const canvas = document.createElement('canvas');
 canvas.dataset['testid'] = 'map';
@@ -55,8 +182,10 @@ const renderer = await createRenderer({
   map,
   onPick(pick) {
     selection = pick;
+    menu = undefined;
     view.refresh();
   },
+  onCommand: command,
 });
 
 function loop() {
@@ -66,13 +195,14 @@ function loop() {
     current: clock.state,
     progress: clock.progress,
     selection,
+    planned: plannedPaths(),
   });
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 
 // Dropping a save file on the page loads it. This is the one way to load a game
-// until the panels unit adds a menu.
+// until a menu offers it.
 window.addEventListener('dragover', (event) => event.preventDefault());
 window.addEventListener('drop', (event) => {
   event.preventDefault();
@@ -81,29 +211,44 @@ window.addEventListener('drop', (event) => {
   void file.text().then((text) => {
     const loaded = loadGame(text);
     if (!loaded.ok) {
-      console.warn(`save not loaded: ${loaded.error}`);
+      showNotice(`The save did not load. ${loaded.error}`);
+      view.refresh();
       return;
     }
     clock.load(loaded.state);
+    alerts = [];
+    menu = undefined;
     view.refresh();
   });
 });
 
-mount(TimeControls, {
-  target: host,
-  props: {
-    view,
-    controls: {
-      togglePause() {
-        clock.togglePause();
-        view.refresh();
-      },
-      setSpeed(speed) {
-        clock.setSpeed(speed);
-        view.refresh();
-      },
-    },
+const actions: Actions = {
+  togglePause() {
+    clock.togglePause();
+    view.refresh();
   },
-});
+  setSpeed(speed) {
+    clock.setSpeed(speed);
+    view.refresh();
+  },
+  issue(order) {
+    clock.issue(order);
+    view.refresh();
+  },
+  select(pick) {
+    selection = pick;
+    view.refresh();
+  },
+  openAlert(alert) {
+    if (!alert.focus) return;
+    renderer.focus(alert.focus.at);
+    if (alert.focus.select) selection = alert.focus.select;
+    view.refresh();
+  },
+  closeMenu() {
+    menu = undefined;
+    view.refresh();
+  },
+};
 
-mount(SelectionReadout, { target: host, props: { view } });
+mount(Hud, { target: host, props: { view, actions } });

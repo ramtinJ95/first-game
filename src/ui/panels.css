@@ -1,0 +1,133 @@
+:root {
+  --paper: rgb(250 243 228 / 94%);
+  --paper-solid: #faf3e4;
+  --ink: #3b2a1a;
+  --rule: #7a4b2a;
+  --muted: #7d6a52;
+  --good: #3f6b35;
+  --bad: #a3322a;
+  --serif: 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+}
+
+.panel {
+  box-sizing: border-box;
+  padding: 8px 12px 10px;
+  font: 14px/1.35 var(--serif);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgb(59 42 26 / 18%);
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: bold;
+  letter-spacing: 0.02em;
+}
+
+.panel h3 {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.panel p {
+  margin: 2px 0;
+}
+
+.panel .head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.panel .muted {
+  color: var(--muted);
+}
+
+.panel .bad {
+  color: var(--bad);
+}
+
+.panel .good {
+  color: var(--good);
+}
+
+.panel .swatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+}
+
+.panel button,
+.panel select {
+  padding: 2px 8px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+
+.panel button {
+  cursor: pointer;
+}
+
+.panel button:hover:not(:disabled) {
+  background: rgb(122 75 42 / 12%);
+}
+
+.panel button:disabled {
+  color: var(--muted);
+  cursor: default;
+  border-color: rgb(122 75 42 / 40%);
+}
+
+.panel button[aria-pressed='true'] {
+  color: var(--paper-solid);
+  background: var(--rule);
+}
+
+.panel button.danger {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.panel .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.panel table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel td,
+.panel th {
+  padding: 1px 4px 1px 0;
+  text-align: left;
+}
+
+.panel th {
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--muted);
+}
+
+.panel td.number,
+.panel th.number {
+  text-align: right;
+}

@@ -45,16 +45,26 @@ describe('drawnArmies', () => {
     });
   });
 
-  it('draws an army new today at its current place, and no army at sea', () => {
+  it('draws an army new today at its current place, and an army at sea at its convoy', () => {
     const { previous, current } = marched();
     previous.armies = Object.fromEntries(
       Object.entries(previous.armies).filter(([id]) => id !== FIXTURE.romanArmy),
     );
     const punic = current.armies[FIXTURE.punicArmy];
     if (!punic) throw new Error('fixture lacks the Punic army');
-    punic.activity = { kind: 'embarked', convoy: 'convoy-1' as ConvoyId };
+    const convoy = 'convoy-1' as ConvoyId;
+    punic.activity = { kind: 'embarked', convoy };
+    current.convoys[convoy] = {
+      id: convoy,
+      owner: FIXTURE.carthage,
+      position: { x: 2300, y: 2800 },
+      armies: [FIXTURE.punicArmy],
+      waypoints: [{ x: 2400, y: 2700 }],
+    };
     const drawn = drawnArmies(previous, current, 0.5);
-    expect(drawn.map((army) => army.id)).toEqual([FIXTURE.romanArmy]);
     expect(romanAt(drawn)).toEqual(end);
+    const punicAt = drawn.find((army) => army.id === FIXTURE.punicArmy)?.position;
+    const ashore = positionOf(previous, FIXTURE.punicArmy);
+    expect(punicAt).toEqual({ x: (ashore.x + 2300) / 2, y: (ashore.y + 2800) / 2 });
   });
 });

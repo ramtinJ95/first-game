@@ -230,4 +230,29 @@ describe('clock', () => {
     expect(clock.state.cities[FIXTURE.capua]?.owner).toBe(FIXTURE.carthage);
     expect(clock.state.armies[FIXTURE.romanArmy]?.stance).toBe('holdTheLine');
   });
+
+  it('hands onDay each day before and after its tick, and keeps issued orders pending until then', () => {
+    const time = fakeTime();
+    const days: [number, number][] = [];
+    const clock = createClock({
+      world,
+      state: buildFixture(),
+      now: time.now,
+      onDay: (before, after) => days.push([before.day, after.day]),
+    });
+    const order = {
+      kind: 'setStance',
+      faction: FIXTURE.rome,
+      army: FIXTURE.romanArmy,
+      stance: 'allOutAssault',
+    } as const;
+    clock.issue(order);
+    expect(clock.pending).toEqual([order]);
+    run(clock, time, 2000);
+    expect(days).toEqual([
+      [1, 2],
+      [2, 3],
+    ]);
+    expect(clock.pending).toEqual([]);
+  });
 });

@@ -21,10 +21,8 @@ test('the skeleton renders the map and the time controls without errors', async 
   expect(box?.width).toBeGreaterThan(0);
   expect(box?.height).toBeGreaterThan(0);
 
-  await expect(page.getByTestId('time-controls-day')).toHaveText(/^Day \d+$/);
-  await expect(page.getByTestId('time-controls-realm')).toHaveText(
-    `Rome · ${map.provinces.length} provinces`,
-  );
+  await expect(page.getByTestId('time-controls-day')).toHaveText(/^Year 1, day \d+$/);
+  await expect(page.getByTestId('top-bar')).toContainText('Rome');
   expect(errors).toEqual([]);
 });
 

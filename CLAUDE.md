@@ -121,6 +121,17 @@ Known faults in the source data. Check them before you draw or label terrain.
 - The selection lives in `src/app/main.ts` and reaches panels as `view.current.selection`. It is not game state.
 - Dropping a save file on the page loads it through `loadGame` and `clock.load`.
 
+### Panels
+
+- `src/ui/Hud.svelte` is the one root the page mounts. It lays out the top bar, the side column of the army, city, and battle panels at the right edge, the alerts at the bottom left, the refusal notice, and the right-click menu. Panels read `view.current` and act only through `Actions` in `src/ui/actions.ts`, which issue orders to the clock, select, and move the camera.
+- A panel prop that holds the game state is named `game`, because Svelte reads `$state` next to a local named `state` as a store.
+- A right click reaches `onCommand` in `src/app/main.ts`. With one of the player's armies selected it issues `moveArmy`, or opens the menu that offers `embark` when the army stands at one of its ports and the click is on a port city.
+- The renderer also takes `onCommand` for a right click and offers `focus(point)` for an alert's click. In the `markers` layer it draws the player's march and sea paths, the paths of orders still waiting, and a battle marker that `pickAt` selects after banners and before provinces. An army at sea is drawn at its convoy.
+- `alertsBetween(before, after)` in `src/app/alerts.ts` works out the alerts from two days, and the clock's `onDay` feeds it every tick. Alerts are page state, not game state. To add a kind, add it to `AlertKind` and one test to `alerts.test.ts`.
+- `reasonText` in `src/app/names.ts` turns a rule's refusal into words a player reads. The notice shows it for four seconds.
+- The view times each refresh as the user-timing measure `panels`. The `panels` capture scenario reads it.
+- `e2e/support.ts` builds saves for browser tests and capture scenarios, such as a battle or a fallen city. Tests drop them on the page and then play through the panels.
+
 ## Code and tests
 
 - TypeScript strict. No `any`.
