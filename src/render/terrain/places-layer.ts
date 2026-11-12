@@ -56,15 +56,16 @@ function settlementSymbols(): Record<Rank, GraphicsContext> {
   house(town, 3.4, 3, 3.4, 2.4);
   town.moveTo(-6, 3.6).lineTo(6, 3.6).stroke({ color: INK, width: 1, cap: 'round' });
   const village = new GraphicsContext();
-  house(village, -1.4, 2, 2.8, 2.1);
-  house(village, 1.9, 2, 2.2, 1.7);
-  village.moveTo(-3.6, 2.5).lineTo(3.8, 2.5).stroke({ color: INK, width: 0.8, cap: 'round' });
+  house(village, 0.6, -0.6, 2.6, 1.9);
+  house(village, -2.3, 2.2, 3, 2.2);
+  house(village, 2.6, 2.4, 2.6, 1.9);
+  village.moveTo(-4.6, 2.9).lineTo(4.6, 2.9).stroke({ color: INK, width: 0.8, cap: 'round' });
   return { town, village };
 }
 
 const HALF: Record<Rank, { x: number; y: number }> = {
   town: { x: 6.5, y: 5.5 },
-  village: { x: 4, y: 3.8 },
+  village: { x: 5, y: 4.4 },
 };
 
 interface Drawn {

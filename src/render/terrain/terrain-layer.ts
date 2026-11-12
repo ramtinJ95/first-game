@@ -3,6 +3,7 @@ import type { GameMap, MapLine } from '../../sim/map.ts';
 import { visibleRect, type Camera, type Size } from '../camera.ts';
 import { toPixels } from '../lines.ts';
 import { INK, SEA, WATER_LINE } from '../palette.ts';
+import { chunkKey, chunkRect, chunkRow, chunksNear, OVERHANG } from './chunks.ts';
 import { DETAIL, detailAlpha, type Band } from './detail.ts';
 import { drawDesert, drawMarks, drawPeaks, drawValleys, drawWoods, mix } from './draw.ts';
 import {
@@ -45,6 +46,12 @@ interface Layer {
   readonly name: string;
   readonly band: Band;
   readonly size: number;
+  /**
+   * How far in km a drawing can reach beyond its chunk: a mountain rises above its foot,
+   * and a field or a track runs out from its place. A chunk shows while its rect grown by
+   * this much meets the view, so nothing at a chunk's edge vanishes during a pan.
+   */
+  readonly overhang: number;
   readonly container: Container;
   readonly chunks: Map<number, Chunk>;
   build(rect: Rect): Container;
@@ -58,12 +65,6 @@ export interface Terrain {
   update(camera: Camera, viewport: Size, now: number): boolean;
   /** Rebuilds the lakes' lines at a fixed width on screen, as the renderer does for the coast. */
   restroke(scale: number): void;
-}
-
-function rectOf(size: number, key: number): Rect {
-  const i = Math.floor(key / 4096);
-  const j = key % 4096;
-  return { left: i * size, top: j * size, right: (i + 1) * size, bottom: (j + 1) * size };
 }
 
 /**
@@ -95,6 +96,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
     name,
     band,
     size: TIERS[name].chunk,
+    overhang: OVERHANG[name],
     container: new Container({ label: name }),
     chunks: new Map(),
     build(rect) {
@@ -108,6 +110,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
     name: 'fields',
     band: DETAIL.fields,
     size: TIERS.close.chunk,
+    overhang: OVERHANG.fields,
     container: new Container({ label: 'fields' }),
     chunks: new Map(),
     build(rect) {
@@ -120,6 +123,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
     name: 'texture',
     band: DETAIL.textureWide,
     size: TIERS.texture.chunk,
+    overhang: OVERHANG.texture,
     container: new Container({ label: 'texture' }),
     chunks: new Map(),
     build(rect) {
@@ -185,8 +189,8 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   if (wide) {
     for (let j = 0; j * wide.size < map.height; j++) {
       for (let i = 0; i * wide.size < map.width; i++) {
-        const key = i * 4096 + j;
-        const chunk = wide.build(rectOf(wide.size, key));
+        const key = chunkKey(i, j);
+        const chunk = wide.build(chunkRect(wide.size, key));
         wide.chunks.set(key, { graphics: chunk, bornAt: -Infinity });
         wide.container.addChild(chunk);
       }
@@ -239,35 +243,26 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
         if (!layer.container.visible && !(still && soon)) continue;
         const { size } = layer;
         const wanted = new Set<number>();
-        const ring = still ? size : 0;
-        const i0 = Math.max(0, Math.floor((view.left - ring) / size));
-        const j0 = Math.max(0, Math.floor((view.top - ring) / size));
-        const i1 = Math.min(
-          Math.ceil(map.width / size) - 1,
-          Math.floor((view.right + ring) / size),
-        );
-        const j1 = Math.min(
-          Math.ceil(map.height / size) - 1,
-          Math.floor((view.bottom + ring) / size),
-        );
-        for (let i = i0; i <= i1; i++) {
-          for (let j = j0; j <= j1; j++) {
-            const key = i * 4096 + j;
-            const rect = rectOf(size, key);
-            const inView =
-              layer.container.visible &&
-              rect.right > view.left &&
-              rect.left < view.right &&
-              rect.bottom > view.top &&
-              rect.top < view.bottom;
-            if (inView) wanted.add(key);
-            if (layer.chunks.has(key)) continue;
-            const distance = Math.hypot(
-              (rect.left + rect.right) / 2 - centre.x,
-              (rect.top + rect.bottom) / 2 - centre.y,
-            );
-            missing.push({ layer, key, distance, needed: inView });
-          }
+        const shown = layer.container.visible
+          ? new Set(chunksNear(view, size, layer.overhang, 0, map.width, map.height))
+          : new Set<number>();
+        for (const key of chunksNear(
+          view,
+          size,
+          layer.overhang,
+          still ? size : 0,
+          map.width,
+          map.height,
+        )) {
+          const needed = shown.has(key);
+          if (needed) wanted.add(key);
+          if (layer.chunks.has(key)) continue;
+          const rect = chunkRect(size, key);
+          const distance = Math.hypot(
+            (rect.left + rect.right) / 2 - centre.x,
+            (rect.top + rect.bottom) / 2 - centre.y,
+          );
+          missing.push({ layer, key, distance, needed });
         }
         for (const [key, chunk] of layer.chunks) {
           const shown = wanted.has(key);
@@ -284,13 +279,14 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       const started = performance.now();
       for (const { layer, key, needed } of missing) {
         if (performance.now() - started > BUILD_BUDGET_MS) break;
-        const graphics = layer.build(rectOf(layer.size, key));
+        const graphics = layer.build(chunkRect(layer.size, key));
         graphics.alpha = 0;
         graphics.visible = needed;
         layer.chunks.set(key, { graphics, bornAt: now });
-        const row = key % 4096;
+        const row = chunkRow(key);
         let before = 0;
-        for (const other of layer.chunks.keys()) if (other !== key && other % 4096 <= row) before++;
+        for (const other of layer.chunks.keys())
+          if (other !== key && chunkRow(other) <= row) before++;
         layer.container.addChildAt(graphics, Math.min(before, layer.container.children.length));
         if (needed) fading = true;
       }
