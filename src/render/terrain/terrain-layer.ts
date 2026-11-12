@@ -1,11 +1,10 @@
 import { Container, Graphics, RenderTexture, Sprite, type Renderer } from 'pixi.js';
-import type { GameMap, MapLine } from '../../sim/map.ts';
+import type { GameMap } from '../../sim/map.ts';
 import { visibleRect, type Camera, type Size } from '../camera.ts';
-import { toPixels } from '../lines.ts';
-import { INK, SEA, WATER_LINE } from '../palette.ts';
 import { chunkKey, chunkRect, chunkRow, chunksNear, OVERHANG } from './chunks.ts';
 import { DETAIL, detailAlpha, type Band } from './detail.ts';
-import { drawDesert, drawMarks, drawPeaks, drawValleys, drawWoods, mix } from './draw.ts';
+import { createLakes } from './lakes.ts';
+import { drawDesert, drawMarks, drawPeaks, drawValleys, drawWoods } from './draw.ts';
 import {
   Land,
   peaksIn,
@@ -30,12 +29,6 @@ const CHUNK_FADE_MS = 260;
 const PREFETCH_AFTER_MS = 250;
 const BUILD_BUDGET_MS = 8;
 const PREFETCH_ZOOM = 1.6;
-/** Lake water lines in screen pixels from the shore, like the sea's but closer. */
-const LAKE_LINES = [
-  { distance: 9, strength: 0.16 },
-  { distance: 5.5, strength: 0.3 },
-  { distance: 2.8, strength: 0.5 },
-] as const;
 
 interface Chunk {
   readonly graphics: Container;
@@ -157,48 +150,8 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   let drawn: { x: number; y: number; scale: number } | undefined;
   const shownAlpha = new Map<Layer, number>();
 
-  const lakeOutlines = map.terrain.filter((a) => a.kind === 'lake').map((a) => a.outline);
-  const lakeRings: MapLine[] = lakeOutlines.flatMap((outline) =>
-    outline.flatMap((polygon) => polygon.map((ring) => [...ring, ring[0] as (typeof ring)[0]])),
-  );
-  const lakeFill = new Graphics();
-  for (const outline of lakeOutlines) {
-    for (const [outer] of outline) if (outer) lakeFill.poly(outer.flat()).fill(SEA);
-  }
-  const lakeMask = new Graphics();
-  for (const outline of lakeOutlines) {
-    for (const [outer] of outline) if (outer) lakeMask.poly(outer.flat()).fill(0xffffff);
-  }
-  const lakeLines = new Graphics();
-  lakeLines.mask = lakeMask;
-  const lakeShore = new Graphics();
-  // The lakes sit above the washes, so they cannot share the terrain's texture, but
-  // they are cached the same way: the mask on their water lines costs only when the
-  // texture is drawn again, not every frame.
-  const lakeArt = new Container();
-  lakeArt.addChild(lakeFill, lakeLines, lakeMask, lakeShore);
-  const lakeRoot = new Container();
-  lakeRoot.addChild(lakeArt);
-  const lakeTexture = RenderTexture.create({
-    width: 1,
-    height: 1,
-    resolution: renderer.resolution,
-    antialias: true,
-  });
-  const lakeSprite = new Sprite(lakeTexture);
-  const lakes = new Container({ label: 'lakes' });
-  lakes.addChild(lakeSprite);
+  const lakes = createLakes(map, renderer);
   let lakesStale = true;
-
-  function traceRings(g: Graphics, scale: number, step: number) {
-    for (const ring of lakeRings) {
-      const flat = toPixels(ring, scale, step);
-      if (flat.length < 6) continue;
-      g.moveTo(flat[0] as number, flat[1] as number);
-      for (let i = 2; i < flat.length; i += 2) g.lineTo(flat[i] as number, flat[i + 1] as number);
-    }
-    return g;
-  }
 
   const [, , wide] = layers;
   if (wide) {
@@ -215,25 +168,10 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   let stillSince = 0;
 
   return {
-    lakes,
+    lakes: lakes.container,
     land,
     restroke(scale) {
-      lakeLines.clear();
-      for (const { distance, strength } of LAKE_LINES) {
-        traceRings(lakeLines, scale, 0.75).stroke({
-          width: 2 * distance + 0.9,
-          color: mix(SEA, WATER_LINE, strength),
-          join: 'round',
-        });
-        traceRings(lakeLines, scale, 0.75).stroke({
-          width: 2 * distance - 0.9,
-          color: SEA,
-          join: 'round',
-        });
-      }
-      lakeShore.clear();
-      traceRings(lakeShore, scale, 0.75).stroke({ width: 1.2, color: INK, join: 'round' });
-      for (const g of [lakeLines, lakeShore]) g.scale.set(1 / scale);
+      lakes.restroke(scale);
       lakesStale = true;
     },
     update(camera, viewport, now) {
@@ -313,7 +251,6 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       const resized = texture.width !== width || texture.height !== height;
       if (resized) {
         texture.resize(width, height, renderer.resolution);
-        lakeTexture.resize(width, height, renderer.resolution);
       }
       if (
         lakesStale ||
@@ -330,11 +267,12 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
         drawn = { x, y, scale: camera.scale };
         sprite.scale.set(1 / camera.scale);
         sprite.position.set((-CACHE_MARGIN - x) / camera.scale, (-CACHE_MARGIN - y) / camera.scale);
-        lakeArt.scale.set(camera.scale);
-        lakeArt.position.set(x + CACHE_MARGIN, y + CACHE_MARGIN);
-        renderer.render({ container: lakeRoot, target: lakeTexture, clear: true });
-        lakeSprite.scale.set(1 / camera.scale);
-        lakeSprite.position.copyFrom(sprite.position);
+        lakes.render(x, y, camera.scale, {
+          left: -CACHE_MARGIN,
+          top: -CACHE_MARGIN,
+          right: width - CACHE_MARGIN,
+          bottom: height - CACHE_MARGIN,
+        });
         lakesStale = false;
       }
       return fading;
