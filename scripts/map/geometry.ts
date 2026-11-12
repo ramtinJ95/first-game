@@ -21,10 +21,6 @@ export function boxOf(polygons: MultiPolygon): Box {
   return box;
 }
 
-function boxContains(box: Box, [x, y]: Point): boolean {
-  return x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY;
-}
-
 export function boxesOverlap(a: Box, b: Box): boolean {
   return a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY;
 }
@@ -75,45 +71,6 @@ export function polygonContains(polygon: Polygon, point: Point): boolean {
 
 export function contains(polygons: MultiPolygon, point: Point): boolean {
   return polygons.some((polygon) => polygonContains(polygon, point));
-}
-
-export function locator<K>(
-  regions: { key: K; polygons: MultiPolygon }[],
-): (p: Point) => K | undefined {
-  const entries = regions.flatMap(({ key, polygons }) =>
-    polygons.map((polygon) => ({ key, polygon, box: boxOf([polygon]) })),
-  );
-  return (point) =>
-    entries.find(({ polygon, box }) => boxContains(box, point) && polygonContains(polygon, point))
-      ?.key;
-}
-
-export interface BoundarySample {
-  mid: Point;
-  outside: Point;
-  length: number;
-}
-
-export function* boundarySamples(
-  polygons: MultiPolygon,
-  offset: number,
-): Generator<BoundarySample> {
-  for (const polygon of polygons) {
-    for (const [index, ring] of polygon.entries()) {
-      const interiorOnLeft = (index === 0) === ringArea(ring) > 0;
-      let [ax, ay] = ring[ring.length - 1] ?? [0, 0];
-      for (const [bx, by] of ring) {
-        const length = Math.hypot(bx - ax, by - ay);
-        if (length > 0) {
-          const side = interiorOnLeft ? offset / length : -offset / length;
-          const mid: Point = [(ax + bx) / 2, (ay + by) / 2];
-          yield { mid, outside: [mid[0] + (by - ay) * side, mid[1] - (bx - ax) * side], length };
-        }
-        ax = bx;
-        ay = by;
-      }
-    }
-  }
 }
 
 function closestOnSegment([px, py]: Point, [ax, ay]: Point, [bx, by]: Point): Point {
@@ -240,4 +197,113 @@ export function xor(a: MultiPolygon, b: MultiPolygon): MultiPolygon {
 
 function openRings(polygons: MultiPolygon): MultiPolygon {
   return polygons.map((polygon) => polygon.map((ring) => ring.slice(0, -1)));
+}
+
+export interface BorderLengths {
+  /** Per region, the length of boundary it shares with each other region, by index. */
+  shared: Map<number, number>[];
+  /** Per region, the length of boundary that lies on no other region and not on `edge`. */
+  open: number[];
+}
+
+interface Segment {
+  a: Point;
+  b: Point;
+  box: Box;
+}
+
+const EDGE_KEY = -1;
+
+/**
+ * Measures where boundaries coincide, within `tolerance`, edge interval by edge interval. A region
+ * touching another along part of an edge is credited only that part.
+ */
+export function borderLengths(
+  regions: MultiPolygon[],
+  edge: Ring | undefined,
+  tolerance: number,
+): BorderLengths {
+  const segments = regions.map((polygons) => segmentsOf(polygons));
+  const boxes = regions.map((polygons) => grow(boxOf(polygons), tolerance));
+  const edgeSegments = edge ? segmentsOf([[edge]]) : [];
+  const shared = regions.map(() => new Map<number, number>());
+  const open = regions.map((_, key) => {
+    const others: [number, Segment[]][] = segments.flatMap((list, other): [number, Segment[]][] => {
+      const box = boxes[key];
+      const otherBox = boxes[other];
+      return other !== key && box && otherBox && boxesOverlap(box, otherBox) ? [[other, list]] : [];
+    });
+    others.push([EDGE_KEY, edgeSegments]);
+    let uncovered = 0;
+    for (const segment of segments[key] ?? []) {
+      const length = distance(segment.a, segment.b);
+      if (length === 0) continue;
+      const covered: [number, number][] = [];
+      for (const [other, list] of others) {
+        for (const candidate of list) {
+          if (!boxesOverlap(grow(segment.box, tolerance), candidate.box)) continue;
+          const overlap = coincidence(segment, candidate, tolerance);
+          if (!overlap) continue;
+          covered.push(overlap);
+          if (other !== EDGE_KEY) {
+            const across = shared[key] as Map<number, number>;
+            across.set(other, (across.get(other) ?? 0) + (overlap[1] - overlap[0]) * length);
+          }
+        }
+      }
+      uncovered += (1 - measure(covered)) * length;
+    }
+    return uncovered;
+  });
+  return { shared, open };
+}
+
+function segmentsOf(polygons: MultiPolygon): Segment[] {
+  return [...edges(polygons)].map(([a, b]) => ({
+    a,
+    b,
+    box: {
+      minX: Math.min(a[0], b[0]),
+      minY: Math.min(a[1], b[1]),
+      maxX: Math.max(a[0], b[0]),
+      maxY: Math.max(a[1], b[1]),
+    },
+  }));
+}
+
+function grow({ minX, minY, maxX, maxY }: Box, by: number): Box {
+  return { minX: minX - by, minY: minY - by, maxX: maxX + by, maxY: maxY + by };
+}
+
+/** The parameter interval of `segment` that `other` lies along, if `other` runs within `tolerance` of it. */
+function coincidence(
+  segment: Segment,
+  other: Segment,
+  tolerance: number,
+): [number, number] | undefined {
+  const [ax, ay] = segment.a;
+  const dx = segment.b[0] - ax;
+  const dy = segment.b[1] - ay;
+  const lengthSquared = dx * dx + dy * dy;
+  const length = Math.sqrt(lengthSquared);
+  const offLine = ([px, py]: Point) => Math.abs((px - ax) * dy - (py - ay) * dx) / length;
+  if (offLine(other.a) > tolerance || offLine(other.b) > tolerance) return undefined;
+  const along = ([px, py]: Point) => ((px - ax) * dx + (py - ay) * dy) / lengthSquared;
+  const ta = along(other.a);
+  const tb = along(other.b);
+  const start = Math.max(0, Math.min(ta, tb));
+  const end = Math.min(1, Math.max(ta, tb));
+  return end > start ? [start, end] : undefined;
+}
+
+/** Total length of the union of intervals inside [0, 1]. */
+function measure(intervals: [number, number][]): number {
+  let total = 0;
+  let reach = 0;
+  for (const [start, end] of intervals.sort((p, q) => p[0] - q[0] || p[1] - q[1])) {
+    if (end <= reach) continue;
+    total += end - Math.max(start, reach);
+    reach = end;
+  }
+  return total;
 }

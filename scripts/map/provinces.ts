@@ -2,24 +2,20 @@ import { Delaunay } from 'd3-delaunay';
 import type { MultiPolygon, Point, Polygon, Ring } from '../../src/sim/map.ts';
 import {
   area,
+  borderLengths,
   boundaryDistance,
-  boundarySamples,
-  type BoundarySample,
   boxDistance,
   boxOf,
   distanceToBoundary,
   intersection,
-  locator,
   polygonContains,
   union,
 } from './geometry.ts';
 
-/** How far a boundary sample steps across the border to see what lies on the other side. */
-const PROBE_KM = 0.5;
 export const NEIGHBOUR_MIN_BORDER_KM = 2;
 export const COASTAL_MIN_SEA_KM = 5;
 const ON_EXTENT_EDGE_KM = 0.01;
-/** Borders cut from the same clip coincide to float noise; across a strait they are apart. */
+/** Borders cut from neighbouring clips coincide to float noise; across a strait they are apart. */
 const TOUCH_KM = 0.01;
 
 export interface OrphanMerge {
@@ -115,40 +111,15 @@ function cutByVoronoi(component: Polygon, members: number[], seeds: Point[]): Pi
   return pieces;
 }
 
-interface Borders {
-  /** Border length shared with each other region, by key. */
-  shared: Map<number, number>;
-  /** Stretches of border that touch no other region. */
-  open: BoundarySample[];
-}
-
-/**
- * Probes across every stretch of a region's border. A probe that lands in another region counts
- * as shared border only when the stretch lies on that region's boundary, so land across a strait
- * narrower than the probe is open border, not a shared one.
- */
-function probeBorders(key: number, regions: MultiPolygon[], locate: Locate): Borders {
-  const shared = new Map<number, number>();
-  const open: BoundarySample[] = [];
-  for (const sample of boundarySamples(regions[key] ?? [], PROBE_KM)) {
-    const other = locate(sample.outside);
-    if (other === key) continue;
-    const touches =
-      other !== undefined && distanceToBoundary(regions[other] ?? [], sample.mid) <= TOUCH_KM;
-    if (other !== undefined && touches) shared.set(other, (shared.get(other) ?? 0) + sample.length);
-    else open.push(sample);
-  }
-  return { shared, open };
-}
-
-type Locate = (point: Point) => number | undefined;
-
 function mergeOrphans(pieces: Piece[], merges: OrphanMerge[]): Piece[] {
-  const regions = pieces.map((piece) => [piece.polygon]);
-  const locate = locator(regions.map((polygons, key) => ({ key, polygons })));
+  const { shared } = borderLengths(
+    pieces.map((piece) => [piece.polygon]),
+    undefined,
+    TOUCH_KM,
+  );
   const borders = new Map<Piece, Map<number, number>>();
   for (const [key, piece] of pieces.entries()) {
-    if (piece.owner === undefined) borders.set(piece, probeBorders(key, regions, locate).shared);
+    if (piece.owner === undefined) borders.set(piece, shared[key] ?? new Map());
   }
 
   for (;;) {
@@ -209,23 +180,16 @@ export interface Relations {
   coastal: boolean[];
 }
 
-/** Shared border counts toward neighbours, open border toward the coast, the extent edge toward neither. */
+/** Measured from coinciding boundaries. Boundary on no other territory and off the extent edge is coast. */
 export function relations(territories: MultiPolygon[], extent: Ring): Relations {
-  const locate = locator(territories.map((polygons, key) => ({ key, polygons })));
-  const borders = territories.map((_, key) => probeBorders(key, territories, locate));
-  const shared = borders.map(({ shared }) => shared);
-  const sea = borders.map(({ open }) =>
-    open
-      .filter((sample) => !onExtentEdge(extent, sample.mid))
-      .reduce((length, sample) => length + sample.length, 0),
-  );
+  const { shared, open } = borderLengths(territories, extent, TOUCH_KM);
   const neighbours = shared.map((across, a) =>
     [...territories.keys()].filter(
       (b) =>
         b !== a && Math.max(across.get(b) ?? 0, shared[b]?.get(a) ?? 0) >= NEIGHBOUR_MIN_BORDER_KM,
     ),
   );
-  return { neighbours, coastal: sea.map((length) => length >= COASTAL_MIN_SEA_KM) };
+  return { neighbours, coastal: open.map((length) => length >= COASTAL_MIN_SEA_KM) };
 }
 
 export function onExtentEdge(extent: Ring, point: Point): boolean {
