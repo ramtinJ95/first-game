@@ -369,7 +369,7 @@ export async function createRenderer({
   for (const province of map.provinces) fillOutline(land, province.outline, PAPER);
   layers.land.addChild(land);
 
-  const terrain = createTerrain(map, layers.terrain);
+  const terrain = createTerrain(map, layers.terrain, app.renderer);
 
   const washes = new Map<ProvinceId, Graphics>();
   for (const province of map.provinces) {

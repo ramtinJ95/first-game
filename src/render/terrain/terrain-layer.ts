@@ -1,4 +1,4 @@
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, RenderTexture, Sprite, type Renderer } from 'pixi.js';
 import type { GameMap, MapLine } from '../../sim/map.ts';
 import { visibleRect, type Camera, type Size } from '../camera.ts';
 import { toPixels } from '../lines.ts';
@@ -8,6 +8,8 @@ import { drawDesert, drawMarks, drawPeaks, drawWoods, mix } from './draw.ts';
 import { Land, peaksIn, placeFields, placeRelief, TIERS, type Tier } from './marks.ts';
 import type { Rect } from './scatter.ts';
 
+/** Pixels of terrain drawn beyond each edge of the view, so a pan can slide the drawing. */
+const CACHE_MARGIN = 256;
 /** A chunk fades in over this long once it is built, so a late chunk does not pop. */
 const CHUNK_FADE_MS = 260;
 /**
@@ -60,7 +62,7 @@ function rectOf(size: number, key: number): Rect {
  * fields of the closest zoom. Each tier is cut into square chunks that are placed and
  * drawn the first time they come into view, and kept.
  */
-export function createTerrain(map: GameMap, parent: Container): Terrain {
+export function createTerrain(map: GameMap, parent: Container, renderer: Renderer): Terrain {
   const land = new Land(map);
 
   const ground = new Container({ label: 'ground' });
@@ -100,7 +102,23 @@ export function createTerrain(map: GameMap, parent: Container): Terrain {
     tier('middle', DETAIL.reliefMiddle),
     tier('close', DETAIL.reliefClose),
   ];
-  parent.addChild(ground, ...layers.map((layer) => layer.container));
+  // The terrain is thousands of strokes that change only when the view does, so it is
+  // drawn into a texture a little larger than the screen and shown as one sprite. A pan
+  // slides the sprite and draws again only after moving CACHE_MARGIN pixels.
+  const art = new Container();
+  art.addChild(ground, ...layers.map((layer) => layer.container));
+  const root = new Container();
+  root.addChild(art);
+  const texture = RenderTexture.create({
+    width: 1,
+    height: 1,
+    resolution: renderer.resolution,
+    antialias: true,
+  });
+  const sprite = new Sprite(texture);
+  parent.addChild(sprite);
+  let drawn: { x: number; y: number; scale: number } | undefined;
+  const shownAlpha = new Map<Layer, number>();
 
   const lakeOutlines = map.terrain.filter((a) => a.kind === 'lake').map((a) => a.outline);
   const lakeRings: MapLine[] = lakeOutlines.flatMap((outline) =>
@@ -130,6 +148,17 @@ export function createTerrain(map: GameMap, parent: Container): Terrain {
     return g;
   }
 
+  const [, wide] = layers;
+  if (wide) {
+    for (let j = 0; j * wide.size < map.height; j++) {
+      for (let i = 0; i * wide.size < map.width; i++) {
+        const key = i * 4096 + j;
+        const chunk = wide.build(rectOf(wide.size, key));
+        wide.chunks.set(key, { graphics: chunk, bornAt: -Infinity });
+        wide.container.addChild(chunk);
+      }
+    }
+  }
   let lastCamera: Camera = { centre: { x: NaN, y: NaN }, scale: NaN };
   let stillSince = 0;
 
@@ -165,9 +194,12 @@ export function createTerrain(map: GameMap, parent: Container): Terrain {
       lastCamera = camera;
       const still = now - stillSince > PREFETCH_AFTER_MS;
       let fading = false;
+      let changed = false;
       let next: { layer: Layer; key: number; distance: number; needed: boolean } | undefined;
       for (const layer of layers) {
         const alpha = detailAlpha(layer.band, camera.scale);
+        if (shownAlpha.get(layer) !== alpha) changed = true;
+        shownAlpha.set(layer, alpha);
         layer.container.alpha = alpha;
         layer.container.visible = alpha > 0.002;
         const soon = camera.scale > layer.band.in[0] / PREFETCH_ZOOM;
@@ -177,8 +209,14 @@ export function createTerrain(map: GameMap, parent: Container): Terrain {
         const ring = still ? size : 0;
         const i0 = Math.max(0, Math.floor((view.left - ring) / size));
         const j0 = Math.max(0, Math.floor((view.top - ring) / size));
-        const i1 = Math.floor((view.right + ring) / size);
-        const j1 = Math.floor((view.bottom + ring) / size);
+        const i1 = Math.min(
+          Math.ceil(map.width / size) - 1,
+          Math.floor((view.right + ring) / size),
+        );
+        const j1 = Math.min(
+          Math.ceil(map.height / size) - 1,
+          Math.floor((view.bottom + ring) / size),
+        );
         for (let i = i0; i <= i1; i++) {
           for (let j = j0; j <= j1; j++) {
             const key = i * 4096 + j;
@@ -206,9 +244,11 @@ export function createTerrain(map: GameMap, parent: Container): Terrain {
         }
         for (const [key, chunk] of layer.chunks) {
           const shown = wanted.has(key);
+          if (chunk.graphics.visible !== shown) changed = true;
           chunk.graphics.visible = shown;
           if (!shown) continue;
           const age = Math.min(1, (now - chunk.bornAt) / CHUNK_FADE_MS);
+          if (chunk.graphics.alpha !== age) changed = true;
           chunk.graphics.alpha = age;
           if (age < 1) fading = true;
         }
@@ -224,6 +264,27 @@ export function createTerrain(map: GameMap, parent: Container): Terrain {
         for (const other of layer.chunks.keys()) if (other !== key && other % 4096 <= row) before++;
         layer.container.addChildAt(graphics, Math.min(before, layer.container.children.length));
         fading = true;
+      }
+      const x = viewport.width / 2 - camera.centre.x * camera.scale;
+      const y = viewport.height / 2 - camera.centre.y * camera.scale;
+      const width = Math.ceil(viewport.width) + 2 * CACHE_MARGIN;
+      const height = Math.ceil(viewport.height) + 2 * CACHE_MARGIN;
+      const resized = texture.width !== width || texture.height !== height;
+      if (resized) texture.resize(width, height, renderer.resolution);
+      if (
+        changed ||
+        resized ||
+        !drawn ||
+        drawn.scale !== camera.scale ||
+        Math.abs(x - drawn.x) > CACHE_MARGIN ||
+        Math.abs(y - drawn.y) > CACHE_MARGIN
+      ) {
+        art.scale.set(camera.scale);
+        art.position.set(x + CACHE_MARGIN, y + CACHE_MARGIN);
+        renderer.render({ container: root, target: texture, clear: true });
+        drawn = { x, y, scale: camera.scale };
+        sprite.scale.set(1 / camera.scale);
+        sprite.position.set((-CACHE_MARGIN - x) / camera.scale, (-CACHE_MARGIN - y) / camera.scale);
       }
       return fading;
     },
