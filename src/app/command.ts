@@ -1,5 +1,5 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { ArmyId } from '../sim/ids.ts';
+import type { ArmyId, FactionId } from '../sim/ids.ts';
 import {
   CONVOY_KM_PER_DAY,
   MARCH_KM_PER_DAY,
@@ -19,12 +19,13 @@ import type { Army } from '../sim/state/army.ts';
 import type { City } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
-import { SIEGE_DISTANCE } from '../sim/systems/sieges.ts';
+import { menOf } from '../sim/systems/economy.ts';
+import { BLOCKADE_ODDS, SIEGE_DISTANCE } from '../sim/systems/sieges.ts';
 import { areAtWar } from '../sim/wars.ts';
 import { connected, distance, findPath, locate, surfaceAt } from '../sim/world/find-path.ts';
 import { nearestSea, type World } from '../sim/world/world.ts';
 import { movedArmy } from './clock.ts';
-import { factionName, placeName, refusalText } from './names.ts';
+import { factionName, placeName, refusalText, whole } from './names.ts';
 
 type State = DeepReadonly<GameState>;
 
@@ -57,7 +58,13 @@ export interface OrderMenu {
 
 /** What a right click does with the selected army. A notice tells the player why. */
 export type Plan =
-  | { readonly kind: 'issue'; readonly order: Order; readonly notice?: string }
+  | {
+      readonly kind: 'issue';
+      readonly order: Order;
+      readonly notice?: string;
+      /** What the order does, such as the days a march takes, told when no notice warns. */
+      readonly info: string;
+    }
   | { readonly kind: 'menu'; readonly menu: OrderMenu; readonly notice?: string }
   | { readonly kind: 'refuse'; readonly notice: string };
 
@@ -284,11 +291,33 @@ function seaOption(state: State, way: SeaWay): MenuOption {
  * the ways left with their days. What the rules would refuse is refused at once, in
  * words, and never queued.
  */
+/**
+ * Why a siege of the city by the army, with its owner's armies that besiege it already,
+ * would not cut the city's food: fewer men than BLOCKADE_ODDS times the garrison, the
+ * test the weak-siege news uses. It names the garrison, the men, and the men still needed.
+ */
+function weakSiegeWarning(
+  state: State,
+  army: DeepReadonly<Army>,
+  city: DeepReadonly<City>,
+): string | undefined {
+  const siege = Object.values(state.sieges).find((s) => s.city === city.id);
+  const others = (siege?.besiegers ?? []).flatMap((id) => {
+    const other = state.armies[id];
+    return other && other.id !== army.id && other.owner === army.owner ? [other] : [];
+  });
+  const men = [army, ...others].reduce((sum, one) => sum + menOf(state, one), 0);
+  const needed = Math.ceil(BLOCKADE_ODDS * city.garrison) - men;
+  if (needed <= 0) return undefined;
+  return `${city.name} holds a garrison of ${whole(city.garrison)}, more than the ${whole(men)} men who would besiege it. Its food would not fall, and sallies would cut the besiegers down. ${whole(needed)} more men would hold the siege.`;
+}
+
 export function planCommand(
   state: State,
   world: World,
   army: DeepReadonly<Army>,
   target: CommandTarget,
+  pending: readonly Order[] = [],
 ): Plan {
   const city = target.kind === 'city' ? target.city : undefined;
   const to = target.kind === 'city' ? target.city.position : target.point;
@@ -298,9 +327,18 @@ export function planCommand(
     army: army.id,
     to: { x: to.x, y: to.y },
   };
+  // A war declared while the game is paused begins on the day the march is given.
+  const atWar = (owner: FactionId) =>
+    areAtWar(state, army.owner, owner) ||
+    pending.some(
+      (order) =>
+        order.kind === 'declareWar' && order.faction === army.owner && order.against === owner,
+    );
   const notice =
-    city && city.owner !== army.owner && !areAtWar(state, army.owner, city.owner)
-      ? `At peace with ${factionName(state, city.owner)}. Declare war to besiege it.`
+    city && city.owner !== army.owner
+      ? atWar(city.owner)
+        ? weakSiegeWarning(state, army, city)
+        : `At peace with ${factionName(state, city.owner)}. Declare war to besiege it.`
       : undefined;
   const found = route(state, world, march);
   // The rules name a destination by its coordinates. A city the player clicked reads better by name.
@@ -351,7 +389,8 @@ export function planCommand(
       notice: `${refusal(found)} No way by sea lands within ${MAX_MARCH_DAYS} days' march of it.`,
     };
   }
-  return { kind: 'issue', order: march, notice };
+  const info = `March to ${city?.name ?? placeName(state, to).replace(/^(at|near) /, 'a point near ')}: ${daysText(found.days)}.`;
+  return { kind: 'issue', order: march, info, ...(notice && { notice }) };
 }
 
 /**

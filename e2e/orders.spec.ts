@@ -124,9 +124,10 @@ test.describe('orders by right click', () => {
           await expect(activity).toHaveText(`Idle near ${name}`);
           const icon = view.city(id);
           await rightClick(page, { x: icon.x + dx, y: icon.y + dy });
+          await expect(page.getByTestId('notice')).toHaveText(`March to ${name}: 1 day.`);
+          await expect(page.getByTestId('notice')).toHaveAttribute('data-tone', 'info');
           await resume(page);
           await expect(activity).toHaveText(new RegExp(`^Besieging ${name} · day \\d+$`));
-          await expect(page.getByTestId('notice')).toHaveCount(0);
         });
       }
     }
@@ -143,7 +144,7 @@ test.describe('orders by right click', () => {
     await load(page, armyBeside('massalia', { war: false }));
     await rightClick(page, view.city('massalia'));
     await expect(page.getByTestId('notice')).toHaveText(
-      'At peace with Massalia. Declare war to besiege it.',
+      'March to Massalia: 1 day. At peace with Massalia. Declare war to besiege it.',
     );
     await resume(page);
     await expect(activity).toHaveText('Idle at Massalia');
@@ -159,9 +160,9 @@ test.describe('orders by right click', () => {
     await pause(page);
     await load(page, armyBeside('massalia', { war: true }));
     await rightClick(page, view.city('massalia'));
+    await expect(page.getByTestId('notice')).toHaveAttribute('data-tone', 'info');
     await resume(page);
     await expect(activity).toHaveText(/^Besieging Massalia · day \d+$/);
-    await expect(page.getByTestId('notice')).toHaveCount(0);
   });
 
   test('twenty right clicks in a pause leave one order for the army, which marches to the last place', async ({
