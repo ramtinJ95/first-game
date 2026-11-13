@@ -411,7 +411,15 @@ function homeOf(state: DeepReadonly<GameState>): MapPoint | undefined {
 
 /** What the page keeps beside the game in a save. */
 function pageNow(): Page {
-  return { chronicle, camera: renderer.camera(), selection, panel, occupied };
+  return {
+    chronicle,
+    camera: renderer.camera(),
+    selection,
+    panel,
+    occupied,
+    told: toldOnce,
+    weakSieges,
+  };
 }
 
 /**
@@ -428,14 +436,14 @@ function enter(
 ) {
   clock.load(state);
   chronicle = page?.chronicle ?? [];
-  toldOnce = new Set(chronicle.flatMap((alert) => alert.pause?.once ?? []));
+  toldOnce = new Set(page?.told);
   occupied = new Map(page?.occupied);
   if (page) {
     panel = page.panel;
     selection =
       page.selection && seesPick(sightFor(state), page.selection) ? page.selection : undefined;
   }
-  weakSieges = new Map();
+  weakSieges = new Map(page?.weakSieges);
   menu = undefined;
   stopAsked = false;
   const outcome = outcomeOf(state, world, state.player);
@@ -460,7 +468,7 @@ function covered(): Insets {
     return element && element.childElementCount > 0 ? element.getBoundingClientRect() : undefined;
   };
   const bar = box('[data-testid="top-bar"]');
-  const overview = box('[data-testid="overview"]');
+  const overview = box('[data-testid="overview"]') ?? box('[data-testid="chronicle"]');
   const side = box('aside[aria-label="Selection"]');
   // Below 720 px the side column is a sheet along the bottom.
   const narrow = window.innerWidth < 720;

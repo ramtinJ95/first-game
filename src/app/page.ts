@@ -1,10 +1,17 @@
 import * as v from 'valibot';
 import type { Camera } from '../render/camera.ts';
 import type { Pick } from '../render/pick.ts';
-import { ArmyIdSchema, BattleIdSchema, CityIdSchema, ProvinceIdSchema } from '../sim/ids.ts';
+import {
+  ArmyIdSchema,
+  BattleIdSchema,
+  CityIdSchema,
+  ProvinceIdSchema,
+  SiegeIdSchema,
+  type SiegeId,
+} from '../sim/ids.ts';
 import { DaySchema } from '../sim/state/day.ts';
 import { MapPointSchema } from '../sim/state/map-point.ts';
-import { ALERT_KINDS, PAUSE_KINDS, type Alert, type Occupied } from './alerts.ts';
+import { ALERT_KINDS, PAUSE_KINDS, type Alert, type Occupied, type WeakSiege } from './alerts.ts';
 
 /** The panels that open over the map's left side, one at a time. */
 export const PANELS = ['overview', 'chronicle'] as const;
@@ -43,12 +50,25 @@ const PageSchema = v.object({
   selection: v.optional(PickSchema),
   panel: v.optional(v.picklist(PANELS)),
   occupied: v.array(v.tuple([CityIdSchema, DaySchema])),
+  told: v.array(v.string()),
+  weakSieges: v.array(
+    v.tuple([
+      SiegeIdSchema,
+      v.object({
+        men: v.array(v.tuple([ArmyIdSchema, v.number()])),
+        killed: v.number(),
+        bled: v.boolean(),
+      }),
+    ]),
+  ),
 });
 
 /**
  * What the page keeps beside the game in a save, so a loaded game opens where the
  * player left it: the chronicle, the camera, the selection, the open panel, and the
- * cities the player chose to occupy.
+ * cities the player chose to occupy. It also keeps what the news has told already, the
+ * keys of news told once and the weak sieges watched, so a loaded game neither tells
+ * them again nor stops for them twice.
  */
 export interface Page {
   readonly chronicle: readonly Alert[];
@@ -56,10 +76,17 @@ export interface Page {
   readonly selection: Pick | undefined;
   readonly panel: Panel | undefined;
   readonly occupied: Occupied;
+  readonly told: ReadonlySet<string>;
+  readonly weakSieges: ReadonlyMap<SiegeId, WeakSiege>;
 }
 
 export function pageData(page: Page): unknown {
-  return { ...page, occupied: [...page.occupied] };
+  return {
+    ...page,
+    occupied: [...page.occupied],
+    told: [...page.told],
+    weakSieges: [...page.weakSieges].map(([id, siege]) => [id, { ...siege, men: [...siege.men] }]),
+  };
 }
 
 /**
@@ -79,9 +106,19 @@ export function parsePage(
       error: `The save's page is malformed at ${path ? `page.${path}` : 'page'}: ${first.message}`,
     };
   }
-  const { chronicle, camera, selection, panel, occupied } = parsed.output;
+  const { chronicle, camera, selection, panel, occupied, told, weakSieges } = parsed.output;
   return {
     ok: true,
-    page: { chronicle, camera, selection, panel, occupied: new Map(occupied) },
+    page: {
+      chronicle,
+      camera,
+      selection,
+      panel,
+      occupied: new Map(occupied),
+      told: new Set(told),
+      weakSieges: new Map(
+        weakSieges.map(([id, siege]) => [id, { ...siege, men: new Map(siege.men) }]),
+      ),
+    },
   };
 }

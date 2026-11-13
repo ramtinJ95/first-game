@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildFixture, FIXTURE } from '../sim/fixture.ts';
-import type { CityId } from '../sim/ids.ts';
+import type { CityId, SiegeId } from '../sim/ids.ts';
 import { loadGame, saveGame } from '../sim/save.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { Alert } from './alerts.ts';
@@ -36,11 +36,15 @@ function keptPage(): Page {
     selection: { kind: 'army', army: f.romanArmy },
     panel: 'chronicle',
     occupied: new Map([[f.syracusae as CityId, 4 as Day]]),
+    told: new Set(['["carthage","rome"]@1']),
+    weakSieges: new Map([
+      ['siege-1' as SiegeId, { men: new Map([[f.romanArmy, 1200]]), killed: 300, bled: false }],
+    ]),
   };
 }
 
 describe('the page a save keeps', () => {
-  it('loads back the chronicle, the camera, the selection, the open panel, and the occupied cities', () => {
+  it('loads back the chronicle, the camera, the selection, the open panel, the occupied cities, and what the news told', () => {
     const page = keptPage();
     const loaded = loadGame(saveGame(buildFixture(), pageData(page)));
     if (!loaded.ok) throw new Error(loaded.error);
