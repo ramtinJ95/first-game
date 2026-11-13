@@ -93,8 +93,11 @@ async function zoomTo(page: Page, at: MapPoint, scale: number) {
   await page.mouse.up();
   const busy = page.locator('canvas[data-terrain="busy"]');
   const flagged = await page.locator('canvas[data-terrain]').count();
-  if (flagged > 0)
+  if (flagged > 0) {
+    // The flag still says "ready" for the old view until the page draws a frame of the new one.
+    await busy.waitFor({ timeout: 10_000 }).catch(() => undefined);
     await busy.waitFor({ state: 'detached', timeout: 120_000 }).catch(() => undefined);
+  }
 }
 
 async function measure(browser: Browser, base: string, query: string, zoom: string, shot?: string) {
