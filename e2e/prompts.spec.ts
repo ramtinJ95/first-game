@@ -16,6 +16,7 @@ import {
   resume,
   startGame,
   untilDay,
+  clearCentre,
   untilDrawn,
 } from './support.ts';
 
@@ -61,21 +62,6 @@ test.describe('the prompts say what they do', () => {
     await expect(page.getByTestId('alerts')).not.toContainText('No fate was chosen');
   });
 });
-
-/** The centre of the part of the page the top bar, the overview, and the side column leave clear. */
-async function clearCentre(page: Page) {
-  return page.evaluate(() => {
-    const box = (selector: string) => {
-      const element = document.querySelector(selector);
-      return element && element.childElementCount > 0 ? element.getBoundingClientRect() : undefined;
-    };
-    const top = box('[data-testid="top-bar"]')?.bottom ?? 0;
-    const left = box('[data-testid="overview"]')?.right ?? 0;
-    const side = box('aside[aria-label="Selection"]');
-    const right = side ? side.left : window.innerWidth;
-    return { x: (left + right) / 2, y: (top + window.innerHeight) / 2 };
-  });
-}
 
 /**
  * Clicks the flag of the banner whose foot stands at the screen point. The flag is a

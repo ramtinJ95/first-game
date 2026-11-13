@@ -12,6 +12,7 @@ import {
   armyOf,
   camera,
   cityPoint,
+  clearCentre,
   day,
   dropSave,
   map,
@@ -125,9 +126,9 @@ test.describe('the frame round the game', () => {
       await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
       expect(await day(page)).toBe(1);
 
-      const viewport = page.viewportSize();
-      if (!viewport) throw new Error('no viewport');
-      await page.mouse.click(viewport.width / 2, viewport.height / 2 + 14);
+      await untilDrawn(page);
+      const centre = await clearCentre(page);
+      await page.mouse.click(centre.x, centre.y + 14);
       await expect(page.getByTestId('city-name')).toHaveText(capital.name);
       expect(await day(page)).toBe(1);
     });
@@ -285,12 +286,9 @@ test.describe('the frame round the game', () => {
     expect(await day(page)).toBe(saved);
     await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
 
-    const viewport = page.viewportSize();
-    if (!viewport) throw new Error('no viewport');
-    await page.mouse.click(
-      viewport.width / 2 + BANNER.flagWidth / 2,
-      viewport.height / 2 - BANNER.pole + 5,
-    );
+    await untilDrawn(page);
+    const centre = await clearCentre(page);
+    await page.mouse.click(centre.x + BANNER.flagWidth / 2, centre.y - BANNER.pole + 5);
     await expect(army.getByTestId('army-men')).toHaveText('1,534 men');
     await expect(army.getByTestId('army-activity')).toHaveText(activity ?? '');
   });

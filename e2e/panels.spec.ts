@@ -279,6 +279,7 @@ test.describe('the panels', () => {
     const battle = page.getByTestId('battle-panel');
     await expect(battle).toBeVisible();
     await pause(page);
+    await untilDrawn(page);
     await expect(battle.getByTestId('battle-day')).toHaveText(/^day \d+$/);
     await expect(battle.getByTestId('battle-attackers')).toContainText(/men$/);
     await expect(battle.getByTestId('formation')).toHaveCount(4);

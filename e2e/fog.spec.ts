@@ -111,7 +111,10 @@ test.describe('fog of war', () => {
     expect(await punicPixels(page, OUT_OF_SIGHT)).toBe(0);
     const flag = camera(page).banner(OUT_OF_SIGHT);
     await page.mouse.click(flag.x, flag.y);
-    await expect(page.getByTestId('city-name')).toHaveText(cityUnder(page, state, flag));
+    // The point lies by Lugdunum's name, so the click means Lugdunum, whose province it
+    // is not, and never the hidden army.
+    await expect(page.getByTestId('city-name')).toHaveText('Lugdunum');
+    expect(cityUnder(page, state, flag)).not.toBe('Lugdunum');
     await expect(page.getByTestId('army-panel')).toHaveCount(0);
   });
 
@@ -177,6 +180,7 @@ test.describe('fog of war', () => {
     await resume(page);
     await untilDay(page, state.day + 1);
     await pause(page);
+    await untilDrawn(page);
     const alerts = page.getByTestId('alerts').getByRole('button');
     await expect(alerts.filter({ hasText: /Battle .*Massalia/ })).toHaveCount(1);
     await expect(alerts.filter({ hasText: /Macedon|Egypt/ })).toHaveCount(0);

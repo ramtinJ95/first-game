@@ -259,17 +259,18 @@ export interface WeakSiege {
   readonly men: ReadonlyMap<ArmyId, number>;
   /** The men the besiegers lost while in the siege since it was told of. */
   readonly killed: number;
-  /** Whether the player has been told that the sallies killed `BLED_SHARE` of them. */
+  /** Whether the player has been told that the besiegers lost `BLED_SHARE` of their men. */
   readonly bled: boolean;
 }
 
-/** The share of a weak siege's men that sallies kill before the player is warned again. */
+/** The share of a weak siege's men lost, to sallies, storms, or desertion, before the player is warned again. */
 export const BLED_SHARE = 1 / 3;
 
 /**
  * The news of the player's sieges too weak to cut the food (besiegers fewer than
  * `BLOCKADE_ODDS` times the garrison): one alert on the day a siege is weak, and one
- * once the besiegers have lost `BLED_SHARE` of their men while in it. An army that
+ * once the besiegers have lost `BLED_SHARE` of their men while in it, whatever killed
+ * them, since the page cannot tell a sally's dead from a storm's. An army that
  * leaves takes its men with it and counts as no loss, and one that joins adds its own.
  * `watched` is what was told before, which the page keeps, and the result gives it for
  * the next day.
@@ -316,7 +317,7 @@ export function weakSiegeNews(
         kind: 'siegeBled',
         day: before.day,
         tone: 'bad',
-        text: `Sallies from ${city.name} have killed a third of your besiegers: ${whole(killed)} men lost, ${whole(total)} left`,
+        text: `Your besiegers at ${city.name} have lost a third of their men in a siege too weak to starve it: ${whole(killed)} lost, ${whole(total)} left`,
         focus,
       });
     }

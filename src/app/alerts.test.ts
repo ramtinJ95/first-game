@@ -595,7 +595,7 @@ describe('sightingsOfDay', () => {
 });
 
 describe('weakSiegeNews', () => {
-  it('tells on the first day that a siege of the player is too weak, and once when sallies have killed a third of it', () => {
+  it('tells on the first day that a siege of the player is too weak, and once when its besiegers have lost a third of their men', () => {
     let state = buildFixture();
     atWar(state, f.rome, f.syracusaeFaction);
     const roman = state.armies[f.romanArmy];
@@ -625,7 +625,7 @@ describe('weakSiegeNews', () => {
         'siegeBled',
         expect.any(Number),
         expect.stringMatching(
-          /^Sallies from Syracusae have killed a third of your besiegers: \d+ men lost, \d+ left$/,
+          /^Your besiegers at Syracusae have lost a third of their men in a siege too weak to starve it: \d+ lost, \d+ left$/,
         ),
       ],
     ]);
@@ -669,6 +669,32 @@ describe('weakSiegeNews', () => {
     const gone = after.armies[second.id];
     if (gone) gone.activity = { kind: 'idle', position: { x: 0, y: 0 } };
     expect(weakSiegeNews(both, after, told.watched).alerts).toEqual([]);
+  });
+
+  it('does not blame the sallies for the dead of a failed storm', () => {
+    const state = buildFixture();
+    atWar(state, f.rome, f.syracusaeFaction);
+    const roman = state.armies[f.romanArmy];
+    const syracusae = state.cities[f.syracusae];
+    if (!roman || !syracusae) throw new Error('fixture changed');
+    roman.activity = { kind: 'idle', position: { ...syracusae.position } };
+    for (const id of roman.formations) {
+      const formation = state.formations[id];
+      if (formation) formation.men = 550;
+    }
+    // Without walls a failed storm kills about half the garrison's number, which leaves men.
+    Object.assign(syracusae, { walls: 0, garrison: 1190 });
+    const first = tick(state, [], world).state;
+    const told = weakSiegeNews(state, first, new Map());
+    const stormed = tick(
+      first,
+      [{ kind: 'storm', faction: f.rome, city: f.syracusae }],
+      world,
+    ).state;
+    expect(stormed.cities[f.syracusae]?.owner).toBe(f.syracusaeFaction);
+    const news = weakSiegeNews(first, stormed, told.watched).alerts;
+    expect(news.map((a) => a.kind)).toEqual(['siegeBled']);
+    expect(news[0]?.text).not.toMatch(/[Ss]all/);
   });
 
   it('says nothing of a siege strong enough to cut the food', () => {

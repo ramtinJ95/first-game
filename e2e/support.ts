@@ -621,3 +621,21 @@ export function carthageSailsOnRoma(): GameState {
   }
   throw new Error("Carthage's fleet never came into Rome's sight");
 }
+
+/**
+ * The centre of the part of the page the top bar, the overview, and the side column
+ * leave clear, where the page centres what the player chose.
+ */
+export async function clearCentre(page: Page) {
+  return page.evaluate(() => {
+    const box = (selector: string) => {
+      const element = document.querySelector(selector);
+      return element && element.childElementCount > 0 ? element.getBoundingClientRect() : undefined;
+    };
+    const top = box('[data-testid="top-bar"]')?.bottom ?? 0;
+    const left = box('[data-testid="overview"]')?.right ?? 0;
+    const side = box('aside[aria-label="Selection"]');
+    const right = side ? side.left : window.innerWidth;
+    return { x: (left + right) / 2, y: (top + window.innerHeight) / 2 };
+  });
+}
