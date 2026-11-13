@@ -75,9 +75,31 @@ export const MAX_RETREAT_DAYS =
 /** How a stance scales the blows an army gives, the blows it takes, and the morale it loses. */
 export const STANCE_EFFECTS: Record<Stance, { dealt: number; taken: number; morale: number }> = {
   holdTheLine: { dealt: 1, taken: 1, morale: 1 },
-  allOutAssault: { dealt: 1.5, taken: 1.4, morale: 1 },
-  skirmishAndWithdraw: { dealt: 0.6, taken: 0.6, morale: 2.5 },
+  allOutAssault: { dealt: 1.25, taken: 1.25, morale: 1 },
+  skirmishAndWithdraw: { dealt: 0.75, taken: 0.75, morale: 1 },
 };
+
+/**
+ * The stance each stance beats. A held line breaks an assault on its braced front, an
+ * assault runs skirmishers down before they can withdraw, and skirmishers shoot down a
+ * line that stands still. The army whose stance beats its enemy's deals STANCE_EDGE
+ * times its blows to it, the beaten stance deals that much less, and the beaten side's
+ * morale falls STANCE_EDGE times as fast, so the right stance is worth about a quarter
+ * more men.
+ */
+export const STANCE_BEATS: Readonly<Record<Stance, Stance>> = {
+  holdTheLine: 'allOutAssault',
+  allOutAssault: 'skirmishAndWithdraw',
+  skirmishAndWithdraw: 'holdTheLine',
+};
+export const STANCE_EDGE = 1.27;
+
+/** What one army's stance multiplies its blows on another army by. */
+export function stanceEdge(mine: Stance, theirs: Stance): number {
+  if (STANCE_BEATS[mine] === theirs) return STANCE_EDGE;
+  if (STANCE_BEATS[theirs] === mine) return 1 / STANCE_EDGE;
+  return 1;
+}
 
 type Side = 'attackers' | 'defenders';
 
@@ -258,6 +280,7 @@ function fightOneDay(state: GameState, id: BattleId) {
         const bonus = troop.bonus[TROOPS[target.formation.troop].category] ?? 1;
         const killed =
           (blows *
+            stanceEdge(army.stance, target.army.stance) *
             (target.formation.men / atMen) *
             bonus *
             KILL_RATE *
@@ -278,6 +301,7 @@ function fightOneDay(state: GameState, id: BattleId) {
     ['attackers', attackers, pressureOn(attackerMen, defenderMen, attackersLost, defendersLost)],
     ['defenders', defenders, pressureOn(defenderMen, attackerMen, defendersLost, attackersLost)],
   ] as const) {
+    const enemies = side === 'attackers' ? defenders : attackers;
     for (const { formation, army } of fighters) {
       const cap = Math.max(Math.round(formation.men * MAX_DAILY_LOSS), REMNANT_MEN);
       const lost = Math.min(formation.men, cap, Math.round(losses.get(formation) ?? 0));
@@ -285,12 +309,24 @@ function fightOneDay(state: GameState, id: BattleId) {
       const moraleLost =
         ((lost / formation.men) * MORALE_PER_LOSS + DAILY_STRAIN) *
         pressure *
+        edgeOn(army, enemies) *
         (STANCE_EFFECTS[army.stance].morale /
           (TROOPS[formation.troop].discipline * generalFactor(army)));
       formation.men -= lost;
       formation.morale = Math.max(0, formation.morale - moraleLost);
     }
   }
+}
+
+/** The edge the enemy's stances hold over the army's, weighted by the enemy's men. */
+function edgeOn(army: Army, enemies: readonly Fighter[]): number {
+  let men = 0;
+  let sum = 0;
+  for (const { formation, army: enemy } of enemies) {
+    men += formation.men;
+    sum += formation.men * stanceEdge(enemy.stance, army.stance);
+  }
+  return men === 0 ? 1 : sum / men;
 }
 
 /**

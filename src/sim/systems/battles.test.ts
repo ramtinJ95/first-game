@@ -659,12 +659,31 @@ describe('stances', () => {
     expect(assault.keptB).toBeLessThan(hold.keptB);
   });
 
-  test('skirmishAndWithdraw costs both sides fewer men, and the skirmisher gives up the field sooner', () => {
-    const skirmish = averages('skirmishAndWithdraw', 'holdTheLine');
-    expect(skirmish.days).toBeLessThan(hold.days);
+  test('skirmishAndWithdraw on both sides costs both fewer men', () => {
+    const skirmish = averages('skirmishAndWithdraw', 'skirmishAndWithdraw');
     expect(skirmish.keptA).toBeGreaterThan(hold.keptA);
     expect(skirmish.keptB).toBeGreaterThan(hold.keptB);
-    expect(skirmish.aWins).toBeLessThan(0.1);
+  });
+
+  test.each([
+    ['holdTheLine', 'allOutAssault'],
+    ['allOutAssault', 'skirmishAndWithdraw'],
+    ['skirmishAndWithdraw', 'holdTheLine'],
+  ] as const)('in an even battle %s beats %s', (mine, theirs) => {
+    expect(averages(mine, theirs).aWins).toBeGreaterThan(0.65);
+  });
+
+  test('the right stance gives a side outnumbered 1.3 to 1 a fair chance', () => {
+    const more = Object.fromEntries(Object.entries(MIX).map(([troop, men]) => [troop, men * 1.3]));
+    const wins = (a: Stance, b: Stance) =>
+      Array.from({ length: SEEDS }, (_, seed) =>
+        playTrial(
+          { name: '', a: { troops: MIX, stance: a }, b: { troops: more, stance: b } },
+          seed + 1,
+        ),
+      ).filter((r) => r.winner === 'a').length / SEEDS;
+    expect(wins('skirmishAndWithdraw', 'holdTheLine')).toBeGreaterThanOrEqual(0.3);
+    expect(wins('holdTheLine', 'holdTheLine')).toBe(0);
   });
 });
 
