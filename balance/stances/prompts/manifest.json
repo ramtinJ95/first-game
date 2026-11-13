@@ -1,0 +1,42 @@
+[
+  {
+    "file": "fate-prompt.png",
+    "title": "Mediolanum falls to Rome: each fate says what the city then yields a day, and what a sack or an enslavement takes from occupying it",
+    "kind": "screenshot"
+  },
+  {
+    "file": "storm-confirmation.png",
+    "title": "The storm of Carthago asks to be confirmed with the rules' odds: how often it takes the city, and the men it is expected to cost",
+    "kind": "screenshot"
+  },
+  {
+    "file": "fleet-sighted.png",
+    "title": "Carthage's fleet comes into Rome's sight on its way to Roma: one alert with its men and where it sails",
+    "kind": "screenshot"
+  },
+  {
+    "file": "evacuation-left.png",
+    "title": "The people of Roma leave for Capua: an alert tells of it, and the overview lists them on the road",
+    "kind": "screenshot"
+  },
+  {
+    "file": "evacuation-arrived.png",
+    "title": "They settle in Capua, and an alert tells of that too",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The prompts say what they do: the fate of a city with what occupying yields, a storm with its odds, a fleet sighted, and an evacuation told",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The prompts say what they do: the fate of a city with what occupying yields, a storm with its odds, a fleet sighted, and an evacuation told (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The prompts say what they do: the fate of a city with what occupying yields, a storm with its odds, a fleet sighted, and an evacuation told (Playwright trace)",
+    "kind": "trace"
+  }
+]
