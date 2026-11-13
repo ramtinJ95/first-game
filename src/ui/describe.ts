@@ -1,4 +1,11 @@
-import { AT_CITY_KM, factionName, nearestCity, placeName, TROOP_NAMES } from '../app/names.ts';
+import {
+  AT_CITY_KM,
+  factionName,
+  nearestCity,
+  placeName,
+  TROOP_NAMES,
+  whole,
+} from '../app/names.ts';
 import { factionColour } from '../render/palette.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { Pick } from '../render/pick.ts';
@@ -15,7 +22,17 @@ import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { warSides } from '../sim/state/war.ts';
 import { STANCE_EFFECTS } from '../sim/systems/battles.ts';
-import { menOf } from '../sim/systems/economy.ts';
+import { SACK } from '../sim/cities.ts';
+import type { Siege } from '../sim/state/siege.ts';
+import type { Stores } from '../sim/state/faction.ts';
+import {
+  dailyBalances,
+  FOOD_PER_PERSON,
+  GRANARY_DAYS,
+  MANPOWER_SHARE,
+  menOf,
+} from '../sim/systems/economy.ts';
+import { BLOCKADE_ODDS } from '../sim/systems/sieges.ts';
 import { areAtWar } from '../sim/wars.ts';
 import { distance } from '../sim/world/find-path.ts';
 
@@ -367,4 +384,99 @@ export function overviewOf(state: State, sight: Sight): Overview {
       ];
     });
   return { cities, armies, wars: warsOf(state, state.player) };
+}
+
+/** What the city adds to its owner's stores each day: the economy's own balance of a realm of this city alone. */
+export function cityBalance(state: State, city: DeepReadonly<City>): Stores {
+  const alone = { ...state, cities: { [city.id]: city }, armies: {} };
+  return dailyBalances(alone).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
+}
+
+/** What the city's fields grow and its people eat each day, and the difference. */
+export function cityFoodText(state: State, city: DeepReadonly<City>): string {
+  const eats = city.population * FOOD_PER_PERSON;
+  const net = cityBalance(state, city).food;
+  return `Grows ${(net + eats).toFixed(1)}, eats ${eats.toFixed(1)} a day · ${signed(net)}`;
+}
+
+/** How long a sacked city still yields less gold, or nothing once it has recovered. */
+export function sackText(state: State, city: DeepReadonly<City>): string | undefined {
+  if (city.sackedOn === null) return undefined;
+  const left = SACK.poorDays - (state.day - city.sackedOn);
+  if (left <= 0) return undefined;
+  const share = SACK.poorOutput === 0.5 ? 'half' : `${Math.round(SACK.poorOutput * 100)}% of`;
+  return `Sacked on day ${city.sackedOn}: yields ${share} its gold for ${whole(left)} more days`;
+}
+
+/** A store's balance that runs out within this many days is a warning. */
+export const WARN_DAYS = 60;
+
+export interface StoreNote {
+  readonly text: string;
+  /** Why, in a sentence, for the tooltip. */
+  readonly why: string;
+  readonly bad: boolean;
+}
+
+/**
+ * What the top bar says beside a store: that it ran out, how many days it lasts while it
+ * falls, or that it stops growing at its limit (`limitsOf`), today or with tomorrow's gain.
+ */
+export function storeNote(
+  store: keyof Stores,
+  amount: number,
+  change: number,
+  limit: number | undefined,
+): StoreNote | undefined {
+  if (store !== 'manpower' && amount <= 0) {
+    return {
+      text: 'Ran out: formations desert',
+      why: 'Each formation loses men every day while it lasts.',
+      bad: true,
+    };
+  }
+  if (store !== 'manpower' && change < 0) {
+    const days = Math.floor(amount / -change);
+    return {
+      text: `Runs out in ${whole(days)} days`,
+      why: "At today's balance. Formations desert once it runs out.",
+      bad: days <= WARN_DAYS,
+    };
+  }
+  if (store === 'gold' || limit === undefined || change <= 0 || amount + change <= limit) {
+    return undefined;
+  }
+  const when = amount >= limit ? '' : ' tomorrow';
+  return store === 'food'
+    ? {
+        text: `Granaries full${when}`,
+        why: `Granaries hold ${GRANARY_DAYS} days of what your people and men eat. More food spoils.`,
+        bad: false,
+      }
+    : {
+        text: `At the call-up limit${when}`,
+        why: `You can call up ${Math.round(MANPOWER_SHARE * 100)}% of your people, less the men under arms and in training. Grow your cities or let men go to call up more.`,
+        bad: false,
+      };
+}
+
+/**
+ * Why a siege does not starve its city, or nothing when it does: its besiegers are
+ * fewer than the blockade needs, so the food holds and the garrison sallies. Nothing
+ * either while a besieger is out of sight, so the count gives away no hidden army.
+ */
+export function weakSiegeText(
+  state: State,
+  sight: Sight,
+  siege: DeepReadonly<Siege>,
+): string | undefined {
+  const city = state.cities[siege.city];
+  if (!city || !siege.besiegers.every((id) => sight.armies.has(id))) return undefined;
+  const men = siege.besiegers.reduce((sum, id) => {
+    const army = state.armies[id];
+    return sum + (army ? menOf(state, army) : 0);
+  }, 0);
+  if (men >= BLOCKADE_ODDS * city.garrison) return undefined;
+  const needed = Math.ceil(BLOCKADE_ODDS * city.garrison) - men;
+  return `Too few to starve ${city.name}: ${whole(men)} besiegers against a garrison of ${whole(city.garrison)}. The food does not fall, and sallies cut down besiegers each day. ${whole(needed)} more men would cut the food.`;
 }

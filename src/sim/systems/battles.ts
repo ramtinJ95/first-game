@@ -45,6 +45,13 @@ const MAX_DAILY_LOSS = 0.2;
 const REMNANT_MEN = 50;
 /** Morale that a formation of an idle army regains each day. */
 export const MORALE_RECOVERY = 0.05;
+/**
+ * Morale that a formation regains each day instead while its idle army stands within
+ * REFUGE_KM of a city of its owner that no siege holds, so a beaten army that reached a
+ * safe city can face the enemy that follows it.
+ */
+export const REFUGE_RECOVERY = 0.2;
+export const REFUGE_KM = 10;
 /** The share of its men that each formation of an army loses when it retreats by order. */
 export const RETREAT_LOSS = 0.15;
 /**
@@ -84,10 +91,18 @@ export function battles(state: GameState, world: World): void {
 }
 
 function recoverMorale(state: GameState) {
+  const besieged = new Set(Object.values(state.sieges).map((siege) => siege.city));
+  const refuges = Object.values(state.cities).filter((city) => !besieged.has(city.id));
   for (const army of Object.values(state.armies)) {
-    if (army.activity.kind !== 'idle') continue;
+    const { activity } = army;
+    if (activity.kind !== 'idle') continue;
+    const sheltered = refuges.some(
+      (city) =>
+        city.owner === army.owner && distance(city.position, activity.position) <= REFUGE_KM,
+    );
+    const recovery = sheltered ? REFUGE_RECOVERY : MORALE_RECOVERY;
     for (const formation of formationsOf(state, army)) {
-      formation.morale = Math.min(1, formation.morale + MORALE_RECOVERY);
+      formation.morale = Math.min(1, formation.morale + recovery);
     }
   }
 }

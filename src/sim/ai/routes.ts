@@ -135,7 +135,7 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
   }
 
   function reaches(from: MapPoint, target: CityView): boolean {
-    return options(from, target).length > 0;
+    return byLand(world, from, target.position) || options(from, target).length > 0;
   }
 
   return { routeTo, reaches, portAt };

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { playTrial, type ArmySpec, type Matchup } from '../battle-trial.ts';
 import { buildFixture, FIXTURE } from '../fixture.ts';
-import type { ArmyId, FactionId, FormationId } from '../ids.ts';
+import type { ArmyId, FactionId, FormationId, SiegeId } from '../ids.ts';
 import { executeOrder } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
 import { saveGame } from '../save.ts';
@@ -470,11 +470,50 @@ describe('the end of a battle', () => {
     expectConsistent(state);
   });
 
-  test('formations of an idle army regain morale each day', () => {
+  test('formations of an idle army in the field regain morale each day', () => {
     const state = buildFixture();
+    place(state, FIXTURE.punicArmy, { kind: 'idle', position: { x: 2300, y: 2800 } });
     const next = tick(state, [], world).state;
     expect(next.formations[FIXTURE.citizenSpears]?.morale).toBeCloseTo(0.9 + MORALE_RECOVERY);
-    expect(tick(next, [], world).state.formations[FIXTURE.hastati]?.morale).toBe(1);
+    expect(tick(next, [], world).state.formations[FIXTURE.citizenSpears]?.morale).toBeCloseTo(
+      0.9 + 2 * MORALE_RECOVERY,
+    );
+    expectConsistent(next);
+  });
+
+  test('a broken army at a city of its own that no siege holds regains a fifth of its morale a day', () => {
+    const state = buildFixture();
+    const spears = state.formations[FIXTURE.citizenSpears];
+    if (!spears) throw new Error('fixture changed');
+    spears.morale = 0;
+    const next = tick(state, [], world).state;
+    expect(next.formations[FIXTURE.citizenSpears]?.morale).toBeCloseTo(0.2);
+    expect(tick(next, [], world).state.formations[FIXTURE.citizenSpears]?.morale).toBeCloseTo(0.4);
+    expectConsistent(next);
+  });
+
+  test('a broken army at its own besieged city regains morale only at the pace of the field', () => {
+    // Besiegers at peace with Carthage fight no battle with it today, so the day shows recovery alone.
+    const state = buildFixture();
+    const spears = state.formations[FIXTURE.citizenSpears];
+    if (!spears) throw new Error('fixture changed');
+    spears.morale = 0;
+    const siege = 'siege-carthago' as SiegeId;
+    addArmy(
+      state,
+      'besiegers',
+      3000,
+      { kind: 'besieging', position: { x: 2229.9, y: 2875.1 }, siege },
+      FIXTURE.syracusaeFaction,
+    );
+    state.sieges[siege] = {
+      id: siege,
+      city: FIXTURE.carthago,
+      besiegers: ['besiegers' as ArmyId],
+      startedOn: state.day,
+    };
+    const next = tick(state, [], world).state;
+    expect(next.formations[FIXTURE.citizenSpears]?.morale).toBeCloseTo(MORALE_RECOVERY);
     expectConsistent(next);
   });
 });

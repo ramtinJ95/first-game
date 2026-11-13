@@ -1,4 +1,14 @@
-import { playTrial, type Matchup, type TrialResult } from '../src/sim/battle-trial.ts';
+import {
+  buildTrial,
+  playTrial,
+  TRIAL_ARMIES,
+  type Matchup,
+  type TrialResult,
+} from '../src/sim/battle-trial.ts';
+import { fixtureWorld } from '../src/sim/fixture.ts';
+import type { Order } from '../src/sim/orders/orders.ts';
+import type { GameState } from '../src/sim/state/game-state.ts';
+import { tick } from '../src/sim/tick.ts';
 
 const MIX: Matchup['a']['troops'] = {
   spearmen: 1500,
@@ -150,10 +160,109 @@ function printLog(index: number, seed: number) {
   });
 }
 
+/**
+ * Rome's 3,000 lose beside Roma and fall back to a city of Rome's. Carthage's army marches
+ * after them each day they stand still, as a winner that means to finish them does.
+ */
+const CHASES: Matchup[] = [
+  { name: 'chased by an equal mix, 3000 v 3000', a: { troops: MIX }, b: { troops: MIX } },
+  {
+    name: 'chased by a larger mix, 3000 v 4500',
+    a: { troops: MIX },
+    b: {
+      troops: Object.fromEntries(Object.entries(MIX).map(([troop, men]) => [troop, men * 1.5])),
+    },
+  },
+];
+const CHASE_SEEDS = 200;
+const CHASE_DAYS = 30;
+
+interface Chase {
+  /** The beaten army reached the city it fell back to. */
+  reached: boolean;
+  /** It was alive CHASE_DAYS after its first battle ended. */
+  alive: boolean;
+  /** The days of its first battle at its refuge, and whether it held the field, if it fought one. */
+  refuge?: { days: number; held: boolean };
+}
+
+function playChase(matchup: Matchup, seed: number): Chase | undefined {
+  const world = fixtureWorld();
+  const { a, b } = TRIAL_ARMIES;
+  let state: GameState = buildTrial(matchup, seed);
+  do state = tick(state, [], world).state;
+  while (Object.keys(state.battles).length > 0 && state.day < 60);
+  const retreat = state.armies[a]?.activity;
+  const to = retreat?.kind === 'retreating' ? retreat.waypoints.at(-1) : undefined;
+  if (!to) return undefined;
+  let reached = false;
+  let refuge: Chase['refuge'];
+  for (let day = 0; day < CHASE_DAYS; day++) {
+    const loser = state.armies[a];
+    const winner = state.armies[b];
+    if (!loser || loser.activity.kind === 'embarked') break;
+    const at = loser.activity.position;
+    if (loser.activity.kind === 'idle' && Math.hypot(at.x - to.x, at.y - to.y) < 1) reached = true;
+    const end = winner?.activity.kind === 'marching' ? winner.activity.waypoints.at(-1) : undefined;
+    const follows =
+      winner &&
+      loser.activity.kind === 'idle' &&
+      winner.activity.kind !== 'inBattle' &&
+      winner.activity.kind !== 'retreating' &&
+      !(end?.x === at.x && end.y === at.y);
+    const orders: Order[] = follows
+      ? [{ kind: 'moveArmy', faction: winner.owner, army: b, to: at }]
+      : [];
+    const { state: next, events } = tick(state, orders, world);
+    for (const event of events) {
+      if (event.kind !== 'battleEnded' || !reached || refuge) continue;
+      const side = event.attackers.factions.includes(loser.owner) ? 'attackers' : 'defenders';
+      refuge = { days: event.days, held: event.winner === side };
+    }
+    state = next;
+  }
+  return { reached, alive: Object.hasOwn(state.armies, a), ...(refuge && { refuge }) };
+}
+
+function summariseChase(matchup: Matchup) {
+  const chases = Array.from({ length: CHASE_SEEDS }, (_, seed) => playChase(matchup, seed + 1));
+  const beaten = chases.flatMap((c) => (c ? [c] : []));
+  const fought = beaten.flatMap((c) => (c.reached && c.refuge ? [c.refuge] : []));
+  return {
+    chase: matchup.name,
+    'Rome beaten': percent(beaten.length / CHASE_SEEDS),
+    'reached its refuge': percent(beaten.filter((c) => c.reached).length / beaten.length),
+    [`alive ${CHASE_DAYS} days on`]: percent(beaten.filter((c) => c.alive).length / beaten.length),
+    'fought there': percent(fought.length / beaten.length),
+    'broken there on day 1': percent(
+      fought.filter((r) => r.days === 1 && !r.held).length / fought.length,
+    ),
+    'days there p10/median/p90': [0.1, 0.5, 0.9]
+      .map((q) =>
+        quantile(
+          fought.map((r) => r.days),
+          q,
+        ),
+      )
+      .join(' / '),
+    'held the field there': percent(fought.filter((r) => r.held).length / fought.length),
+  };
+}
+
+function printChases() {
+  console.log(
+    `\n${CHASE_SEEDS} seeds per chase. Rome's beaten army falls back to its own city and the winner follows it.`,
+  );
+  console.table(CHASES.map(summariseChase));
+}
+
 const logAt = process.argv.indexOf('--log');
 if (logAt >= 0) {
   printLog(Number(process.argv[logAt + 1] ?? 0), Number(process.argv[logAt + 2] ?? 1));
+} else if (process.argv.includes('--chase')) {
+  printChases();
 } else {
   console.log(`${SEEDS} seeds per matchup. Keeps are shares of the men a side started with.`);
   console.table(MATCHUPS.map(summarise));
+  printChases();
 }

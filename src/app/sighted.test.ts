@@ -5,7 +5,7 @@ import { newGame } from '../sim/new-game.ts';
 import { sightOf } from '../sim/sight.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { Alert } from './alerts.ts';
-import { alertsInSight, seesPick } from './sighted.ts';
+import { alertsInSight, seesPick, sightOfAll } from './sighted.ts';
 
 const world = fixtureWorld();
 const state = newGame(world.map, { seed: 1, player: 'rome' });
@@ -51,5 +51,17 @@ describe('alertsInSight', () => {
     );
     expect(kept).toHaveLength(3);
     expect(kept.every((a) => a.focus?.at !== at)).toBe(true);
+  });
+});
+
+describe('sightOfAll', () => {
+  it('sees every army, battle, and place, as a defeated player watching on does', () => {
+    const all = sightOfAll(state);
+    expect(seesPick(all, { kind: 'army', army: persian.id })).toBe(true);
+    expect(all.armies.size).toBe(Object.keys(state.armies).length);
+    expect(
+      all.sees(persian.activity.kind === 'embarked' ? roma.position : persian.activity.position),
+    ).toBe(true);
+    expect(all.sees({ x: 0, y: 0 })).toBe(true);
   });
 });

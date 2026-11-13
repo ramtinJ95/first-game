@@ -113,8 +113,10 @@ function musteringRome(): GameState {
   const state = startGame();
   const roma = state.cities['roma' as CityId];
   if (!roma) throw new Error('no Roma');
-  roma.recruits = [1, 11].flatMap((day) =>
-    Array.from({ length: 12 }, () => ({ troop: 'spearmen' as const, readyOn: day as Day })),
+  // A troop mustered on a day of its own is a line of its own, since the page folds the
+  // same muster at one city on one day into one line.
+  roma.recruits = Array.from({ length: 12 }, (_, i) => i + 1).flatMap((day) =>
+    (['spearmen', 'archers'] as const).map((troop) => ({ troop, readyOn: day as Day })),
   );
   return state;
 }

@@ -8,7 +8,14 @@
   import { menOf } from '../sim/systems/economy.ts';
   import type { Actions } from './actions.ts';
   import ArmiesHere from './ArmiesHere.svelte';
-  import { activityText, armiesAt, armyPosition, cssColour, whyNotBesieging } from './describe.ts';
+  import {
+    activityText,
+    armiesAt,
+    armyPosition,
+    cssColour,
+    weakSiegeText,
+    whyNotBesieging,
+  } from './describe.ts';
   import Formations from './Formations.svelte';
   import StanceControls from './StanceControls.svelte';
   import WarStatus from './WarStatus.svelte';
@@ -34,6 +41,10 @@
     return at ? armiesAt(game, sight, at, army.id) : [];
   });
   const blocked = $derived(own ? whyNotBesieging(game, army, pending) : undefined);
+  const weak = $derived.by(() => {
+    const siege = army.activity.kind === 'besieging' ? game.sieges[army.activity.siege] : undefined;
+    return siege && weakSiegeText(game, sight, siege);
+  });
 </script>
 
 <section class="panel" data-testid="army-panel" aria-label="Army">
@@ -45,6 +56,9 @@
   <p data-testid="army-activity">{activityText(game, army)}</p>
   {#if blocked}
     <p class="bad" data-testid="army-siege-block">{blocked}</p>
+  {/if}
+  {#if weak}
+    <p class="bad" data-testid="army-weak-siege">{weak}</p>
   {/if}
   <p class="muted" data-testid="army-general">
     General's skill {army.generalSkill} of 10 · {STANCE_NAMES[army.stance]}

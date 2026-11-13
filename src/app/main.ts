@@ -20,13 +20,13 @@ import type { Actions } from '../ui/actions.ts';
 import { GAME_NAME, type FrameActions } from '../ui/frame-actions.ts';
 import Hud from '../ui/Hud.svelte';
 import '../ui/panels.css';
-import { alertsOfDay, type Alert } from './alerts.ts';
+import { alertsOfDay, groupAlerts, type Alert } from './alerts.ts';
 import { createClock } from './clock.ts';
 import { planCommand, plannedRoutes, type CommandTarget } from './command.ts';
 import { fateChoices, type FateChoice } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
 import { refusalText } from './names.ts';
-import { alertsInSight, seesPick } from './sighted.ts';
+import { alertsInSight, seesPick, sightOfAll } from './sighted.ts';
 import { enqueue, keepOpen, type Modal } from './modals.ts';
 import {
   browserStorage,
@@ -151,11 +151,17 @@ function save(slot: Slot, state: DeepReadonly<GameState>): boolean {
 }
 
 const sights = new WeakMap<DeepReadonly<GameState>, Sight>();
-/** What the player sees on a day. A state never changes once a tick returns it. */
+/**
+ * What the player sees on a day, or the whole map once they have lost. A state never
+ * changes once a tick returns it.
+ */
 function sightFor(state: DeepReadonly<GameState>): Sight {
   let sight = sights.get(state);
   if (!sight) {
-    sight = sightOf(state, world, state.player);
+    sight =
+      state.factions[state.player]?.defeatedOn === null
+        ? sightOf(state, world, state.player)
+        : sightOfAll(state);
     sights.set(state, sight);
   }
   return sight;
@@ -181,10 +187,8 @@ const clock = createClock({
     if (last) showNotice(refusalText(clock.state, last.reason));
   },
   onDay(before, after, events) {
-    const news = alertsInSight(
-      alertsOfDay(before, after, events),
-      sightFor(before),
-      sightFor(after),
+    const news = groupAlerts(
+      alertsInSight(alertsOfDay(before, after, events), sightFor(before), sightFor(after)),
     );
     if (news.length > 0) alerts = [...news.reverse(), ...alerts].slice(0, ALERTS_KEPT);
     for (const point of turningPoints(before, after, world)) {

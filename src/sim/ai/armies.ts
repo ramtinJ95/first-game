@@ -357,12 +357,11 @@ export function movements(context: Context, muster: CityView | undefined): Order
   while (rest.length > 1) {
     const group = groupFor(rest);
     if (!group) break;
-    const routes = new Map(
-      group.members.map((m) => [m, context.router.routeTo(m.at, group.city)] as const),
-    );
     // A group already on its way, such as one marching to its port to embark, keeps going.
+    // A route costs a path search, so it is priced only for a member that is marching.
     const onTheWay = group.members.every((m) => {
-      const step = routes.get(m)?.step;
+      if (!destinationOf(m.army)) return false;
+      const step = context.router.routeTo(m.at, group.city)?.step;
       return step?.kind === 'march' && marchingTo(m.army, step.to);
     });
     const assembled =
@@ -370,7 +369,7 @@ export function movements(context: Context, muster: CityView | undefined): Order
       (group.members.every((m) => m.army.activity.kind === 'idle') &&
         group.members.every((m) => distance(m.at, group.members[0]?.at ?? m.at) <= RALLY_DISTANCE));
     for (const mover of group.members) {
-      const route = assembled && routes.get(mover);
+      const route = assembled && context.router.routeTo(mover.at, group.city);
       if (route) send(mover, route.step);
       else {
         const to = meeting ?? (group.members[0] as Mover).at;

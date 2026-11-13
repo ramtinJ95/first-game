@@ -11,6 +11,10 @@ import { warKey } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import {
   armiesAt,
+  cityFoodText,
+  sackText,
+  storeNote,
+  weakSiegeText,
   ordersWaitingText,
   overviewOf,
   rankText,
@@ -291,5 +295,102 @@ describe('overviewOf', () => {
   it('lists no war for a player at peace', () => {
     const state = buildFixture();
     expect(overviewOf(state, sightOf(state, world, f.rome)).wars).toEqual([]);
+  });
+});
+
+describe('cityFoodText', () => {
+  it("gives what a calm city grows and eats a day, and what that adds to its owner's food", () => {
+    const state = buildFixture();
+    const roma = state.cities[f.roma];
+    if (!roma) throw new Error('fixture changed');
+    roma.population = 10_000;
+    roma.unrestDays = 0;
+    expect(cityFoodText(state, roma)).toBe('Grows 6.0, eats 4.0 a day · +2.0');
+  });
+
+  it('grows less in unrest but eats as much', () => {
+    const state = buildFixture();
+    const roma = state.cities[f.roma];
+    if (!roma) throw new Error('fixture changed');
+    roma.population = 10_000;
+    roma.unrestDays = 365;
+    expect(cityFoodText(state, roma)).toBe('Grows 1.5, eats 4.0 a day · −2.5');
+  });
+});
+
+describe('sackText', () => {
+  it('tells for how many more days a sacked city yields half its gold, and nothing after', () => {
+    const state = buildFixture();
+    const roma = state.cities[f.roma];
+    if (!roma) throw new Error('fixture changed');
+    expect(sackText(state, roma)).toBeUndefined();
+    roma.sackedOn = 1 as Day;
+    state.day = 101 as Day;
+    expect(sackText(state, roma)).toBe('Sacked on day 1: yields half its gold for 995 more days');
+    state.day = (1 + 3 * 365) as Day;
+    expect(sackText(state, roma)).toBeUndefined();
+  });
+});
+
+describe('storeNote', () => {
+  it('says how many days a falling store of gold or food lasts, and warns within two months', () => {
+    expect(storeNote('gold', 1000, -5, undefined)).toMatchObject({
+      text: 'Runs out in 200 days',
+      bad: false,
+    });
+    expect(storeNote('food', 100, -5, 500)).toMatchObject({
+      text: 'Runs out in 20 days',
+      bad: true,
+    });
+    expect(storeNote('gold', 0, -5, undefined)).toMatchObject({
+      text: 'Ran out: formations desert',
+      bad: true,
+    });
+  });
+
+  it('says when food or manpower stops growing at its limit, and nothing below it', () => {
+    expect(storeNote('food', 500, 5, 500)).toMatchObject({ text: 'Granaries full', bad: false });
+    expect(storeNote('food', 95, 10, 100)).toMatchObject({ text: 'Granaries full tomorrow' });
+    expect(storeNote('manpower', 299, 4, 300)).toMatchObject({
+      text: 'At the call-up limit tomorrow',
+    });
+    expect(storeNote('manpower', 300, 1, 300)).toMatchObject({ text: 'At the call-up limit' });
+    expect(storeNote('food', 400, 5, 500)).toBeUndefined();
+    expect(storeNote('gold', 400, 5, undefined)).toBeUndefined();
+  });
+});
+
+describe('weakSiegeText', () => {
+  function siegeOfSyracusae(men: number) {
+    const state = buildFixture();
+    state.wars[warKey(f.rome, f.syracusaeFaction)] = { since: state.day };
+    const roman = state.armies[f.romanArmy];
+    const syracusae = state.cities[f.syracusae];
+    if (!roman || !syracusae) throw new Error('fixture changed');
+    roman.activity = { kind: 'idle', position: { ...syracusae.position } };
+    for (const id of roman.formations) {
+      const formation = state.formations[id];
+      if (formation) formation.men = Math.round(men / roman.formations.length);
+    }
+    const next = tick(state, [], world).state;
+    const siege = Object.values(next.sieges)[0];
+    if (!siege) throw new Error('no siege began');
+    return { state: next, siege };
+  }
+
+  it('tells a siege with fewer men than the garrison that it does not starve the city, and how many more it needs', () => {
+    const { state, siege } = siegeOfSyracusae(600);
+    const garrison = state.cities[f.syracusae]?.garrison ?? 0;
+    const men = Object.values(state.formations)
+      .filter((formation) => formation.army === f.romanArmy)
+      .reduce((sum, formation) => sum + formation.men, 0);
+    expect(weakSiegeText(state, sightOf(state, world, f.rome), siege)).toBe(
+      `Too few to starve Syracusae: ${men.toLocaleString('en')} besiegers against a garrison of ${garrison.toLocaleString('en')}. The food does not fall, and sallies cut down besiegers each day. ${(garrison - men).toLocaleString('en')} more men would cut the food.`,
+    );
+  });
+
+  it('says nothing of a siege strong enough to cut the food', () => {
+    const { state, siege } = siegeOfSyracusae(3000);
+    expect(weakSiegeText(state, sightOf(state, world, f.rome), siege)).toBeUndefined();
   });
 });
