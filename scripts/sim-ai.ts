@@ -88,6 +88,8 @@ interface Game {
   battleDays: number[];
   /** For each army that lost a battle at least 30 days before the end, whether it was alive 30 days later. */
   beatenAlive: boolean[];
+  /** For each beaten army, where it went (a city, the field, or nowhere) and whether it lived 30 days: alive, or how it was lost. */
+  refugeFates: { went: string; fate: string }[];
   ledger: ConquestLedger;
 }
 
@@ -131,6 +133,9 @@ function play(seed: number, passive: readonly FactionId[]): Game {
   const battleDays: number[] = [];
   const beatenAlive: boolean[] = [];
   const beaten = new Map<number, ArmyId[]>();
+  const refugeFates: { went: string; fate: string }[] = [];
+  const sheltered = new Map<number, { army: ArmyId; went: string }[]>();
+  const lostTo = new Map<ArmyId, string>();
   const ledger = startLedger(state);
 
   for (let day = 1; day <= YEARS * DAYS_PER_YEAR; day++) {
@@ -203,6 +208,14 @@ function play(seed: number, passive: readonly FactionId[]): Game {
         }
       } else if (event.kind === 'armyRetreated') {
         lostToday.push(event.army);
+        const refuge = Object.values(next.cities).some(
+          (city) =>
+            city.owner === event.owner &&
+            Math.hypot(city.position.x - event.to.x, city.position.y - event.to.y) < 1,
+        );
+        const went = `${event.ordered ? 'withdrew' : 'broke'} to ${refuge ? 'a city' : 'the field'}`;
+        sheltered.set(day, [...(sheltered.get(day) ?? []), { army: event.army, went }]);
+        lostTo.delete(event.army);
       } else if (
         event.kind === 'armyDestroyed' &&
         (event.cause === 'battle' || event.cause === 'surrender')
@@ -210,6 +223,19 @@ function play(seed: number, passive: readonly FactionId[]): Game {
         lostToday.push(event.army);
       }
     }
+    for (const event of events) {
+      if (event.kind !== 'armyDestroyed') continue;
+      lostTo.set(event.army, event.cause);
+      if (event.cause === 'battle' || event.cause === 'surrender') {
+        const went = event.cause === 'battle' ? 'destroyed in the battle' : 'surrendered';
+        sheltered.set(day, [...(sheltered.get(day) ?? []), { army: event.army, went }]);
+      }
+    }
+    for (const { army, went } of sheltered.get(day - 30) ?? []) {
+      const fate = Object.hasOwn(next.armies, army) ? 'alive' : (lostTo.get(army) ?? 'gone');
+      refugeFates.push({ went, fate });
+    }
+    sheltered.delete(day - 30);
     if (lostToday.length > 0) beaten.set(day, lostToday);
     for (const id of beaten.get(day - 30) ?? []) beatenAlive.push(Object.hasOwn(next.armies, id));
     beaten.delete(day - 30);
@@ -262,6 +288,7 @@ function play(seed: number, passive: readonly FactionId[]): Game {
     longestPeace,
     battleDays,
     beatenAlive,
+    refugeFates,
     ledger,
   };
 }
@@ -447,6 +474,19 @@ function table(title: string, passive: readonly FactionId[]) {
   console.log(
     `- Armies that lost a battle and were still alive 30 days later: ${fmt(beaten.filter(Boolean).length)} of ${fmt(beaten.length)} (${fmt((100 * beaten.filter(Boolean).length) / Math.max(1, beaten.length), 1)}%).`,
   );
+  const fates = games.flatMap((g) => g.refugeFates);
+  console.log(
+    '- Beaten armies by where they went, alive 30 days later, and how the rest were lost:',
+  );
+  for (const went of [...new Set(fates.map((f) => f.went))].sort()) {
+    const of = fates.filter((f) => f.went === went);
+    const living = of.filter((f) => f.fate === 'alive').length;
+    const losses = new Map<string, number>();
+    for (const { fate } of of) if (fate !== 'alive') losses.set(fate, (losses.get(fate) ?? 0) + 1);
+    console.log(
+      `  - ${went}: ${fmt(living)} of ${fmt(of.length)} alive (${fmt((100 * living) / Math.max(1, of.length), 1)}%). Lost: ${[...losses].map(([cause, n]) => `${n} × ${cause}`).join(', ') || 'none'}.`,
+    );
+  }
   if (passive.length > 0) {
     console.log(
       `- Seeds where a power declares war on Rome: ${games.filter((g) => g.warsOnRome > 0).length}/${SEEDS}.`,
