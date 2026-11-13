@@ -388,7 +388,7 @@ export async function createRenderer({
 
   const terrain = createTerrain(map, layers.terrain, app.renderer);
 
-  const wash = createWash(map);
+  const wash = createWash({ ...map, terrain: terrain.land.terrain });
   terrain.washes.addChild(wash.root);
 
   const borderLines = borderRuns(sharedBorders(map));

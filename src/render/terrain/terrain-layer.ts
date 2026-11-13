@@ -129,7 +129,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   const clipped = new Container();
   clipped.addChild(
     tintSprite,
-    new Graphics(drawDesert(map.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline))),
+    new Graphics(drawDesert(land.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline))),
     new Graphics(drawPans(land.pans)),
     new Graphics(drawValleys(land.valleys, land.deltas)),
   );

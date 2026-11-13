@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Texture } from 'pixi.js';
-import type { GameMap, MultiPolygon } from '../sim/map.ts';
+import type { MultiPolygon } from '../sim/map.ts';
 
 /** The side of a cell of the wash in km. */
 export const WASH_CELL_KM = 4;
@@ -238,7 +238,7 @@ export interface WashLayer {
   paint(washes: readonly (Wash | undefined)[]): boolean;
 }
 
-export function createWash(map: GameMap): WashLayer {
+export function createWash(map: WashedMap): WashLayer {
   const raster = rasterise(map);
   const canvas = document.createElement('canvas');
   canvas.width = raster.columns;

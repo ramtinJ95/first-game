@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { parseMap } from '../../sim/map.ts';
+import { parseMap, type MultiPolygon, type Point } from '../../sim/map.ts';
 import { PAPER } from '../palette.ts';
 import { groundTint, TINT_CELL } from './draw.ts';
 import {
@@ -14,6 +14,8 @@ import {
   type Mark,
   type Tier,
 } from './marks.ts';
+import { AreaIndex } from './area-index.ts';
+import { WAVER } from './waver.ts';
 
 const map = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../../../data/map/map.json'), 'utf8')),
@@ -288,5 +290,148 @@ describe('the dry lands', () => {
     }
     const gaul = chunks(GAUL, 'close').flatMap((rect) => placeFields(land, rect));
     expect(count(gaul, 'hamlet') * 10).toBeLessThan(hamlets.length);
+  });
+});
+
+/** Each stretch of at least `window` km along a line whose points all lie within `bend` km of its chord. */
+function ruledStretches(lines: Point[][], window: number, bend: number): [Point, Point][] {
+  const ruled: [Point, Point][] = [];
+  const length = (a: Point, b: Point) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+  for (const line of lines) {
+    let end = 0;
+    let run = 0;
+    for (let start = 0; start < line.length; start++) {
+      while (end + 1 < line.length && run < window) {
+        run += length(line[end] as Point, line[end + 1] as Point);
+        end++;
+      }
+      if (run < window) break;
+      const a = line[start] as Point;
+      const b = line[end] as Point;
+      const chord = length(a, b);
+      let off = 0;
+      for (let k = start + 1; k < end; k++) {
+        const [px, py] = line[k] as Point;
+        off = Math.max(
+          off,
+          Math.abs((px - a[0]) * (b[1] - a[1]) - (py - a[1]) * (b[0] - a[0])) / chord,
+        );
+      }
+      if (off < bend) ruled.push([a, b]);
+      run -= length(line[start] as Point, line[start + 1] as Point);
+    }
+  }
+  return ruled;
+}
+
+function insideOutline(outline: MultiPolygon, x: number, y: number): boolean {
+  let inside = false;
+  for (const ring of outline.flat()) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [ax, ay] = ring[i] as Point;
+      const [bx, by] = ring[j] as Point;
+      if (ay > y !== by > y && x < ((bx - ax) * (y - ay)) / (by - ay) + ax) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/** The pairs of edges of a ring that cross each other, found through a grid of 16 km cells. */
+function crossings(ring: readonly Point[]): [Point, Point][] {
+  const cells = new Map<string, number[]>();
+  const n = ring.length;
+  const at = (i: number) => ring[i % n] as Point;
+  for (let i = 0; i < n; i++) {
+    const [ax, ay] = at(i);
+    const [bx, by] = at(i + 1);
+    for (
+      let cx = Math.floor(Math.min(ax, bx) / 16);
+      cx <= Math.floor(Math.max(ax, bx) / 16);
+      cx++
+    ) {
+      for (
+        let cy = Math.floor(Math.min(ay, by) / 16);
+        cy <= Math.floor(Math.max(ay, by) / 16);
+        cy++
+      ) {
+        const key = `${cx},${cy}`;
+        cells.set(key, [...(cells.get(key) ?? []), i]);
+      }
+    }
+  }
+  const side = (a: Point, b: Point, c: Point) =>
+    Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+  const found: [Point, Point][] = [];
+  for (const edges of cells.values()) {
+    for (const i of edges) {
+      for (const j of edges) {
+        if (j <= i + 1 || (i === 0 && j === n - 1)) continue;
+        const [a, b, c, d] = [at(i), at(i + 1), at(j), at(j + 1)];
+        if (side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0)
+          found.push([a, c]);
+      }
+    }
+  }
+  return found;
+}
+
+describe("the desert's edge", () => {
+  const drawn = () => land.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline);
+  const original = map.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline);
+  /**
+   * The runs of each ring that a player sees as the desert's edge where it wavers in full:
+   * away from the coast and the frame, and with no desert on its far side, as there is
+   * along the seam between two named deserts.
+   */
+  const seen = (outlines: readonly MultiPolygon[]) => {
+    const index = new AreaIndex(outlines, 0, { seams: false });
+    const desert = (x: number, y: number) => index.inside(x, y);
+    return outlines.flatMap((outline) =>
+      outline.flat().flatMap((ring) => {
+        const runs: Point[][] = [[]];
+        for (const [i, point] of [...ring, ...ring.slice(0, 1)].entries()) {
+          const before = ring[(i + ring.length - 1) % ring.length] as Point;
+          const after = ring[(i + 1) % ring.length] as Point;
+          const length = Math.hypot(after[0] - before[0], after[1] - before[1]) || 1;
+          const nx = -(after[1] - before[1]) / length;
+          const ny = (after[0] - before[0]) / length;
+          const edge =
+            desert(point[0] + nx, point[1] + ny) !== desert(point[0] - nx, point[1] - ny);
+          if (edge && land.coast.smoothDepth(point[0], point[1]) >= WAVER.coastKm[1]) {
+            runs.at(-1)?.push(point);
+          } else if (runs.at(-1)?.length) runs.push([]);
+        }
+        return runs.filter((run) => run.length > 1);
+      }),
+    );
+  };
+
+  it('bends at least 1 km off a straight line in every 40 km, where the map data ran ruled lines', () => {
+    const ruled = (outlines: readonly MultiPolygon[]) =>
+      ruledStretches(seen(outlines), 40, 1).map(([a, b]) => `${a.join(',')} to ${b.join(',')}`);
+    expect(ruled(drawn())).toEqual([]);
+    expect(ruled(original).length).toBeGreaterThan(100);
+  });
+
+  it('never crosses itself', () => {
+    const crossed = drawn()
+      .flatMap((outline) => outline.flat().flatMap(crossings))
+      .map(([a, b]) => `${a.join(',')} and ${b.join(',')}`);
+    expect(crossed).toEqual([]);
+  });
+
+  it('keeps the dunes and stipple on the drawn desert', () => {
+    const tacape = map.provinces.find((p) => p.id === 'tacape');
+    if (!tacape) throw new Error('no tacape');
+    const [tx, ty] = tacape.city;
+    const edge = { left: tx - 384, top: ty, right: tx + 128, bottom: ty + 384 };
+    const marks = [
+      ...chunks(SAHARA, 'middle').flatMap((rect) => placeRelief(land, rect, 'middle')),
+      ...chunks(edge, 'middle').flatMap((rect) => placeRelief(land, rect, 'middle')),
+      ...chunks(edge, 'close').flatMap((rect) => placeRelief(land, rect, 'close')),
+    ].filter((m) => m.kind === 'dune' || m.kind === 'stipple');
+    expect(marks.length).toBeGreaterThan(1000);
+    const off = marks.filter((m) => !drawn().some((outline) => insideOutline(outline, m.x, m.y)));
+    expect(off.map((m) => `${m.kind} at ${m.x},${m.y}`)).toEqual([]);
   });
 });

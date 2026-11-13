@@ -2,6 +2,7 @@ import type { GameMap, Peak, TerrainArea } from '../../sim/map.ts';
 import { AreaIndex, DISTANCE_ERROR } from './area-index.ts';
 import { hash01, stream, valueNoise } from './random.ts';
 import { scatter, type Rect } from './scatter.ts';
+import { drawnTerrain } from './waver.ts';
 
 export type TreeShape = 'broadleaf' | 'conifer' | 'cypress';
 export type PlaceRank = 'capital' | 'city' | 'town' | 'village' | 'hamlet';
@@ -173,7 +174,7 @@ export const VALLEY = { desertReach: 30, width: 13 } as const;
 /**
  * A delta fans out from a river's end 25 to 220 km from the coast, over about 70
  * degrees. A river that ends in a lake, as the Jordan in the Dead Sea, has none. Its
- * sides swell and waver (`deltaSide`), drawn in steps of `step` km.
+ * sides swell out in shoulders and wander (`deltaSide`), drawn in steps of `step` km.
  */
 const DELTA = {
   inland: 25,
@@ -235,8 +236,8 @@ interface Forest {
   readonly name: string;
 }
 
-function kindOutlines(map: GameMap, kind: TerrainArea['kind']) {
-  return map.terrain.filter((area) => area.kind === kind).map((area) => area.outline);
+function kindOutlines(terrain: readonly TerrainArea[], kind: TerrainArea['kind']) {
+  return terrain.filter((area) => area.kind === kind).map((area) => area.outline);
 }
 
 const GRID = 32;
@@ -290,6 +291,8 @@ export class Land {
   readonly land: AreaIndex;
   /** Distance to the coast or the map's frame, so a wood keeps off the sea and on the map. */
   readonly coast: AreaIndex;
+  /** The terrain areas as drawn, with the deserts' edges wavered (`drawnTerrain`). */
+  readonly terrain: readonly TerrainArea[];
   readonly lakes: AreaIndex;
   readonly mountains: AreaIndex;
   readonly hills: AreaIndex;
@@ -340,25 +343,29 @@ export class Land {
       COAST_REACH,
       { seams: false },
     );
-    this.lakes = new AreaIndex(kindOutlines(map, 'lake'));
-    this.mountains = new AreaIndex(kindOutlines(map, 'mountains'), STRIKE_REACH);
-    this.hills = new AreaIndex(kindOutlines(map, 'hills'));
-    this.desert = new AreaIndex(kindOutlines(map, 'desert'), ARID.desertKm);
+    const terrain = (this.terrain = drawnTerrain(map.terrain, this.coast));
+    this.lakes = new AreaIndex(kindOutlines(terrain, 'lake'));
+    this.mountains = new AreaIndex(kindOutlines(terrain, 'mountains'), STRIKE_REACH);
+    this.hills = new AreaIndex(kindOutlines(terrain, 'hills'));
+    // The wavered edges are many short ones, and testing each for a seam with the desert
+    // beside it cost a tenth of a second. Nothing reads a desert's depth, and the map keeps
+    // every desert river within an outer edge, so a seam may count as an edge.
+    this.desert = new AreaIndex(kindOutlines(terrain, 'desert'), ARID.desertKm, { seams: false });
     this.sand = new AreaIndex(
-      map.terrain.filter((a) => a.kind === 'desert' && SAND_SEA.test(a.name)).map((a) => a.outline),
+      terrain.filter((a) => a.kind === 'desert' && SAND_SEA.test(a.name)).map((a) => a.outline),
+      0,
+      { seams: false },
     );
     this.salt = new AreaIndex(
-      map.terrain
-        .filter((a) => a.kind === 'desert' && SALT_FLAT.test(a.name))
-        .map((a) => a.outline),
+      terrain.filter((a) => a.kind === 'desert' && SALT_FLAT.test(a.name)).map((a) => a.outline),
       PAN.depthFull,
     );
-    this.forest = new AreaIndex(kindOutlines(map, 'forest'), ARID.forestKm);
+    this.forest = new AreaIndex(kindOutlines(terrain, 'forest'), ARID.forestKm);
     this.rivers = new AreaIndex(
       map.rivers.map(({ line }) => [[[...line, ...line.slice(1, -1).reverse()]]]),
       16,
     );
-    this.forests = map.terrain
+    this.forests = terrain
       .filter((area) => area.kind === 'forest')
       .map((area) => ({ index: new AreaIndex([area.outline]), name: area.name }));
     this.peaks = map.peaks;
