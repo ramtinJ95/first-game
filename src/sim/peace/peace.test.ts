@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { cancelRefund } from '../buildings/build.ts';
 import { changeCityOwner } from '../cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { FactionId } from '../ids.ts';
@@ -352,5 +353,34 @@ describe('what the review found', () => {
     ).toBeUndefined();
     expect(state.armies[f.punicArmy]?.activity.kind).toBe('idle');
     expect(Object.values(state.sieges).flatMap((siege) => siege.besiegers)).toEqual([]);
+  });
+
+  test('a city handed over keeps its buildings, and the work under way is refunded to the payer with no alert of a fall', () => {
+    const cede = (building: boolean) => {
+      const state = atWar();
+      const capua = state.cities[f.capua];
+      if (!capua) throw new Error('fixture');
+      capua.buildings = ['forum'];
+      if (building) capua.construction = { building: 'canals', daysLeft: 30 };
+      const terms: PeaceTerms = { kind: 'payment', payer: f.rome, gold: 0, cities: [f.capua] };
+      expect(
+        run(state, { kind: 'offerPeace', faction: f.rome, to: f.carthage, terms }),
+      ).toBeUndefined();
+      return tick(
+        state,
+        [{ kind: 'acceptPeace', faction: f.carthage, from: f.rome, terms }],
+        world,
+      );
+    };
+    const result = cede(true);
+    expect(result.state.cities[f.capua]).toMatchObject({
+      owner: f.carthage,
+      buildings: ['forum'],
+      construction: null,
+    });
+    const gold = (r: typeof result) => r.state.factions[f.rome]?.stores.gold ?? 0;
+    expect(gold(result) - gold(cede(false))).toBeCloseTo(cancelRefund('canals'));
+    expect(result.events.filter((event) => event.kind === 'buildingsLost')).toEqual([]);
+    expectConsistent(result.state);
   });
 });

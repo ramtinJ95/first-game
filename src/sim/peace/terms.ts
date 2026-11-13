@@ -1,4 +1,5 @@
 import type { DeepReadonly } from '../deep-readonly.ts';
+import { cancelBuilding } from '../buildings/build.ts';
 import { changeCityOwner } from '../cities.ts';
 import { musterEarly } from '../systems/economy.ts';
 import type { CityId, FactionId } from '../ids.ts';
@@ -58,7 +59,8 @@ export function termsProblem(
 /**
  * Pays what the terms ask, to the side that is not the payer. The caller checked
  * `termsProblem`. A city handed over first musters what it trains for the payer, so no
- * paid recruit is lost, and the homecoming of the peace sends them home.
+ * paid recruit is lost, and the homecoming of the peace sends them home. Its building
+ * under way is cancelled for the payer with the usual refund. Its finished buildings go with it.
  */
 export function payTerms(
   state: GameState,
@@ -75,6 +77,8 @@ export function payTerms(
     const city = state.cities[id];
     if (!city) continue;
     musterEarly(state, city);
+    if (city.construction)
+      cancelBuilding(state, { kind: 'cancelBuilding', faction: terms.payer, city: id });
     changeCityOwner(state, id, receiver);
   }
 }
