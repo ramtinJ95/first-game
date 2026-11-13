@@ -29,6 +29,7 @@ import {
   type Size,
 } from './camera.ts';
 import type { DrawOptions } from './draw-options.ts';
+import { fitTexture } from './cached-texture.ts';
 import { createFog, fogCircles } from './fog.ts';
 import { LABEL_PRIORITY, placeLabels, type Box, type LabelRequest } from './labels.ts';
 import { BANNER, BATTLE_HIT_RADIUS, drawnArmies, type DrawnArmy } from './markers.ts';
@@ -345,7 +346,7 @@ export async function createRenderer({
   seaArt.addChild(new Graphics().poly(map.extent.flat()).fill(SEA), waterLines, seaMask);
   const seaRoot = new Container();
   seaRoot.addChild(seaArt);
-  const seaTexture = RenderTexture.create({
+  let seaTexture = RenderTexture.create({
     width: viewport().width + 2 * SEA_MARGIN,
     height: viewport().height + 2 * SEA_MARGIN,
     resolution: app.renderer.resolution,
@@ -811,7 +812,10 @@ export async function createRenderer({
     }
     const size = { width: width + 2 * SEA_MARGIN, height: height + 2 * SEA_MARGIN };
     const resized = seaTexture.width !== size.width || seaTexture.height !== size.height;
-    if (resized) seaTexture.resize(size.width, size.height, app.renderer.resolution);
+    if (resized) {
+      seaTexture = fitTexture(seaTexture, size.width, size.height, app.renderer.resolution);
+      seaSprite.texture = seaTexture;
+    }
     if (
       resized ||
       !seaDrawn ||

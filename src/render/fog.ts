@@ -12,6 +12,7 @@ import type { ProvinceId } from '../sim/ids.ts';
 import type { GameMap } from '../sim/map.ts';
 import type { Sight, SightCircle } from '../sim/sight.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
+import { fitTexture } from './cached-texture.ts';
 import { toPixels } from './lines.ts';
 import { INK } from './palette.ts';
 
@@ -135,7 +136,7 @@ export function createFog(renderer: Renderer, map: GameMap): Fog {
   paint.addChild(shade, hatch, toneMask, bandMask);
   // The masks cost full-screen passes, so the painted fog is kept in a texture and
   // repainted only when the camera or the sight moves, not on every frame the sea moves.
-  const screen = RenderTexture.create({
+  let screen = RenderTexture.create({
     width: 1,
     height: 1,
     resolution: renderer.resolution,
@@ -237,9 +238,8 @@ export function createFog(renderer: Renderer, map: GameMap): Fog {
       hatch.width = width;
       hatch.height = height;
       hatch.tilePosition.set(x, y);
-      if (screen.width !== width || screen.height !== height) {
-        screen.resize(width, height, renderer.resolution);
-      }
+      screen = fitTexture(screen, width, height, renderer.resolution);
+      root.texture = screen;
       stale = true;
     },
     paint() {
