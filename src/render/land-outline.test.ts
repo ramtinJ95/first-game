@@ -47,3 +47,39 @@ it('covers the same land as the provinces, with none of the borders between them
   const inland = outline.flat(2).filter((p) => !coast.has(`${p[0]},${p[1]}`) && !onFrame(p));
   expect(inland).toEqual([]);
 });
+
+it('keeps a lake two provinces enclose as a hole of their piece, and covers two pieces that touch at a corner', () => {
+  const square = (x: number, y: number, size: number): Point[] => [
+    [x, y],
+    [x + size, y],
+    [x + size, y + size],
+    [x, y + size],
+  ];
+  const lake: Point[] = [
+    [4, 4],
+    [4, 6],
+    [6, 6],
+    [6, 4],
+  ];
+  const outline = landOutline({
+    provinces: [
+      { outline: [[square(0, 0, 10), lake]] },
+      { outline: [[square(10, 0, 10)]] },
+      { outline: [[square(20, 10, 5)]] },
+    ],
+  });
+  const area = (ring: readonly Point[]) =>
+    Math.abs(
+      ring.reduce((sum, [ax, ay], i) => {
+        const [bx, by] = ring[(i + 1) % ring.length] as Point;
+        return sum + ax * by - bx * ay;
+      }, 0) / 2,
+    );
+  const outer = outline.reduce((sum, [ring]) => sum + (ring ? area(ring) : 0), 0);
+  const holes = outline.flatMap(([, ...rest]) => rest.map(area));
+  expect(outer).toBe(225);
+  expect(holes).toEqual([4]);
+  expect(inside(outline, [5, 5])).toBe(false);
+  expect(inside(outline, [15, 5])).toBe(true);
+  expect(inside(outline, [22, 12])).toBe(true);
+});
