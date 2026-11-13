@@ -65,19 +65,23 @@ test('the battle panel says whose stance beats whose, follows the enemy when it 
   await untilDay(page, changed);
   await pause(page);
   await expect(standing).not.toHaveText('Your skirmishers beat their line');
-  const theirs = battle.getByTestId('battle-army').filter({ hasText: /^\s*Mediolanum ·/ });
-  await expect(theirs).toContainText(/Mediolanum · (All-out assault|Skirmish and withdraw)/);
+  const theirs = battle.getByTestId('battle-army').filter({ hasText: /^\s*Army of Mediolanum ·/ });
+  await expect(theirs).toContainText(
+    /Army of Mediolanum · (All-out assault|Skirmish and withdraw)/,
+  );
 
   const answer = battle.locator('[data-testid^="stance-"].answers');
   await expect(answer).toContainText(/re-forms \d+ days/);
   await answer.click();
   // The army panel keeps the army's stance after the battle ends, so it is read there.
-  await battle.getByRole('button', { name: /^Rome ·/ }).click();
+  await battle.getByRole('button', { name: /^First Legion ·/ }).click();
   const army = page.getByTestId('army-panel');
-  await expect(army.getByRole('heading', { level: 2 })).toHaveText('Army of Rome');
+  await expect(army.getByRole('heading', { level: 2 })).toHaveText('First Legion');
   const ordered = await day(page);
   await resume(page);
   await untilDay(page, ordered + 1);
   await pause(page);
-  await expect(army.getByTestId('stance-reforming')).toHaveText(/^Re-forming, \d days? left$/);
+  await expect(
+    page.getByRole('complementary', { name: 'Selection' }).getByTestId('stance-reforming'),
+  ).toHaveText(/^Re-forming, \d days? left$/);
 });

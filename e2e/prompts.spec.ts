@@ -106,7 +106,7 @@ test.describe('a click goes where it is aimed', () => {
     await untilDrawn(page);
     await clickFlagAt(page, await clearCentre(page));
     await expect(page.getByTestId('army-panel').getByRole('heading', { level: 2 })).toHaveText(
-      'Army of Rome',
+      'First Legion',
     );
   });
 
@@ -125,7 +125,7 @@ test.describe('a click goes where it is aimed', () => {
     await untilDrawn(page);
     await clickFlagAt(page, await clearCentre(page));
     await expect(page.getByTestId('army-panel').getByRole('heading', { level: 2 })).toHaveText(
-      'Army of Rome',
+      'First Legion',
     );
   });
 });

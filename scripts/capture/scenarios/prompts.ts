@@ -63,7 +63,7 @@ export default defineScenario({
 
     await load(page, carthageSailsOnRoma());
     await resume(page);
-    await alerts.getByText(/A fleet of Carthage with [\d,]+ men is sailing for/).waitFor();
+    await alerts.getByText(/A fleet of Carthage with .+, [\d,]+ men, is sailing for/).waitFor();
     await pause(page);
     await shot(
       'fleet-sighted',

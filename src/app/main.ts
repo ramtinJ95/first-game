@@ -418,7 +418,8 @@ function pageNow(): Page {
  * Replaces the game. `pause` stops the clock for a player who just arrived, and
  * `focus` brings the camera to their land. A dropped file changes neither, as before.
  * A save's `page` puts back the chronicle, the open panel, the selection, and the
- * camera, so a loaded game opens where the player left it.
+ * camera, so a loaded game opens where the player left it. A save without one, such as
+ * a test's, keeps the selection and the panel.
  */
 function enter(
   state: GameState,
@@ -429,9 +430,11 @@ function enter(
   chronicle = page?.chronicle ?? [];
   toldOnce = new Set(chronicle.flatMap((alert) => alert.pause?.once ?? []));
   occupied = new Map(page?.occupied);
-  panel = page?.panel;
-  selection =
-    page?.selection && seesPick(sightFor(state), page.selection) ? page.selection : undefined;
+  if (page) {
+    panel = page.panel;
+    selection =
+      page.selection && seesPick(sightFor(state), page.selection) ? page.selection : undefined;
+  }
   weakSieges = new Map();
   menu = undefined;
   stopAsked = false;

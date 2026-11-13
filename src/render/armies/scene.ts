@@ -955,6 +955,7 @@ class Context {
         alpha: 1,
         rotation: 0,
         depth: spot.y,
+        ...this.campHit(army, spot, 0.5, 0.8),
       });
     });
     spots.fires.forEach((spot, i) => this.fire(spot, `${army}:${i}`, 1));
@@ -986,6 +987,7 @@ class Context {
         alpha: 1,
         rotation: 0,
         depth: spot.y,
+        ...this.campHit(army, spot, 0.5, 0.8),
       });
     });
     fires.forEach((spot, i) => this.fire(spot, `${army}:siege:${i}`, 1));
@@ -1010,6 +1012,18 @@ class Context {
     this.scene.works.push({ points: layout.works() });
   }
 
+  /**
+   * The army a click on a tent or a stack of arms in its owner's colour selects, and the
+   * box it answers to, `half` a man's height to each side and `up` above its foot.
+   */
+  campHit(army: ArmyId, at: MapPoint, half: number, up: number) {
+    const { h } = this;
+    return {
+      army,
+      hit: { left: at.x - half * h, right: at.x + half * h, top: at.y - up * h, bottom: at.y },
+    };
+  }
+
   /** A stack of arms beside each tent, set off towards the army. */
   arms(tents: readonly MapPoint[], colour: number, army: ArmyId, besieged?: CityId) {
     tents.forEach((tent, i) => {
@@ -1026,6 +1040,7 @@ class Context {
         alpha: 1,
         rotation: 0,
         depth: y,
+        ...this.campHit(army, { x, y }, 0.3, 1),
       });
     });
   }

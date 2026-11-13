@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { BANNER } from '../src/render/markers.ts';
 import type { CityId } from '../src/sim/ids.ts';
 import { POWERS } from '../src/sim/map.ts';
 import { POWER_NAMES } from '../src/sim/new-game.ts';
@@ -287,10 +286,14 @@ test.describe('the frame round the game', () => {
     await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
 
     await untilDrawn(page);
-    const centre = await clearCentre(page);
-    await page.mouse.click(centre.x + BANNER.flagWidth / 2, centre.y - BANNER.pole + 5);
+    // The save kept the selection and the camera, so the army is selected and its flag
+    // stands where it stood.
     await expect(army.getByTestId('army-men')).toHaveText('1,534 men');
     await expect(army.getByTestId('army-activity')).toHaveText(activity ?? '');
+    await page.keyboard.press('Escape');
+    await expect(army).toBeHidden();
+    await page.mouse.click(before.x, before.y);
+    await expect(army.getByTestId('army-men')).toHaveText('1,534 men');
   });
 
   test('the game saves itself at the start of a month, and Continue loads that save', async ({
@@ -384,7 +387,9 @@ test.describe('the frame round the game', () => {
       await expect(prompt).toBeVisible();
       await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
       const choice = prompt.getByTestId(`fate-${fate}`);
-      const unrest = Number(/Unrest for (\d+) days/.exec((await choice.textContent()) ?? '')?.[1]);
+      const unrest = Number(
+        /^(\d+) days left$/.exec(await prompt.getByTestId(`fate-${fate}-unrest`).innerText())?.[1],
+      );
       if (fate === 'sack') await expect(choice).toContainText(/\+[\d,]+ gold/);
       if (fate === 'enslave') await expect(choice).toContainText(/\+[\d,]+ manpower/);
       const asked = await day(page);

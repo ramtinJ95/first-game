@@ -95,7 +95,16 @@
       {/each}
     </aside>
     <div class="slot alerts">
-      <AlertList alerts={view.current.alerts.slice(0, ALERTS_SHOWN)} day={game.day} {actions} />
+      <button
+        type="button"
+        class="panel chronicle-toggle"
+        aria-expanded={view.current.panel === 'chronicle'}
+        aria-controls="chronicle"
+        onclick={() => actions.togglePanel('chronicle')}>Chronicle</button
+      >
+      <div class="latest">
+        <AlertList alerts={view.current.alerts.slice(0, ALERTS_SHOWN)} day={game.day} {actions} />
+      </div>
     </div>
   </div>
   {#if !modal}
@@ -153,7 +162,20 @@
 
   .alerts {
     grid-area: alerts;
-    max-height: min(30vh, 11.5rem);
+    gap: 4px;
+    max-height: min(34vh, 13.5rem);
+  }
+
+  .latest {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .chronicle-toggle {
+    padding: 2px 10px;
+    font-size: 13px;
+    pointer-events: auto;
   }
 
   .side {
@@ -182,7 +204,7 @@
     }
 
     .alerts {
-      max-height: 5.2rem;
+      max-height: 7rem;
     }
 
     .side {
@@ -191,7 +213,7 @@
     }
 
     /* The open sheet takes the bottom of a phone. The latest news waits in the chronicle. */
-    .hud:has(.side > *) .alerts {
+    .hud:has(.side > :global(*)) .latest {
       display: none;
     }
   }

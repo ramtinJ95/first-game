@@ -24,7 +24,7 @@
           <span class="day">{dateText(alert.day)}</span>
           <span class="text"
             >{#if alert.paused}<span class="paused" data-testid="alert-paused">Paused</span
-              >{/if}{alert.text}</span
+              >{/if}{alert.paused ? ` ${alert.text}` : alert.text}</span
           >
           {#if alert.count && alert.count > 1}
             <span class="count" data-testid="alert-count">×{alert.count}</span>

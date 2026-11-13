@@ -78,12 +78,6 @@
       aria-controls="overview"
       onclick={() => actions.togglePanel('overview')}>Overview</button
     >
-    <button
-      type="button"
-      aria-expanded={view.current.panel === 'chronicle'}
-      aria-controls="chronicle"
-      onclick={() => actions.togglePanel('chronicle')}>Chronicle</button
-    >
     <FrameControls frame={view.current.frame} actions={frame} />
   </span>
 </header>

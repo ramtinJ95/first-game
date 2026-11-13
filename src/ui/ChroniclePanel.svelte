@@ -22,7 +22,9 @@
         >
           <span class="day">{dateText(alert.day)}</span>
           <span class="text"
-            >{#if alert.paused}<span class="paused">Paused</span>{/if}{alert.text}</span
+            >{#if alert.paused}<span class="paused">Paused</span>{/if}{alert.paused
+              ? ` ${alert.text}`
+              : alert.text}</span
           >
           {#if alert.count && alert.count > 1}<span class="count">×{alert.count}</span>{/if}
         </button>

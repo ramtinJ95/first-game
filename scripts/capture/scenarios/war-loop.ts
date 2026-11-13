@@ -47,7 +47,7 @@ export default defineScenario({
     );
     await page
       .getByTestId('alerts')
-      .getByRole('button', { name: /Your army broke/ })
+      .getByRole('button', { name: /Legion broke/ })
       .click();
     await page.getByTestId('army-panel').waitFor();
     await shot(

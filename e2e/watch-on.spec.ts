@@ -69,7 +69,7 @@ test('a defeated player who watches on sees every army, and the top bar and the 
 
   await page.mouse.click(persian.at.x, persian.at.y);
   const panel = page.getByTestId('army-panel');
-  await expect(panel.getByRole('heading')).toHaveText('Army of Persia');
+  await expect(panel.getByRole('heading')).toHaveText(/^Persia's /);
 
   await page.getByRole('button', { name: 'Overview' }).click();
   const overview = page.getByTestId('overview');
