@@ -188,6 +188,16 @@ export function movements(context: Context, muster: CityView | undefined): Order
       orders.push({ kind: 'moveArmy', faction, army: mover.army.id, to: step.to });
     }
   };
+  /** Sends the mover on its way to the city by road or sea, and says whether a way exists. */
+  const headFor = (mover: Mover, city: CityView): boolean => {
+    if (marchingTo(mover.army, city.position)) {
+      used.add(mover.army.id);
+      return true;
+    }
+    const route = context.router.routeTo(mover.at, city);
+    if (route) send(mover, route.step);
+    return route !== undefined;
+  };
 
   const capital = homeCapital(state, world, faction);
   const raiders = hostile.filter((army) => !atOwnCity(state, army));
@@ -204,11 +214,10 @@ export function movements(context: Context, muster: CityView | undefined): Order
       .sort((a, b) => strengthOf(state, a) - strengthOf(state, b));
     if (atCapital) used.add(atCapital.id);
     else {
-      const guard = nearest(
-        movers.filter((m) => byLand(world, m.at, capital.position)),
-        capital.position,
-      );
-      if (guard) send(guard, { kind: 'march', to: capital.position });
+      const guards = movers
+        .filter((m) => context.router.reaches(m.at, capital))
+        .sort((a, b) => distance(a.at, capital.position) - distance(b.at, capital.position));
+      guards.some((guard) => headFor(guard, capital));
     }
   }
 
@@ -229,6 +238,8 @@ export function movements(context: Context, muster: CityView | undefined): Order
     let gathered = 0;
     for (const mover of near) {
       if (gathered >= needed) break;
+      const onTheWay = marchingTo(mover.army, city.position);
+      if (!onTheWay && !context.router.marches(mover.at, city.position)) continue;
       relief.push(mover);
       gathered += mover.strength;
     }
@@ -244,9 +255,11 @@ export function movements(context: Context, muster: CityView | undefined): Order
     if (men >= BLOCKADE_ODDS * city.garrison || !muster) continue;
     for (const army of besiegers) {
       const at = positionOf(army);
-      if (army.owner !== faction || !at || !byLand(world, at, muster.position)) continue;
+      if (army.owner !== faction || !at) continue;
+      const step = context.router.routeTo(at, muster)?.step;
+      if (step?.kind !== 'march') continue;
       used.add(army.id);
-      orders.push({ kind: 'moveArmy', faction, army: army.id, to: muster.position });
+      orders.push({ kind: 'moveArmy', faction, army: army.id, to: step.to });
     }
   }
 
@@ -374,7 +387,9 @@ export function movements(context: Context, muster: CityView | undefined): Order
       else {
         const to = meeting ?? (group.members[0] as Mover).at;
         if (distance(mover.at, to) <= RALLY_DISTANCE) used.add(mover.army.id);
-        else if (byLand(world, mover.at, to)) send(mover, { kind: 'march', to });
+        else if (muster) {
+          if (!headFor(mover, muster)) used.add(mover.army.id);
+        } else if (context.router.marches(mover.at, to)) send(mover, { kind: 'march', to });
         else used.add(mover.army.id);
       }
     }
@@ -385,13 +400,8 @@ export function movements(context: Context, muster: CityView | undefined): Order
   }
 
   for (const mover of rest) {
-    if (
-      targets.length > 0 &&
-      muster &&
-      distance(mover.at, muster.position) > RALLY_DISTANCE &&
-      byLand(world, mover.at, muster.position)
-    ) {
-      send(mover, { kind: 'march', to: muster.position });
+    if (targets.length > 0 && muster && distance(mover.at, muster.position) > RALLY_DISTANCE) {
+      headFor(mover, muster);
     }
   }
   return orders;
@@ -419,14 +429,6 @@ function destinationOf(army: ArmyView): MapPoint | undefined {
 function marchingTo(army: ArmyView, point: MapPoint): boolean {
   const last = destinationOf(army);
   return !!last && distance(last, point) <= SAME_POINT_KM;
-}
-
-function nearest(movers: readonly Mover[], point: MapPoint): Mover | undefined {
-  let best: Mover | undefined;
-  for (const mover of movers) {
-    if (!best || distance(mover.at, point) < distance(best.at, point)) best = mover;
-  }
-  return best;
 }
 
 /** Whether recruits muster within RALLY_WAIT_DAYS at a city of the faction where the army stands. */

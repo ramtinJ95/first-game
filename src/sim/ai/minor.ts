@@ -3,7 +3,7 @@ import { RALLY_DISTANCE, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import { TROOPS, type Troop } from '../troops.ts';
 import { distance } from '../world/find-path.ts';
 import { retreats, type Context } from './armies.ts';
-import { balanceOf, besieged, byLand, meanMorale, menInTraining, sorted } from './situation.ts';
+import { balanceOf, besieged, meanMorale, menInTraining, sorted } from './situation.ts';
 import { MARCH_MORALE, MINOR_DEFICIT_DAYS } from './thresholds.ts';
 
 const CHEAPEST: Troop = (Object.keys(TROOPS) as Troop[]).reduce((a, b) =>
@@ -17,7 +17,7 @@ const CHEAPEST: Troop = (Object.keys(TROOPS) as Troop[]).reduce((a, b) =>
  * once their morale is back to MARCH_MORALE, and retreats from a battle it is losing.
  */
 export function minorOrders(context: Context): Order[] {
-  const { state, world, faction, enemies } = context;
+  const { state, router, faction, enemies } = context;
   if (enemies.size === 0) return [];
   const orders = retreats(context);
   const [home] = sorted(state.cities).filter((city) => city.owner === faction);
@@ -27,7 +27,7 @@ export function minorOrders(context: Context): Order[] {
     if (army.owner !== faction || army.activity.kind !== 'idle') continue;
     if (meanMorale(state, army) < MARCH_MORALE) continue;
     const at = army.activity.position;
-    if (distance(at, home.position) > RALLY_DISTANCE && byLand(world, at, home.position)) {
+    if (distance(at, home.position) > RALLY_DISTANCE && router.marches(at, home.position)) {
       orders.push({ kind: 'moveArmy', faction, army: army.id, to: home.position });
     }
   }

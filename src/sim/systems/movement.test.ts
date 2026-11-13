@@ -2,7 +2,13 @@ import { describe, expect, test } from 'vitest';
 import { LandOracle } from '../../../scripts/movement/land-oracle.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { ArmyId, BattleId, CityId } from '../ids.ts';
-import { CONVOY_KM_PER_DAY, landPath, MARCH_KM_PER_DAY, REFUGEE_KM_PER_DAY } from '../march.ts';
+import {
+  CONVOY_KM_PER_DAY,
+  landPath,
+  MARCH_KM_PER_DAY,
+  marchPath,
+  REFUGEE_KM_PER_DAY,
+} from '../march.ts';
 import { newGame } from '../new-game.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
@@ -327,13 +333,24 @@ describe('a refugee column', () => {
 
 describe('the whole game', () => {
   const capitals = ['persepolis', 'memphis', 'roma', 'carthago', 'pella'];
+  // Each army marches on the first capital in turn that lies within a march of it.
   const orders = (state: GameState): Order[] =>
-    Object.values(state.armies).map((army, i) => ({
-      kind: 'moveArmy',
-      faction: army.owner,
-      army: army.id,
-      to: cityOnMap(capitals[i % capitals.length] as string),
-    }));
+    Object.values(state.armies).flatMap((army, i) => {
+      const from = army.activity.kind === 'idle' ? army.activity.position : undefined;
+      const turn = [
+        ...capitals.slice(i % capitals.length),
+        ...capitals.slice(0, i % capitals.length),
+      ];
+      const to = turn
+        .map((id) => cityOnMap(id))
+        .find(
+          (to) =>
+            from &&
+            Math.hypot(to.x - from.x, to.y - from.y) > 100 &&
+            typeof marchPath(world, from, to) !== 'string',
+        );
+      return to ? [{ kind: 'moveArmy', faction: army.owner, army: army.id, to }] : [];
+    });
   const play = (from: GameState, days: number, first: (state: GameState) => Order[] = () => []) => {
     let state = from;
     for (let day = 0; day < days; day += 1) {

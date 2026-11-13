@@ -1,4 +1,5 @@
 import type { CityId, FactionId } from '../ids.ts';
+import { MARCH_KM_PER_DAY, MAX_MARCH_DAYS } from '../march.ts';
 import { AT_PORT_KM } from '../orders/embark.ts';
 import type { MapPoint } from '../state/map-point.ts';
 import { connected, distance, findPath } from '../world/find-path.ts';
@@ -8,6 +9,9 @@ import { SEA_KM_FACTOR } from './thresholds.ts';
 
 /** The next order on the way to a city: march to a point, or sail from the port the army stands at. */
 export type Step = { kind: 'march'; to: MapPoint } | { kind: 'embark'; to: CityId };
+
+/** The longest march the rules allow, in km of road. */
+const MAX_MARCH_KM = MAX_MARCH_DAYS * MARCH_KM_PER_DAY;
 
 export interface Route {
   /** Km along the land path, plus straight km at sea weighted by SEA_KM_FACTOR. */
@@ -21,6 +25,8 @@ export interface Router {
   routeTo(from: MapPoint, target: CityView, within?: number): Route | undefined;
   /** Whether any route joins them, without pricing it. */
   reaches(from: MapPoint, target: CityView): boolean;
+  /** Whether an army may march from one point to the other, within MAX_MARCH_DAYS. */
+  marches(from: MapPoint, to: MapPoint): boolean;
   /** The port the embark order would sail from, for an army at this point. */
   portAt(from: MapPoint): CityView | undefined;
 }
@@ -65,7 +71,10 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
   }
 
   const roads = new Map<string, number>();
-  /** The length of the land path, which only the chosen few routes pay to find. */
+  /**
+   * The length of the land path, which only the chosen few routes pay to find. A path
+   * longer than a march may be costs infinity, so no route takes it.
+   */
   function roadKm(from: MapPoint, to: MapPoint): number {
     const key = `${from.x},${from.y};${to.x},${to.y}`;
     let km = roads.get(key);
@@ -79,6 +88,7 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
           km += distance(at, point);
           at = point;
         }
+        if (km > MAX_MARCH_KM) km = Number.POSITIVE_INFINITY;
       }
       roads.set(key, km);
     }
@@ -94,7 +104,7 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
 
   function options(from: MapPoint, target: CityView): Option[] {
     const found: Option[] = [];
-    if (byLand(world, from, target.position)) {
+    if (distance(from, target.position) <= MAX_MARCH_KM && byLand(world, from, target.position)) {
       found.push({
         bound: distance(from, target.position),
         price: () => roadKm(from, target.position),
@@ -112,7 +122,8 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
       return found;
     }
     for (const port of ownPorts) {
-      if (port.id === landing.id || !byLand(world, from, port.position)) continue;
+      if (port.id === landing.id || distance(from, port.position) > MAX_MARCH_KM) continue;
+      if (!byLand(world, from, port.position)) continue;
       if (!connected(world.mesh, harbour(port), landAt, 'sea')) continue;
       const voyage = distance(harbour(port), landAt) * SEA_KM_FACTOR + ashore;
       found.push({
@@ -135,8 +146,18 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
   }
 
   function reaches(from: MapPoint, target: CityView): boolean {
-    return byLand(world, from, target.position) || options(from, target).length > 0;
+    const walk =
+      distance(from, target.position) <= MAX_MARCH_KM && byLand(world, from, target.position);
+    return walk || options(from, target).length > 0;
   }
 
-  return { routeTo, reaches, portAt };
+  function marches(from: MapPoint, to: MapPoint): boolean {
+    return (
+      distance(from, to) <= MAX_MARCH_KM &&
+      byLand(world, from, to) &&
+      roadKm(from, to) <= MAX_MARCH_KM
+    );
+  }
+
+  return { routeTo, reaches, marches, portAt };
 }

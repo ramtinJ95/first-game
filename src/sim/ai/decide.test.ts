@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { CityId, FactionId, FormationId } from '../ids.ts';
+import { changeCityOwner } from '../cities.ts';
+import { marchPath } from '../march.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
 import type { Day } from '../state/day.ts';
@@ -311,14 +313,31 @@ describe('a great power', () => {
     });
 
     test('leaves for its muster city a siege whose garrison outnumbers its besiegers, before the sallies wear them down', () => {
-      // Carthage's army besieges Capua, so Rome musters at Roma.
-      const state = besieging(f.carthago, 1200);
+      const start = buildFixture();
+      changeCityOwner(start, f.capua, f.carthage);
+      setMen(start, f.hastati, 1200);
+      declare(start, f.rome, f.carthage);
+      place(start, f.romanArmy, { x: CAPUA.x - 3, y: CAPUA.y });
+      const state = tick(start, [], world).state;
+      expect(army(state, f.romanArmy).activity.kind).toBe('besieging');
+      city(state, f.capua).garrison = 5000;
       expect(decide(state, f.rome)).toContainEqual({
         kind: 'moveArmy',
         faction: f.rome,
         army: f.romanArmy,
         to: ROMA,
       });
+    });
+
+    test('never sets out on a march longer than MAX_MARCH_DAYS, such as round the sea from a failed siege overseas', () => {
+      // Carthage's army besieges Capua, so Rome musters at Roma, 287 days from Carthago by land.
+      const state = besieging(f.carthago, 1200);
+      for (const order of decide(state, f.rome)) {
+        if (order.kind !== 'moveArmy') continue;
+        const from = army(state, order.army).activity;
+        const at = from.kind === 'embarked' ? undefined : from.position;
+        expect(at && marchPath(world, at, order.to)).toBeInstanceOf(Array);
+      }
     });
 
     test('storms a city when the storm is near certain and cheap, and besieges a strong one', () => {

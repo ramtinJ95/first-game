@@ -208,12 +208,16 @@ describe('sightOf', () => {
 
   test('it is fast enough for every refresh on the new game with every army marching', () => {
     const state = game();
-    const capitals = ['roma', 'carthago', 'pella', 'alexandria', 'persepolis'];
+    const cities = Object.values(state.cities).sort((a, b) => (a.id < b.id ? -1 : 1));
     for (const [i, army] of Object.values(state.armies).entries()) {
       if (army.activity.kind !== 'idle') continue;
       const from = army.activity.position;
-      const to = state.cities[capitals[(i + 1) % capitals.length] as CityId]?.position;
-      if (to) startMarch(world, army, from, to);
+      const rotated = [...cities.slice(i * 7), ...cities.slice(0, i * 7)];
+      rotated.some(
+        (city) =>
+          Math.hypot(city.position.x - from.x, city.position.y - from.y) > 100 &&
+          startMarch(world, army, from, city.position) === undefined,
+      );
     }
     const marching = Object.values(state.armies).filter((a) => a.activity.kind === 'marching');
     expect(marching.length).toBe(Object.keys(state.armies).length);

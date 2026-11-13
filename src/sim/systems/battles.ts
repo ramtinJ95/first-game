@@ -1,16 +1,15 @@
 import { leaveSiege, removeArmy } from '../armies.ts';
 import { emit, type BattleSideName } from '../events.ts';
-import type { ArmyId, BattleId, CityId, FactionId } from '../ids.ts';
+import type { ArmyId, BattleId, FactionId } from '../ids.ts';
 import { allocateId } from '../ids.ts';
 import { removeRecord } from '../records.ts';
 import { nextRandom } from '../rng.ts';
 import type { Army, Stance } from '../state/army.ts';
 import type { Battle } from '../state/battle.ts';
-import type { City } from '../state/city.ts';
 import type { Formation } from '../state/formation.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
-import { landPath } from '../march.ts';
+import { landPath, MARCH_KM_PER_DAY, marchDays } from '../march.ts';
 import { connected, surfaceAt } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import { TROOPS } from '../troops.ts';
@@ -66,6 +65,12 @@ const PURSUIT_MAX = 0.25;
 export const SAFE_KM = 2 * ENGAGEMENT_DISTANCE;
 /** With no safe city, a retreat goes this far into the field, away from the enemy. */
 export const FIELD_RETREAT_KM = 100;
+/**
+ * No retreat takes longer than this. A beaten army that walks farther to a city is back
+ * to full morale later than one that falls back into the field and recovers there.
+ */
+export const MAX_RETREAT_DAYS =
+  FIELD_RETREAT_KM / MARCH_KM_PER_DAY + 1 / MORALE_RECOVERY - 1 / REFUGE_RECOVERY;
 
 /** How a stance scales the blows an army gives, the blows it takes, and the morale it loses. */
 export const STANCE_EFFECTS: Record<Stance, { dealt: number; taken: number; morale: number }> = {
@@ -350,10 +355,10 @@ function settle(state: GameState, world: World, id: BattleId) {
  * Takes an army out of its battle, broken, and sends it to safety. Ordered out, each
  * formation loses RETREAT_LOSS of its men. Beaten, it loses what the enemy's horsemen
  * cut down as it breaks. It retreats to the nearest city its owner holds that a land
- * route reaches, that is not besieged, that has no enemy army within ENGAGEMENT_DISTANCE,
- * and that lies at least SAFE_KM from every army it fought. With no such city it goes
- * FIELD_RETREAT_KM into the field, as directly away from those armies as the land allows.
- * With neither it surrenders. No battle takes it until it arrives. The battle may be left
+ * route of at most MAX_RETREAT_DAYS reaches, that is not besieged, that has no enemy army
+ * within ENGAGEMENT_DISTANCE, and that lies at least SAFE_KM from every army it fought.
+ * With no such city it goes FIELD_RETREAT_KM into the field, as directly away from those
+ * armies as the land allows. With neither it surrenders. No battle takes it until it arrives. The battle may be left
  * with an empty side, which the battles system ends the same day.
  */
 export function retreatFromBattle(
@@ -438,11 +443,8 @@ function retreatPath(
   foes: readonly MapPoint[],
   battlePosition: MapPoint,
 ): MapPoint[] | undefined {
-  const city = safeCity(state, world, owner, from, foes);
-  if (city) {
-    const path = landPath(world, from, city.position);
-    if (typeof path !== 'string') return path;
-  }
+  const refuge = refugePath(state, world, owner, from, foes);
+  if (refuge) return refuge;
   const centre =
     foes.length > 0
       ? {
@@ -461,34 +463,45 @@ function retreatPath(
     };
     if (surfaceAt(world.mesh, to) !== 'land' || !connected(world.mesh, from, to, 'land')) continue;
     const path = landPath(world, from, to);
-    if (typeof path !== 'string') return path;
+    if (typeof path !== 'string' && marchDays(from, path) <= MAX_RETREAT_DAYS) return path;
   }
   return undefined;
 }
 
-function safeCity(
+/** The shortest land path to a safe city of the owner within MAX_RETREAT_DAYS, if any. */
+function refugePath(
   state: GameState,
   world: World,
   owner: FactionId,
   from: MapPoint,
   foes: readonly MapPoint[],
-): City | undefined {
+): MapPoint[] | undefined {
   const besieged = new Set(Object.values(state.sieges).map((siege) => siege.city));
   const hostile = Object.values(state.armies).flatMap((army) =>
     army.activity.kind !== 'embarked' && areAtWar(state, owner, army.owner)
       ? [army.activity.position]
       : [],
   );
-  let best: City | undefined;
-  for (const id of Object.keys(state.cities).sort()) {
-    const city = state.cities[id as CityId];
-    if (!city || city.owner !== owner || besieged.has(city.id)) continue;
-    if (best && distance(from, city.position) >= distance(from, best.position)) continue;
+  const reach = MAX_RETREAT_DAYS * MARCH_KM_PER_DAY;
+  const near = Object.values(state.cities)
+    .map((city) => ({ city, km: distance(from, city.position) }))
+    .filter(({ city, km }) => city.owner === owner && km <= reach && !besieged.has(city.id))
+    .sort((a, b) => a.km - b.km || (a.city.id < b.city.id ? -1 : 1));
+  let best: { path: MapPoint[]; days: number } | undefined;
+  for (const { city, km } of near) {
+    // No road is shorter than the straight line, so no later city can be nearer by road.
+    if (best && km / MARCH_KM_PER_DAY >= best.days) break;
     if (foes.some((foe) => distance(foe, city.position) < SAFE_KM)) continue;
     if (hostile.some((enemy) => distance(enemy, city.position) <= ENGAGEMENT_DISTANCE)) continue;
-    if (connected(world.mesh, from, city.position, 'land')) best = city;
+    if (!connected(world.mesh, from, city.position, 'land')) continue;
+    const path = landPath(world, from, city.position);
+    if (typeof path === 'string') continue;
+    const days = marchDays(from, path);
+    if (days <= MAX_RETREAT_DAYS && days < (best?.days ?? Number.POSITIVE_INFINITY)) {
+      best = { path, days };
+    }
   }
-  return best;
+  return best?.path;
 }
 
 export function removeEmptyFormations(state: GameState, army: Army): void {

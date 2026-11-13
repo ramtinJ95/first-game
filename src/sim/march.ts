@@ -9,6 +9,23 @@ export const MARCH_KM_PER_DAY = 25;
 export const CONVOY_KM_PER_DAY = 20;
 /** How far a column of refugees walks in a day. */
 export const REFUGEE_KM_PER_DAY = 12;
+/**
+ * No march takes longer than this. Between cities within the AI's war reach, every march
+ * that no crossing by sea beats takes at most 65 days, and the walks round a sea take 100
+ * or more, so the bound falls in that gap.
+ */
+export const MAX_MARCH_DAYS = 90;
+
+/** The days an army takes to walk the waypoints from the point. */
+export function marchDays(from: MapPoint, waypoints: readonly MapPoint[]): number {
+  let km = 0;
+  let at = from;
+  for (const point of waypoints) {
+    km += distance(at, point);
+    at = point;
+  }
+  return Math.ceil(km / MARCH_KM_PER_DAY);
+}
 
 /** The land path from one point to another, or the reason no army can walk it. */
 export function landPath(world: World, from: MapPoint, to: MapPoint): MapPoint[] | string {
@@ -21,10 +38,21 @@ export function landPath(world: World, from: MapPoint, to: MapPoint): MapPoint[]
   return findPath(world.mesh, from, to, 'land') ?? `no land route reaches ${where}`;
 }
 
+/** The land path of a march from one point to another, or why no army may march it. */
+export function marchPath(world: World, from: MapPoint, to: MapPoint): MapPoint[] | string {
+  const path = landPath(world, from, to);
+  if (typeof path === 'string') return path;
+  const days = marchDays(from, path);
+  if (days > MAX_MARCH_DAYS) {
+    return `the march to ${to.x}, ${to.y} takes ${days} days, more than the ${MAX_MARCH_DAYS} a march may take`;
+  }
+  return path;
+}
+
 /**
- * Sets the army marching from the point to the destination along a land path, or
- * returns why it cannot and leaves the army alone. Nothing else starts a march, so
- * every marching army has a path.
+ * Sets the army marching from the point to the destination along a land path no longer
+ * than MAX_MARCH_DAYS, or returns why it cannot and leaves the army alone. Nothing else
+ * starts a march, so every marching army has a path.
  */
 export function startMarch(
   world: World,
@@ -32,7 +60,7 @@ export function startMarch(
   from: MapPoint,
   to: MapPoint,
 ): string | undefined {
-  const path = landPath(world, from, to);
+  const path = marchPath(world, from, to);
   if (typeof path === 'string') return path;
   army.activity = { kind: 'marching', position: { x: from.x, y: from.y }, waypoints: path };
   return undefined;
