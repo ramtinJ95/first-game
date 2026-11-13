@@ -690,6 +690,7 @@ export async function createRenderer({
       [...requests, ...settled.requests],
       [...symbolBoxes, ...settled.boxes, ...standingMarkers(state)],
       view,
+      onLand,
     );
     places.placeLabels(placed);
     drawnPlaces = [
