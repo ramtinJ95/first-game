@@ -835,8 +835,11 @@ export async function createRenderer({
   function gpuBusy(): boolean {
     if (!fence || !('gl' in app.renderer)) return false;
     const gl = app.renderer.gl as WebGL2RenderingContext;
-    if (gl.getSyncParameter(fence, gl.SYNC_STATUS) !== gl.SIGNALED) return true;
-    gl.deleteSync(fence);
+    // A lost context drops its fences, which then never signal, so a fence that cannot
+    // be read is let go rather than waited on.
+    const status: unknown = gl.isContextLost() ? null : gl.getSyncParameter(fence, gl.SYNC_STATUS);
+    if (status === gl.UNSIGNALED) return true;
+    if (status !== null) gl.deleteSync(fence);
     fence = null;
     return false;
   }
@@ -1001,9 +1004,9 @@ export async function createRenderer({
         dirty = true;
       }
       if (cameraMoved) applyCamera();
-      const terrainBusy = terrain.update(camera, viewport(), now);
-      if (terrainBusy) dirty = true;
-      const terrainState = terrainBusy ? 'busy' : 'ready';
+      const terrainNow = terrain.update(camera, viewport(), now);
+      if (terrainNow.busy || terrainNow.redrawn) dirty = true;
+      const terrainState = terrainNow.busy ? 'busy' : 'ready';
       if (canvas.dataset['terrain'] !== terrainState) canvas.dataset['terrain'] = terrainState;
       if (dirty) layoutCities(current);
       if (

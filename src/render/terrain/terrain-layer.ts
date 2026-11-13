@@ -63,8 +63,11 @@ export interface Terrain {
   /** The lakes, which sit over the washes so no owner's colour tints them. */
   readonly lakes: Container;
   readonly land: Land;
-  /** Places and shows the drawings for this view. Returns true while something still fades in. */
-  update(camera: Camera, viewport: Size, now: number): boolean;
+  /**
+   * Places and shows the drawings for this view. Says whether something still builds or
+   * fades in, and whether the cached texture was drawn again, which the frame must show.
+   */
+  update(camera: Camera, viewport: Size, now: number): { busy: boolean; redrawn: boolean };
   /** Rebuilds the lakes' lines at a fixed width on screen, as the renderer does for the coast. */
   restroke(scale: number): void;
   /** Stops building chunks, before the renderer is destroyed. */
@@ -243,6 +246,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       const still = now - stillSince > PREFETCH_AFTER_MS;
       let fading = false;
       let changed = false;
+      let redrawn = false;
       const missing: { layer: Layer; key: number; distance: number; needed: boolean }[] = [];
       for (const layer of layers) {
         const alpha = detailAlpha(layer.band, camera.scale);
@@ -311,6 +315,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
         art.scale.set(camera.scale);
         art.position.set(x + CACHE_MARGIN, y + CACHE_MARGIN);
         renderer.render({ container: root, target: texture, clear: true });
+        redrawn = true;
         drawn = { x, y, scale: camera.scale };
         repaint = false;
         sprite.scale.set(1 / camera.scale);
@@ -323,7 +328,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
         });
         lakesStale = false;
       }
-      return fading;
+      return { busy: fading, redrawn };
     },
   };
 }
