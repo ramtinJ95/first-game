@@ -7,7 +7,7 @@ import type { City, CityRank } from '../../sim/state/city.ts';
 import type { Formation } from '../../sim/state/formation.ts';
 import type { GameState } from '../../sim/state/game-state.ts';
 import type { MapPoint } from '../../sim/state/map-point.ts';
-import { CITY_DEFENCES } from '../../sim/systems/sieges.ts';
+import { fullDefences } from '../../sim/systems/sieges.ts';
 import { TROOPS, type Troop } from '../../sim/troops.ts';
 import { mapToScreen, type Camera, type Size } from '../camera.ts';
 import type { Box } from '../labels.ts';
@@ -1146,7 +1146,7 @@ class Context {
       const seen = sight.sees(city.position) || city.owner === current.player;
       const growth = this.input.growth;
       const before = previous.cities[city.id];
-      const full = CITY_DEFENCES[city.rank].walls;
+      const full = fullDefences(city).walls;
       if (seen && city.walls < full * 0.98) {
         this.scene.breaches.push({
           city: city.id,
