@@ -26,9 +26,11 @@ import { newGame } from '../src/sim/new-game.ts';
 import type { Order } from '../src/sim/orders/orders.ts';
 import { saveGame } from '../src/sim/save.ts';
 import type { Army } from '../src/sim/state/army.ts';
+import type { Day } from '../src/sim/state/day.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import type { MapPoint } from '../src/sim/state/map-point.ts';
 import { warKey } from '../src/sim/state/war.ts';
+import { limitsOf } from '../src/sim/systems/economy.ts';
 import { tick } from '../src/sim/tick.ts';
 import { areAtWar } from '../src/sim/wars.ts';
 import { buildWorld, type World } from '../src/sim/world/world.ts';
@@ -500,4 +502,68 @@ export function winnerMarchesOn(): GameState {
     { kind: 'moveArmy', faction: rome, army: armyOf(start, rome).id, to },
   ]);
   return playAi(joined, 5);
+}
+
+/** Rome is rich, and six formations of spearmen finish their training at Roma tomorrow. */
+export function sixSpearmenMusterTomorrow(): GameState {
+  const state = startGame();
+  setRich(state);
+  const roma = state.cities['roma' as CityId];
+  if (!roma) throw new Error('no Roma');
+  roma.recruits = Array.from({ length: 6 }, () => ({ troop: 'spearmen', readyOn: state.day }));
+  return state;
+}
+
+/**
+ * Roma trains two spearmen and archers weeks from done, Rome's army is away at Arretium,
+ * and a Carthaginian army stands at Roma's walls, at war, so tomorrow the siege begins
+ * and Roma musters its recruits early.
+ */
+export function romaMustersUnderSiege(): GameState {
+  const state = startGame();
+  setRich(state);
+  declareWar(state, rome, carthage);
+  const roma = state.cities['roma' as CityId];
+  if (!roma) throw new Error('no Roma');
+  roma.recruits = [
+    { troop: 'spearmen', readyOn: (state.day + 20) as Day },
+    { troop: 'spearmen', readyOn: (state.day + 20) as Day },
+    { troop: 'archers', readyOn: (state.day + 25) as Day },
+  ];
+  armyOf(state, rome).activity = { kind: 'idle', position: cityPoint('arretium') };
+  const punic = withFormations(state, armyOf(state, carthage), [
+    ['spearmen', 3000],
+    ['swordsmen', 2000],
+  ]);
+  punic.activity = { kind: 'idle', position: { ...roma.position } };
+  return state;
+}
+
+/** Mediolanum thirty days after Rome sacked it, with Rome's army still there. */
+export function sackedMediolanum(): GameState {
+  const state = startGame();
+  fallenTo(state, 'mediolanum');
+  return playDays(state, 30, [{ kind: 'sack', faction: rome, city: 'mediolanum' as CityId }]);
+}
+
+/** Rome's food and manpower stand at their limits, so neither grows tomorrow. */
+export function storesAtTheirLimits(): GameState {
+  const state = startGame();
+  const limit = limitsOf(state).get(rome);
+  const stores = state.factions[rome]?.stores;
+  if (!limit || !stores) throw new Error('no stores of Rome');
+  stores.food = limit.food;
+  stores.manpower = limit.manpower;
+  return state;
+}
+
+/** Rome's army of 600 spearmen began the siege of Mediolanum's 1,200 today, too few to cut its food. */
+export function weakSiegeOfMediolanum(): GameState {
+  const state = startGame();
+  const city = state.cities['mediolanum' as CityId];
+  if (!city) throw new Error('no Mediolanum');
+  declareWar(state, rome, city.owner);
+  const army = withFormations(state, armyOf(state, rome), [['spearmen', 600]]);
+  army.activity = { kind: 'idle', position: { x: city.position.x + 4, y: city.position.y } };
+  return playDays(state, 1);
 }
