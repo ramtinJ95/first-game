@@ -82,11 +82,19 @@ export function activityText(state: State, army: DeepReadonly<Army>): string {
         pathKm(activity.position, activity.waypoints),
         MARCH_KM_PER_DAY,
       )}`;
-    case 'retreating':
-      return `Retreating${destination(state, activity.waypoints.at(-1))} · ${daysLeft(
-        pathKm(activity.position, activity.waypoints),
-        MARCH_KM_PER_DAY,
-      )}`;
+    case 'retreating': {
+      const days = daysLeft(pathKm(activity.position, activity.waypoints), MARCH_KM_PER_DAY);
+      const end = activity.waypoints.at(-1);
+      const refuge =
+        end &&
+        Object.values(state.cities).find(
+          (city) => city.owner === army.owner && distance(city.position, end) <= AT_CITY_KM,
+        );
+      // A retreat into the field ends near no city of the owner, often by the enemy's.
+      return refuge
+        ? `Retreating to ${refuge.name} · ${days}`
+        : `Falling back into the field · ${days}`;
+    }
     case 'inBattle': {
       const battle = state.battles[activity.battle];
       const day = battle ? state.day - battle.startedOn + 1 : 1;

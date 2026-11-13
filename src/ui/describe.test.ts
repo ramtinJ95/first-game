@@ -15,6 +15,7 @@ import {
   cityFoodText,
   sackText,
   storeNote,
+  activityText,
   stormText,
   weakSiegeText,
   ordersWaitingText,
@@ -487,5 +488,31 @@ describe('weakSiegeText', () => {
       }
       expect(lost / tries / cost, `${men} men`).toBeCloseTo(1, 1);
     }
+  });
+});
+
+describe('activityText', () => {
+  function retreatingTo(end: { x: number; y: number }) {
+    const state = buildFixture();
+    const roman = state.armies[f.romanArmy];
+    const roma = state.cities[f.roma];
+    if (!roman || !roma) throw new Error('fixture changed');
+    const from = { x: end.x + 60, y: end.y };
+    roman.activity = { kind: 'retreating', position: from, waypoints: [end] };
+    return activityText(state, roman);
+  }
+
+  it('names the city of its own a retreat ends at', () => {
+    const roma = buildFixture().cities[f.roma]?.position;
+    if (!roma) throw new Error('fixture changed');
+    expect(retreatingTo(roma)).toBe('Retreating to Roma · 3 days left');
+  });
+
+  it("says a retreat that ends in the field falls back into it, and names no enemy's city", () => {
+    const carthago = buildFixture().cities[f.carthago]?.position;
+    if (!carthago) throw new Error('fixture changed');
+    expect(retreatingTo({ x: carthago.x, y: carthago.y + 30 })).toBe(
+      'Falling back into the field · 3 days left',
+    );
   });
 });
