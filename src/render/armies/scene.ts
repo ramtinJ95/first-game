@@ -12,7 +12,7 @@ import { TROOPS, type Troop } from '../../sim/troops.ts';
 import { mapToScreen, type Camera, type Size } from '../camera.ts';
 import type { Box } from '../labels.ts';
 import { MOTIONS, MOUNTED, type FigureKind, type Motion } from '../figures/motions.ts';
-import { OWNED, SHARED, artKey, figureKey } from '../figures/sheet.ts';
+import { OWNED, SHARED, artKey, figureKey, groundSpan } from '../figures/sheet.ts';
 import { factionColour, MINOR_COLOUR, POWER_COLOURS } from '../palette.ts';
 import { figuresFor } from './count.ts';
 import {
@@ -118,6 +118,8 @@ export interface SceneInput {
   readonly land?: (screen: MapPoint) => boolean;
   /** Where each city's name is drawn on screen, which an army at the city keeps clear of. */
   readonly names?: ReadonlyMap<CityId, Box>;
+  /** The town and village symbols and names drawn on screen, which a siege camp keeps clear of. */
+  readonly keepClear?: readonly Box[];
 }
 
 type State = DeepReadonly<GameState>;
@@ -264,6 +266,35 @@ class Context {
     const { width, height } = this.input.viewport;
     const m = this.margin + extra;
     return point.x > -m && point.y > -m && point.x < width + m && point.y < height + m;
+  }
+
+  /**
+   * Whether the ground a figure covers at a screen point is land: its feet, or a horse's
+   * hooves, at either side of it, so a figure on a coast never stands half in the sea.
+   */
+  dry(x: number, y: number, kind: FigureKind | 'tent'): boolean {
+    const land = this.input.land;
+    if (!land) return true;
+    const half = (kind === 'tent' ? TENT_SPAN : groundSpan(kind)) * this.h;
+    return land({ x, y }) && land({ x: x - half, y }) && land({ x: x + half, y });
+  }
+
+  /**
+   * The nearest place within `NUDGE_RINGS` steps where the figure's ground is dry, for a
+   * figure that the layout of its army could not keep on land, such as a man running from
+   * a broken line toward the shore, or undefined when there is none, and it is not drawn.
+   */
+  nudge(x: number, y: number, kind: FigureKind): MapPoint | undefined {
+    if (this.dry(x, y, kind)) return { x, y };
+    for (let ring = 1; ring <= NUDGE_RINGS; ring++) {
+      const r = ring * NUDGE_STEP * this.h;
+      for (let k = 0; k < 12; k++) {
+        const a = (k / 12) * Math.PI * 2;
+        const at = { x: x + Math.cos(a) * r, y: y + Math.sin(a) * r * GROUND_Y };
+        if (this.dry(at.x, at.y, kind)) return at;
+      }
+    }
+    return undefined;
   }
 
   /** A km distance on the map in screen px. */
@@ -523,7 +554,7 @@ class Context {
       const files = block(troop, figuresFor((is ?? was)?.men ?? 0), 'line', id).files;
       plans.push({ id, troop, day: formationDay(was, is, current.day, files * 2) });
     }
-    const command: FigureKind[] = record.generalSkill > 0 ? ['bearer', 'general'] : ['bearer'];
+    const command = record.generalSkill > 0 ? COMMAND_KINDS : COMMAND_KINDS.slice(0, 1);
 
     const beforeLayout =
       before && modeBefore ? this.layout(previous, before, modeBefore, 'before') : undefined;
@@ -662,6 +693,10 @@ class Context {
         facing = Math.cos(angle) >= 0 ? at.facing : -at.facing;
       }
 
+      const ground = this.nudge(x, y, kind);
+      if (!ground) return;
+      x = ground.x;
+      y = ground.y;
       const usable = motionFor(kind, motion);
       const frame = frameOf(usable, usable === 'fall' ? Math.min(0.999, phase) : phase);
       const mounted = MOUNTED.has(kind);
@@ -875,12 +910,11 @@ class Context {
   // ---------------------------------------------------------------- the field
 
   camp(layout: Layout, colour: number, army: ArmyId) {
-    const land = this.input.land ?? (() => true);
     const dry = (side: 1 | -1) => {
       const spots = layout.campSpots(side);
       return {
-        tents: spots.tents.filter(land),
-        fires: spots.fires.filter(land),
+        tents: spots.tents.filter((p) => this.dry(p.x, p.y, 'tent')),
+        fires: spots.fires.filter((p) => this.dry(p.x, p.y, 'bearer')),
         all: spots.tents.length,
       };
     };
@@ -908,7 +942,10 @@ class Context {
     colour: number,
     army: ArmyId,
   ) {
-    const { tents, fires, stakes } = layout.field();
+    const field = layout.field();
+    const tents = field.tents.filter((p) => this.dry(p.x, p.y, 'tent'));
+    const fires = field.fires.filter((p) => this.dry(p.x, p.y, 'bearer'));
+    const stakes = field.stakes.filter((p) => this.dry(p.x, p.y, 'bearer'));
     tents.forEach((spot, i) => {
       const key = `${artKey(i === Math.floor(tents.length / 2) ? 'commandTent' : 'tent')}@${colour}`;
       this.push({
@@ -948,6 +985,7 @@ class Context {
     tents.forEach((tent, i) => {
       const x = tent.x + (seeded(army, 40 + i) < 0.5 ? -1 : 1) * 0.55 * this.h;
       const y = tent.y + 0.18 * this.h;
+      if (!this.dry(x, y, 'bearer')) return;
       this.push({
         key: `${artKey('arms')}@${colour}`,
         x,
@@ -1503,14 +1541,21 @@ class LineLayout implements Layout {
     }
   }
 
-  /** Where every figure of the army stands, its seeded step included, with its commanders. */
+  /**
+   * The ground every figure of the army covers, its seeded step included, with its
+   * commanders: its feet, or a horse's hooves, at either side of where it stands.
+   */
   positions(): MapPoint[] {
     const points: MapPoint[] = [];
-    for (const slot of [0, 1]) {
-      const at = this.locate('command', slot);
-      if (at) points.push(at);
-    }
     const { h } = this.ctx;
+    const cover = (at: MapPoint, kind: FigureKind) => {
+      const half = groundSpan(kind) * h;
+      points.push({ x: at.x - half, y: at.y }, at, { x: at.x + half, y: at.y });
+    };
+    COMMAND_KINDS.forEach((kind, slot) => {
+      const at = this.locate('command', slot);
+      if (at) cover(at, kind);
+    });
     for (const [id, { block, troop }] of this.blocks) {
       // The reach of a skirmisher's sway and of a horseman's loop at every moment, from
       // the place the figure moves about, so one shift keeps it on land at every phase
@@ -1526,10 +1571,10 @@ class LineLayout implements Layout {
           : [{ along: 0, across: 0 }];
         for (const sway of sways) {
           for (const { along, across } of loop) {
-            points.push({
-              x: at.x + at.facing * (along + sway) * h,
-              y: at.y + across * h * GROUND_Y,
-            });
+            cover(
+              { x: at.x + at.facing * (along + sway) * h, y: at.y + across * h * GROUND_Y },
+              troop,
+            );
           }
         }
       }
@@ -1698,6 +1743,13 @@ class ColumnLayout implements Layout {
 /** Rings of candidate shifts tried, each `LAND_STEP` figure heights further out, in 16 directions. */
 const LAND_RINGS = 12;
 const LAND_STEP = 0.5;
+/** The standard bearer and the general, in the order of their slots. */
+const COMMAND_KINDS: readonly FigureKind[] = ['bearer', 'general'];
+/** How far a tent's foot reaches to either side, in men's heights. */
+const TENT_SPAN = 0.5;
+/** Rings of places tried for one figure the layout left off land, each `NUDGE_STEP` men's heights out. */
+const NUDGE_RINGS = 4;
+const NUDGE_STEP = 0.35;
 
 /**
  * The smallest shift on screen, in px, that brings every sample point onto land, or the
@@ -1735,6 +1787,11 @@ function ringRadius(rank: CityRank, growth: number, h: number): number {
   return CITY_HALF_WIDTH[rank] * growth + 4 + 0.45 * h;
 }
 
+/** The rows of a siege ring, in men's heights out from its first rank: stakes, ditch, men, tents. */
+const RING_ROWS = [0.55, 0.78, 1.05, 1.35, 1.65, 2.35, 2.7];
+/** The fewest of the ring's 72 angles a siege keeps to; with fewer it rings the whole city. */
+const RING_MIN_ANGLES = 6;
+
 /** Besiegers in their share of a ring round the city, facing its walls. */
 class RingLayout implements Layout {
   private readonly ctx: Context;
@@ -1767,25 +1824,47 @@ class RingLayout implements Layout {
   private landAngles: number[] | undefined;
 
   /**
-   * The ring is shared out over the angles at which it stands on land, so a city on a
-   * coast is ringed on its landward side and no tent stands in the sea.
+   * The ring is shared out over the angles at which every row of it, from the stakes to
+   * the tents, stands on land and clear of the towns, villages, and names near the city,
+   * so a city on a coast is ringed on its landward side, no tent stands in the sea, and
+   * the places round the city stay readable. Where too little of the ring is clear of
+   * the places, it keeps to the land alone.
    */
   private onLand(angle: number): number {
     const start = seeded(this.mode.city.id) * Math.PI * 2;
     if (!this.landAngles) {
-      const c = this.ctx.screen(this.mode.city.position);
-      const r = this.radius() + 1.3 * this.ctx.h;
-      const land = this.ctx.input.land ?? (() => true);
+      const { ctx } = this;
+      const h = ctx.h;
+      const c = ctx.screen(this.mode.city.position);
+      const radius = this.radius();
+      const name = ctx.input.names?.get(this.mode.city.id);
+      const places = [...(ctx.input.keepClear ?? []), ...(name ? [name] : [])];
+      const covers = (p: MapPoint) =>
+        places.some(
+          (b) =>
+            p.x + 0.5 * h > b.left &&
+            p.x - 0.5 * h < b.right &&
+            p.y > b.top &&
+            p.y - 1.3 * h < b.bottom,
+        );
+      const rows = RING_ROWS.map((r) => radius + r * h);
       const samples = 72;
-      this.landAngles = [];
+      const dry: number[] = [];
+      const clear: number[] = [];
       for (let i = 0; i < samples; i++) {
         const a = start + (i / samples) * Math.PI * 2;
-        if (land({ x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r * GROUND_Y }))
-          this.landAngles.push(a);
+        const points = rows.map((r) => ({
+          x: c.x + Math.cos(a) * r,
+          y: c.y + Math.sin(a) * r * GROUND_Y,
+        }));
+        if (!points.every((p) => ctx.dry(p.x, p.y, 'tent'))) continue;
+        dry.push(a);
+        if (!points.some(covers)) clear.push(a);
       }
+      this.landAngles = clear.length >= RING_MIN_ANGLES ? clear : dry;
     }
     const angles = this.landAngles;
-    if (angles.length < 6 || angles.length === 72) return angle;
+    if (angles.length < RING_MIN_ANGLES || angles.length === 72) return angle;
     const u = frac((angle - start) / (Math.PI * 2)) * angles.length;
     const i = Math.floor(u);
     const a = angles[i % angles.length] as number;

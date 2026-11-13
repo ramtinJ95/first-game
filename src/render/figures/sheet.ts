@@ -329,3 +329,31 @@ export function sheetSvg(
 export function sheetRows(layout: SheetLayout): number[] {
   return [...new Set([...layout.cells.values()].map((cell) => cell.y))].sort((a, b) => a - b);
 }
+
+const spans = new Map<FigureKind, number>();
+
+/**
+ * How far a figure's feet, hooves, or spear butt reach to either side of its origin, in
+ * men's heights, over every frame it stands or walks: the ground it covers, which must
+ * be land.
+ */
+export function groundSpan(kind: FigureKind): number {
+  const known = spans.get(kind);
+  if (known !== undefined) return known;
+  let span = 0;
+  for (const motion of KIND_MOTIONS[kind]) {
+    if (motion === 'fall') continue;
+    for (let frame = 0; frame < MOTIONS[motion].frames; frame++) {
+      for (const op of posedFigure(kind, motion, frameTime(motion, frame)).ops) {
+        const box = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+        pathBounds(op.d, box, 0);
+        if (box.maxY >= GROUND_CONTACT) span = Math.max(span, -box.minX, box.maxX);
+      }
+    }
+  }
+  spans.set(kind, span / 100);
+  return span / 100;
+}
+
+/** A shape whose lowest point is at most this far above the origin, in figure units, touches the ground. */
+const GROUND_CONTACT = -8;
