@@ -9,7 +9,7 @@ import type { City } from '../src/sim/state/city.ts';
 import type { Stores } from '../src/sim/state/faction.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import type { MapPoint } from '../src/sim/state/map-point.ts';
-import { warKey } from '../src/sim/state/war.ts';
+import { newWar, warKey } from '../src/sim/state/war.ts';
 import { surfaceAt } from '../src/sim/world/find-path.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 import { menOf, OUTPUT_PER_PERSON } from '../src/sim/systems/economy.ts';
@@ -133,7 +133,7 @@ function setUp(c: Case, seed: number) {
   for (const army of Object.values(state.armies)) {
     if (army.owner === ROME || army.owner === city.owner) removeArmy(state, army, 'defeat');
   }
-  state.wars[warKey(ROME, city.owner)] = { since: state.day };
+  state.wars[warKey(ROME, city.owner)] = newWar(ROME, city.owner, state.day);
   const camp = [
     { x: 3, y: 0 },
     { x: -3, y: 0 },

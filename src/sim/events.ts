@@ -3,6 +3,7 @@ import type { ArmyId, BattleId, CityId, FactionId } from './ids.ts';
 import type { Day } from './state/day.ts';
 import type { GameState } from './state/game-state.ts';
 import type { MapPoint } from './state/map-point.ts';
+import type { PeaceTerms } from './state/peace.ts';
 
 export type BattleSideName = 'attackers' | 'defenders';
 
@@ -81,7 +82,10 @@ export type DayEvent =
       buildings: readonly BuildingKind[];
       cause: 'sack' | 'siege';
       position: MapPoint;
-    };
+    }
+  | { kind: 'peaceOffered'; from: FactionId; to: FactionId; terms: PeaceTerms }
+  | { kind: 'peaceRefused'; by: FactionId; from: FactionId; terms: PeaceTerms }
+  | { kind: 'peaceMade'; between: readonly [FactionId, FactionId]; terms: PeaceTerms };
 
 const sinks = new WeakMap<GameState, DayEvent[]>();
 

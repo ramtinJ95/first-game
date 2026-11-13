@@ -34,6 +34,9 @@ const SLOTS: {
   enslave: undefined,
   build: undefined,
   cancelBuilding: undefined,
+  offerPeace: undefined,
+  acceptPeace: undefined,
+  refusePeace: undefined,
 };
 
 /** The army whose movement the order changes, or nothing for an order of another slot. */

@@ -4,7 +4,7 @@ import { defeatFaction } from '../sim/defeat.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { warKey } from '../sim/state/war.ts';
+import { warKey, newWar } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { ArmyId, ConvoyId, FormationId, SiegeId } from '../sim/ids.ts';
@@ -36,7 +36,7 @@ function play(state: GameState, orders: Order[], done: (state: GameState) => boo
 }
 
 function atWar(state: GameState, a = f.rome, b = f.carthage) {
-  state.wars[warKey(a, b)] = { since: state.day };
+  state.wars[warKey(a, b)] = newWar(a, b, state.day);
 }
 
 /** Puts Carthage's army 5 km west of Rome's, at war, with the given strength on each side. */

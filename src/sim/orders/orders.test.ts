@@ -118,7 +118,17 @@ describe('declareWar', () => {
     ).toBeUndefined();
     expect(areAtWar(state, FIXTURE.rome, FIXTURE.carthage)).toBe(true);
     expect(areAtWar(state, FIXTURE.carthage, FIXTURE.rome)).toBe(true);
-    expect(Object.values(state.wars)).toEqual([{ since: 1 }]);
+    expect(Object.values(state.wars)).toEqual([
+      {
+        since: 1,
+        declaredBy: FIXTURE.rome,
+        sides: {
+          [FIXTURE.rome]: { taken: [], lost: 0 },
+          [FIXTURE.carthage]: { taken: [], lost: 0 },
+        },
+        offeredOn: null,
+      },
+    ]);
     expectConsistent(state);
   });
 

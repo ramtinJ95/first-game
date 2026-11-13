@@ -1,6 +1,6 @@
 import * as v from 'valibot';
-import type { FactionId } from '../ids.ts';
-import { DaySchema } from './day.ts';
+import { CityIdSchema, FactionIdSchema, type FactionId } from '../ids.ts';
+import { DaySchema, type Day } from './day.ts';
 
 /** The two factions a war key names, or nothing for a key that names no valid pair. */
 export function warSides(key: string): [FactionId, FactionId] | undefined {
@@ -30,8 +30,35 @@ export const WarKeySchema = v.pipe(
 );
 export type WarKey = v.InferOutput<typeof WarKeySchema>;
 
-export const WarSchema = v.object({ since: DaySchema });
+/** What one side of a war has done to the other in it. */
+export const WarSideSchema = v.object({
+  /** The other side's cities this side has taken in the war and still holds, in the order taken. */
+  taken: v.array(CityIdSchema),
+  /** The men this side has lost in battles against the other. */
+  lost: v.pipe(v.number(), v.integer(), v.minValue(0)),
+});
+export type WarSide = v.InferOutput<typeof WarSideSchema>;
+
+/** What a war remembers: when it began, who declared it, and what each side has taken and lost. */
+export const WarSchema = v.object({
+  since: DaySchema,
+  declaredBy: FactionIdSchema,
+  /** Keyed by the two factions of the war's key, and by no other. */
+  sides: v.record(FactionIdSchema, WarSideSchema),
+  /** The day either side last offered peace, or null, so an AI offers again only after a pause. */
+  offeredOn: v.nullable(DaySchema),
+});
 export type War = v.InferOutput<typeof WarSchema>;
+
+/** A war that the first faction declares on the second on the day. */
+export function newWar(by: FactionId, against: FactionId, since: Day): War {
+  return {
+    since,
+    declaredBy: by,
+    sides: { [by]: { taken: [], lost: 0 }, [against]: { taken: [], lost: 0 } },
+    offeredOn: null,
+  };
+}
 
 /** The key of the war between two different factions, whichever order they come in. */
 export function warKey(a: FactionId, b: FactionId): WarKey {

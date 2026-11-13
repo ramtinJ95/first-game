@@ -3,7 +3,7 @@ import { buildFixture, FIXTURE } from './fixture.ts';
 import type { BattleId, ConvoyId } from './ids.ts';
 import { expectConsistent, findBrokenReferences } from './references.ts';
 import type { Day } from './state/day.ts';
-import { warKey, type WarKey } from './state/war.ts';
+import { warKey, type WarKey, newWar } from './state/war.ts';
 
 test('an army in a battle that does not list it is reported', () => {
   const state = buildFixture();
@@ -107,7 +107,11 @@ test('an allocated id at or above nextSerial is reported', () => {
 
 test('a war with a faction that does not exist is reported', () => {
   const state = buildFixture();
-  state.wars[warKey(FIXTURE.rome, 'sparta' as typeof FIXTURE.rome)] = { since: 1 as Day };
+  state.wars[warKey(FIXTURE.rome, 'sparta' as typeof FIXTURE.rome)] = newWar(
+    FIXTURE.rome,
+    'sparta' as typeof FIXTURE.rome,
+    1 as Day,
+  );
   expect(findBrokenReferences(state)).toEqual([
     'war ["rome","sparta"] names unknown faction sparta',
   ]);
@@ -115,8 +119,8 @@ test('a war with a faction that does not exist is reported', () => {
 
 test('a war key out of order or with one faction twice is reported', () => {
   const state = buildFixture();
-  state.wars['["rome","carthage"]' as WarKey] = { since: 1 as Day };
-  state.wars['["rome","rome"]' as WarKey] = { since: 1 as Day };
+  state.wars['["rome","carthage"]' as WarKey] = newWar(FIXTURE.rome, FIXTURE.carthage, 1 as Day);
+  state.wars['["rome","rome"]' as WarKey] = newWar(FIXTURE.rome, FIXTURE.rome, 1 as Day);
   expect(findBrokenReferences(state)).toEqual([
     'war ["rome","carthage"] does not name two different factions in ascending order',
     'war ["rome","rome"] does not name two different factions in ascending order',

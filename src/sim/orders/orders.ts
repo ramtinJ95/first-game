@@ -1,13 +1,16 @@
 import { build, cancelBuilding } from '../buildings/build.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { World } from '../world/world.ts';
+import { acceptPeace } from './accept-peace.ts';
 import { declareWar } from './declare-war.ts';
 import { enslave } from './enslave.ts';
 import { evacuate } from './evacuate.ts';
 import { embark } from './embark.ts';
 import { halt } from './halt.ts';
 import { moveArmy } from './move-army.ts';
+import { offerPeace } from './offer-peace.ts';
 import { recruit } from './recruit.ts';
+import { refusePeace } from './refuse-peace.ts';
 import { retreat } from './retreat.ts';
 import { sack } from './sack.ts';
 import { setStance } from './set-stance.ts';
@@ -31,6 +34,9 @@ const ORDER_HANDLERS = {
   enslave,
   build,
   cancelBuilding,
+  offerPeace,
+  acceptPeace,
+  refusePeace,
 };
 
 type Handlers = typeof ORDER_HANDLERS;

@@ -19,6 +19,7 @@ import { ConvoySchema } from './convoy.ts';
 import { DaySchema } from './day.ts';
 import { FactionSchema } from './faction.ts';
 import { FormationSchema } from './formation.ts';
+import { PeaceOfferSchema, TruceSchema } from './peace.ts';
 import { ProvinceSchema } from './province.ts';
 import { RefugeeColumnSchema } from './refugee-column.ts';
 import { SiegeSchema } from './siege.ts';
@@ -44,6 +45,10 @@ export const GameStateSchema = v.object({
   sieges: v.record(SiegeIdSchema, SiegeSchema),
   /** Each pair of factions at war, once. Factions missing from it are at peace. */
   wars: v.record(WarKeySchema, WarSchema),
+  /** The offer of peace that waits for an answer in each war, at most one. */
+  peaceOffers: v.record(WarKeySchema, PeaceOfferSchema),
+  /** Each pair of factions that made peace and may not declare war on each other yet. */
+  truces: v.record(WarKeySchema, TruceSchema),
 });
 
 export type GameState = v.InferOutput<typeof GameStateSchema>;

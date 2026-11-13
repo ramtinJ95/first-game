@@ -2,6 +2,7 @@ import type { DeepReadonly } from './deep-readonly.ts';
 import { defeatFaction } from './defeat.ts';
 import { emit } from './events.ts';
 import type { CityId, FactionId } from './ids.ts';
+import { recordCapture } from './peace/war-record.ts';
 import type { GameState } from './state/game-state.ts';
 import type { Troop } from './troops.ts';
 
@@ -61,6 +62,7 @@ export function changeCityOwner(state: GameState, cityId: CityId, owner: Faction
     });
     city.construction = null;
   }
+  recordCapture(state, cityId, previous, owner);
   if (!Object.values(state.cities).some((other) => other.owner === previous)) {
     defeatFaction(state, previous);
   }

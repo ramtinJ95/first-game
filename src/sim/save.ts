@@ -3,10 +3,7 @@ import type { DeepReadonly } from './deep-readonly.ts';
 import { findBrokenReferences } from './references.ts';
 import { GameStateSchema, type GameState } from './state/game-state.ts';
 
-/**
- * Raise this when a change to the state makes older saves unreadable. Format 12 added
- * each army's name, the faction's count of armies raised, and the page beside the state.
- */
+export const SAVE_FORMAT = 13;
 export const SAVE_FORMAT = 12;
 
 /**

@@ -7,7 +7,7 @@ import type { Sight } from '../../sim/sight.ts';
 import type { Army } from '../../sim/state/army.ts';
 import type { GameState } from '../../sim/state/game-state.ts';
 import type { MapPoint } from '../../sim/state/map-point.ts';
-import { warKey } from '../../sim/state/war.ts';
+import { warKey, newWar } from '../../sim/state/war.ts';
 import { tick } from '../../sim/tick.ts';
 import type { Troop } from '../../sim/troops.ts';
 import { mapToScreen, screenToMap, symbolGrowth } from '../camera.ts';
@@ -147,7 +147,7 @@ const CASES: readonly (readonly [string, (city: CityId) => Drawn])[] = [
         const state = emptyGame();
         const enemy = enemyOf(state, city);
         const owner = enemy === rome ? ('carthage' as FactionId) : cityOf(state, city).owner;
-        state.wars[warKey(enemy, owner)] = { since: state.day };
+        state.wars[warKey(enemy, owner)] = newWar(enemy, owner, state.day);
         raise(state, owner, 'defender', cityOf(state, city).position);
         raise(state, enemy, 'attacker', at);
         const next = tick(state, [], world).state as GameState;
@@ -165,7 +165,11 @@ const CASES: readonly (readonly [string, (city: CityId) => Drawn])[] = [
     (city) => {
       const state = emptyGame();
       const enemy = enemyOf(state, city);
-      state.wars[warKey(enemy, cityOf(state, city).owner)] = { since: state.day };
+      state.wars[warKey(enemy, cityOf(state, city).owner)] = newWar(
+        enemy,
+        cityOf(state, city).owner,
+        state.day,
+      );
       raise(state, enemy, 'besieger', cityOf(state, city).position);
       const next = tick(state, [], world).state as GameState;
       const after = tick(next, [], world).state as GameState;
@@ -244,7 +248,11 @@ describe('a siege camp beside the places round its city', () => {
       for (const { city, towns } of sieges) {
         const state = emptyGame();
         const enemy = enemyOf(state, city);
-        state.wars[warKey(enemy, cityOf(state, city).owner)] = { since: state.day };
+        state.wars[warKey(enemy, cityOf(state, city).owner)] = newWar(
+          enemy,
+          cityOf(state, city).owner,
+          state.day,
+        );
         raise(state, enemy, 'besieger', cityOf(state, city).position);
         const next = tick(state, [], world).state as GameState;
         const after = tick(next, [], world).state as GameState;

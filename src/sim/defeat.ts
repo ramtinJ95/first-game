@@ -6,7 +6,7 @@ import { warSides } from './state/war.ts';
 
 /**
  * Takes a faction out of the game: its armies, convoys, and refugee columns are
- * removed, its stores are emptied, and its wars end. The faction record stays, marked
+ * removed, its stores are emptied, and its wars, offers of peace, and truces end. The faction record stays, marked
  * with the day, so the player's faction can still be named after a loss. A battle
  * left with an empty side ends when the battles system next runs. Calling it again
  * changes nothing.
@@ -34,6 +34,12 @@ export function defeatFaction(state: GameState, faction: FactionId): void {
   }
   for (const key of Object.keys(state.wars) as (keyof GameState['wars'])[]) {
     if (warSides(key)?.includes(faction)) removeRecord(state.wars, key);
+  }
+  for (const key of Object.keys(state.peaceOffers) as (keyof GameState['peaceOffers'])[]) {
+    if (warSides(key)?.includes(faction)) removeRecord(state.peaceOffers, key);
+  }
+  for (const key of Object.keys(state.truces) as (keyof GameState['truces'])[]) {
+    if (warSides(key)?.includes(faction)) removeRecord(state.truces, key);
   }
   record.stores = { gold: 0, food: 0, manpower: 0 };
   record.defeatedOn = state.day;

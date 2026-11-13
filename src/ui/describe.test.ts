@@ -9,7 +9,7 @@ import { sightOf } from '../sim/sight.ts';
 import { dailyBalances } from '../sim/systems/economy.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { warKey } from '../sim/state/war.ts';
+import { warKey, newWar } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import { STANCES, type Stance } from '../sim/state/army.ts';
 import { REFORM_DAYS } from '../sim/systems/battles.ts';
@@ -54,7 +54,7 @@ function withBattle() {
 }
 
 function atWar(state: GameState, a: FactionId, b: FactionId, since = state.day) {
-  state.wars[warKey(a, b)] = { since };
+  state.wars[warKey(a, b)] = newWar(a, b, since);
 }
 
 function roman(state: GameState) {
@@ -137,7 +137,7 @@ describe('whyNotBesieging', () => {
     const state = buildFixture();
     const city = state.cities[f.syracusae];
     if (!city) throw new Error('fixture changed');
-    state.wars[warKey(f.rome, f.syracusaeFaction)] = { since: state.day };
+    state.wars[warKey(f.rome, f.syracusaeFaction)] = newWar(f.rome, f.syracusaeFaction, state.day);
     roman(state).activity = {
       kind: 'idle',
       position: { x: city.position.x - 15, y: city.position.y },
@@ -444,7 +444,7 @@ describe('storeNote', () => {
 describe('weakSiegeText', () => {
   function siegeOfSyracusae(men: number) {
     const state = buildFixture();
-    state.wars[warKey(f.rome, f.syracusaeFaction)] = { since: state.day };
+    state.wars[warKey(f.rome, f.syracusaeFaction)] = newWar(f.rome, f.syracusaeFaction, state.day);
     const roman = state.armies[f.romanArmy];
     const syracusae = state.cities[f.syracusae];
     if (!roman || !syracusae) throw new Error('fixture changed');

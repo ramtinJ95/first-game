@@ -4,7 +4,7 @@ import { allocateId, type ArmyId, type FactionId } from './ids.ts';
 import type { Stance } from './state/army.ts';
 import type { GameState } from './state/game-state.ts';
 import type { MapPoint } from './state/map-point.ts';
-import { warKey } from './state/war.ts';
+import { newWar, warKey } from './state/war.ts';
 import { tick } from './tick.ts';
 import type { Troop } from './troops.ts';
 
@@ -44,7 +44,9 @@ export function buildTrial(matchup: Matchup, seed: number): GameState {
   const state = buildFixture(seed);
   state.armies = {};
   state.formations = {};
-  state.wars = { [warKey(FIXTURE.rome, FIXTURE.carthage)]: { since: state.day } };
+  state.wars = {
+    [warKey(FIXTURE.rome, FIXTURE.carthage)]: newWar(FIXTURE.rome, FIXTURE.carthage, state.day),
+  };
   addArmy(state, TRIAL_ARMIES.a, FIXTURE.rome, matchup.a, { x: 2511.3, y: 2350.8 });
   addArmy(state, TRIAL_ARMIES.b, FIXTURE.carthage, matchup.b, { x: 2521.3, y: 2350.8 });
   return state;

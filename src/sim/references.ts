@@ -181,6 +181,62 @@ export function findBrokenReferences(state: DeepReadonly<GameState>): string[] {
       expect(record !== undefined, `war ${key} names unknown faction ${faction}`);
       expect(record?.defeatedOn == null, `war ${key} names ${faction}, which is out of the game`);
     }
+    const war = state.wars[key as keyof typeof state.wars];
+    if (!sides || !war) continue;
+    const named = Object.keys(war.sides).sort();
+    expect(
+      named.length === 2 && named[0] === sides[0] && named[1] === sides[1],
+      `war ${key} keeps the sides ${named.join(', ')}, not its own two factions`,
+    );
+    expect(
+      sides.includes(war.declaredBy),
+      `war ${key} was declared by ${war.declaredBy}, not a side of it`,
+    );
+    for (const [index, faction] of sides.entries()) {
+      const other = sides[1 - index];
+      for (const id of war.sides[faction]?.taken ?? []) {
+        const city = get(state.cities, id);
+        expect(
+          city?.owner === faction,
+          `war ${key} lists ${id} as taken by ${faction} from ${other}, but ${faction} does not hold it`,
+        );
+      }
+      unique(war.sides[faction]?.taken ?? [], `war ${key} side ${faction}`);
+    }
+    expect(
+      !Object.hasOwn(state.truces, key),
+      `war ${key} is fought during a truce between the same factions`,
+    );
+  }
+
+  for (const [key, offer] of Object.entries(state.peaceOffers)) {
+    const sides = warSides(key);
+    expect(Object.hasOwn(state.wars, key), `offer of peace ${key} belongs to no war`);
+    expect(
+      !!sides?.includes(offer.from),
+      `offer of peace ${key} comes from ${offer.from}, not a side of it`,
+    );
+    if (offer.terms.kind === 'payment') {
+      const { payer, cities } = offer.terms;
+      expect(!!sides?.includes(payer), `offer of peace ${key} has ${payer} pay, not a side of it`);
+      for (const id of cities) {
+        expect(
+          get(state.cities, id) !== undefined,
+          `offer of peace ${key} hands over unknown city ${id}`,
+        );
+      }
+    }
+  }
+
+  for (const key of Object.keys(state.truces)) {
+    const sides = warSides(key);
+    expect(!!sides, `truce ${key} does not name two different factions in ascending order`);
+    for (const faction of sides ?? []) {
+      expect(
+        get(state.factions, faction) !== undefined,
+        `truce ${key} names unknown faction ${faction}`,
+      );
+    }
   }
 
   const defeated = new Set(

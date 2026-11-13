@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { MAX_UNREST_DAYS } from './cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from './fixture.ts';
 import { loadGame, SAVE_FORMAT, saveGame } from './save.ts';
-import { warKey } from './state/war.ts';
+import { warKey, newWar } from './state/war.ts';
 import { tick } from './tick.ts';
 
 const world = fixtureWorld();
@@ -47,7 +47,7 @@ describe('save and load', () => {
     const save = JSON.stringify({ format: 99, state: buildFixture() });
     expect(loadGame(save)).toEqual({
       ok: false,
-      error: `The save has format 99, but this game reads format ${SAVE_FORMAT}.`,
+      error: 'The save has format 99, but this game reads format 13.',
     });
   });
 
@@ -114,7 +114,7 @@ describe('save and load', () => {
       stores: { gold: 0, food: 0, manpower: 0 },
       defeatedOn: null,
     };
-    state.wars[warKey(FIXTURE.rome, odd)] = { since: state.day };
+    state.wars[warKey(FIXTURE.rome, odd)] = newWar(FIXTURE.rome, odd, state.day);
     expect(loadGame(saveGame(state))).toEqual({ ok: true, state });
   });
 

@@ -5,7 +5,7 @@ import type { CityId } from '../sim/ids.ts';
 import { newGame } from '../sim/new-game.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { warKey } from '../sim/state/war.ts';
+import { warKey, newWar } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import { fateChoices } from './fates.ts';
 import { turningPoints } from './turning-points.ts';
@@ -16,7 +16,7 @@ const f = FIXTURE;
 /** Rome's army stands at Syracusae, at war with it, and the city has no garrison left. */
 function syracusaeFalls(): GameState {
   const state = buildFixture();
-  state.wars[warKey(f.rome, f.syracusaeFaction)] = { since: state.day };
+  state.wars[warKey(f.rome, f.syracusaeFaction)] = newWar(f.rome, f.syracusaeFaction, state.day);
   const roman = state.armies[f.romanArmy];
   const syracusae = state.cities[f.syracusae];
   if (!roman || !syracusae) throw new Error('fixture changed');

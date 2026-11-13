@@ -31,7 +31,7 @@ import type { Army } from '../src/sim/state/army.ts';
 import type { Day } from '../src/sim/state/day.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import type { MapPoint } from '../src/sim/state/map-point.ts';
-import { warKey } from '../src/sim/state/war.ts';
+import { newWar, warKey } from '../src/sim/state/war.ts';
 import { limitsOf } from '../src/sim/systems/economy.ts';
 import { tick } from '../src/sim/tick.ts';
 import { areAtWar } from '../src/sim/wars.ts';
@@ -119,7 +119,7 @@ export function armyOf(state: GameState, owner: FactionId): Army {
 }
 
 export function declareWar(state: GameState, a: FactionId, b: FactionId) {
-  state.wars[warKey(a, b)] = { since: state.day };
+  state.wars[warKey(a, b)] = newWar(a, b, state.day);
 }
 
 export function setRich(state: GameState) {

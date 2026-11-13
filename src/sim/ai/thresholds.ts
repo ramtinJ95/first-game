@@ -88,3 +88,23 @@ export const ENSLAVE_BELOW_MANPOWER = 2000;
 
 /** A minor at war raises its cheapest troop when its gold covers the cost, and its gold and food this many days of the new deficit. */
 export const MINOR_DEFICIT_DAYS = 365;
+
+/**
+ * Peace. A faction's wish for peace adds these, in the points of `warStanding` and
+ * `termsPoints`, and it accepts terms when the wish and the terms' worth to it reach 0.
+ */
+/** A faction does not talk of peace in a war younger than this many days. */
+export const MIN_WAR_DAYS = 60;
+/** The wish grows by one point for every this many days of war, up to MAX_WEARINESS. */
+export const WEARY_DAYS = 15;
+export const MAX_WEARINESS = 30;
+/** The wish grows by this for each other war the faction fights against a great power. */
+export const OTHER_WAR_POINTS = 15;
+/** The wish grows by this while the faction is short of gold or food. */
+export const SHORTAGE_POINTS = 20;
+/** A faction does not end a war for nothing: the wish starts this far below 0. */
+export const PEACE_RESOLVE = 15;
+/** After an offer in a war, an AI offers again in it only after this many days. */
+export const OFFER_GAP_DAYS = 90;
+/** Gold in the terms the AI writes is a multiple of this. */
+export const GOLD_STEP = 50;

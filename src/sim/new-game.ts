@@ -142,6 +142,8 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
     battles: {},
     sieges: {},
     wars: {},
+    peaceOffers: {},
+    truces: {},
   };
 
   for (const power of POWERS) {

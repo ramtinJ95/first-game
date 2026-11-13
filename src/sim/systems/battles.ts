@@ -13,6 +13,7 @@ import { landPath, MARCH_KM_PER_DAY, marchDays } from '../march.ts';
 import { connected, surfaceAt } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import { TROOPS } from '../troops.ts';
+import { recordBattleLosses } from '../peace/war-record.ts';
 import { areAtWar } from '../wars.ts';
 
 /**
@@ -357,6 +358,10 @@ function fightOneDay(state: GameState, id: BattleId) {
       if (!edges.has(army)) edges.set(army, edgeOn(state, army, enemies));
     }
   }
+  const lostBy = {
+    attackers: new Map<FactionId, number>(),
+    defenders: new Map<FactionId, number>(),
+  };
   for (const [side, fighters, pressure] of [
     ['attackers', attackers, pressureOn(attackerMen, defenderMen, attackersLost, defendersLost)],
     ['defenders', defenders, pressureOn(defenderMen, attackerMen, defendersLost, attackersLost)],
@@ -365,6 +370,7 @@ function fightOneDay(state: GameState, id: BattleId) {
       const cap = Math.max(Math.round(formation.men * MAX_DAILY_LOSS), REMNANT_MEN);
       const lost = Math.min(formation.men, cap, Math.round(losses.get(formation) ?? 0));
       battle.sides[side].lost += lost;
+      lostBy[side].set(army.owner, (lostBy[side].get(army.owner) ?? 0) + lost);
       const moraleLost =
         ((lost / formation.men) * MORALE_PER_LOSS + DAILY_STRAIN) *
         pressure *
@@ -375,6 +381,10 @@ function fightOneDay(state: GameState, id: BattleId) {
       formation.morale = Math.max(0, formation.morale - moraleLost);
     }
   }
+  recordBattleLosses(state, [
+    { factions: battle.sides.attackers.factions, lost: lostBy.attackers },
+    { factions: battle.sides.defenders.factions, lost: lostBy.defenders },
+  ]);
 }
 
 /** The edge the enemy's stances hold over the army's, weighted by the enemy's men. */
