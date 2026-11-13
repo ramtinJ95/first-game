@@ -1,3 +1,4 @@
+import { BUILDINGS, type BuildingKind } from '../sim/buildings/buildings.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { CityId, FactionId } from '../sim/ids.ts';
 import type { Stance } from '../sim/state/army.ts';
@@ -86,4 +87,12 @@ export function dateText(day: number): string {
 
 export function whole(value: number): string {
   return Math.round(value).toLocaleString('en');
+}
+
+/** "Forum", "Forum and Towers", or "Forum, Canals and Towers", in the order given. */
+export function buildingList(kinds: readonly BuildingKind[]): string {
+  const names = kinds.map((kind) => BUILDINGS[kind].name);
+  return names.length > 1
+    ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+    : (names[0] ?? '');
 }

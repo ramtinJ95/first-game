@@ -10,10 +10,13 @@
   import type { City } from '../sim/state/city.ts';
   import type { GameState } from '../sim/state/game-state.ts';
   import { OUTPUT_PER_PERSON } from '../sim/systems/economy.ts';
-  import { CITY_DEFENCES } from '../sim/systems/sieges.ts';
+  import { trainingDaysAt } from '../sim/buildings/buildings.ts';
+  import { fullDefences } from '../sim/systems/sieges.ts';
   import { TROOPS, type Troop } from '../sim/troops.ts';
   import type { Actions } from './actions.ts';
   import ArmiesHere from './ArmiesHere.svelte';
+  import { afterWaiting } from './buildings-text.ts';
+  import CityBuildings from './CityBuildings.svelte';
   import {
     armiesAt,
     cityBalance,
@@ -54,7 +57,7 @@
   let storming = $state(false);
 
   const own = $derived(city.owner === game.player);
-  const full = $derived(CITY_DEFENCES[city.rank]);
+  const full = $derived(fullDefences(city));
   // A siege the player cannot see is not shown: its besiegers stand out of sight.
   const siege = $derived(
     Object.values(game.sieges).find(
@@ -85,17 +88,10 @@
       .map((order) => ({ troop: order.troop, when: 'ordered for the next day' })),
   ]);
 
-  /** What the player has left once the recruits waiting for the next day are paid. */
-  const available = $derived.by(() => {
-    const stores = game.factions[game.player]?.stores ?? { gold: 0, manpower: 0 };
-    let gold = stores.gold;
-    let manpower = stores.manpower;
-    for (const order of ordered) {
-      gold -= TROOPS[order.troop].recruit.gold;
-      manpower -= TROOPS[order.troop].recruit.men;
-    }
-    return { gold, manpower };
-  });
+  /** What the player has left once the recruits and buildings waiting for the next day are paid. */
+  const available = $derived(
+    afterWaiting(game, pending).factions[game.player]?.stores ?? { gold: 0, manpower: 0 },
+  );
 
   function refusal(troop: Troop): string | undefined {
     const { gold, men } = TROOPS[troop].recruit;
@@ -135,7 +131,7 @@
       </tr>
       <tr>
         <td>Walls</td><td class="number" data-testid="city-walls"
-          >{whole(city.walls)} of {full.walls}</td
+          >{whole(city.walls)} of {whole(full.walls)}</td
         >
       </tr>
       <tr>
@@ -145,7 +141,7 @@
       </tr>
       <tr>
         <td>Food</td><td class="number" data-testid="city-food"
-          >{Math.floor(city.foodDays)} of {full.foodDays} days</td
+          >{Math.floor(city.foodDays)} of {whole(full.foodDays)} days</td
         >
       </tr>
       {#if own}
@@ -225,6 +221,10 @@
     <p class="muted">With no choice the city is occupied as it stands when the days run out.</p>
   {/if}
 
+  {#if own}
+    <CityBuildings {game} {city} {pending} {actions} />
+  {/if}
+
   {#if raising.length > 0 || own}
     <h3>Raising</h3>
     {#if raising.length === 0}
@@ -252,7 +252,7 @@
         >
           <span class="troop">{TROOP_NAMES[troop]}</span>
           <span class="cost"
-            >{whole(cost.gold)} gold · {whole(cost.men)} men · {cost.days} days</span
+            >{whole(cost.gold)} gold · {whole(cost.men)} men · {trainingDaysAt(city, cost.days)} days</span
           >
           {#if why}<span class="why">{why}</span>{/if}
         </button>
