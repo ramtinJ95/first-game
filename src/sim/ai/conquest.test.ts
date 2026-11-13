@@ -525,3 +525,39 @@ describe('remnants and prey', () => {
     expectConsistent(state);
   });
 });
+
+describe('a realm that has grown', () => {
+  /** Rome at peace, with one army at Roma, every minor's army gone and every minor garrison alike. */
+  function atPeace(men: number, taken: number) {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    for (const army of Object.values(state.armies)) {
+      if (army.owner !== rome && state.factions[army.owner]?.kind !== 'minor') continue;
+      for (const id of army.formations) removeRecord(state.formations, id);
+      removeRecord(state.armies, army.id);
+    }
+    const roma = cityOf(state, rome);
+    const minors = Object.values(state.cities)
+      .filter((city) => state.factions[city.owner]?.kind === 'minor')
+      .sort((a, b) => distance(a.position, roma.position) - distance(b.position, roma.position));
+    for (const city of minors) Object.assign(city, { garrison: 1200 });
+    for (const city of minors.slice(0, taken)) changeCityOwner(state, city.id, rome);
+    for (const city of Object.values(state.cities)) city.unrestDays = 0;
+    addArmy(state, rome, men, roma.position);
+    return state;
+  }
+  const onAMinor = (state: GameState) =>
+    decideOrders(state, world, rome).some(
+      (order) => order.kind === 'declareWar' && state.factions[order.against]?.kind === 'minor',
+    );
+
+  test('needs better odds to start a war on a minor than the realm it started with', () => {
+    let men = 500;
+    while (!onAMinor(atPeace(men, 0))) {
+      men += 100;
+      if (men > 20_000) throw new Error('Rome never declares on a minor');
+    }
+    const grown = atPeace(men, 4);
+    expect(onAMinor(grown)).toBe(false);
+    expectConsistent(grown);
+  });
+});

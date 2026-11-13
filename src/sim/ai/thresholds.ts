@@ -40,6 +40,12 @@ export const LEADER_SHARE = 0.2;
 export const COALITION_ODDS = 0.8;
 /** The odds a power at peace with everyone needs, whatever the distance, so that a long peace can end. */
 export const PEACE_WAR_ODDS = 1.6;
+/**
+ * Against a minor, the odds a power needs are multiplied by its cities over the cities the
+ * map gave it, raised to this power. With peace in the game, a median of 26 of the 60
+ * minors stood at year 5 at 0.5 and 36 at 1.
+ */
+export const SATED_EXPONENT = 0.75;
 /** The odds needed grow by their own size for each this many km between the nearest cities. */
 export const WAR_DISTANCE_KM = 800;
 /** A neighbour is a faction with a city this close, in a straight line, to a city of the power. */
