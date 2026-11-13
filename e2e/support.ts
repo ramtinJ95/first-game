@@ -25,6 +25,7 @@ import { parseMap, type PowerId } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
 import type { Order } from '../src/sim/orders/orders.ts';
 import { saveGame } from '../src/sim/save.ts';
+import { sightOf } from '../src/sim/sight.ts';
 import type { Army } from '../src/sim/state/army.ts';
 import type { Day } from '../src/sim/state/day.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
@@ -597,4 +598,44 @@ export function beatenOverseas(power: PowerId, enemy: PowerId, at: string): Game
     if (!activity) throw new Error(`${power} lost its army at ${at}`);
   }
   throw new Error(`${power} was not beaten at ${at}`);
+}
+
+/**
+ * Carthage's army at sea on its way from Carthago to Roma, at war with Rome, on the last
+ * day before its fleet comes into Rome's sight.
+ */
+export function carthageSailsOnRoma(): GameState {
+  world ??= buildWorld(map);
+  const state = startGame();
+  declareWar(state, rome, carthage);
+  const punic = armyOf(state, carthage);
+  punic.activity = { kind: 'idle', position: cityPoint('carthago') };
+  let current = playDays(state, 1, [
+    { kind: 'embark', faction: carthage, army: punic.id, to: 'roma' as CityId },
+  ]);
+  for (let day = 0; day < 60; day++) {
+    const next = playDays(current, 1);
+    const seen = sightOf(next, world, rome);
+    if (Object.values(next.convoys).some((convoy) => seen.convoys.has(convoy.id))) return current;
+    current = next;
+  }
+  throw new Error("Carthage's fleet never came into Rome's sight");
+}
+
+/**
+ * The centre of the part of the page the top bar, the overview, and the side column
+ * leave clear, where the page centres what the player chose.
+ */
+export async function clearCentre(page: Page) {
+  return page.evaluate(() => {
+    const box = (selector: string) => {
+      const element = document.querySelector(selector);
+      return element && element.childElementCount > 0 ? element.getBoundingClientRect() : undefined;
+    };
+    const top = box('[data-testid="top-bar"]')?.bottom ?? 0;
+    const left = box('[data-testid="overview"]')?.right ?? 0;
+    const side = box('aside[aria-label="Selection"]');
+    const right = side ? side.left : window.innerWidth;
+    return { x: (left + right) / 2, y: (top + window.innerHeight) / 2 };
+  });
 }

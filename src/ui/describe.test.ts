@@ -4,7 +4,7 @@ import { changeCityOwner } from '../sim/cities.ts';
 import { buildFixture, FIXTURE as f, fixtureWorld } from '../sim/fixture.ts';
 import type { ArmyId, BattleId, CityId, ConvoyId, FactionId, SiegeId } from '../sim/ids.ts';
 import { newGame } from '../sim/new-game.ts';
-import type { Order } from '../sim/orders/orders.ts';
+import { executeOrder, type Order } from '../sim/orders/orders.ts';
 import { sightOf } from '../sim/sight.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
@@ -15,6 +15,8 @@ import {
   cityFoodText,
   sackText,
   storeNote,
+  activityText,
+  stormText,
   weakSiegeText,
   ordersWaitingText,
   overviewOf,
@@ -201,12 +203,14 @@ describe('ordersWaitingText', () => {
   const recruit: Order = { kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' };
 
   it('counts the armies that the waiting orders are for', () => {
-    expect(ordersWaitingText([army('army-1'), army('army-1'), recruit], f.rome)).toBe(
-      '1 army has orders for the next day',
-    );
-    expect(ordersWaitingText([army('army-1'), army('army-2')], f.rome)).toBe(
-      '2 armies have orders for the next day',
-    );
+    expect(ordersWaitingText([army('army-1'), army('army-1'), recruit], f.rome)).toEqual({
+      short: '1 army',
+      full: '1 army has orders for the next day',
+    });
+    expect(ordersWaitingText([army('army-1'), army('army-2')], f.rome)).toEqual({
+      short: '2 armies',
+      full: '2 armies have orders for the next day',
+    });
   });
 
   it('says nothing when no waiting order is for one of your armies', () => {
@@ -299,6 +303,19 @@ describe('overviewOf', () => {
     expect(standing(state, sight).armies[0]?.at).toEqual(sea);
   });
 
+  it("lists the player's people on the road, with their route, and selects where they go", () => {
+    const state = buildFixture();
+    const next = tick(
+      state,
+      [{ kind: 'evacuate', faction: f.rome, city: f.roma, to: f.capua, share: 0.1 }],
+      world,
+    ).state;
+    const rows = standing(next, sightOf(next, world, f.rome)).columns;
+    expect(rows.map(({ people, route, pick }) => [people, route, pick])).toEqual([
+      [4000, 'Roma to Capua', { kind: 'province', province: f.campania }],
+    ]);
+  });
+
   it('lists no war for a player at peace', () => {
     const state = buildFixture();
     expect(standing(state, sightOf(state, world, f.rome)).wars).toEqual([]);
@@ -352,26 +369,35 @@ describe('sackText', () => {
 describe('storeNote', () => {
   it('says how many days a falling store of gold or food lasts, and warns within two months', () => {
     expect(storeNote('gold', 1000, -5, undefined)).toMatchObject({
-      text: 'Runs out in 200 days',
+      text: '200 days left',
+      why: "Runs out in 200 days at today's balance. Formations desert once it runs out.",
       bad: false,
     });
-    expect(storeNote('food', 100, -5, 500)).toMatchObject({
-      text: 'Runs out in 20 days',
-      bad: true,
-    });
+    expect(storeNote('food', 100, -5, 500)).toMatchObject({ text: '20 days left', bad: true });
     expect(storeNote('gold', 0, -5, undefined)).toMatchObject({
-      text: 'Ran out: formations desert',
+      text: 'Ran out',
+      why: expect.stringMatching(/^Ran out: formations desert\./) as string,
       bad: true,
     });
   });
 
   it('says when food or manpower stops growing at its limit, and nothing below it', () => {
-    expect(storeNote('food', 500, 5, 500)).toMatchObject({ text: 'Granaries full', bad: false });
-    expect(storeNote('food', 95, 10, 100)).toMatchObject({ text: 'Granaries full tomorrow' });
-    expect(storeNote('manpower', 299, 4, 300)).toMatchObject({
-      text: 'At the call-up limit tomorrow',
+    expect(storeNote('food', 500, 5, 500)).toMatchObject({
+      text: 'Full',
+      why: expect.stringMatching(/^Granaries full\. /) as string,
+      bad: false,
     });
-    expect(storeNote('manpower', 300, 1, 300)).toMatchObject({ text: 'At the call-up limit' });
+    expect(storeNote('food', 95, 10, 100)).toMatchObject({
+      text: 'Full tomorrow',
+      why: expect.stringMatching(/^Granaries full tomorrow\. /) as string,
+    });
+    expect(storeNote('manpower', 299, 4, 300)).toMatchObject({
+      text: 'At limit tomorrow',
+      why: expect.stringMatching(/^At the call-up limit tomorrow\. /) as string,
+    });
+    expect(storeNote('manpower', 300, 1, 300)).toMatchObject({
+      why: expect.stringMatching(/^At the call-up limit\. /) as string,
+    });
     expect(storeNote('food', 400, 5, 500)).toBeUndefined();
     expect(storeNote('gold', 400, 5, undefined)).toBeUndefined();
   });
@@ -409,5 +435,84 @@ describe('weakSiegeText', () => {
   it('says nothing of a siege strong enough to cut the food', () => {
     const { state, siege } = siegeOfSyracusae(3000);
     expect(weakSiegeText(state, sightOf(state, world, f.rome), siege)).toBeUndefined();
+  });
+
+  it('promises no storm while a field army of the city defends it, as the storm order refuses', () => {
+    const { state, siege } = siegeOfSyracusae(6000);
+    const copy = structuredClone(state) as GameState;
+    const garrison = copy.armies[f.punicArmy];
+    const syracusae = copy.cities[f.syracusae];
+    if (!garrison || !syracusae) throw new Error('fixture changed');
+    garrison.owner = f.syracusaeFaction;
+    garrison.activity = { kind: 'idle', position: { ...syracusae.position } };
+    expect(stormText(copy, siege)).toBe(
+      'No storm while an army of Syracusae defends Syracusae in the field. Beat it first.',
+    );
+    expect(
+      executeOrder(
+        structuredClone(copy),
+        { kind: 'storm', faction: f.rome, city: f.syracusae },
+        world,
+      ),
+    ).toBeDefined();
+  });
+
+  it('gives the odds of a storm as often as storms played on many days take the city, and what one costs', () => {
+    for (const men of [3000, 4500, 6000]) {
+      const { state, siege } = siegeOfSyracusae(men);
+      const text = stormText(state, siege) ?? '';
+      const percent = /takes Syracusae (\d+) times in 100/.exec(text)?.[1];
+      const cost = Number(/cost ([\d,]+) of your/.exec(text)?.[1]?.replace(/,/g, ''));
+      const tries = 400;
+      let taken = 0;
+      let lost = 0;
+      for (let i = 0; i < tries; i++) {
+        const copy = structuredClone(state) as GameState;
+        copy.rng = (i * 2654435761) >>> 0;
+        const romans = () =>
+          Object.values(copy.formations)
+            .filter((formation) => formation.army === f.romanArmy)
+            .reduce((sum, formation) => sum + formation.men, 0);
+        const had = romans();
+        executeOrder(copy, { kind: 'storm', faction: f.rome, city: f.syracusae }, world);
+        const won = copy.cities[f.syracusae]?.owner === f.rome;
+        if (won) taken += 1;
+        // The winners leave men of their own as the new garrison, which the storm did not kill.
+        lost += had - romans() - (won ? (copy.cities[f.syracusae]?.garrison ?? 0) : 0);
+      }
+      if (percent === undefined) {
+        expect(text, `${men} men`).toMatch(/cannot take|for certain/);
+        expect(taken === 0 || taken === tries, `${men} men`).toBe(true);
+      } else {
+        expect(taken / tries, `${men} men: ${text}`).toBeCloseTo(Number(percent) / 100, 1);
+      }
+      expect(lost / tries / cost, `${men} men`).toBeCloseTo(1, 1);
+    }
+  });
+});
+
+describe('activityText', () => {
+  function retreatingTo(end: { x: number; y: number }) {
+    const state = buildFixture();
+    const roman = state.armies[f.romanArmy];
+    const roma = state.cities[f.roma];
+    if (!roman || !roma) throw new Error('fixture changed');
+    const from = { x: end.x + 60, y: end.y };
+    roman.activity = { kind: 'retreating', position: from, waypoints: [end] };
+    return activityText(state, roman);
+  }
+
+  it('names the city of its own a retreat ends at', () => {
+    const roma = buildFixture().cities[f.roma]?.position;
+    if (!roma) throw new Error('fixture changed');
+    expect(retreatingTo(roma)).toBe('Retreating to Roma · 3 days left');
+  });
+
+  it("says a retreat that ends in the field falls back into it, and names no enemy's city", () => {
+    const carthago = buildFixture().cities[f.carthago]?.position;
+    if (!carthago) throw new Error('fixture changed');
+    expect(retreatingTo({ x: carthago.x, y: carthago.y + 30 })).toBe(
+      'Falling back into the field · 3 days left',
+    );
   });
 });

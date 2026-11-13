@@ -172,7 +172,8 @@ test.describe('orders by right click', () => {
     await pause(page);
     for (const point of SCATTERED) await rightClick(page, view.screen(point));
     await rightClick(page, view.city('capua'));
-    await expect(page.getByTestId('orders-waiting')).toHaveText(
+    await expect(page.getByTestId('orders-waiting')).toHaveAttribute(
+      'title',
       '1 army has orders for the next day',
     );
     await resume(page);

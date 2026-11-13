@@ -7,9 +7,16 @@ import type { GameState } from '../sim/state/game-state.ts';
 import { warKey } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import type { Day } from '../sim/state/day.ts';
-import type { ArmyId, FormationId } from '../sim/ids.ts';
+import type { ArmyId, ConvoyId, FormationId, SiegeId } from '../sim/ids.ts';
 import { sightOf } from '../sim/sight.ts';
-import { alertsOfDay, groupAlerts, type Alert } from './alerts.ts';
+import {
+  alertsOfDay,
+  groupAlerts,
+  sightingsOfDay,
+  weakSiegeNews,
+  type Alert,
+  type WeakSiege,
+} from './alerts.ts';
 import { alertsInSight } from './sighted.ts';
 
 const world = fixtureWorld();
@@ -60,7 +67,7 @@ describe('alertsOfDay', () => {
     expect(ofKind(alerts, 'battleBegan')).toEqual([
       {
         kind: 'battleBegan',
-        day: 2,
+        day: 1,
         tone: 'neutral',
         text: 'Battle at Roma against Carthage',
         focus: { at: battle?.position, select: { kind: 'battle', battle: battle?.id } },
@@ -202,7 +209,7 @@ describe('alertsOfDay', () => {
       () => true,
     );
     expect(declared.alerts).toEqual([
-      { kind: 'warDeclared', day: 2, tone: 'bad', text: 'Carthage declared war on you' },
+      { kind: 'warDeclared', day: 1, tone: 'bad', text: 'Carthage declared war on you' },
     ]);
     const declaring = play(
       buildFixture(),
@@ -258,7 +265,7 @@ describe('alertsOfDay', () => {
       return told.map((a) => [a.day, a.tone, a.text]);
     };
     expect(deserting({ x: 2164.9, y: 2895.1 })).toEqual([
-      [2, 'neutral', expect.stringMatching(/^\d+ men deserted an army of Carthage at Carthago$/)],
+      [1, 'neutral', expect.stringMatching(/^\d+ men deserted an army of Carthage at Carthago$/)],
     ]);
     const roma = buildFixture().cities[f.roma]?.position;
     if (!roma) throw new Error('fixture changed');
@@ -275,7 +282,7 @@ describe('alertsOfDay', () => {
     const { alerts } = play(state, [], () => false, 5);
     const deserted = ofKind(alerts, 'armyDeserted');
     expect(deserted.map((a) => [a.day, a.focus?.select])).toEqual([
-      [2, { kind: 'army', army: f.romanArmy }],
+      [1, { kind: 'army', army: f.romanArmy }],
     ]);
     expect(deserted[0]?.text).toMatch(/^\d+ men deserted your army at Roma$/);
   });
@@ -298,7 +305,7 @@ describe('alertsOfDay', () => {
     const recruit: Order = { kind: 'recruit', faction: f.rome, city: f.roma, troop: 'skirmishers' };
     const { alerts } = play(buildFixture(), [recruit], () => false, 12);
     const mustered = ofKind(alerts, 'formationMustered');
-    expect(mustered.map((a) => [a.text, a.day])).toEqual([['Skirmishers mustered at Roma', 12]]);
+    expect(mustered.map((a) => [a.text, a.day])).toEqual([['Skirmishers mustered at Roma', 11]]);
     expect(mustered[0]?.focus?.select).toEqual({ kind: 'army', army: f.romanArmy });
   });
 
@@ -412,7 +419,7 @@ describe('alertsOfDay', () => {
     expect(alertsOfDay(before, after, [])).toEqual([
       {
         kind: 'cityChangedOwner',
-        day: 2,
+        day: 1,
         tone: 'bad',
         text: 'Capua fell to Carthage',
         focus: { at: capua.position, select: { kind: 'province', province: f.campania } },
@@ -433,6 +440,40 @@ describe('alertsOfDay', () => {
     const { alerts } = play(state, [], () => true);
     expect(ofKind(alerts, 'siegeBegan').map((a) => [a.text, a.focus?.select])).toEqual([
       ['Your army besieges Syracusae', { kind: 'province', province: f.sicilia }],
+    ]);
+  });
+
+  it("dates a city's fall on the day the rules record it, the day the defeat screen names", () => {
+    const state = buildFixture();
+    atWar(state, f.rome, f.syracusaeFaction);
+    const roman = state.armies[f.romanArmy];
+    const syracusae = state.cities[f.syracusae];
+    if (!roman || !syracusae) throw new Error('fixture changed');
+    roman.activity = { kind: 'idle', position: { ...syracusae.position } };
+    syracusae.garrison = 0;
+    const { state: next, events } = tick(state, [], world);
+    const fell = next.cities[f.syracusae]?.fellOn;
+    expect(fell).toBe(state.day);
+    expect(ofKind(alertsOfDay(state, next, events), 'cityChangedOwner').map((a) => a.day)).toEqual([
+      fell,
+    ]);
+  });
+
+  it('tells when an evacuation leaves its city and when its people settle at the other', () => {
+    const { alerts, state } = play(
+      buildFixture(),
+      [{ kind: 'evacuate', faction: f.rome, city: f.roma, to: f.capua, share: 0.1 }],
+      (s) => Object.keys(s.refugeeColumns).length === 0,
+      60,
+    );
+    expect(Object.keys(state.refugeeColumns)).toEqual([]);
+    expect(
+      alerts
+        .filter((a) => a.kind === 'columnLeft' || a.kind === 'columnArrived')
+        .map((a) => [a.kind, a.tone, a.text]),
+    ).toEqual([
+      ['columnLeft', 'neutral', '4,000 people left Roma for Capua'],
+      ['columnArrived', 'good', '4,000 people from Roma settled in Capua'],
     ]);
   });
 
@@ -457,7 +498,7 @@ describe('alertsOfDay', () => {
     expect(ofKind(alertsOfDay(before, after, []), 'storeRanOut')).toEqual([]);
   });
 
-  it('tells once that a captured city is occupied when its days to choose a fate pass, and not after a sack', () => {
+  it('tells once that a captured city is occupied when its days to choose a fate pass, and not after a sack or a choice to occupy', () => {
     const fallen = () => {
       const state = buildFixture();
       const roman = state.armies[f.romanArmy];
@@ -468,9 +509,19 @@ describe('alertsOfDay', () => {
       syracusae.fellOn = state.day;
       return state;
     };
+    const occupiedOn = new Map([[f.syracusae, fallen().day]]);
+    const chosen = fallen();
+    const told: Alert[] = [];
+    let at = chosen;
+    for (let i = 0; i < FATE_DAYS + 5; i++) {
+      const { state: next, events } = tick(at, [], world);
+      told.push(...alertsOfDay(at, next, events, occupiedOn));
+      at = next;
+    }
+    expect(ofKind(told, 'fateLapsed')).toEqual([]);
     const left = play(fallen(), [], () => false, FATE_DAYS + 5);
     expect(ofKind(left.alerts, 'fateLapsed').map((a) => [a.day, a.text])).toEqual([
-      [FATE_DAYS + 2, 'No fate was chosen for Syracusae: you occupy it as it stands'],
+      [FATE_DAYS + 1, 'No fate was chosen for Syracusae: you occupy it as it stands'],
     ]);
     const sacked = play(
       fallen(),
@@ -479,5 +530,182 @@ describe('alertsOfDay', () => {
       FATE_DAYS + 5,
     );
     expect(ofKind(sacked.alerts, 'fateLapsed')).toEqual([]);
+  });
+});
+
+describe('sightingsOfDay', () => {
+  /** Carthage's army or fleet out of Rome's sight one day, and 130 km from Roma the next. */
+  function sighted(how: 'march' | 'sail', to: 'roma' | 'carthago', war = true) {
+    const before = buildFixture();
+    if (war) atWar(before);
+    const roma = before.cities[f.roma]?.position;
+    const carthago = before.cities[f.carthago]?.position;
+    const punic = before.armies[f.punicArmy];
+    if (!roma || !carthago || !punic) throw new Error('fixture changed');
+    const after = structuredClone(before);
+    after.day = (before.day + 1) as Day;
+    const near = { x: roma.x, y: roma.y + 130 };
+    const end = to === 'roma' ? roma : carthago;
+    const away = (state: GameState) => {
+      const army = state.armies[f.punicArmy];
+      if (army) army.activity = { kind: 'marching', position: { ...carthago }, waypoints: [end] };
+    };
+    away(before);
+    if (how === 'march') {
+      const army = after.armies[f.punicArmy];
+      if (army) army.activity = { kind: 'marching', position: near, waypoints: [end] };
+    } else {
+      const convoy = 'convoy-1' as ConvoyId;
+      after.convoys[convoy] = {
+        id: convoy,
+        owner: f.carthage,
+        position: near,
+        armies: [f.punicArmy],
+        waypoints: [end],
+      };
+      const army = after.armies[f.punicArmy];
+      if (army) army.activity = { kind: 'embarked', convoy };
+    }
+    return sightingsOfDay(
+      before,
+      after,
+      sightOf(before, world, f.rome),
+      sightOf(after, world, f.rome),
+      world,
+    );
+  }
+
+  it('tells once of an enemy army or fleet that comes into sight on its way to the player, with its men and target', () => {
+    expect(sighted('march', 'roma').map((a) => [a.kind, a.tone, a.text, a.day])).toEqual([
+      ['enemySighted', 'bad', 'An army of Carthage with 1,500 men is marching on Roma', 1],
+    ]);
+    expect(sighted('sail', 'roma').map((a) => [a.text, a.focus?.select])).toEqual([
+      [
+        'A fleet of Carthage with 1,500 men is sailing for Roma',
+        { kind: 'army', army: f.punicArmy },
+      ],
+    ]);
+  });
+
+  it('says nothing of an enemy heading elsewhere, or of a power at peace', () => {
+    expect(sighted('march', 'carthago')).toEqual([]);
+    expect(sighted('sail', 'carthago')).toEqual([]);
+    expect(sighted('march', 'roma', false)).toEqual([]);
+  });
+});
+
+describe('weakSiegeNews', () => {
+  it('tells on the first day that a siege of the player is too weak, and once when its besiegers have lost a third of their men', () => {
+    let state = buildFixture();
+    atWar(state, f.rome, f.syracusaeFaction);
+    const roman = state.armies[f.romanArmy];
+    const syracusae = state.cities[f.syracusae];
+    if (!roman || !syracusae) throw new Error('fixture changed');
+    roman.activity = { kind: 'idle', position: { ...syracusae.position } };
+    for (const id of roman.formations) {
+      const formation = state.formations[id];
+      if (formation) formation.men = 300;
+    }
+    let watched = new Map<SiegeId, WeakSiege>();
+    const told: Alert[] = [];
+    for (let i = 0; i < 12; i++) {
+      const next = tick(state, [], world).state;
+      const news = weakSiegeNews(state, next, watched);
+      told.push(...news.alerts);
+      watched = news.watched;
+      state = next;
+    }
+    expect(told.map((a) => [a.kind, a.day, a.text])).toEqual([
+      [
+        'siegeTooWeak',
+        1,
+        'Your siege of Syracusae is too weak to starve it: 540 men against a garrison of 1,200, whose sallies kill besiegers each day',
+      ],
+      [
+        'siegeBled',
+        expect.any(Number),
+        expect.stringMatching(
+          /^Your besiegers at Syracusae have lost a third of their men in a siege too weak to starve it: \d+ lost, \d+ left$/,
+        ),
+      ],
+    ]);
+  });
+
+  it('counts an army that leaves the siege as no loss to the sallies', () => {
+    const state = buildFixture();
+    atWar(state, f.rome, f.syracusaeFaction);
+    const roman = state.armies[f.romanArmy];
+    const syracusae = state.cities[f.syracusae];
+    if (!roman || !syracusae) throw new Error('fixture changed');
+    roman.activity = { kind: 'idle', position: { ...syracusae.position } };
+    for (const id of roman.formations) {
+      const formation = state.formations[id];
+      if (formation) formation.men = 300;
+    }
+    const first = tick(state, [], world).state;
+    const siege = Object.values(first.sieges)[0];
+    const army = first.armies[f.romanArmy];
+    if (!siege || !army) throw new Error('no siege began');
+    // A second Roman army of the same men stands in the siege, and the next day marches off.
+    const both = structuredClone(first);
+    const second = {
+      ...structuredClone(army),
+      id: 'army-2' as ArmyId,
+      formations: [] as FormationId[],
+    };
+    for (const id of army.formations) {
+      const formation = both.formations[id];
+      if (!formation) continue;
+      const copy = { ...formation, id: `${id}-2` as FormationId, army: second.id };
+      both.formations[copy.id] = copy;
+      second.formations.push(copy.id);
+    }
+    both.armies[second.id] = second;
+    both.sieges[siege.id] = { ...siege, besiegers: [army.id, second.id] };
+    const told = weakSiegeNews(first, both, new Map());
+    expect(ofKind(told.alerts, 'siegeTooWeak')).toHaveLength(1);
+    const after = structuredClone(both);
+    after.sieges[siege.id] = { ...siege, besiegers: [army.id] };
+    const gone = after.armies[second.id];
+    if (gone) gone.activity = { kind: 'idle', position: { x: 0, y: 0 } };
+    expect(weakSiegeNews(both, after, told.watched).alerts).toEqual([]);
+  });
+
+  it('does not blame the sallies for the dead of a failed storm', () => {
+    const state = buildFixture();
+    atWar(state, f.rome, f.syracusaeFaction);
+    const roman = state.armies[f.romanArmy];
+    const syracusae = state.cities[f.syracusae];
+    if (!roman || !syracusae) throw new Error('fixture changed');
+    roman.activity = { kind: 'idle', position: { ...syracusae.position } };
+    for (const id of roman.formations) {
+      const formation = state.formations[id];
+      if (formation) formation.men = 550;
+    }
+    // Without walls a failed storm kills about half the garrison's number, which leaves men.
+    Object.assign(syracusae, { walls: 0, garrison: 1190 });
+    const first = tick(state, [], world).state;
+    const told = weakSiegeNews(state, first, new Map());
+    const stormed = tick(
+      first,
+      [{ kind: 'storm', faction: f.rome, city: f.syracusae }],
+      world,
+    ).state;
+    expect(stormed.cities[f.syracusae]?.owner).toBe(f.syracusaeFaction);
+    const news = weakSiegeNews(first, stormed, told.watched).alerts;
+    expect(news.map((a) => a.kind)).toEqual(['siegeBled']);
+    expect(news[0]?.text).not.toMatch(/[Ss]all/);
+  });
+
+  it('says nothing of a siege strong enough to cut the food', () => {
+    const state = buildFixture();
+    atWar(state, f.rome, f.syracusaeFaction);
+    const roman = state.armies[f.romanArmy];
+    const syracusae = state.cities[f.syracusae];
+    if (!roman || !syracusae) throw new Error('fixture changed');
+    roman.activity = { kind: 'idle', position: { ...syracusae.position } };
+    const next = tick(state, [], world).state;
+    expect(Object.keys(next.sieges)).toHaveLength(1);
+    expect(weakSiegeNews(state, next, new Map()).alerts).toEqual([]);
   });
 });

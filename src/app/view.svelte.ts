@@ -7,7 +7,7 @@ import type { Sight } from '../sim/sight.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import type { Standing } from '../sim/outcome.ts';
-import type { Alert } from './alerts.ts';
+import type { Alert, Occupied } from './alerts.ts';
 import type { Speed } from './clock.ts';
 import type { OrderMenu } from './command.ts';
 import type { FateChoice } from './fates.ts';
@@ -62,6 +62,8 @@ export interface Snapshot {
   menu: CommandMenu | undefined;
   /** What the player sees. A panel or an alert shows nothing outside it. */
   sight: Sight;
+  /** The captured cities whose fate the player settled by occupying them. */
+  occupied: Occupied;
   frame: Frame;
 }
 

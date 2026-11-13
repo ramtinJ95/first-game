@@ -32,7 +32,7 @@ export interface FrameMeter {
 }
 
 /**
- * A readout in the page's corner over the last FRAME_WINDOW_MS, refreshed each second:
+ * A readout in the page's bottom right corner, clear of the top bar, over the last FRAME_WINDOW_MS, refreshed each second:
  * the interval between animation frames, and the time each drawn frame took. It also
  * writes them in ms to `data-median`, `data-p95`, `data-draw-median`, and
  * `data-draw-p95`, so a script reads the same numbers.
@@ -42,8 +42,8 @@ export function showFrameMeter(host: HTMLElement): FrameMeter {
   readout.dataset['testid'] = 'frame-meter';
   Object.assign(readout.style, {
     position: 'fixed',
-    left: '8px',
-    top: '8px',
+    right: '8px',
+    bottom: '8px',
     zIndex: '10',
     padding: '4px 8px',
     font: '12px ui-monospace, monospace',

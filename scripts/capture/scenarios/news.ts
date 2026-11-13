@@ -72,7 +72,7 @@ export default defineScenario({
     await page.getByTestId('store-food-note').waitFor();
     await shot(
       'top-bar-limits',
-      'The top bar with Rome\'s food and manpower at their limits: "Granaries full" and "At the call-up limit", with the reason on hover',
+      'The top bar with Rome\'s food and manpower at their limits: "Full" and "At limit", with the reason on hover',
     );
 
     await load(page, weakSiegeOfMediolanum());

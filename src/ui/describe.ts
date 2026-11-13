@@ -9,7 +9,14 @@ import {
 import { factionColour } from '../render/palette.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { Pick } from '../render/pick.ts';
-import type { ArmyId, BattleId, CityId, FactionId, ProvinceId } from '../sim/ids.ts';
+import type {
+  ArmyId,
+  BattleId,
+  CityId,
+  FactionId,
+  ProvinceId,
+  RefugeeColumnId,
+} from '../sim/ids.ts';
 import type { GameMap } from '../sim/map.ts';
 import { CONVOY_KM_PER_DAY, MARCH_KM_PER_DAY } from '../sim/march.ts';
 import type { Order } from '../sim/orders/orders.ts';
@@ -32,7 +39,8 @@ import {
   MANPOWER_SHARE,
   menOf,
 } from '../sim/systems/economy.ts';
-import { BLOCKADE_ODDS } from '../sim/systems/sieges.ts';
+import { stormOdds } from '../sim/ai/situation.ts';
+import { BLOCKADE_ODDS, defendersAt } from '../sim/systems/sieges.ts';
 import { areAtWar } from '../sim/wars.ts';
 import { distance } from '../sim/world/find-path.ts';
 
@@ -74,11 +82,19 @@ export function activityText(state: State, army: DeepReadonly<Army>): string {
         pathKm(activity.position, activity.waypoints),
         MARCH_KM_PER_DAY,
       )}`;
-    case 'retreating':
-      return `Retreating${destination(state, activity.waypoints.at(-1))} · ${daysLeft(
-        pathKm(activity.position, activity.waypoints),
-        MARCH_KM_PER_DAY,
-      )}`;
+    case 'retreating': {
+      const days = daysLeft(pathKm(activity.position, activity.waypoints), MARCH_KM_PER_DAY);
+      const end = activity.waypoints.at(-1);
+      const refuge =
+        end &&
+        Object.values(state.cities).find(
+          (city) => city.owner === army.owner && distance(city.position, end) <= AT_CITY_KM,
+        );
+      // A retreat into the field ends near no city of the owner, often by the enemy's.
+      return refuge
+        ? `Retreating to ${refuge.name} · ${days}`
+        : `Falling back into the field · ${days}`;
+    }
     case 'inBattle': {
       const battle = state.battles[activity.battle];
       const day = battle ? state.day - battle.startedOn + 1 : 1;
@@ -270,14 +286,17 @@ export function whyNotBesieging(
 export function ordersWaitingText(
   pending: readonly Order[],
   player: FactionId,
-): string | undefined {
+): { readonly short: string; readonly full: string } | undefined {
   const armies = new Set(
     pending.flatMap((order) => (order.faction === player && 'army' in order ? [order.army] : [])),
   );
   if (armies.size === 0) return undefined;
   return armies.size === 1
-    ? '1 army has orders for the next day'
-    : `${armies.size} armies have orders for the next day`;
+    ? { short: '1 army', full: '1 army has orders for the next day' }
+    : {
+        short: `${armies.size} armies`,
+        full: `${armies.size} armies have orders for the next day`,
+      };
 }
 
 /** What a click on a row selects, and where it centres the map. */
@@ -305,13 +324,26 @@ export interface WarRow {
   readonly since: Day;
 }
 
-/** The player's cities, armies, and wars, as the overview lists them. */
-/** The player's realm while it stands, or the day it fell, when nothing is left to list. */
+/** A column of the player's people on the road from one city to another. */
+export interface ColumnRow {
+  readonly column: RefugeeColumnId;
+  readonly people: number;
+  readonly route: string;
+  /** The destination, which a click on the row selects. */
+  readonly pick: Pick;
+  readonly at: MapPoint;
+}
+
+/**
+ * The player's cities, armies, people on the road, and wars, as the overview lists them,
+ * or the day the realm fell, when nothing is left to list.
+ */
 export type Overview =
   | {
       readonly kind: 'standing';
       readonly cities: readonly CityRow[];
       readonly armies: readonly ArmyRow[];
+      readonly columns: readonly ColumnRow[];
       readonly wars: readonly WarRow[];
     }
   | { readonly kind: 'fallen'; readonly on: Day };
@@ -389,7 +421,24 @@ export function overviewOf(state: State, sight: Sight): Overview {
         },
       ];
     });
-  return { kind: 'standing', cities, armies, wars: warsOf(state, state.player) };
+  const columns = Object.values(state.refugeeColumns)
+    .filter((column) => column.owner === state.player)
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .flatMap((column) => {
+      const to = state.cities[column.to];
+      if (!to) return [];
+      const from = state.cities[column.from]?.name ?? 'the road';
+      return [
+        {
+          column: column.id,
+          people: column.people,
+          route: `${from} to ${to.name}`,
+          pick: { kind: 'province', province: to.province } as const,
+          at: column.position,
+        },
+      ];
+    });
+  return { kind: 'standing', cities, armies, columns, wars: warsOf(state, state.player) };
 }
 
 /** What the city adds to its owner's stores each day: the economy's own balance of a realm of this city alone. */
@@ -425,8 +474,9 @@ export interface StoreNote {
 }
 
 /**
- * What the top bar says beside a store: that it ran out, how many days it lasts while it
- * falls, or that it stops growing at its limit (`limitsOf`), today or with tomorrow's gain.
+ * What the top bar says beside a store, in a word or two, and in full in `why`: that it
+ * ran out, how many days it lasts while it falls, or that it stops growing at its limit
+ * (`limitsOf`), today or with tomorrow's gain.
  */
 export function storeNote(
   store: keyof Stores,
@@ -436,16 +486,16 @@ export function storeNote(
 ): StoreNote | undefined {
   if (store !== 'manpower' && amount <= 0) {
     return {
-      text: 'Ran out: formations desert',
-      why: 'Each formation loses men every day while it lasts.',
+      text: 'Ran out',
+      why: 'Ran out: formations desert. Each formation loses men every day while it lasts.',
       bad: true,
     };
   }
   if (store !== 'manpower' && change < 0) {
     const days = Math.floor(amount / -change);
     return {
-      text: `Runs out in ${whole(days)} days`,
-      why: "At today's balance. Formations desert once it runs out.",
+      text: `${whole(days)} days left`,
+      why: `Runs out in ${whole(days)} days at today's balance. Formations desert once it runs out.`,
       bad: days <= WARN_DAYS,
     };
   }
@@ -455,13 +505,13 @@ export function storeNote(
   const when = amount >= limit ? '' : ' tomorrow';
   return store === 'food'
     ? {
-        text: `Granaries full${when}`,
-        why: `Granaries hold ${GRANARY_DAYS} days of what your people and men eat. More food spoils.`,
+        text: `Full${when}`,
+        why: `Granaries full${when}. They hold ${GRANARY_DAYS} days of what your people and men eat. More food spoils.`,
         bad: false,
       }
     : {
-        text: `At the call-up limit${when}`,
-        why: `You can call up ${Math.round(MANPOWER_SHARE * 100)}% of your people, less the men under arms and in training. Grow your cities or let men go to call up more.`,
+        text: `At limit${when}`,
+        why: `At the call-up limit${when}. You can call up ${Math.round(MANPOWER_SHARE * 100)}% of your people, less the men under arms and in training. Grow your cities or let men go to call up more.`,
         bad: false,
       };
 }
@@ -485,4 +535,30 @@ export function weakSiegeText(
   if (men >= BLOCKADE_ODDS * city.garrison) return undefined;
   const needed = Math.ceil(BLOCKADE_ODDS * city.garrison) - men;
   return `Too few to starve ${city.name}: ${whole(men)} besiegers against a garrison of ${whole(city.garrison)}. The food does not fall, and sallies cut down besiegers each day. ${whole(needed)} more men would cut the food.`;
+}
+
+/**
+ * What a storm of the city today would do, by the storm rule's own odds (`stormOdds`): the
+ * chance that the player's besiegers take it, and the men they are expected to lose either way.
+ */
+export function stormText(state: State, siege: DeepReadonly<Siege>): string | undefined {
+  const city = state.cities[siege.city];
+  if (!city) return undefined;
+  const stormers = siege.besiegers.flatMap((id) => {
+    const army = state.armies[id];
+    return army?.owner === state.player ? [army] : [];
+  });
+  if (stormers.length === 0) return undefined;
+  if (defendersAt(state, city)) {
+    return `No storm while an army of ${factionName(state, city.owner)} defends ${city.name} in the field. Beat it first.`;
+  }
+  const { chance, loss, men } = stormOdds(state, city, stormers);
+  const percent = Math.round(chance * 100);
+  const odds =
+    chance <= 0
+      ? `A storm cannot take ${city.name} today`
+      : chance >= 1
+        ? `A storm takes ${city.name} for certain`
+        : `A storm takes ${city.name} ${percent === 0 ? 'less than 1' : percent === 100 ? 'more than 99' : percent} times in 100`;
+  return `${odds}. It is expected to cost ${whole(loss)} of your ${whole(men)} men, whether it takes the city or not.`;
 }

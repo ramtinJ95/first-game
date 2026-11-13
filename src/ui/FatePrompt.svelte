@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dailyText, forgoneText } from '../app/fates.ts';
   import { whole } from '../app/names.ts';
   import type { ShownModal } from '../app/view.svelte.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
@@ -19,6 +20,7 @@
 
   const NAMES = { occupy: 'Occupy', sack: 'Sack', enslave: 'Enslave' } as const;
   const city = $derived(game.cities[fate.city]);
+  const occupy = $derived(fate.choices.find((choice) => choice.kind === 'occupy'));
 
   function gives(choice: (typeof fate.choices)[number]): string[] {
     const lines: string[] = [];
@@ -55,6 +57,12 @@
           <span class="name">{NAMES[choice.kind]}</span>
           {#each gives(choice) as line (line)}<span class="good">{line}</span>{/each}
           {#each costs(choice) as line (line)}<span class="bad">{line}</span>{/each}
+          <span data-testid="fate-{choice.kind}-daily">Then {dailyText(choice.daily)}</span>
+          {#if occupy && forgoneText(choice, occupy)}
+            <span class="bad" data-testid="fate-{choice.kind}-forgone"
+              >{forgoneText(choice, occupy)}</span
+            >
+          {/if}
         </button>
       {/each}
     </div>

@@ -77,8 +77,13 @@ test.describe('what the page tells of stores, cities, and sieges', () => {
 
   test('the top bar says when food and manpower stop at their limits', async ({ page }) => {
     await load(page, storesAtTheirLimits());
-    await expect(page.getByTestId('store-food-note')).toHaveText('Granaries full');
-    await expect(page.getByTestId('store-manpower-note')).toHaveText('At the call-up limit');
+    await expect(page.getByTestId('store-food-note')).toHaveText('Full');
+    await expect(page.getByTestId('store-food')).toHaveAttribute('title', /^Granaries full\. /);
+    await expect(page.getByTestId('store-manpower-note')).toHaveText('At limit');
+    await expect(page.getByTestId('store-manpower')).toHaveAttribute(
+      'title',
+      /^At the call-up limit\. /,
+    );
   });
 
   test('the army and city panels of a siege too weak to cut the food say how many men it needs', async ({

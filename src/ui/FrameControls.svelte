@@ -58,7 +58,7 @@
         >Import from a file</button
       >
       <hr />
-      <button type="button" role="menuitem" onclick={() => act(() => actions.showStart())}
+      <button type="button" role="menuitem" onclick={() => act(() => actions.askToLeave())}
         >Start screen</button
       >
       <p class="muted hint">Dropping a save file on the page also loads it.</p>

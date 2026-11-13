@@ -103,11 +103,23 @@ export interface RendererOptions {
   readonly waitForGpu?: boolean;
 }
 
+/** How far in from each edge of the view something covers it, in screen px. */
+export interface Insets {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
 export interface Renderer {
   /** Draws the frame if anything in it changed, and says whether it did. */
   draw(frame: Frame): boolean;
-  /** Centres the view on a map point, zooming in to at least FOCUS_SCALE. */
-  focus(point: MapPoint): void;
+  /**
+   * Centres the view on a map point, zooming in to at least FOCUS_SCALE. With `covered`,
+   * the screen px the open panels cover along each edge, it centres the point in the
+   * part of the map they leave clear.
+   */
+  focus(point: MapPoint, covered?: Insets): void;
   destroy(): void;
 }
 
@@ -945,18 +957,23 @@ export async function createRenderer({
     'pointerup',
     (event) => {
       if (event.pointerId !== drag?.pointer) return;
-      if (!drag.moved)
-        onPick(
-          pickAt(
-            map,
-            camera,
-            viewport(),
-            bannersShown(),
-            local(event),
-            battlesShown(),
-            figuresShown(),
-          ),
+      if (!drag.moved) {
+        const screen = local(event);
+        const pick = pickAt(
+          map,
+          camera,
+          viewport(),
+          bannersShown(),
+          screen,
+          battlesShown(),
+          figuresShown(),
         );
+        // A city's name can stand over a neighbouring province, so a click on it, or on
+        // its symbol, picks the city's own province.
+        const city = !pick || pick.kind === 'province' ? cityAt(drawnCities, screen) : undefined;
+        const province = city && map.provinces.find((p) => (p.id as string) === city)?.id;
+        onPick(province ? { kind: 'province', province } : pick);
+      }
       drag = undefined;
       canvas.style.cursor = 'grab';
     },
@@ -1185,12 +1202,13 @@ export async function createRenderer({
       canvas.dataset['drawnState'] = String(stateId(current));
       return true;
     },
-    focus(point) {
-      camera = clampCamera(
-        { centre: point, scale: Math.max(camera.scale, FOCUS_SCALE) },
-        viewport(),
-        map,
-      );
+    focus(point, covered = { left: 0, top: 0, right: 0, bottom: 0 }) {
+      const scale = Math.max(camera.scale, FOCUS_SCALE);
+      const centre = {
+        x: point.x - (covered.left - covered.right) / 2 / scale,
+        y: point.y - (covered.top - covered.bottom) / 2 / scale,
+      };
+      camera = clampCamera({ centre, scale }, viewport(), map);
       cameraMoved = true;
     },
     destroy() {

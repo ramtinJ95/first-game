@@ -1,18 +1,19 @@
-import { mount } from 'svelte';
+import { flushSync, mount } from 'svelte';
 import mapUrl from '../../data/map/map.json?url';
 import { parseDrawOptions } from '../render/draw-options.ts';
 import type { Pick } from '../render/pick.ts';
-import { createRenderer, type Command } from '../render/renderer.ts';
+import { createRenderer, type Command, type Insets } from '../render/renderer.ts';
 import { decideAll } from '../sim/ai/decide.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import { FATE_DAYS } from '../sim/cities.ts';
-import type { CityId } from '../sim/ids.ts';
+import type { CityId, SiegeId } from '../sim/ids.ts';
 import { parseMap, POWERS, type GameMap, type PowerId } from '../sim/map.ts';
 import { newGame, POWER_NAMES } from '../sim/new-game.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import { outcomeOf, standingOf } from '../sim/outcome.ts';
 import { loadGame, saveGame } from '../sim/save.ts';
 import { sightOf, type Sight } from '../sim/sight.ts';
+import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { buildWorld } from '../sim/world/world.ts';
@@ -20,7 +21,14 @@ import type { Actions } from '../ui/actions.ts';
 import { GAME_NAME, type FrameActions } from '../ui/frame-actions.ts';
 import Hud from '../ui/Hud.svelte';
 import '../ui/panels.css';
-import { alertsOfDay, groupAlerts, type Alert } from './alerts.ts';
+import {
+  alertsOfDay,
+  groupAlerts,
+  sightingsOfDay,
+  weakSiegeNews,
+  type Alert,
+  type WeakSiege,
+} from './alerts.ts';
 import { createClock } from './clock.ts';
 import { planCommand, plannedRoutes, type CommandTarget } from './command.ts';
 import { fateChoices, type FateChoice } from './fates.ts';
@@ -129,14 +137,27 @@ function readPauseOnFate(): boolean {
   }
 }
 
+/** Cities the player chose to occupy, with the day each fell. A new game or a load forgets them. */
+let occupied = new Map<CityId, Day>();
+/** The player's sieges too weak to cut the food that the player has been told of. */
+let weakSieges = new Map<SiegeId, WeakSiege>();
+
 function fateOpen(state: DeepReadonly<GameState>, id: CityId): boolean {
   const city = state.cities[id];
   return (
     !!city &&
     city.owner === state.player &&
     city.fellOn !== null &&
+    occupied.get(id) !== city.fellOn &&
     state.day - city.fellOn <= FATE_DAYS
   );
+}
+
+/** Settles the fate of a city the player captured by occupying it as it stands. */
+function occupy(id: CityId) {
+  const city = clock.state.cities[id];
+  if (!city || city.fellOn === null) return;
+  occupied = new Map(occupied).set(id, city.fellOn);
 }
 
 /** Writes the day to a browser slot, or tells the player why the browser refused it. */
@@ -187,9 +208,15 @@ const clock = createClock({
     if (last) showNotice(refusalText(clock.state, last.reason));
   },
   onDay(before, after, events) {
-    const news = groupAlerts(
-      alertsInSight(alertsOfDay(before, after, events), sightFor(before), sightFor(after)),
-    );
+    const saw = sightFor(before);
+    const sees = sightFor(after);
+    const weak = weakSiegeNews(before, after, weakSieges);
+    weakSieges = weak.watched;
+    const news = groupAlerts([
+      ...alertsInSight(alertsOfDay(before, after, events, occupied), saw, sees),
+      ...sightingsOfDay(before, after, saw, sees, world),
+      ...weak.alerts,
+    ]);
     if (news.length > 0) alerts = [...news.reverse(), ...alerts].slice(0, ALERTS_KEPT);
     for (const point of turningPoints(before, after, world)) {
       if (point.kind === 'fate' && !pauseOnFate) continue;
@@ -229,6 +256,7 @@ const view = createView(
     notice,
     menu,
     sight: sightFor(clock.state),
+    occupied,
     frame: {
       powers,
       modal: shownModal(),
@@ -305,7 +333,11 @@ const renderer = await createRenderer({
 const meter = metering ? showFrameMeter(host) : undefined;
 
 function loop() {
+  const shown = clock.state;
   clock.frame();
+  // The top bar shows a new day in the frame that draws it, so Space pauses on the
+  // day the player reads, not one the panels have yet to show.
+  if (clock.state !== shown) view.refresh();
   if (stopAsked) {
     stopAsked = false;
     if (!clock.paused) {
@@ -352,6 +384,8 @@ function homeOf(state: DeepReadonly<GameState>): MapPoint | undefined {
 function enter(state: GameState, { pause, focus }: { pause: boolean; focus: boolean }) {
   clock.load(state);
   alerts = [];
+  occupied = new Map();
+  weakSieges = new Map();
   menu = undefined;
   stopAsked = false;
   const outcome = outcomeOf(state, world, state.player);
@@ -363,8 +397,33 @@ function enter(state: GameState, { pause, focus }: { pause: boolean; focus: bool
   resumeOnClose = modals.length > 0 && !pause && !clock.paused;
   if (pause || modals.length > 0) clock.pause();
   const home = focus ? homeOf(state) : undefined;
-  if (home) renderer.focus(home);
   view.refresh();
+  if (home) focusClear(home);
+}
+
+/** The screen px that the open panels cover along each edge of the map. */
+function covered(): Insets {
+  flushSync();
+  const box = (selector: string) => {
+    const element = document.querySelector(selector);
+    return element && element.childElementCount > 0 ? element.getBoundingClientRect() : undefined;
+  };
+  const bar = box('[data-testid="top-bar"]');
+  const overview = box('[data-testid="overview"]');
+  const side = box('aside[aria-label="Selection"]');
+  // Below 720 px the side column is a sheet along the bottom.
+  const narrow = window.innerWidth < 720;
+  return {
+    top: bar?.bottom ?? 0,
+    left: overview && !narrow ? overview.right : 0,
+    right: side && !narrow ? window.innerWidth - side.left : 0,
+    bottom: side && narrow ? window.innerHeight - side.top : 0,
+  };
+}
+
+/** Centres the map on the point in the part the panels leave clear, once they show what was chosen. */
+function focusClear(point: MapPoint) {
+  renderer.focus(point, covered());
 }
 
 /** The fates a loaded game still waits on, which no day's change would announce. */
@@ -421,6 +480,24 @@ const frame: FrameActions = {
     menu = undefined;
     view.refresh();
   },
+  askToLeave() {
+    if (clock.state.factions[clock.state.player]?.defeatedOn !== null) {
+      frame.showStart();
+      return;
+    }
+    if (!clock.paused) resumeOnClose = true;
+    clock.pause();
+    modals = [{ kind: 'leave' }, ...modals];
+    menu = undefined;
+    view.refresh();
+  },
+  leave(keep) {
+    if (keep && !save('manual', clock.state)) {
+      view.refresh();
+      return;
+    }
+    frame.showStart();
+  },
   openGuide() {
     if (modals[0]?.kind === 'guide') return;
     modals = [{ kind: 'guide' }, ...modals];
@@ -434,7 +511,9 @@ const frame: FrameActions = {
     view.refresh();
   },
   decideFate(order) {
+    const front = modals[0];
     if (order) clock.issue(order);
+    else if (front?.kind === 'fate') occupy(front.city);
     closeModal();
   },
   setPauseOnFate(on) {
@@ -469,9 +548,11 @@ const frame: FrameActions = {
   },
 };
 
-/** A fate to choose, a loss, or a win holds the game until the player answers it. */
+/** A fate to choose, a loss, a win, or the question to leave holds the game until the player answers it. */
 function held(): boolean {
-  return modals.some(({ kind }) => kind === 'fate' || kind === 'lost' || kind === 'won');
+  return modals.some(
+    ({ kind }) => kind === 'leave' || kind === 'fate' || kind === 'lost' || kind === 'won',
+  );
 }
 
 const actions: Actions = {
@@ -506,18 +587,27 @@ const actions: Actions = {
     if (!seesPick(sightFor(clock.state), pick)) return;
     selection = pick;
     menu = undefined;
-    renderer.focus(at);
     view.refresh();
+    focusClear(at);
   },
   openAlert(alert) {
     if (!alert.focus) return;
-    renderer.focus(alert.focus.at);
     const { select } = alert.focus;
     if (select && seesPick(sightFor(clock.state), select)) selection = select;
     view.refresh();
+    focusClear(alert.focus.at);
   },
   closeMenu() {
     menu = undefined;
+    view.refresh();
+  },
+  occupy(city) {
+    occupy(city);
+    const front = modals[0];
+    if (front?.kind === 'fate' && front.city === city) {
+      closeModal();
+      return;
+    }
     view.refresh();
   },
 };

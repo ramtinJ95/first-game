@@ -13,6 +13,7 @@
   import FatePrompt from './FatePrompt.svelte';
   import type { FrameActions } from './frame-actions.ts';
   import Guide from './Guide.svelte';
+  import LeaveConfirm from './LeaveConfirm.svelte';
   import NoticeToast from './NoticeToast.svelte';
   import OverviewPanel from './OverviewPanel.svelte';
   import StartScreen from './StartScreen.svelte';
@@ -74,7 +75,15 @@
       {/if}
       {#if city}
         {#key city.id}
-          <CityPanel {game} {map} {city} {sight} pending={view.current.pending} {actions} />
+          <CityPanel
+            {game}
+            {map}
+            {city}
+            {sight}
+            pending={view.current.pending}
+            occupied={view.current.occupied}
+            {actions}
+          />
         {/key}
       {/if}
       {#each battles as battle (battle.id)}
@@ -89,7 +98,9 @@
     <CommandMenu menu={view.current.menu} {actions} />
   {/if}
 
-  {#if modal?.kind === 'guide'}
+  {#if modal?.kind === 'leave'}
+    <LeaveConfirm frame={view.current.frame} actions={frame} />
+  {:else if modal?.kind === 'guide'}
     <Guide {game} frame={view.current.frame} actions={frame} />
   {:else if modal?.kind === 'fate'}
     <FatePrompt {game} fate={modal} pauseOnFate={view.current.frame.pauseOnFate} actions={frame} />
@@ -105,7 +116,7 @@
     inset: 0;
     display: grid;
     grid-template-areas:
-      'top side'
+      'top top'
       'main side'
       'alerts side';
     grid-template-rows: auto minmax(0, 1fr) auto;
@@ -123,8 +134,13 @@
     min-height: 0;
   }
 
+  /* The bar spans the page, so the buttons at its right end stand still as the numbers change. */
   .top {
     grid-area: top;
+  }
+
+  .top > :global(*) {
+    align-self: stretch;
   }
 
   .main {
@@ -159,10 +175,6 @@
       grid-template-rows: auto minmax(0, 1fr) auto auto;
       grid-template-columns: minmax(0, 1fr);
       gap: 6px;
-    }
-
-    .top > :global(*) {
-      align-self: stretch;
     }
 
     .alerts {

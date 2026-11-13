@@ -78,7 +78,7 @@ test.describe('the panels', () => {
     await expect(bar.getByTestId('store-gold-amount')).toHaveText('200');
     await expect(bar.getByTestId('store-gold-change')).toHaveText(/^−\d+\.\d\/day$/);
     await expect(bar.getByTestId('store-gold')).toHaveClass(/falling/);
-    await expect(bar.getByTestId('store-gold')).toContainText(/Runs out in \d+ days/);
+    await expect(bar.getByTestId('store-gold')).toContainText(/\d+ days left/);
   });
 
   test('a right click on land marches your selected army there with moveArmy, and Halt stops it', async ({
@@ -93,7 +93,8 @@ test.describe('the panels', () => {
 
     const target = view.city('mediolanum');
     await page.mouse.click(target.x, target.y, { button: 'right' });
-    await expect(page.getByTestId('orders-waiting')).toHaveText(
+    await expect(page.getByTestId('orders-waiting')).toHaveAttribute(
+      'title',
       '1 army has orders for the next day',
     );
     await resume(page);
@@ -278,6 +279,7 @@ test.describe('the panels', () => {
     const battle = page.getByTestId('battle-panel');
     await expect(battle).toBeVisible();
     await pause(page);
+    await untilDrawn(page);
     await expect(battle.getByTestId('battle-day')).toHaveText(/^day \d+$/);
     await expect(battle.getByTestId('battle-attackers')).toContainText(/men$/);
     await expect(battle.getByTestId('formation')).toHaveCount(4);
@@ -340,7 +342,14 @@ test.describe('the panels', () => {
       fallenTo(state, 'mediolanum');
       await pause(page);
       await load(page, state);
+      // Occupy would settle the fate, so the prompt is turned off and the save loaded
+      // again, which leaves the choice to the city panel.
+      await page
+        .getByTestId('fate-prompt')
+        .getByRole('checkbox', { name: 'Pause and ask when a city falls to you' })
+        .uncheck();
       await page.getByTestId('fate-occupy').click();
+      await load(page, state);
       const view = camera(page);
       const at = view.city('mediolanum');
       await page.mouse.click(at.x, at.y);
