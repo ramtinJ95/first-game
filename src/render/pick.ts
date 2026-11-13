@@ -82,9 +82,21 @@ export function provinceAt(map: GameMap, point: MapPoint): ProvinceId | undefine
   return undefined;
 }
 
+/** A drawn figure or ship that a click selects its army by, in screen px. */
+export interface FigureHit {
+  readonly army?: ArmyId;
+  readonly hit?: {
+    readonly left: number;
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+  };
+}
+
 /**
- * What a click at `screen` points at. A banner wins over a battle marker, which wins
- * over the land under it. The banner drawn last, which is on top, wins over the others.
+ * What a click at `screen` points at. A figure wins over a banner, which wins over a
+ * battle marker, which wins over the land under it. Among figures or banners, the one
+ * drawn last, which is on top, wins.
  */
 export function pickAt(
   map: GameMap,
@@ -93,7 +105,21 @@ export function pickAt(
   armies: readonly DrawnArmy[],
   screen: MapPoint,
   battles: readonly DrawnBattle[] = [],
+  figures: readonly FigureHit[] = [],
 ): Pick | undefined {
+  for (let i = figures.length - 1; i >= 0; i--) {
+    const { army, hit } = figures[i] as FigureHit;
+    if (
+      army &&
+      hit &&
+      screen.x >= hit.left &&
+      screen.x <= hit.right &&
+      screen.y >= hit.top &&
+      screen.y <= hit.bottom
+    ) {
+      return { kind: 'army', army };
+    }
+  }
   for (let i = armies.length - 1; i >= 0; i--) {
     const army = armies[i] as DrawnArmy;
     const foot = mapToScreen(camera, viewport, army.position);

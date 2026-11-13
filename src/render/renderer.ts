@@ -22,6 +22,7 @@ import {
   mapToScreen,
   panBy,
   screenToMap,
+  symbolGrowth,
   wheelFactor,
   zoomAt,
   type Camera,
@@ -45,12 +46,19 @@ import {
 } from './palette.ts';
 import { paperTexture, waterTexture } from './paper.ts';
 import { toPixels } from './lines.ts';
-import { cityAt, pickAt, type DrawnCity, type Pick } from './pick.ts';
+import { cityAt, pickAt, provinceAt, type DrawnCity, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
 import { citySymbols } from './symbols.ts';
 import { createLife } from './terrain/life.ts';
 import { createPlaces } from './terrain/places-layer.ts';
 import { createTerrain } from './terrain/terrain-layer.ts';
+import { createArmyLayer } from './armies/layer.ts';
+import {
+  buildScene,
+  figureHeight,
+  type Scene,
+  type Sprite as SceneSprite,
+} from './armies/scene.ts';
 
 /** What one drawn frame shows: the days either side of now, and the selection. */
 export interface Frame {
@@ -155,11 +163,6 @@ const WATER_LINE_WIDTH = 0.9;
 /** Pixels of sea drawn beyond each edge of the view, so a pan can slide the drawing. */
 const SEA_MARGIN = 256;
 /**
- * City symbols grow from the base size at 0.6 px per km to at most this factor at
- * the closest zoom, so a close view shows a town and not a speck.
- */
-const SYMBOL_GROWTH = { from: 0.6, perDoubling: 0.35, most: 1.8 } as const;
-/**
  * The sea's drift: how far it bends in pixels, the size of its swell, its speed, and
  * how often it steps. The map draws only when something changed, and the swell is
  * the one thing that changes on its own, so its step sets the idle frame rate.
@@ -167,6 +170,10 @@ const SYMBOL_GROWTH = { from: 0.6, perDoubling: 0.35, most: 1.8 } as const;
 const SWELL = { bend: 2.2, scale: 2.5, pixelsPerSecond: { x: 7, y: 4 }, stepMs: 80 } as const;
 /** The zoom that an alert's click brings the view to at least, so the place is legible. */
 const FOCUS_SCALE = 0.8;
+/** How often a still scene is built again, so men at ease, fires, smoke, and flags move. */
+const ALIVE_MS = 90;
+/** How far a pan may move the built scene before it is built again. */
+const PAN_REBUILD_PX = 200;
 const ROUTE_DASH = { dash: 7, gap: 5 } as const;
 
 function mix(from: number, to: number, t: number): number {
@@ -225,11 +232,6 @@ function sameSelection(a: Pick | undefined, b: Pick | undefined): boolean {
   if (a?.kind === 'army' && b?.kind === 'army') return a.army === b.army;
   if (a?.kind === 'battle' && b?.kind === 'battle') return a.battle === b.battle;
   return a === b;
-}
-
-function symbolGrowth(scale: number): number {
-  const { from, perDoubling, most } = SYMBOL_GROWTH;
-  return Math.min(most, Math.max(1, 1 + perDoubling * Math.log2(scale / from)));
 }
 
 function sameArmies(a: readonly DrawnArmy[], b: readonly DrawnArmy[]): boolean {
@@ -418,6 +420,12 @@ export async function createRenderer({
   const routes = new Graphics();
   const battleLayer = new Container({ label: 'battles' });
   const bannerLayer = new Container({ label: 'banners' });
+  const armyLayer = createArmyLayer(app.renderer.resolution, () => {
+    sheetPainted = true;
+  });
+  // The figures stand over the city symbols and under the city names, so a name stays
+  // readable when an army, a battle, or a siege stands at its city.
+  layers.settlements.addChild(armyLayer.root);
   layers.markers.addChild(routes, battleLayer, bannerLayer);
 
   const highlight = new Graphics();
@@ -439,6 +447,55 @@ export async function createRenderer({
   let seenBy: Sight | undefined;
   let seenBattles: DeepReadonly<Battle>[] = [];
   let swellAt = -Infinity;
+  let sheetPainted = false;
+  let scene: Scene | undefined;
+  /** The sprites last drawn, so a click picks only what is on the screen. */
+  let drawnFigures: readonly SceneSprite[] = [];
+  let built:
+    | {
+        previous: DeepReadonly<GameState>;
+        current: DeepReadonly<GameState>;
+        progress: number;
+        sight: Sight;
+        scale: number;
+        centre: MapPoint;
+        width: number;
+        height: number;
+        at: number;
+        cost: number;
+      }
+    | undefined;
+  /** How far the camera has panned since the scene was built, in screen px. */
+  const sceneShift = () =>
+    built
+      ? {
+          x: (built.centre.x - camera.centre.x) * camera.scale,
+          y: (built.centre.y - camera.centre.y) * camera.scale,
+        }
+      : { x: 0, y: 0 };
+  /** The figures a click can pick, where they stand on screen now. */
+  const figuresShown = () => {
+    if (!scene || scene.height === 0) return [];
+    const { x, y } = sceneShift();
+    return drawnFigures.flatMap((sprite) =>
+      sprite.army && sprite.hit
+        ? [
+            {
+              army: sprite.army,
+              hit: {
+                left: sprite.hit.left + x,
+                right: sprite.hit.right + x,
+                top: sprite.hit.top + y,
+                bottom: sprite.hit.bottom + y,
+              },
+            },
+          ]
+        : [],
+    );
+  };
+  /** Seconds of motion: it runs with the game's days, faster at a higher speed, and stops while paused. */
+  let motion = 0;
+  let clockAt: { day: number; now: number } | undefined;
 
   function restroke(scale: number) {
     strokedAt = scale;
@@ -621,7 +678,7 @@ export async function createRenderer({
       if (bannerLayer.getChildIndex(banner.graphics) !== index) {
         bannerLayer.setChildIndex(banner.graphics, index);
       }
-      if (selection?.kind === 'army' && selection.army === army.id) {
+      if (bannerLayer.visible && selection?.kind === 'army' && selection.army === army.id) {
         const cx = at.x + BANNER.flagWidth / 2;
         const cy = at.y - BANNER.pole + BANNER.flagHeight / 2;
         armyRing.circle(cx, cy, 17).stroke({ width: 4, color: LABEL_HALO });
@@ -641,7 +698,7 @@ export async function createRenderer({
       remove: (graphics) => graphics.destroy(),
     });
     const view = viewport();
-    for (const battle of seenBattles) {
+    for (const battle of battlesShown()) {
       const at = mapToScreen(camera, view, battle.position);
       battleMarkers.get(battle.id)?.position.set(at.x, at.y);
       if (selection?.kind === 'battle' && selection.battle === battle.id) {
@@ -745,7 +802,31 @@ export async function createRenderer({
     }
   }
 
-  const battlesShown = () => seenBattles;
+  const landAt = new Map<string, boolean>();
+  const onLand = (screen: MapPoint) => {
+    const point = screenToMap(camera, viewport(), screen);
+    const key = `${Math.round(point.x)},${Math.round(point.y)}`;
+    let found = landAt.get(key);
+    if (found === undefined) {
+      if (landAt.size > 4000) landAt.clear();
+      found = provinceAt(map, point) !== undefined;
+      landAt.set(key, found);
+    }
+    return found;
+  };
+  /** At the zooms that draw figures, a battle's marker stands above its fighting. */
+  const battleLift = () =>
+    scene && scene.height > 0 ? (1.75 * scene.height + 14) / camera.scale : 0;
+  const battlesShown = () => {
+    const lift = battleLift();
+    if (lift === 0) return seenBattles;
+    // At figure zooms a battle is drawn where the scene placed it, clear of any city.
+    return seenBattles.map((b) => {
+      const at = scene?.battleAnchors.get(b.id) ?? b.position;
+      return { id: b.id, position: { x: at.x, y: at.y - lift } };
+    });
+  };
+  const bannersShown = () => (scene && scene.height > 0 ? [] : armies);
 
   const listening = new AbortController();
   const { signal } = listening;
@@ -783,7 +864,17 @@ export async function createRenderer({
     (event) => {
       if (event.pointerId !== drag?.pointer) return;
       if (!drag.moved)
-        onPick(pickAt(map, camera, viewport(), armies, local(event), battlesShown()));
+        onPick(
+          pickAt(
+            map,
+            camera,
+            viewport(),
+            bannersShown(),
+            local(event),
+            battlesShown(),
+            figuresShown(),
+          ),
+        );
       drag = undefined;
       canvas.style.cursor = 'grab';
     },
@@ -805,7 +896,15 @@ export async function createRenderer({
       const screen = local(event);
       onCommand({
         point: screenToMap(camera, viewport(), screen),
-        pick: pickAt(map, camera, viewport(), armies, screen, battlesShown()),
+        pick: pickAt(
+          map,
+          camera,
+          viewport(),
+          bannersShown(),
+          screen,
+          battlesShown(),
+          figuresShown(),
+        ),
         city: cityAt(drawnCities, screen),
         screen,
       });
@@ -878,12 +977,96 @@ export async function createRenderer({
         dirty = true;
       }
       if (places.step(now)) dirty = true;
+      const day = current.day + progress;
+      if (clockAt) {
+        const seconds = (now - clockAt.now) / 1000;
+        const days = day - clockAt.day;
+        const rate = seconds > 0 && days > 0 && days < 2 ? days / seconds : 0;
+        motion += seconds * (Math.min(rate, 1) + 0.35 * Math.max(0, rate - 1));
+      }
+      clockAt = { day, now };
+      const height = figureHeight(camera.scale);
+      const view = viewport();
+      const stale =
+        !built ||
+        built.scale !== camera.scale ||
+        built.width !== view.width ||
+        built.height !== view.height ||
+        sheetPainted ||
+        // A pan moves the built scene; once it has moved far, armies culled from it come into view.
+        Math.hypot(sceneShift().x, sceneShift().y) > PAN_REBUILD_PX;
+      const newDay =
+        built &&
+        (built.current !== current || built.previous !== previous || built.sight !== sight);
+      // Without the swell the page draws only when something changes, so men at ease,
+      // fires, and smoke then move only with the clock.
+      const moving =
+        built && (built.progress !== progress || (swellOn && now - built.at >= ALIVE_MS));
+      // A scene of many armies costs milliseconds to build, so between builds a pan
+      // moves the built scene, and a rebuild for motion alone waits for twice what the
+      // last one cost. A new day or new sight is drawn at once.
+      const due = !built || now - built.at >= 2 * built.cost;
+      if (
+        (height > 0 || (scene && scene.height > 0) || sheetPainted) &&
+        (stale || newDay || (moving && due))
+      ) {
+        const start = performance.now();
+        scene = buildScene({
+          previous,
+          current,
+          progress,
+          camera,
+          viewport: view,
+          previousSight,
+          sight,
+          motion,
+          now: now / 1000,
+          growth: symbolGrowth(camera.scale),
+          land: onLand,
+        });
+        drawnFigures = armyLayer.draw(scene);
+        canvas.dataset['figures'] = String(drawnFigures.filter((sprite) => sprite.army).length);
+        built = {
+          previous,
+          current,
+          progress,
+          sight,
+          scale: camera.scale,
+          centre: camera.centre,
+          width: view.width,
+          height: view.height,
+          at: now,
+          cost: performance.now() - start,
+        };
+        sheetPainted = false;
+        dirty = true;
+      }
+      if (built) {
+        const shift = sceneShift();
+        if (armyLayer.root.x !== shift.x || armyLayer.root.y !== shift.y) {
+          armyLayer.root.position.set(shift.x, shift.y);
+          dirty = true;
+        }
+      }
       if (!dirty) return false;
       life.update(camera, viewport(), now, sight);
       moveSwell(now);
+      bannerLayer.visible = !scene || scene.height === 0;
       drawRoutes(current, selection, planned, replaced);
       placeBanners(current, selection);
       placeBattles(selection);
+      if (scene && scene.height > 0 && selection?.kind === 'army') {
+        const box = scene.armyBoxes.get(selection.army);
+        if (box) {
+          const shift = sceneShift();
+          const cx = (box.left + box.right) / 2 + shift.x;
+          const cy = box.bottom - 2 + shift.y;
+          const rx = (box.right - box.left) / 2 + 8;
+          const ry = Math.max(8, (box.bottom - box.top) * 0.35);
+          armyRing.ellipse(cx, cy, rx, ry).stroke({ width: 4, color: LABEL_HALO, alpha: 0.9 });
+          armyRing.ellipse(cx, cy, rx, ry).stroke({ width: 1.6, color: INK });
+        }
+      }
       if (fogShown) fog.paint();
       app.render();
       if (waitForGpu) finish();
@@ -903,6 +1086,7 @@ export async function createRenderer({
       seaRoot.destroy({ children: true });
       seaTexture.destroy(true);
       fog.destroy();
+      armyLayer.destroy();
       app.destroy(true, { children: true, texture: true });
     },
   };

@@ -12,7 +12,15 @@ import {
 import { BANNER } from '../src/render/markers.ts';
 import { decideAll } from '../src/sim/ai/decide.ts';
 import { changeCityOwner } from '../src/sim/cities.ts';
-import type { ArmyId, CityId, FactionId, FormationId } from '../src/sim/ids.ts';
+import {
+  allocateId,
+  type ArmyId,
+  type CityId,
+  type FactionId,
+  type FormationId,
+} from '../src/sim/ids.ts';
+import { removeRecord } from '../src/sim/records.ts';
+import type { Troop } from '../src/sim/troops.ts';
 import { parseMap, type PowerId } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
 import type { Order } from '../src/sim/orders/orders.ts';
@@ -228,6 +236,9 @@ export function camera(page: Page) {
   if (!viewport) throw new Error('no viewport');
   let at: Camera = fitCamera(viewport, map);
   return {
+    get camera(): Camera {
+      return at;
+    },
     screen: (point: MapPoint) => mapToScreen(at, viewport, point),
     city(id: string) {
       return this.screen(cityPoint(id));
@@ -258,6 +269,20 @@ export function camera(page: Page) {
       await this.zoom(this.screen(point), notches);
       await this.drag(this.screen(point), { x: viewport.width / 2, y: viewport.height / 2 });
     },
+    /**
+     * Zooms to `scale` px per km in one wheel event and brings the point to the middle in
+     * one short drag. A page that draws in software takes seconds per step of a zoom, so a
+     * recorded clip starts on its subject this way.
+     */
+    async jumpTo(point: MapPoint, scale: number) {
+      const screen = this.screen(point);
+      const deltaY = -Math.log(scale / at.scale) / 0.002;
+      await page.mouse.move(screen.x, screen.y);
+      await page.mouse.wheel(0, deltaY);
+      at = zoomAt(at, screen, wheelFactor(deltaY), viewport, map);
+      await page.waitForTimeout(200);
+      await this.drag(this.screen(point), { x: viewport.width / 2, y: viewport.height / 2 }, 3);
+    },
   };
 }
 
@@ -280,4 +305,174 @@ export async function day(page: Page): Promise<number> {
 /** Waits until the page shows `target` or a later day. */
 export async function untilDay(page: Page, target: number) {
   await expect.poll(() => day(page)).toBeGreaterThanOrEqual(target);
+}
+
+/** Replaces the army's formations with fresh ones of these troops and men. */
+export function withFormations(
+  state: GameState,
+  army: Army,
+  troops: readonly (readonly [Troop, number])[],
+) {
+  for (const id of army.formations) removeRecord(state.formations, id);
+  army.formations = [];
+  for (const [troop, men] of troops) {
+    const id = allocateId(state, 'formation');
+    state.formations[id] = { id, army: army.id, troop, men, morale: 1 };
+    army.formations.push(id);
+  }
+  army.generalSkill = 4;
+  return army;
+}
+
+/** Rome's army of four formations: spearmen, swordsmen, archers, and heavy horse. */
+export const ROMAN_FOUR = [
+  ['spearmen', 1200],
+  ['swordsmen', 1000],
+  ['archers', 500],
+  ['heavyCavalry', 400],
+] as const;
+
+/** Rome's four formations at rest beside Roma. */
+export function armyAtRest(): GameState {
+  const state = startGame();
+  const army = withFormations(state, armyOf(state, rome), ROMAN_FOUR);
+  army.activity = { kind: 'idle', position: cityPoint('roma') };
+  return state;
+}
+
+/** Rome's four formations a day into a march of about five days from Roma towards Arretium. */
+export function marchToCamp(): GameState {
+  const state = armyAtRest();
+  const army = armyOf(state, rome);
+  const roma = cityPoint('roma');
+  const to = { x: roma.x - 45, y: roma.y - 105 };
+  return playDays(state, 1, [{ kind: 'moveArmy', faction: rome, army: army.id, to }]);
+}
+
+/**
+ * Rome's four formations and Carthage's four 12 km apart outside Roma, at war, so they
+ * meet the next day. Played on by the AI, Carthage's skirmishers and light horse break
+ * on day 6 and its army leaves the field on day 8.
+ */
+export function fieldBattle(): GameState {
+  const state = startGame();
+  declareWar(state, rome, carthage);
+  const roman = withFormations(state, armyOf(state, rome), ROMAN_FOUR);
+  const punic = withFormations(state, armyOf(state, carthage), [
+    ['spearmen', 1300],
+    ['skirmishers', 500],
+    ['lightCavalry', 400],
+    ['swordsmen', 1100],
+  ]);
+  const roma = cityPoint('roma');
+  roman.activity = { kind: 'idle', position: { x: roma.x + 30, y: roma.y - 4 } };
+  punic.activity = { kind: 'idle', position: { x: roma.x + 42, y: roma.y - 4 } };
+  return state;
+}
+
+/** A strong Roman army three days into the siege of Carthago, whose walls are already worn. */
+export function siegeOfCarthago(): GameState {
+  const state = startGame();
+  declareWar(state, rome, carthage);
+  const roman = withFormations(state, armyOf(state, rome), [
+    ['spearmen', 1500],
+    ['swordsmen', 1500],
+    ['swordsmen', 1500],
+    ['archers', 500],
+    ['heavyCavalry', 400],
+    ['spearmen', 1500],
+  ]);
+  armyOf(state, carthage).activity = { kind: 'idle', position: cityPoint('tacape') };
+  const at = cityPoint('carthago');
+  roman.activity = { kind: 'idle', position: { x: at.x - 6, y: at.y + 3 } };
+  const city = state.cities['carthago' as CityId];
+  if (city) Object.assign(city, { walls: 120, garrison: 1200 });
+  setRich(state);
+  return playDays(state, 3);
+}
+
+/** Rome's four formations twelve days out of Roma on the 20-day crossing to Caralis. */
+export function crossingToCaralis(days = 12): GameState {
+  const state = armyAtRest();
+  const army = armyOf(state, rome);
+  return playDays(state, days, [
+    { kind: 'embark', faction: rome, army: army.id, to: 'caralis' as CityId },
+  ]);
+}
+
+/** A third of Roma's people four days out on the road to Capua, with Rome's army away north. */
+export function refugeesToCapua(): GameState {
+  const state = startGame();
+  armyOf(state, rome).activity = { kind: 'idle', position: cityPoint('arretium') };
+  return playDays(state, 5, [
+    { kind: 'evacuate', faction: rome, city: 'roma' as CityId, to: 'capua' as CityId, share: 0.3 },
+  ]);
+}
+
+/** Carthago the day after Rome stormed it, with its fate still open. */
+export function stormedCarthago(): GameState {
+  return playDays(siegeOfCarthago(), 1, [
+    { kind: 'storm', faction: rome, city: 'carthago' as CityId },
+  ]);
+}
+
+/** Plays the days with every faction but the player's run by the AI, as the page plays them. */
+export function playAi(state: GameState, days: number): GameState {
+  world ??= buildWorld(map);
+  let current = state;
+  for (let i = 0; i < days; i++) current = tick(current, decideAll(current, world), world).state;
+  return current;
+}
+
+/**
+ * A hundred armies of four formations in a grid over Italy and its neighbours, all
+ * Rome's, so every one is in sight: the load a busy front puts on the renderer.
+ */
+export function hundredArmies(): GameState {
+  const state = startGame();
+  const first = armyOf(state, rome);
+  const roma = cityPoint('roma');
+  for (let i = 0; i < 100; i++) {
+    const id = (i === 0 ? first.id : allocateId(state, 'army')) as ArmyId;
+    const army: Army = i === 0 ? first : { ...first, id, formations: [] };
+    state.armies[id] = army;
+    withFormations(state, army, ROMAN_FOUR);
+    army.activity = {
+      kind: 'idle',
+      position: { x: roma.x - 270 + (i % 10) * 60, y: roma.y - 230 + Math.floor(i / 10) * 50 },
+    };
+  }
+  return state;
+}
+
+/** Two full armies of eight formations of 1,500 men, about to meet outside Roma. */
+export function greatBattle(): GameState {
+  const state = fieldBattle();
+  const eight = [
+    ['spearmen', 1500],
+    ['spearmen', 1500],
+    ['swordsmen', 1500],
+    ['swordsmen', 1500],
+    ['archers', 1500],
+    ['skirmishers', 1500],
+    ['lightCavalry', 1500],
+    ['heavyCavalry', 1500],
+  ] as const;
+  withFormations(state, armyOf(state, rome), eight);
+  withFormations(state, armyOf(state, carthage), eight);
+  return state;
+}
+
+/**
+ * The field battle with Rome on its way east when Carthage meets it, played by the AI
+ * to day 7: the next day Rome wins and takes up its march, and Carthage retreats.
+ */
+export function winnerMarchesOn(): GameState {
+  const start = fieldBattle();
+  const roma = cityPoint('roma');
+  const to = { x: roma.x + 160, y: roma.y + 30 };
+  const joined = playDays(start, 1, [
+    { kind: 'moveArmy', faction: rome, army: armyOf(start, rome).id, to },
+  ]);
+  return playAi(joined, 5);
 }
