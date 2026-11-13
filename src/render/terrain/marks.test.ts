@@ -26,7 +26,7 @@ interface Foot {
 
 function feet(marks: readonly Mark[]): Foot[] {
   return marks.flatMap((m): Foot[] =>
-    m.kind === 'track'
+    'points' in m
       ? m.points.map(([x, y]) => ({ kind: m.kind, x, y }))
       : [{ kind: m.kind, x: m.x, y: m.y }],
   );

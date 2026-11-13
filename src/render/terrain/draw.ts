@@ -281,6 +281,86 @@ function track(g: GraphicsContext, m: Extract<Mark, { kind: 'track' }>) {
   g.stroke({ width: 0.22, color: TERRAIN_COLOURS.track, alpha: 0.9, cap: 'round', join: 'round' });
 }
 
+const GROUND_INK = mix(INK, SEPIA, 0.45);
+const GRASS = mix(PAPER, 0x7f8f4a, 0.55);
+const SCRUB = mix(PAPER, 0x5f7a3c, 0.5);
+const SCRUB_SHADE = mix(PAPER, 0x2f4423, 0.55);
+const ROCK_LIT = mix(PAPER, 0xfff8e6, 0.5);
+const ROCK = mix(PAPER, SEPIA, 0.32);
+const ROCK_SHADE = mix(PAPER, SEPIA, 0.55);
+const STREAM = 0x557d8c;
+
+/** A tuft of grass: a few blades fanned up from one foot, inked. */
+function tuft(g: GraphicsContext, m: Extract<Mark, { kind: 'tuft' }>) {
+  const random = stream(m.seed);
+  const blades = 4 + Math.floor(random() * 3);
+  for (let n = 0; n < blades; n++) {
+    const a = -Math.PI / 2 + (n / (blades - 1) - 0.5) * 1.5 + (random() - 0.5) * 0.2;
+    const length = m.size * (0.55 + 0.45 * random());
+    g.moveTo(m.x, m.y).lineTo(m.x + Math.cos(a) * length, m.y + Math.sin(a) * length);
+  }
+  g.stroke({ width: 0.16, color: GRASS, cap: 'round' });
+  g.moveTo(m.x - m.size * 0.35, m.y).lineTo(m.x + m.size * 0.35, m.y);
+  g.stroke({ width: 0.12, color: GROUND_INK, alpha: 0.6, cap: 'round' });
+}
+
+/** A low bush or two: round crowns with a shaded side, inked round. */
+function scrub(g: GraphicsContext, m: Extract<Mark, { kind: 'scrub' }>) {
+  const random = stream(m.seed);
+  const crowns = 1 + Math.floor(random() * 3);
+  for (let n = 0; n < crowns; n++) {
+    const r = m.size * (0.32 + 0.18 * random());
+    const x = m.x + (n - (crowns - 1) / 2) * r * 1.3;
+    const y = m.y - r * (0.8 + 0.2 * random());
+    g.circle(x, y, r).fill(SCRUB);
+    g.circle(x + r * 0.3, y + r * 0.25, r * 0.7).fill(SCRUB_SHADE);
+    g.circle(x, y, r).stroke({ width: 0.12, color: INK, alpha: 0.75 });
+  }
+}
+
+/** A rock: a lit top, a shaded side, and an ink outline. */
+function rock(g: GraphicsContext, m: Extract<Mark, { kind: 'rock' }>) {
+  const random = stream(m.seed);
+  const w = m.size * (0.7 + 0.4 * random());
+  const h = w * (0.45 + 0.2 * random());
+  const peak = (random() - 0.5) * w * 0.4;
+  const outline = [
+    m.x - w / 2,
+    m.y,
+    m.x - w * 0.35,
+    m.y - h * 0.7,
+    m.x + peak,
+    m.y - h,
+    m.x + w * 0.4,
+    m.y - h * 0.55,
+    m.x + w / 2,
+    m.y,
+  ];
+  g.poly(outline).fill(ROCK);
+  g.poly([
+    m.x + peak,
+    m.y - h,
+    m.x + w * 0.4,
+    m.y - h * 0.55,
+    m.x + w / 2,
+    m.y,
+    m.x + peak * 0.5,
+    m.y,
+  ]).fill(ROCK_SHADE);
+  g.poly([m.x - w * 0.35, m.y - h * 0.7, m.x + peak, m.y - h, m.x - w * 0.05, m.y - h * 0.55]).fill(
+    ROCK_LIT,
+  );
+  g.poly(outline).stroke({ width: 0.13, color: INK, join: 'round' });
+}
+
+function brook(g: GraphicsContext, m: Extract<Mark, { kind: 'stream' }>) {
+  const [first, ...rest] = m.points;
+  if (!first) return;
+  g.moveTo(first[0], first[1]);
+  for (const [px, py] of rest) g.lineTo(px, py);
+  g.stroke({ width: 0.2, color: STREAM, alpha: 0.85, cap: 'round', join: 'round' });
+}
+
 /** Draws marks of one tier into a new context, in the order given. */
 export function drawMarks(marks: readonly Mark[], tier: Tier): GraphicsContext {
   const g = new GraphicsContext();
@@ -309,6 +389,18 @@ export function drawMarks(marks: readonly Mark[], tier: Tier): GraphicsContext {
         break;
       case 'track':
         track(g, m);
+        break;
+      case 'tuft':
+        tuft(g, m);
+        break;
+      case 'scrub':
+        scrub(g, m);
+        break;
+      case 'rock':
+        rock(g, m);
+        break;
+      case 'stream':
+        brook(g, m);
         break;
     }
   }

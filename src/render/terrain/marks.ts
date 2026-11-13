@@ -25,7 +25,11 @@ export type Mark =
   | { kind: 'stipple'; x: number; y: number; spread: number; seed: number }
   | { kind: 'field'; x: number; y: number; width: number; depth: number; angle: number; crop: Crop }
   | { kind: 'orchard'; x: number; y: number; width: number; depth: number; angle: number }
-  | { kind: 'track'; points: readonly (readonly [number, number])[] };
+  | { kind: 'track'; points: readonly (readonly [number, number])[] }
+  | { kind: 'tuft'; x: number; y: number; size: number; seed: number }
+  | { kind: 'scrub'; x: number; y: number; size: number; seed: number }
+  | { kind: 'rock'; x: number; y: number; size: number; seed: number }
+  | { kind: 'stream'; points: readonly (readonly [number, number])[] };
 
 /** A wood: overlapping round patches of forest ground that trees stand in. */
 export interface Wood {
@@ -55,10 +59,10 @@ export const TIERS = {
 const CLEARING: Record<PlaceRank, number> = { capital: 7, city: 5.5, town: 2.8, village: 1.8 };
 /** The ring of fields around each place, in km from its centre. */
 const FIELD_RING: Record<PlaceRank, readonly [number, number]> = {
-  capital: [6.5, 19],
-  city: [5, 14],
-  town: [2.6, 8],
-  village: [1.7, 5],
+  capital: [6.5, 24],
+  city: [5, 18],
+  town: [2.6, 11],
+  village: [1.7, 7],
 };
 /** The side of a field in km, from its smallest to its largest. */
 const FIELD_SIZE: Record<PlaceRank, readonly [number, number]> = {
@@ -497,6 +501,7 @@ function trees(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
       if (!land.open(x, y) || land.mountains.inside(x, y) || land.cleared(x, y, tier)) {
         return undefined;
       }
+      if (tier !== 'wide' && inFields(land, x, y, FARMED_SHARE)) return undefined;
       if (loose && valueNoise(x, y, 25, salt + 21) < 0.5) return undefined;
       return spacing * (loose ? 2.2 : 1.25 - 0.4 * depth);
     },
@@ -559,6 +564,9 @@ function onOpenLand(land: Land, x: number, y: number): boolean {
 
 const CROPS: readonly Crop[] = ['grain', 'grain', 'stubble', 'green', 'fallow'];
 
+/** The spacing of the plots along a desert river and across its delta, in km. */
+const VALLEY_FIELD = 1.5;
+
 const VALLEY_CROPS: readonly Crop[] = ['green', 'green', 'grain', 'grain', 'stubble'];
 
 /**
@@ -569,23 +577,23 @@ function valleyFields(land: Land, rect: Rect): Mark[] {
   const marks: Mark[] = [];
   for (const { x, y, seed } of scatter(
     rect,
-    0.9,
+    VALLEY_FIELD / 2,
     707,
     (x, y) => {
       if (!land.open(x, y) || land.desert.inside(x, y) || land.cleared(x, y, 'close'))
         return undefined;
       const valley = land.valleyAt(x, y);
       if (!valley && !land.cultivated.inside(x, y)) return undefined;
-      return 1.9;
+      return VALLEY_FIELD;
     },
-    1.9,
+    VALLEY_FIELD,
   )) {
     const random = stream(seed);
     const valley = land.valleyAt(x, y);
     const angle = (valley?.angle ?? 0.4) + Math.PI / 2 + (random() - 0.5) * 0.2;
-    const width = 1.3 + random() * 0.9;
-    const depth = 0.55 + random() * 0.35;
-    if (random() < 0.12) marks.push({ kind: 'orchard', x, y, width, depth: depth * 1.4, angle });
+    const width = 1.5 + random() * 1.0;
+    const depth = 0.8 + random() * 0.4;
+    if (random() < 0.16) marks.push({ kind: 'orchard', x, y, width, depth: depth * 1.4, angle });
     else {
       const crop = VALLEY_CROPS[Math.floor(random() * VALLEY_CROPS.length)] ?? 'green';
       marks.push({ kind: 'field', x, y, width, depth, angle, crop });
@@ -708,6 +716,95 @@ function trackBetween(land: Land, from: Place, to: Place): Mark | undefined {
 }
 
 /**
+ * Open land away from the fields still shows its ground at the closest zoom: clumps of
+ * grass tufts and scrub, rocks near the hills and mountains and on the dry land, and
+ * here and there a stream. Each spot is seeded from its place, like every mark.
+ */
+const GROUND = { spacing: 2.4, clump: 16, stream: 26, streamStep: 0.7, streamSteps: 14 } as const;
+
+function inFields(land: Land, x: number, y: number, share = 0.85): boolean {
+  return land
+    .placesNear(x, y, FIELD_RING.capital[1])
+    .some((place) => Math.hypot(place.x - x, place.y - y) < FIELD_RING[place.rank][1] * share);
+}
+
+/** Trees keep off the inner fields of each place, so the land round it reads as farmed. */
+const FARMED_SHARE = 0.6;
+
+function openGround(land: Land, x: number, y: number): boolean {
+  return (
+    onOpenLand(land, x, y) &&
+    land.woodDepth(x, y, 1.2) === 0 &&
+    !land.cultivated.inside(x, y) &&
+    !land.valleyAt(x, y)
+  );
+}
+
+function ground(land: Land, rect: Rect): Mark[] {
+  const marks: Mark[] = [];
+  for (const { x, y, seed } of scatter(
+    rect,
+    GROUND.spacing / 2,
+    808,
+    (x, y) => {
+      if (valueNoise(x, y, GROUND.clump, 809) < 0.42) return undefined;
+      if (!openGround(land, x, y) || land.cleared(x, y, 'close') || inFields(land, x, y))
+        return undefined;
+      return GROUND.spacing;
+    },
+    GROUND.spacing,
+  )) {
+    const random = stream(seed);
+    const dry = land.desert.inside(x, y);
+    const rugged = land.hills.inside(x, y) || land.mountains.distance(x, y) < 20;
+    const roll = random();
+    const kind: 'tuft' | 'scrub' | 'rock' = dry
+      ? roll < 0.55
+        ? 'rock'
+        : 'scrub'
+      : rugged
+        ? roll < 0.4
+          ? 'rock'
+          : roll < 0.75
+            ? 'scrub'
+            : 'tuft'
+        : roll < 0.6
+          ? 'tuft'
+          : roll < 0.92
+            ? 'scrub'
+            : 'rock';
+    marks.push({ kind, x, y, size: 0.8 + random() * 0.6, seed });
+  }
+  for (const { x, y, seed } of scatter(
+    rect,
+    GROUND.stream / 2,
+    810,
+    (x, y) =>
+      openGround(land, x, y) && !land.desert.inside(x, y) && !inFields(land, x, y)
+        ? GROUND.stream
+        : undefined,
+    GROUND.stream,
+  )) {
+    const random = stream(seed);
+    let heading = random() * Math.PI * 2;
+    const points: [number, number][] = [[x, y]];
+    let at: [number, number] = [x, y];
+    for (let n = 0; n < GROUND.streamSteps; n++) {
+      heading += (random() - 0.5) * 0.9;
+      const next: [number, number] = [
+        at[0] + Math.cos(heading) * GROUND.streamStep,
+        at[1] + Math.sin(heading) * GROUND.streamStep,
+      ];
+      if (!openGround(land, next[0], next[1])) break;
+      points.push(next);
+      at = next;
+    }
+    if (points.length >= 6) marks.push({ kind: 'stream', points });
+  }
+  return marks;
+}
+
+/**
  * The relief, trees, and desert marks of one tier whose foot lies in `rect`, drawn from
  * the back (north) to the front. The same rect, tier, and map give the same marks every
  * time, and neighbouring rects never place the same mark twice.
@@ -735,11 +832,11 @@ export function placeTexture(land: Land, rect: Rect): Mark[] {
 
 /** The fields, orchards, and tracks of the places that stand in `rect`. */
 export function placeFields(land: Land, rect: Rect): Mark[] {
-  return fields(land, rect).sort((a, b) => footOf(a) - footOf(b));
+  return [...ground(land, rect), ...fields(land, rect)].sort((a, b) => footOf(a) - footOf(b));
 }
 
 function footOf(mark: Mark): number {
-  return mark.kind === 'track' ? -Infinity : mark.y;
+  return 'points' in mark ? -Infinity : mark.y;
 }
 
 /** The named peaks whose foot lies in `rect`. */
