@@ -431,6 +431,8 @@ export async function createRenderer({
   let highlighted: { selection: Pick | undefined; scale: number } | undefined;
   let armies: DrawnArmy[] = [];
   let drawnCities: DrawnCity[] = [];
+  /** Where each city's name stands relative to the city, which the army scene depends on. */
+  let nameSides = '';
   let plannedShown: Frame['planned'];
   let seenBy: Sight | undefined;
   let seenBattles: DeepReadonly<Battle>[] = [];
@@ -451,6 +453,7 @@ export async function createRenderer({
         height: number;
         at: number;
         cost: number;
+        nameSides: string;
       }
     | undefined;
   /** How far the camera has panned since the scene was built, in screen px. */
@@ -661,6 +664,14 @@ export async function createRenderer({
       symbol: symbolBoxes[i] as Box,
       label: placed.get(id),
     }));
+    const side = (from: number, to: number) => (Math.abs(to - from) < 1 ? 0 : Math.sign(to - from));
+    nameSides = requests
+      .map(({ id, anchor }) => {
+        const box = placed.get(id);
+        if (!box) return '';
+        return `${id}:${side(anchor.x, (box.left + box.right) / 2)}:${side(anchor.y, (box.top + box.bottom) / 2)}`;
+      })
+      .join(',');
   }
 
   function drawHighlight(selection: Pick | undefined) {
@@ -1022,6 +1033,9 @@ export async function createRenderer({
         built.scale !== camera.scale ||
         built.width !== view.width ||
         built.height !== view.height ||
+        // An army at a city stands clear of its name, so a name that moves round its
+        // city moves the army too, where a pan alone only slides the built scene.
+        built.nameSides !== nameSides ||
         sheetPainted ||
         // A pan moves the built scene; once it has moved far, armies culled from it come into view.
         Math.hypot(sceneShift().x, sceneShift().y) > PAN_REBUILD_PX;
@@ -1068,6 +1082,7 @@ export async function createRenderer({
           height: view.height,
           at: now,
           cost: performance.now() - start,
+          nameSides,
         };
         sheetPainted = false;
         dirty = true;
