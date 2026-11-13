@@ -19,7 +19,7 @@ export const FATE_DAYS = 10;
  * city out-earns a sacked one within a year.
  */
 export const SACK = {
-  wealthYears: 0.75,
+  wealthYears: 0.5,
   populationShare: 0.4,
   unrestDays: 365,
   poorDays: 3 * 365,

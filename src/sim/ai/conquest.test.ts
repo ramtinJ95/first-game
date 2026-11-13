@@ -5,7 +5,7 @@ import { changeCityOwner } from '../cities.ts';
 import { landPath } from '../march.ts';
 import { newGame } from '../new-game.ts';
 import { SIEGE_DISTANCE } from '../systems/sieges.ts';
-import { LEADER_SHARE } from './thresholds.ts';
+import { LEADER_SHARE, REMNANT_MEN } from './thresholds.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
 import { removeRecord } from '../records.ts';
 import { expectConsistent } from '../references.ts';
@@ -418,5 +418,53 @@ describe('the leader', () => {
     const total = Object.keys(carthageFacing(0).cities).length;
     expect(declaredOnRome(carthageFacing(Math.ceil(LEADER_SHARE * total)))).toBe(true);
     expect(declaredOnRome(carthageFacing(2))).toBe(false);
+  });
+});
+
+describe('remnants and prey', () => {
+  test('a remnant is not sent at a city, even when it would make a stronger army enough', () => {
+    const { state, target } = war();
+    const near = { x: target.position.x + 30, y: target.position.y };
+    const strong = addArmy(state, rome, 1500, near);
+    const remnant = addArmy(state, rome, REMNANT_MEN - 1, near);
+    const orders = decideOrders(state, world, rome);
+    for (const army of [strong, remnant]) {
+      expect(orders).not.toContainEqual(
+        expect.objectContaining({ kind: 'moveArmy', army, to: target.position }),
+      );
+    }
+    expectConsistent(state);
+  });
+
+  test('an idle army marches on a weak enemy army that stands in the field', () => {
+    const { state, target } = war();
+    const roma = cityOf(state, rome);
+    const hunter = addArmy(state, rome, 1500, roma.position);
+    const path = landPath(world, roma.position, target.position);
+    if (typeof path === 'string') throw new Error(path);
+    let field: MapPoint | undefined;
+    let walked = 0;
+    let from = roma.position;
+    for (const point of path) {
+      const leg = distance(from, point);
+      if (walked + leg >= 120) {
+        const t = (120 - walked) / leg;
+        field = {
+          x: Math.round((from.x + t * (point.x - from.x)) * 10) / 10,
+          y: Math.round((from.y + t * (point.y - from.y)) * 10) / 10,
+        };
+        break;
+      }
+      walked += leg;
+      from = point;
+    }
+    if (!field || distance(field, target.position) < 60)
+      throw new Error('the target is too near Roma');
+    const prey = addArmy(state, target.owner, 300, field);
+    expect(decideOrders(state, world, rome)).toContainEqual(
+      expect.objectContaining({ kind: 'moveArmy', army: hunter, to: field }),
+    );
+    expect(state.armies[prey]).toBeDefined();
+    expectConsistent(state);
   });
 });

@@ -68,6 +68,17 @@ export const STORM_MIN_CHANCE = 0.9;
 export const STORM_MAX_LOSS = 0.2;
 /** An idle army whose mean morale is below this rests before it marches. */
 export const MARCH_MORALE = 0.7;
+/**
+ * An idle army attacks an enemy army that stands idle in the field, away from its own
+ * cities, within this many km, when it outweighs it and every enemy army beside it
+ * ATTACK_ODDS times.
+ */
+export const PREY_KM = 300;
+/**
+ * An army of fewer men than this is a remnant: it takes no part in an attack, a relief,
+ * or a group, and goes to the muster city, where recruits join it.
+ */
+export const REMNANT_MEN = 200;
 /** An idle army waits at a city for recruits that muster there within this many days. */
 export const RALLY_WAIT_DAYS = 10;
 

@@ -12,6 +12,7 @@ import type { GameState } from '../src/sim/state/game-state.ts';
 import { SYSTEMS, type System } from '../src/sim/systems.ts';
 import { sieges } from '../src/sim/systems/sieges.ts';
 import { tick } from '../src/sim/tick.ts';
+import { areAtWar } from '../src/sim/wars.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 import { createStandoffCounter, standoffLines, type Standoffs } from './standoffs.ts';
 
@@ -64,6 +65,8 @@ interface Seed {
   sallyMen: number;
   /** For each army in each battle, how many times it changed its stance in that battle. */
   stanceChanges: number[];
+  /** For each war a great power declared, the days until it first fought, besieged, or marched on the enemy, or undefined if it never did within a year. */
+  firstActs: (number | undefined)[];
   quiet: { power: PowerId; days: number; from: number };
   /** The same, counting only days on which its idle armies together could take an enemy city they have a route to. */
   quietStrong: { power: PowerId; days: number; from: number };
@@ -94,6 +97,8 @@ function play(seed: number): Seed {
   let repeatedMarches = 0;
   let sallyArmies = 0;
   const sallies = { men: 0 };
+  const declared: { by: FactionId; against: FactionId; on: number }[] = [];
+  const firstActs: (number | undefined)[] = [];
   const stanceChanges = new Map<string, number>();
   const standoffs = createStandoffCounter(world);
 
@@ -123,6 +128,41 @@ function play(seed: number): Seed {
     const before = state;
     const { state: next, events } = tick(state, orders, world, systemsCounting(sallies));
 
+    for (const event of events) {
+      if (event.kind === 'warDeclared' && state.factions[event.by]?.kind === 'greatPower') {
+        declared.push({ by: event.by, against: event.against, on: day });
+      }
+    }
+    for (const war of [...declared]) {
+      const enemyCity = (point: { x: number; y: number }) =>
+        Object.values(next.cities).some(
+          (city) =>
+            city.owner === war.against &&
+            Math.hypot(city.position.x - point.x, city.position.y - point.y) <= 10,
+        );
+      const fought = events.some(
+        (event) =>
+          event.kind === 'battleBegan' &&
+          ((event.attackers.includes(war.by) && event.defenders.includes(war.against)) ||
+            (event.defenders.includes(war.by) && event.attackers.includes(war.against))),
+      );
+      const besieged = Object.values(next.sieges).some(
+        (siege) =>
+          next.cities[siege.city]?.owner === war.against &&
+          siege.besiegers.some((id) => next.armies[id]?.owner === war.by),
+      );
+      const marched = orders.some(
+        (order) =>
+          order.faction === war.by &&
+          ((order.kind === 'moveArmy' && enemyCity(order.to)) ||
+            (order.kind === 'embark' && next.cities[order.to]?.owner === war.against)),
+      );
+      const over = !areAtWar(next, war.by, war.against);
+      if (fought || besieged || marched || over || day - war.on >= 365) {
+        firstActs.push(fought || besieged || marched ? day - war.on : undefined);
+        declared.splice(declared.indexOf(war), 1);
+      }
+    }
     for (const event of events) {
       if (event.kind === 'armyDestroyed' && event.cause === 'sally') {
         sallyArmies++;
@@ -235,6 +275,7 @@ function play(seed: number): Seed {
     repeatedMarches,
     sallyArmies,
     sallyMen: sallies.men,
+    firstActs,
     stanceChanges: [...stanceChanges.values()],
     quiet,
     quietStrong,
@@ -374,6 +415,11 @@ console.log(
 );
 console.log(
   `- The same march ordered again within ${RESTART_DAYS} days: ${sum((g) => g.repeatedMarches)}.`,
+);
+const acts = games.flatMap((g) => g.firstActs);
+const acted = acts.filter((d): d is number => d !== undefined);
+console.log(
+  `- Wars declared by a great power: ${acts.length}. Days until it first fought, besieged, or marched on the enemy: median ${median(acted)}, 90th percentile ${[...acted].sort((a, b) => a - b)[Math.floor(acted.length * 0.9)] ?? 0}. Never within a year, or before the war ended: ${acts.length - acted.length}.`,
 );
 const changes = games.flatMap((g) => g.stanceChanges);
 console.log(

@@ -3,6 +3,7 @@ import type { ArmyId, CityId, FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import type { MapPoint } from '../state/map-point.ts';
 import { RALLY_DISTANCE } from '../systems/economy.ts';
+import { ENGAGEMENT_DISTANCE } from '../systems/battles.ts';
 import { BLOCKADE_ODDS, defendersAt, SALLY_SHARE, SIEGE_DISTANCE } from '../systems/sieges.ts';
 import { MARCH_KM_PER_DAY, marchDays, MAX_MARCH_DAYS } from '../march.ts';
 import { embarkationAt } from '../orders/embark.ts';
@@ -34,7 +35,9 @@ import {
   ENSLAVE_BELOW_MANPOWER,
   GARRISON_ODDS,
   MARCH_MORALE,
+  PREY_KM,
   RALLY_WAIT_DAYS,
+  REMNANT_MEN,
   RELIEF_KM,
   RELIEF_ODDS,
   RETREAT_ODDS,
@@ -227,6 +230,12 @@ export function movements(context: Context, muster: CityView | undefined): Order
     return true;
   };
 
+  for (const mover of movers) {
+    if (mover.men >= REMNANT_MEN) continue;
+    used.add(mover.army.id);
+    if (muster && distance(mover.at, muster.position) > RALLY_DISTANCE) headFor(mover, muster);
+  }
+
   const capital = homeCapital(state, world, faction);
   const raiders = hostile.filter((army) => !atOwnCity(state, army));
   if (capital && strengthNear(state, raiders, capital.position, CAPITAL_GUARD_KM) > 0) {
@@ -273,6 +282,32 @@ export function movements(context: Context, muster: CityView | undefined): Order
     }
     if (gathered < needed) continue;
     for (const mover of relief) send(mover, { kind: 'march', to: city.position });
+  }
+
+  // An enemy army that stands idle in the field, away from its own cities, is prey for an
+  // idle army near it that outweighs it and every enemy army beside it ATTACK_ODDS times.
+  const prey = hostile.filter((army) => army.activity.kind === 'idle' && !atOwnCity(state, army));
+  const taken = new Set<ArmyId>();
+  const hunters = movers
+    .filter((m) => !used.has(m.army.id) && m.army.activity.kind === 'idle')
+    .filter((m) => meanMorale(state, m.army) >= MARCH_MORALE)
+    .sort((a, b) => b.strength - a.strength || (a.army.id < b.army.id ? -1 : 1));
+  for (const hunter of hunters) {
+    let best: { army: ArmyView; at: MapPoint; km: number } | undefined;
+    for (const army of prey) {
+      const at = positionOf(army);
+      if (!at || taken.has(army.id)) continue;
+      const km = distance(hunter.at, at);
+      if (km > PREY_KM || (best && km >= best.km)) continue;
+      if (hunter.strength < ATTACK_ODDS * strengthNear(state, hostile, at, ENGAGEMENT_DISTANCE)) {
+        continue;
+      }
+      if (!context.router.marches(hunter.at, at)) continue;
+      best = { army, at, km };
+    }
+    if (!best) continue;
+    taken.add(best.army.id);
+    send(hunter, { kind: 'march', to: { x: best.at.x, y: best.at.y } });
   }
 
   for (const siege of sorted(state.sieges)) {
