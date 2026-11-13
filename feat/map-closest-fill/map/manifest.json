@@ -1,0 +1,147 @@
+[
+  {
+    "file": "whole-map.png",
+    "title": "The widest zoom shows the whole map, from Britain to the Iranian plateau, with its ranges, deserts, and woods",
+    "kind": "screenshot"
+  },
+  {
+    "file": "italy.png",
+    "title": "Italy at 0.53 px per km, the same view as before",
+    "kind": "screenshot"
+  },
+  {
+    "file": "closest-town.png",
+    "title": "The closest zoom on Tibur, a town in the Apennines",
+    "kind": "screenshot"
+  },
+  {
+    "file": "apennines-pan.png",
+    "title": "After a pan south-east along the Apennines at the closest zoom",
+    "kind": "screenshot"
+  },
+  {
+    "file": "selected-province.png",
+    "title": "Syracusae selected: its outline is inked and the city panel shows the city, its owner, and its defences",
+    "kind": "screenshot"
+  },
+  {
+    "file": "owner-changed.png",
+    "title": "After a save in which Rome holds Syracusae is dropped on the page, Sicily takes the Roman wash",
+    "kind": "screenshot"
+  },
+  {
+    "file": "alps-regional.png",
+    "title": "The Alps and the Po valley, regional zoom, 0.53 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "alps-middle.png",
+    "title": "The Alps and the Po valley, middle zoom, 1.43 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "alps-closest.png",
+    "title": "The Alps and the Po valley, closest zoom, 3.88 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "zagros-regional.png",
+    "title": "The Zagros and Mesopotamia, regional zoom, 0.53 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "zagros-middle.png",
+    "title": "The Zagros and Mesopotamia, middle zoom, 1.43 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "zagros-closest.png",
+    "title": "The Zagros and Mesopotamia, closest zoom, 3.88 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "nile-regional.png",
+    "title": "The Nile from the delta to Thebai, with the desert on both sides, regional zoom, 0.53 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "nile-middle.png",
+    "title": "The Nile from the delta to Thebai, with the desert on both sides, middle zoom, 0.96 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "nile-closest.png",
+    "title": "The Nile from the delta to Thebai, with the desert on both sides, closest zoom, 3.88 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "gaul-regional.png",
+    "title": "Gaul and the Rhine with its forests, regional zoom, 0.53 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "gaul-middle.png",
+    "title": "Gaul and the Rhine with its forests, middle zoom, 1.43 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "gaul-closest.png",
+    "title": "Gaul and the Rhine with its forests, closest zoom, 3.88 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "greece-regional.png",
+    "title": "Greece and the Aegean, regional zoom, 0.53 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "greece-middle.png",
+    "title": "Greece and the Aegean, middle zoom, 1.43 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "greece-closest.png",
+    "title": "Greece and the Aegean, closest zoom, 3.88 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "roman-italy-middle.png",
+    "title": "Roman Italy, the player's own land, at a middle zoom, 1.17 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "persia.png",
+    "title": "Persia and the Iranian plateau at 0.64 px per km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "closest-roma.png",
+    "title": "The closest zoom, 3.9 px per km, on Roma, its fields, and the Roman army's banner",
+    "kind": "screenshot"
+  },
+  {
+    "file": "closest-village.png",
+    "title": "The closest zoom on Elkharas, the village farthest from any city",
+    "kind": "screenshot"
+  },
+  {
+    "file": "pan-frame-time.png",
+    "title": "widest pan, day 300 of an AI game, at 0.16 px per km: 336 frames, main thread busy 1.6 ms per frame, frame interval median 16.7 ms, p95 16.7 ms; middle pan, day 300 of an AI game, at 0.96 px per km: 341 frames, main thread busy 4.9 ms per frame, frame interval median 16.7 ms, p95 16.8 ms; closest pan, day 300 of an AI game, at 3.88 px per km: 350 frames, main thread busy 4.0 ms per frame, frame interval median 16.7 ms, p95 16.8 ms",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The atlas map: zoom from the whole map into Italy, down to a town in the Apennines, hold while the smoke and the sea move, then pan along the range",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The atlas map: zoom from the whole map into Italy, down to a town in the Apennines, hold while the smoke and the sea move, then pan along the range (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The atlas map: zoom from the whole map into Italy, down to a town in the Apennines, hold while the smoke and the sea move, then pan along the range (Playwright trace)",
+    "kind": "trace"
+  }
+]
