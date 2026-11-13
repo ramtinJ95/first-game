@@ -1,7 +1,9 @@
+import type { BuildingKind } from '../sim/buildings/buildings.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { CityId } from '../sim/ids.ts';
 import { executeOrder, type Order } from '../sim/orders/orders.ts';
 import type { Stores } from '../sim/state/faction.ts';
+import type { City } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { World } from '../sim/world/world.ts';
 import { cityBalance, signed } from '../ui/describe.ts';
@@ -18,6 +20,9 @@ export interface FateChoice {
   /** Captives who settle in the player's other cities. */
   readonly peopleMoved: number;
   readonly unrestDays: number;
+  /** The buildings the city keeps, and those the fate destroys with the one at work. */
+  readonly buildingsKept: readonly BuildingKind[];
+  readonly buildingsLost: readonly BuildingKind[];
   /** What the city then adds to the player's stores each day, by the economy's own balance. */
   readonly daily: Stores;
   /** Why the rules refuse it today, or undefined. */
@@ -45,6 +50,8 @@ export function fateChoices(
     peopleLost: 0,
     peopleMoved: 0,
     unrestDays: city.unrestDays,
+    buildingsKept: city.buildings,
+    buildingsLost: [],
     daily: cityBalance(state, city),
     refusal: undefined,
   };
@@ -70,11 +77,18 @@ export function fateChoices(
       peopleLost: city.population - after.population,
       peopleMoved: others(copy) - others(state),
       unrestDays: after.unrestDays,
+      buildingsKept: after.buildings,
+      buildingsLost: standing(city).filter((kind) => !standing(after).includes(kind)),
       daily: cityBalance(copy, after),
       refusal: undefined,
     };
   });
   return [occupy, ...tried];
+}
+
+/** The buildings that stand in the city, and the one at work. */
+function standing(city: DeepReadonly<City>): BuildingKind[] {
+  return [...city.buildings, ...(city.construction ? [city.construction.building] : [])];
 }
 
 const STORE_ORDER = ['gold', 'food', 'manpower'] as const;
