@@ -37,3 +37,24 @@ export function claimSymbols(
 export function approach(from: number, to: number, step: number): number {
   return from < to ? Math.min(to, from + step) : Math.max(to, from - step);
 }
+
+/**
+ * The classical names of the peaks the map marks. Natural Earth names each peak in a
+ * modern language, which a map of the ancient world does not write, so a peak takes its
+ * name only from this table and is otherwise drawn without one.
+ */
+export const PEAK_NAMES: Readonly<Record<string, string>> = {
+  'Mount Olympus': 'Olympus',
+  Olympus: 'Olympus',
+  'Uludağ Tepe': 'Olympus',
+  'Monte Etna': 'Aetna',
+  Vesuvio: 'Vesuvius',
+  Psiloritis: 'Ida',
+  'Erciyes Dagi': 'Argaeus',
+  'Jabal ash Shaykh': 'Hermon',
+};
+
+/** The name the map writes for a peak, or undefined for one it marks without a name. */
+export function peakName(modern: string): string | undefined {
+  return PEAK_NAMES[modern];
+}

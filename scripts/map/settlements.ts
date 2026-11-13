@@ -13,6 +13,33 @@ export const MAX_PER_PROVINCE = 30;
 export const KM2_PER_SETTLEMENT = 6000;
 export const MIN_SPACING_KM = 20;
 export const MIN_CITY_SPACING_KM = 25;
+/**
+ * Languages whose names are ancient forms even when Pleiades gives them no dates. A name
+ * in another language counts only when its dates fall in the game's periods.
+ */
+export const ANCIENT_LANGUAGES: readonly string[] = [
+  'la',
+  'grc',
+  'grc-Latn',
+  'akk',
+  'egy',
+  'egy-leidentr',
+  'phn',
+  'hbo',
+  'arc',
+  'sux',
+  'hit',
+  'peo',
+  'pal',
+  'xpr',
+  'etruscan-in-latin-characters',
+];
+/** A name whose dates run past this year is the name a place still bears, not an ancient form. */
+const MODERN_FROM = 1500;
+/** How sure Pleiades must be that a name belongs to its place. "less-certain" marks a doubtful identification, not a doubtful name. */
+const NAME_CERTAINTIES: readonly string[] = ['certain', 'less-certain'];
+/** The languages a place's name is taken from first, in order; the rest follow in the file's order. */
+const NAME_LANGUAGES: readonly string[] = ['la', 'grc', ''];
 
 export interface PleiadesFiles {
   places: string;
@@ -20,6 +47,7 @@ export interface PleiadesFiles {
   placeTypes: string;
   connections: string;
   timePeriods: string;
+  names: string;
 }
 
 export interface SettlementCandidate {
@@ -58,6 +86,24 @@ export function readCandidates(files: PleiadesFiles): SettlementCandidate[] {
     }
   }
 
+  const ancientNames = new Map<string, { form: string; language: string }[]>();
+  for (const row of readCsv(files.names)) {
+    if (field(row, 'name_type') !== 'geographic') continue;
+    if (!NAME_CERTAINTIES.includes(field(row, 'association_certainty'))) continue;
+    const language = field(row, 'language_tag');
+    const after = year(field(row, 'year_after_which'));
+    const before = year(field(row, 'year_before_which'));
+    const dated = after !== undefined && before !== undefined;
+    const ancient = dated
+      ? after < to && before > from && before <= MODERN_FROM
+      : ANCIENT_LANGUAGES.includes(language);
+    if (!ancient) continue;
+    const form = field(row, 'romanized_form_1');
+    if (form === '') continue;
+    const id = field(row, 'place_id');
+    ancientNames.set(id, [...(ancientNames.get(id) ?? []), { form, language }]);
+  }
+
   const sitesAt = new Map<string, Set<string>>();
   for (const row of readCsv(files.connections)) {
     if (!SITE_CONNECTIONS.includes(field(row, 'connection_type'))) continue;
@@ -70,13 +116,14 @@ export function readCandidates(files: PleiadesFiles): SettlementCandidate[] {
     const id = field(row, 'id');
     const title = field(row, 'title');
     const kinds = types.get(id) ?? new Set<string>();
-    const name = plainName(title);
+    const name = usualName(title, ancientNames.get(id) ?? []);
     if (
       !SETTLEMENT_TYPES.some((type) => kinds.has(type)) ||
       field(row, 'location_precision') !== 'precise' ||
       title.includes('?') ||
       title.startsWith('Unnamed') ||
       name === '' ||
+      name === null ||
       !attested.has(id)
     ) {
       return [];
@@ -109,18 +156,65 @@ const USUAL_NAMES: Readonly<Record<string, string>> = {
 };
 
 /**
+ * The name a map writes for a place, by Pleiades' own records of its names: the title's
+ * plain name when the place is known by it in an ancient language or in the game's
+ * periods, or else the first such name, Latin before Greek before the rest. A title such
+ * as "Tell el-Moqdam" is a modern name and gives way to "Leontopolis". A place with no
+ * ancient name, such as "Hérisson, Cm.", is `null` and stays off the map. A name in an
+ * editor's form, with a comma, a figure, or a question mark left in it, is no name.
+ */
+export function usualName(
+  title: string,
+  ancient: readonly { form: string; language: string }[],
+): string | undefined | null {
+  const plain = plainName(title);
+  if (plain === undefined) return undefined;
+  if (USUAL_NAMES[(title.split('/')[0] ?? '').trim()]) return plain;
+  const written = (name: string) => name.normalize('NFD').replace(/[\p{M}‘’“”]/gu, '');
+  const rank = (language: string) => {
+    const i = NAME_LANGUAGES.indexOf(language);
+    return i < 0 ? NAME_LANGUAGES.length : i;
+  };
+  const forms = [...ancient]
+    .sort((a, b) => rank(a.language) - rank(b.language))
+    .map(({ form }) => plainName(form))
+    .filter(
+      (form): form is string =>
+        form !== undefined && form !== '' && LATIN.test(form) && !EDITORIAL.test(form),
+    );
+  if (forms.some((form) => letters(form) === letters(plain))) return written(plain);
+  const first = forms[0];
+  return first === undefined ? null : written(first);
+}
+
+/** What is left of an editor's form once the plain name is read: a comma, a figure, or a question mark. */
+const EDITORIAL = /[,;?\d]/;
+/** A name the map can write: Latin letters, spaces, hyphens, and apostrophes. */
+const LATIN = /^[\p{Script=Latin}\p{M}\s'‘’ʿʾ-]+$/u;
+
+/** A name's letters with no accents, case, spaces, or hyphens, so "Phérai" is "Pherai" and "Abṓnou teîchos" is "Abonouteichos". */
+function letters(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[^\p{Script=Latin}]/gu, '')
+    .toLowerCase();
+}
+
+/**
  * A Pleiades title as the plain name a map writes. The title's first form is read, and the
  * editors' marks go: brackets round a name no ancient source gives, a star on a reconstructed
  * form, and a word in brackets after the name, such as "(settlement)" or "(or Ricciacus)".
  * Letters in brackets inside a word are kept, so "Al(l)ifae" is "Allifae" and "(H)Emesa" is
- * "Hemesa". A name the source cuts short, such as "Aquae S(...)", has no plain form.
+ * "Hemesa". An editor's short title before the name goes, so "Col. Barcino" is "Barcino". A
+ * name the source cuts short, such as "Aquae S(...)", has no plain form.
  */
 export function plainName(title: string): string | undefined {
   const first = (title.split('/')[0] ?? '').trim();
-  if (first.includes('(...)')) return undefined;
+  if (first.includes('(...)') || first.includes('…')) return undefined;
   const usual = USUAL_NAMES[first];
   if (usual) return usual;
   return first
+    .replace(/^(?:\p{L}{1,4}\.\s+)+/u, '')
     .replace(/[[\]*]/g, '')
     .replace(/\s+\([^()]*\)/g, '')
     .replace(

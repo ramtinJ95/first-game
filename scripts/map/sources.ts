@@ -72,6 +72,10 @@ export const SOURCES = {
     url: `${PLEIADES}/time_periods.csv`,
     sha256: 'd1395f5f020f02de1deca003258c195227d69eb295e55044bc20bc82219da119',
   },
+  names: {
+    url: `${PLEIADES}/names.csv`,
+    sha256: '197596b14b01c0a676d30af7187865fa9a00dd3721028d82a6dc260f9033cf74',
+  },
 } as const satisfies Record<string, Source>;
 
 /** Over the selected ecoregion files' bytes, concatenated in ascending id order. */
@@ -166,14 +170,15 @@ export async function loadSources(): Promise<Sources> {
 }
 
 async function readPleiades(): Promise<SettlementCandidate[]> {
-  const [places, locationPoints, placeTypes, connections, timePeriods] = await Promise.all([
+  const [places, locationPoints, placeTypes, connections, timePeriods, names] = await Promise.all([
     readText(SOURCES.places),
     readText(SOURCES.locationPoints),
     readText(SOURCES.placeTypes),
     readText(SOURCES.connections),
     readText(SOURCES.timePeriods),
+    readText(SOURCES.names),
   ]);
-  return readCandidates({ places, locationPoints, placeTypes, connections, timePeriods });
+  return readCandidates({ places, locationPoints, placeTypes, connections, timePeriods, names });
 }
 
 async function readJson(source: Source): Promise<unknown> {

@@ -468,6 +468,8 @@ export async function createRenderer({
   let drawnCities: DrawnCity[] = [];
   /** Where each city's name stands relative to the city, which the army scene depends on. */
   let nameSides = '';
+  /** The town and village symbols and names drawn, which a siege camp keeps clear of. */
+  let drawnPlaces: Box[] = [];
   let plannedShown: Frame['planned'];
   let seenBy: Sight | undefined;
   let seenBattles: DeepReadonly<Battle>[] = [];
@@ -688,8 +690,16 @@ export async function createRenderer({
       [...requests, ...settled.requests],
       [...symbolBoxes, ...settled.boxes, ...standingMarkers(state)],
       view,
+      onLand,
     );
     places.placeLabels(placed);
+    drawnPlaces = [
+      ...settled.boxes,
+      ...settled.requests.flatMap(({ id }) => {
+        const box = placed.get(id);
+        return box ? [box] : [];
+      }),
+    ];
     for (const [id, box] of placed) {
       const label = cities.get(id as CityId)?.label;
       if (!label) continue;
@@ -709,6 +719,29 @@ export async function createRenderer({
         return `${id}:${side(anchor.x, (box.left + box.right) / 2)}:${side(anchor.y, (box.top + box.bottom) / 2)}`;
       })
       .join(',');
+    // A siege camp keeps clear of the places round its city, so a place near a siege that
+    // gains or loses its symbol or name lays the camp out again. Places elsewhere do not,
+    // so a pan that brings places into view does not rebuild the scene.
+    const reach = 3 * figureHeight(camera.scale) + 120;
+    const sieged = Object.values(state.sieges).flatMap((siege) => {
+      const city = state.cities[siege.city];
+      return city ? [mapToScreen(camera, view, city.position)] : [];
+    });
+    const nearSiege = (box: Box) =>
+      sieged.some(
+        (c) =>
+          box.right > c.x - reach &&
+          box.left < c.x + reach &&
+          box.bottom > c.y - reach &&
+          box.top < c.y + reach,
+      );
+    nameSides += `|${drawnPlaces
+      .filter(nearSiege)
+      .map(
+        (b) =>
+          `${Math.round(b.left - (sieged[0]?.x ?? 0))},${Math.round(b.top - (sieged[0]?.y ?? 0))}`,
+      )
+      .join(',')}`;
   }
 
   function drawHighlight(selection: Pick | undefined) {
@@ -1157,6 +1190,7 @@ export async function createRenderer({
           growth: symbolGrowth(camera.scale),
           land: onLand,
           names: new Map(drawnCities.flatMap(({ id, label }) => (label ? [[id, label]] : []))),
+          keepClear: drawnPlaces,
         });
         drawnFigures = armyLayer.draw(scene);
         canvas.dataset['figures'] = String(drawnFigures.filter((sprite) => sprite.army).length);
@@ -1217,6 +1251,8 @@ export async function createRenderer({
         fenced = size;
       }
       canvas.dataset['drawnState'] = String(stateId(current));
+      // The zoom of the frame drawn, in px per km, so a test knows what the wheel reached.
+      canvas.dataset['zoom'] = camera.scale.toFixed(4);
       return true;
     },
     focus(point, covered = { left: 0, top: 0, right: 0, bottom: 0 }) {
