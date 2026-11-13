@@ -157,6 +157,19 @@ const smooth = (t: number) => {
 };
 const frac = (x: number) => x - Math.floor(x);
 
+/**
+ * A fighting horseman rides a loop round his place: forward and back by `radius` about a
+ * centre `back` of it behind, and up and down the screen by `across`, in men's heights.
+ * `along` is the reach of that loop behind and in front of his place.
+ */
+const CAVALRY_LOOP = {
+  radius: 0.55,
+  back: 0.4,
+  across: 0.4,
+  along: [-(1 + 0.4) * 0.55, (1 - 0.4) * 0.55],
+} as const;
+/** How far, in men's heights, a skirmishing line sways back from its place and returns. */
+const SWAY = 0.5;
 /** A storm's ladders and climbers are drawn over every rank of the siege. */
 const STORM_DEPTH = 1e6;
 /** How far `ladderArt` leans towards the wall for each pixel of its height, and its height in figure units of 100. */
@@ -644,8 +657,8 @@ class Context {
       if (motion === 'fight' && at.cavalryLoop) {
         const loop = this.input.motion * 0.22 + seeded(key, 5);
         const angle = loop * Math.PI * 2;
-        x += at.facing * (Math.sin(angle) - 0.4) * 0.55 * this.h;
-        y += Math.cos(angle) * 0.4 * this.h * GROUND_Y;
+        x += at.facing * (Math.sin(angle) - CAVALRY_LOOP.back) * CAVALRY_LOOP.radius * this.h;
+        y += Math.cos(angle) * CAVALRY_LOOP.across * this.h * GROUND_Y;
         facing = Math.cos(angle) >= 0 ? at.facing : -at.facing;
       }
 
@@ -1497,10 +1510,25 @@ class LineLayout implements Layout {
       const at = this.locate('command', slot);
       if (at) points.push(at);
     }
-    for (const [id, { block }] of this.blocks) {
+    const { h } = this.ctx;
+    const sway =
+      this.mode.kind === 'battle' && this.mode.stance === 'skirmishAndWithdraw' ? SWAY * h : 0;
+    for (const [id, { block, troop }] of this.blocks) {
       for (let slot = 0; slot < block.places.length; slot++) {
         const at = this.locate(id, slot);
-        if (at) points.push(at);
+        if (!at) continue;
+        points.push(at);
+        // The reach of a horseman's loop and of a skirmisher's sway at every moment, so
+        // one shift keeps them on land at every phase and the battle never moves for them.
+        if (at.cavalryLoop) {
+          for (const along of [...CAVALRY_LOOP.along, -CAVALRY_LOOP.back * CAVALRY_LOOP.radius]) {
+            for (const across of [-CAVALRY_LOOP.across, 0, CAVALRY_LOOP.across]) {
+              points.push({ x: at.x + at.facing * along * h, y: at.y + across * h * GROUND_Y });
+            }
+          }
+        } else if (sway > 0 && TROOPS[troop].category !== 'missile') {
+          points.push({ x: at.x - at.facing * sway, y: at.y });
+        }
       }
     }
     return points;
@@ -1548,7 +1576,7 @@ class LineLayout implements Layout {
     const category = TROOPS[entry.troop].category;
     let along = entry.at.along + place.along;
     if (mode.kind === 'battle' && mode.stance === 'skirmishAndWithdraw' && category !== 'missile') {
-      along -= 0.25 * (1 + Math.sin(this.ctx.input.motion * 0.4 + entry.at.across));
+      along -= (SWAY / 2) * (1 + Math.sin(this.ctx.input.motion * 0.4 + entry.at.across));
     }
     if (mode.kind === 'battle' && mode.stance === 'allOutAssault' && rank === 0) along += 0.08;
     const p = this.point(along, entry.at.across + place.across);
