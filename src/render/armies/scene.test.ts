@@ -312,48 +312,53 @@ describe('buildScene', () => {
     }
   });
 
-  test('horsemen fighting in a battle on the shore stay on land at every moment of their loop', () => {
-    const land = new Land(fixtureWorld().map);
-    const previous = buildFixture();
-    const battle = 'battle-1' as keyof GameState['battles'];
-    const at = { x: 2792, y: 2070 };
-    const roman = previous.armies[FIXTURE.romanArmy];
-    const punic = previous.armies[FIXTURE.punicArmy];
-    if (!roman || !punic) throw new Error('fixture');
-    roman.activity = { kind: 'inBattle', position: at, battle, march: [] };
-    punic.activity = { kind: 'inBattle', position: { x: at.x + 4, y: at.y }, battle, march: [] };
-    previous.battles[battle] = {
-      id: battle,
-      position: at,
-      attackers: [FIXTURE.romanArmy],
-      defenders: [FIXTURE.punicArmy],
-      startedOn: previous.day,
-      sides: {
-        attackers: { factions: [FIXTURE.rome], lost: 0 },
-        defenders: { factions: [FIXTURE.carthage], lost: 0 },
-      },
-    };
-    const current = structuredClone(previous);
-    current.day = (previous.day + 1) as GameState['day'];
-    const camera = { centre: at, scale: 1 };
-    const onLand = (p: MapPoint) => {
-      const point = screenToMap(camera, viewport, p);
-      return land.open(point.x, point.y);
-    };
-    const anchors = new Set<string>();
-    let horsemen = 0;
-    for (let k = 0; k < 24; k++) {
-      const scene = buildScene(
-        input(previous, current, { camera, land: onLand, motion: 3.2 + k * 0.19 }),
-      );
-      const fighters = scene.sprites.filter((s) => s.army !== undefined && s.alpha > 0);
-      horsemen += fighters.filter((s) => s.key.startsWith('lightCavalry.fight')).length;
-      expect(fighters.filter((s) => !onLand(s)).map((s) => s.key)).toEqual([]);
-      anchors.add(JSON.stringify(scene.battleAnchors.get(battle)));
-    }
-    expect(horsemen).toBeGreaterThan(0);
-    expect(anchors.size).toBe(1);
-  });
+  test.each(['holdTheLine', 'skirmishAndWithdraw'] as const)(
+    'in a battle on the shore, holding %s, every fighter stays on land at every moment and the battle stays put',
+    (stance) => {
+      const land = new Land(fixtureWorld().map);
+      const previous = buildFixture();
+      const battle = 'battle-1' as keyof GameState['battles'];
+      const at = { x: 2792, y: 2070 };
+      const roman = previous.armies[FIXTURE.romanArmy];
+      const punic = previous.armies[FIXTURE.punicArmy];
+      if (!roman || !punic) throw new Error('fixture');
+      roman.stance = stance;
+      punic.stance = stance;
+      roman.activity = { kind: 'inBattle', position: at, battle, march: [] };
+      punic.activity = { kind: 'inBattle', position: { x: at.x + 4, y: at.y }, battle, march: [] };
+      previous.battles[battle] = {
+        id: battle,
+        position: at,
+        attackers: [FIXTURE.romanArmy],
+        defenders: [FIXTURE.punicArmy],
+        startedOn: previous.day,
+        sides: {
+          attackers: { factions: [FIXTURE.rome], lost: 0 },
+          defenders: { factions: [FIXTURE.carthage], lost: 0 },
+        },
+      };
+      const current = structuredClone(previous);
+      current.day = (previous.day + 1) as GameState['day'];
+      const camera = { centre: at, scale: 1 };
+      const onLand = (p: MapPoint) => {
+        const point = screenToMap(camera, viewport, p);
+        return land.open(point.x, point.y);
+      };
+      const anchors = new Set<string>();
+      let horsemen = 0;
+      for (let k = 0; k < 24; k++) {
+        const scene = buildScene(
+          input(previous, current, { camera, land: onLand, motion: 3.2 + k * 0.19 }),
+        );
+        const fighters = scene.sprites.filter((s) => s.army !== undefined && s.alpha > 0);
+        horsemen += fighters.filter((s) => s.key.startsWith('lightCavalry.fight')).length;
+        expect(fighters.filter((s) => !onLand(s)).map((s) => s.key)).toEqual([]);
+        anchors.add(JSON.stringify(scene.battleAnchors.get(battle)));
+      }
+      expect(horsemen).toBeGreaterThan(0);
+      expect(anchors.size).toBe(1);
+    },
+  );
 
   test('a battle fought at a coast draws both lines on land', () => {
     const previous = buildFixture();

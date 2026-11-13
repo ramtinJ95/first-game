@@ -1511,23 +1511,26 @@ class LineLayout implements Layout {
       if (at) points.push(at);
     }
     const { h } = this.ctx;
-    const sway =
-      this.mode.kind === 'battle' && this.mode.stance === 'skirmishAndWithdraw' ? SWAY * h : 0;
     for (const [id, { block, troop }] of this.blocks) {
+      // The reach of a skirmisher's sway and of a horseman's loop at every moment, from
+      // the place the figure moves about, so one shift keeps it on land at every phase
+      // and the battle never moves as the figures do.
+      const sways = this.sways(troop) ? [0, -SWAY] : [0];
       for (let slot = 0; slot < block.places.length; slot++) {
-        const at = this.locate(id, slot);
+        const at = this.stand(id, slot, true);
         if (!at) continue;
-        points.push(at);
-        // The reach of a horseman's loop and of a skirmisher's sway at every moment, so
-        // one shift keeps them on land at every phase and the battle never moves for them.
-        if (at.cavalryLoop) {
-          for (const along of [...CAVALRY_LOOP.along, -CAVALRY_LOOP.back * CAVALRY_LOOP.radius]) {
-            for (const across of [-CAVALRY_LOOP.across, 0, CAVALRY_LOOP.across]) {
-              points.push({ x: at.x + at.facing * along * h, y: at.y + across * h * GROUND_Y });
-            }
+        const loop: { along: number; across: number }[] = at.cavalryLoop
+          ? [...CAVALRY_LOOP.along, -CAVALRY_LOOP.back * CAVALRY_LOOP.radius].flatMap((along) =>
+              [-CAVALRY_LOOP.across, 0, CAVALRY_LOOP.across].map((across) => ({ along, across })),
+            )
+          : [{ along: 0, across: 0 }];
+        for (const sway of sways) {
+          for (const { along, across } of loop) {
+            points.push({
+              x: at.x + at.facing * (along + sway) * h,
+              y: at.y + across * h * GROUND_Y,
+            });
           }
-        } else if (sway > 0 && TROOPS[troop].category !== 'missile') {
-          points.push({ x: at.x - at.facing * sway, y: at.y });
         }
       }
     }
@@ -1550,7 +1553,21 @@ class LineLayout implements Layout {
     };
   }
 
+  private sways(troop: Troop): boolean {
+    const { mode } = this;
+    return (
+      mode.kind === 'battle' &&
+      mode.stance === 'skirmishAndWithdraw' &&
+      TROOPS[troop].category !== 'missile'
+    );
+  }
+
   locate(id: FormationId | 'command', slot: number): Located | undefined {
+    return this.stand(id, slot, false);
+  }
+
+  /** `still` leaves out the skirmishers' sway, which moves with the motion clock. */
+  private stand(id: FormationId | 'command', slot: number, still: boolean): Located | undefined {
     const { mode } = this;
     const facing = this.facing.x < 0 ? -1 : 1;
     const battle = mode.kind === 'battle' ? mode.battle.id : undefined;
@@ -1575,7 +1592,7 @@ class LineLayout implements Layout {
     const rank = Math.floor(slot / entry.block.files);
     const category = TROOPS[entry.troop].category;
     let along = entry.at.along + place.along;
-    if (mode.kind === 'battle' && mode.stance === 'skirmishAndWithdraw' && category !== 'missile') {
+    if (this.sways(entry.troop) && !still) {
       along -= (SWAY / 2) * (1 + Math.sin(this.ctx.input.motion * 0.4 + entry.at.across));
     }
     if (mode.kind === 'battle' && mode.stance === 'allOutAssault' && rank === 0) along += 0.08;
