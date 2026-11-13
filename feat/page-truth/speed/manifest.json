@@ -1,0 +1,37 @@
+[
+  {
+    "file": "speed-ai-year.png",
+    "title": "Day 366 of a game the AI played: every army Rome sees at a middle zoom",
+    "kind": "screenshot"
+  },
+  {
+    "file": "speed-hundred.png",
+    "title": "A hundred armies of four formations in view at a middle zoom",
+    "kind": "screenshot"
+  },
+  {
+    "file": "speed-battle.png",
+    "title": "Two armies of eight formations of 1,500 men in battle at the closest zoom",
+    "kind": "screenshot"
+  },
+  {
+    "file": "speed-numbers.png",
+    "title": "A year into an AI game, middle zoom over Italy: 83 figures drawn, 125 frames while panning, main thread busy 3.5 ms per frame, of which script 1.6 ms; A hundred armies of four formations, middle zoom: 6178 figures drawn, 153 frames while panning, main thread busy 8.3 ms per frame, of which script 6.6 ms; A battle of two armies of eight full formations, closest zoom: 423 figures drawn, 141 frames while panning, main thread busy 9.5 ms per frame, of which script 7.7 ms",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Frame cost: a year of an AI game at a middle zoom, a hundred armies in view, and a battle of two full armies at the closest zoom",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Frame cost: a year of an AI game at a middle zoom, a hundred armies in view, and a battle of two full armies at the closest zoom (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Frame cost: a year of an AI game at a middle zoom, a hundred armies in view, and a battle of two full armies at the closest zoom (Playwright trace)",
+    "kind": "trace"
+  }
+]
