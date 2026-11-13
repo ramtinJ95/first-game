@@ -429,6 +429,7 @@ export async function createRenderer({
   let cameraMoved = true;
   let strokedAt = 0;
   let shown: DeepReadonly<GameState> | undefined;
+  let laidOut: DeepReadonly<GameState> | undefined;
   let highlighted: { selection: Pick | undefined; scale: number } | undefined;
   let armies: DrawnArmy[] = [];
   let drawnCities: DrawnCity[] = [];
@@ -968,6 +969,14 @@ export async function createRenderer({
 
   return {
     draw({ previous, current, progress, selection, planned, replaced, previousSight, sight }) {
+      // While the GPU still draws the last frame, this one sends it nothing and keeps every
+      // change for the next, but lays the cities out again, which costs the GPU nothing,
+      // so a click picks what the screen will show.
+      if (!pacer.ready()) {
+        if (cameraMoved || current !== laidOut) layoutCities(current);
+        laidOut = current;
+        return false;
+      }
       const now = performance.now();
       let dirty = cameraMoved;
       if (current !== shown) {
@@ -990,6 +999,7 @@ export async function createRenderer({
       const terrainState = terrainNow.busy ? 'busy' : 'ready';
       if (canvas.dataset['terrain'] !== terrainState) canvas.dataset['terrain'] = terrainState;
       if (dirty) layoutCities(current);
+      laidOut = current;
       if (
         !highlighted ||
         highlighted.scale !== camera.scale ||
@@ -1098,7 +1108,7 @@ export async function createRenderer({
           dirty = true;
         }
       }
-      if (!pacer.frame(dirty)) return false;
+      if (!dirty) return false;
       life.update(camera, viewport(), now, sight);
       moveSwell(now);
       bannerLayer.visible = !scene || scene.height === 0;

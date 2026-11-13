@@ -28,37 +28,34 @@ function fakeGl() {
 }
 
 describe('FramePacer', () => {
-  it('renders a changed frame at once when the GPU is idle', () => {
+  it('lets a frame start at once when the GPU has nothing to finish', () => {
     const pacer = new FramePacer(fakeGl().gl);
-    expect(pacer.frame(true)).toBe(true);
-    expect(pacer.frame(false)).toBe(false);
+    expect(pacer.ready()).toBe(true);
   });
 
-  it('holds a frame while the GPU still draws the last one, and does not lose it', () => {
+  it('holds the next frame until the GPU has finished the last, then lets it start', () => {
     const gpu = fakeGl();
     const pacer = new FramePacer(gpu.gl);
-    expect(pacer.frame(true)).toBe(true);
     pacer.rendered();
-    expect(pacer.frame(true)).toBe(false);
-    expect(pacer.frame(false)).toBe(false);
+    expect(pacer.ready()).toBe(false);
+    expect(pacer.ready()).toBe(false);
     gpu.finish();
-    expect(pacer.frame(false)).toBe(true);
+    expect(pacer.ready()).toBe(true);
     expect(gpu.pending()).toBe(0);
+    expect(pacer.ready()).toBe(true);
   });
 
   it('lets a lost context’s fence go instead of waiting on it for ever', () => {
     const gpu = fakeGl();
     const pacer = new FramePacer(gpu.gl);
-    pacer.frame(true);
     pacer.rendered();
     gpu.lose();
-    expect(pacer.frame(true)).toBe(true);
+    expect(pacer.ready()).toBe(true);
   });
 
-  it('renders every changed frame when there is no WebGL 2 to fence', () => {
+  it('never holds a frame when there is no WebGL 2 to fence', () => {
     const pacer = new FramePacer(undefined);
     pacer.rendered();
-    expect(pacer.frame(true)).toBe(true);
-    expect(pacer.frame(true)).toBe(true);
+    expect(pacer.ready()).toBe(true);
   });
 });

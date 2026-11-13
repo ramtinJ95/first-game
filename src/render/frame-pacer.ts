@@ -15,37 +15,27 @@ export interface FenceGl {
  * longer to draw a frame than the page takes to ask for the next, and unpaced frames
  * queue up, so a click or a screenshot waits behind seconds of them.
  *
- * `frame(dirty)` says whether to render now. A frame that is due while the GPU is busy
- * is remembered, and rendered at the first call after the GPU is done, dirty or not.
+ * `ready()` says whether the GPU has finished the last fenced frame. A frame that is not
+ * ready must send the GPU nothing, not even a render into a texture, or the queue grows
+ * while it waits.
  */
 export class FramePacer {
   readonly #gl: FenceGl | undefined;
   #fence: WebGLSync | null = null;
-  #due = false;
 
   constructor(gl: FenceGl | undefined) {
     this.#gl = gl;
   }
 
-  #busy(): boolean {
+  ready(): boolean {
     const gl = this.#gl;
-    if (!gl || !this.#fence) return false;
+    if (!gl || !this.#fence) return true;
     // A lost context drops its fences, which then never signal, so a fence that cannot
     // be read is let go rather than waited on.
     const status = gl.isContextLost() ? null : gl.getSyncParameter(this.#fence, gl.SYNC_STATUS);
-    if (status === gl.UNSIGNALED) return true;
+    if (status === gl.UNSIGNALED) return false;
     if (status !== null) gl.deleteSync(this.#fence);
     this.#fence = null;
-    return false;
-  }
-
-  frame(dirty: boolean): boolean {
-    if (!dirty && !this.#due) return false;
-    if (this.#busy()) {
-      this.#due = true;
-      return false;
-    }
-    this.#due = false;
     return true;
   }
 
