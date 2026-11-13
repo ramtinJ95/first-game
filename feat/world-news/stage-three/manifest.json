@@ -1,0 +1,77 @@
+[
+  {
+    "file": "alexandria-rest.png",
+    "title": "Egypt's army at rest at Alexandria on day 2",
+    "kind": "screenshot"
+  },
+  {
+    "file": "mediolanum-rest.png",
+    "title": "Rome's army at rest at Mediolanum, by the lakes",
+    "kind": "screenshot"
+  },
+  {
+    "file": "siege-novaria.png",
+    "title": "Rome besieges Mediolanum, with Novaria and its name to the west",
+    "kind": "screenshot"
+  },
+  {
+    "file": "world-widest.png",
+    "title": "The whole map at the widest zoom",
+    "kind": "screenshot"
+  },
+  {
+    "file": "po-plain.png",
+    "title": "The Po plain between Mediolanum and Patavium",
+    "kind": "screenshot"
+  },
+  {
+    "file": "nile-delta-closest.png",
+    "title": "The Nile delta at the closest zoom",
+    "kind": "screenshot"
+  },
+  {
+    "file": "sahara-edge.png",
+    "title": "The edge of the Sahara south of Tacape",
+    "kind": "screenshot"
+  },
+  {
+    "file": "persia-plateau-closest.png",
+    "title": "The Persian plateau north of Persepolis at the closest zoom",
+    "kind": "screenshot"
+  },
+  {
+    "file": "anatolia.png",
+    "title": "The Anatolian plateau between Ankyra and Mazaka",
+    "kind": "screenshot"
+  },
+  {
+    "file": "iberia.png",
+    "title": "The Iberian meseta between Numantia and Carthago Nova",
+    "kind": "screenshot"
+  },
+  {
+    "file": "steppe.png",
+    "title": "The steppe north of the Black Sea between Olbia and Tanais",
+    "kind": "screenshot"
+  },
+  {
+    "file": "gaul-names.png",
+    "title": "Central Gaul west of Lugdunum, where a village was written \"Hérisson, Cm.\"",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The views the third playtest found wanting, before and after",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The views the third playtest found wanting, before and after (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The views the third playtest found wanting, before and after (Playwright trace)",
+    "kind": "trace"
+  }
+]
