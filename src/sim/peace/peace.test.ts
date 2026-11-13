@@ -310,4 +310,47 @@ describe('what the review found', () => {
     );
     expectConsistent(result.state);
   });
+
+  test('a city handed over musters what it trains for the payer, and the men go home', () => {
+    let state = atWar();
+    const capua = state.cities[f.capua];
+    if (!capua) throw new Error('fixture');
+    capua.recruits = [{ troop: 'spearmen', readyOn: (state.day + 20) as Day }];
+    const terms: PeaceTerms = { kind: 'payment', payer: f.rome, gold: 0, cities: [f.capua] };
+    expect(
+      run(state, { kind: 'offerPeace', faction: f.rome, to: f.carthage, terms }),
+    ).toBeUndefined();
+    const result = tick(
+      state,
+      [{ kind: 'acceptPeace', faction: f.carthage, from: f.rome, terms }],
+      world,
+    );
+    expect(result.rejected).toEqual([]);
+    state = result.state;
+    const spearmen = Object.values(state.formations).filter(
+      (formation) =>
+        formation.troop === 'spearmen' && state.armies[formation.army]?.owner === f.rome,
+    );
+    expect(spearmen).toHaveLength(2);
+    expect(state.cities[f.capua]?.recruits).toEqual([]);
+    expectConsistent(state);
+  });
+
+  test('a siege of a city handed over ends at the peace, before the day goes on', () => {
+    let state = atWar();
+    const punic = state.armies[f.punicArmy];
+    if (!punic) throw new Error('fixture');
+    punic.activity = { kind: 'idle', position: { x: 2633.8, y: 2443.3 } };
+    state = tick(state, [], world).state;
+    expect(state.armies[f.punicArmy]?.activity.kind).toBe('besieging');
+    const terms: PeaceTerms = { kind: 'payment', payer: f.rome, gold: 0, cities: [f.capua] };
+    expect(
+      run(state, { kind: 'offerPeace', faction: f.rome, to: f.carthage, terms }),
+    ).toBeUndefined();
+    expect(
+      run(state, { kind: 'acceptPeace', faction: f.carthage, from: f.rome, terms }),
+    ).toBeUndefined();
+    expect(state.armies[f.punicArmy]?.activity.kind).toBe('idle');
+    expect(Object.values(state.sieges).flatMap((siege) => siege.besiegers)).toEqual([]);
+  });
 });

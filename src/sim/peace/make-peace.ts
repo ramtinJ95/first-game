@@ -13,12 +13,13 @@ import { TRUCE_DAYS } from './truce.ts';
  * Ends the war between the two on the terms, which the caller checked, and starts a truce.
  * Their armies leave at once the battles they fight against each other and the sieges of
  * each other's cities, so no later order of the day storms or fights on, and no army is
- * lost. They go home when the homecoming system runs the same day, after every order.
+ * lost. That comes before any city changes hands, so a siege of a ceded city ends too.
+ * They go home when the homecoming system runs the same day, after every order.
  */
 export function makePeace(state: GameState, a: FactionId, b: FactionId, terms: PeaceTerms): void {
   const key = warKey(a, b);
-  if (terms.kind === 'payment') payTerms(state, terms, terms.payer === a ? b : a);
   part(state, a, b);
+  if (terms.kind === 'payment') payTerms(state, terms, terms.payer === a ? b : a);
   removeRecord(state.wars, key);
   removeRecord(state.peaceOffers, key);
   state.truces[key] = { since: state.day, endsOn: (state.day + TRUCE_DAYS) as Day };

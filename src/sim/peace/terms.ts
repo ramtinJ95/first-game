@@ -1,5 +1,6 @@
 import type { DeepReadonly } from '../deep-readonly.ts';
 import { changeCityOwner } from '../cities.ts';
+import { musterEarly } from '../systems/economy.ts';
 import type { CityId, FactionId } from '../ids.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { PeaceTerms } from '../state/peace.ts';
@@ -54,7 +55,11 @@ export function termsProblem(
   return undefined;
 }
 
-/** Pays what the terms ask, to the side that is not the payer. The caller checked `termsProblem`. */
+/**
+ * Pays what the terms ask, to the side that is not the payer. The caller checked
+ * `termsProblem`. A city handed over first musters what it trains for the payer, so no
+ * paid recruit is lost, and the homecoming of the peace sends them home.
+ */
 export function payTerms(
   state: GameState,
   terms: DeepReadonly<PeaceTerms>,
@@ -66,7 +71,12 @@ export function payTerms(
   if (!payer || !gainer) return;
   payer.stores.gold -= terms.gold;
   gainer.stores.gold += terms.gold;
-  for (const id of terms.cities as readonly CityId[]) changeCityOwner(state, id, receiver);
+  for (const id of terms.cities as readonly CityId[]) {
+    const city = state.cities[id];
+    if (!city) continue;
+    musterEarly(state, city);
+    changeCityOwner(state, id, receiver);
+  }
 }
 
 /** A copy of the terms that shares nothing with the state it came from. */
