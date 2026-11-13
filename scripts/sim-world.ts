@@ -60,6 +60,8 @@ interface Seed {
   repeatedMarches: number;
   sallyArmies: number;
   sallyMen: number;
+  /** For each army in each battle, how many times it changed its stance in that battle. */
+  stanceChanges: number[];
   quiet: { power: PowerId; days: number; from: number };
   conquests: Partial<Record<PowerId, Conquest>>;
 }
@@ -85,10 +87,25 @@ function play(seed: number): Seed {
   let repeatedMarches = 0;
   let sallyArmies = 0;
   const sallies = { men: 0 };
+  const stanceChanges = new Map<string, number>();
 
   for (let day = 1; day <= YEARS * YEAR; day++) {
     const orders: Order[] = decideAll(state, world, []);
+    for (const army of Object.values(state.armies)) {
+      if (army.activity.kind !== 'inBattle') continue;
+      const key = `${army.activity.battle}|${army.id}`;
+      stanceChanges.set(key, stanceChanges.get(key) ?? 0);
+    }
     for (const order of orders) {
+      const army = order.kind === 'setStance' ? state.armies[order.army] : undefined;
+      if (
+        order.kind === 'setStance' &&
+        army?.activity.kind === 'inBattle' &&
+        army.stance !== order.stance
+      ) {
+        const key = `${army.activity.battle}|${army.id}`;
+        stanceChanges.set(key, (stanceChanges.get(key) ?? 0) + 1);
+      }
       if (order.kind !== 'moveArmy') continue;
       const key = `${order.army}@${order.to.x},${order.to.y}`;
       const last = lastMarch.get(key);
@@ -202,6 +219,7 @@ function play(seed: number): Seed {
     repeatedMarches,
     sallyArmies,
     sallyMen: sallies.men,
+    stanceChanges: [...stanceChanges.values()],
     quiet,
     conquests,
   };
@@ -311,6 +329,10 @@ console.log(
 );
 console.log(
   `- The same march ordered again within ${RESTART_DAYS} days: ${sum((g) => g.repeatedMarches)}.`,
+);
+const changes = games.flatMap((g) => g.stanceChanges);
+console.log(
+  `- Changes of stance by one army in one battle, over ${changes.length} army-battles: median ${median(changes)}, most ${Math.max(0, ...changes)}, none in ${changes.filter((n) => n === 0).length}.`,
 );
 console.log(
   `- Armies lost to sallies: ${sum((g) => g.sallyArmies)}. Men lost to sallies: ${sum((g) => g.sallyMen)}.`,

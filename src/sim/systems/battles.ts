@@ -94,6 +94,28 @@ export const STANCE_BEATS: Readonly<Record<Stance, Stance>> = {
 };
 export const STANCE_EDGE = 1.27;
 
+/**
+ * An army that changed its stance re-forms for this many days, counting the day of the
+ * change, and every enemy that is not re-forming meets it as a stance that beats its own,
+ * so a change is a commitment and a change a day is always beaten.
+ */
+export const REFORM_DAYS = 3;
+
+/** Whether the army is still re-forming after a change of stance. */
+export function reforming(state: { day: number }, army: Pick<Army, 'stanceChangedOn'>): boolean {
+  return army.stanceChangedOn !== undefined && state.day - army.stanceChangedOn < REFORM_DAYS;
+}
+
+/** What one army multiplies its blows on another by, for their stances and their re-forming. */
+function edgeBetween(state: GameState, mine: Army, theirs: Army): number {
+  const a = reforming(state, mine);
+  const b = reforming(state, theirs);
+  if (a && b) return 1;
+  if (a) return 1 / STANCE_EDGE;
+  if (b) return STANCE_EDGE;
+  return stanceEdge(mine.stance, theirs.stance);
+}
+
 /** What one army's stance multiplies its blows on another army by. */
 export function stanceEdge(mine: Stance, theirs: Stance): number {
   if (STANCE_BEATS[mine] === theirs) return STANCE_EDGE;
@@ -280,7 +302,7 @@ function fightOneDay(state: GameState, id: BattleId) {
         const bonus = troop.bonus[TROOPS[target.formation.troop].category] ?? 1;
         const killed =
           (blows *
-            stanceEdge(army.stance, target.army.stance) *
+            edgeBetween(state, army, target.army) *
             (target.formation.men / atMen) *
             bonus *
             KILL_RATE *
@@ -303,7 +325,7 @@ function fightOneDay(state: GameState, id: BattleId) {
     [defenders, attackers],
   ] as const) {
     for (const { army } of fighters) {
-      if (!edges.has(army)) edges.set(army, edgeOn(army, enemies));
+      if (!edges.has(army)) edges.set(army, edgeOn(state, army, enemies));
     }
   }
   for (const [side, fighters, pressure] of [
@@ -327,12 +349,12 @@ function fightOneDay(state: GameState, id: BattleId) {
 }
 
 /** The edge the enemy's stances hold over the army's, weighted by the enemy's men. */
-function edgeOn(army: Army, enemies: readonly Fighter[]): number {
+function edgeOn(state: GameState, army: Army, enemies: readonly Fighter[]): number {
   let men = 0;
   let sum = 0;
   for (const { formation, army: enemy } of enemies) {
     men += formation.men;
-    sum += formation.men * stanceEdge(enemy.stance, army.stance);
+    sum += formation.men * edgeBetween(state, enemy, army);
   }
   return men === 0 ? 1 : sum / men;
 }

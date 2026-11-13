@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { playTrial, type ArmySpec, type Matchup } from '../battle-trial.ts';
+import {
+  buildTrial,
+  playTrial,
+  TRIAL_ARMIES,
+  type ArmySpec,
+  type Matchup,
+} from '../battle-trial.ts';
 import { buildFixture, FIXTURE } from '../fixture.ts';
 import type { ArmyId, CityId, FactionId, FormationId, SiegeId } from '../ids.ts';
 import { executeOrder } from '../orders/orders.ts';
@@ -12,7 +18,7 @@ import { fixtureWorld } from '../fixture.ts';
 import { marchDays } from '../march.ts';
 import { newGame } from '../new-game.ts';
 import { removeRecord } from '../records.ts';
-import { ENGAGEMENT_DISTANCE, MAX_RETREAT_DAYS, MORALE_RECOVERY } from './battles.ts';
+import { ENGAGEMENT_DISTANCE, MAX_RETREAT_DAYS, MORALE_RECOVERY, REFORM_DAYS } from './battles.ts';
 
 const ROMA = { x: 2511.3, y: 2335.8 };
 const CAPUA = { x: 2638.8, y: 2448.3 };
@@ -779,4 +785,74 @@ describe('a retreat overseas', () => {
       expectConsistent(state);
     },
   );
+});
+
+describe('a change of stance', () => {
+  const MIX: ArmySpec['troops'] = {
+    spearmen: 1500,
+    swordsmen: 900,
+    archers: 300,
+    lightCavalry: 300,
+  };
+  const world = fixtureWorld();
+  const lostOnDayOne = (changed: boolean) => {
+    const state = buildTrial(
+      { name: '', a: { troops: MIX, stance: 'holdTheLine' }, b: { troops: MIX } },
+      1,
+    );
+    if (changed) {
+      const order = {
+        kind: 'setStance',
+        faction: FIXTURE.rome,
+        army: TRIAL_ARMIES.a,
+        stance: 'skirmishAndWithdraw',
+      } as const;
+      expect(executeOrder(state, order, world)).toBeUndefined();
+    } else {
+      const army = state.armies[TRIAL_ARMIES.a];
+      if (army) army.stance = 'skirmishAndWithdraw';
+    }
+    const next = tick(state, [], world).state;
+    expectConsistent(next);
+    const men = (id: ArmyId) =>
+      (next.armies[id]?.formations ?? []).reduce(
+        (sum, f) => sum + (next.formations[f]?.men ?? 0),
+        0,
+      );
+    return { a: 3000 - men(TRIAL_ARMIES.a), b: 3000 - men(TRIAL_ARMIES.b) };
+  };
+
+  test('records the day of the change, and an order for the stance an army holds changes nothing', () => {
+    const state = buildFixture();
+    const order = { kind: 'setStance', faction: FIXTURE.rome, army: FIXTURE.romanArmy } as const;
+    expect(executeOrder(state, { ...order, stance: 'holdTheLine' }, world)).toBeUndefined();
+    expect(state.armies[FIXTURE.romanArmy]?.stanceChangedOn).toBeUndefined();
+    expect(executeOrder(state, { ...order, stance: 'allOutAssault' }, world)).toBeUndefined();
+    expect(state.armies[FIXTURE.romanArmy]?.stanceChangedOn).toBe(state.day);
+    expectConsistent(state);
+  });
+
+  test(`an army re-forming after a change is beaten for ${REFORM_DAYS} days, even by the stance its new one beats`, () => {
+    const settled = lostOnDayOne(false);
+    expect(settled.a).toBeLessThan(settled.b);
+    const reforming = lostOnDayOne(true);
+    expect(reforming.a).toBeGreaterThan(reforming.b);
+  });
+
+  test('an army that changes its stance every day loses an even battle to one that holds', () => {
+    const results = Array.from({ length: 40 }, (_, seed) => {
+      let state = buildTrial({ name: '', a: { troops: MIX }, b: { troops: MIX } }, seed + 1);
+      const cycle: readonly Stance[] = ['skirmishAndWithdraw', 'allOutAssault', 'holdTheLine'];
+      for (let day = 0; day < 60; day++) {
+        const stance = cycle[day % cycle.length] as Stance;
+        const orders = [
+          { kind: 'setStance', faction: FIXTURE.rome, army: TRIAL_ARMIES.a, stance } as const,
+        ];
+        state = tick(state, orders, world).state;
+        if (day > 0 && Object.keys(state.battles).length === 0) break;
+      }
+      return state.armies[TRIAL_ARMIES.b]?.activity.kind === 'idle';
+    });
+    expect(results.filter(Boolean).length).toBeGreaterThan(30);
+  });
 });

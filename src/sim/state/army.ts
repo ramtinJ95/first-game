@@ -7,6 +7,7 @@ import {
   FormationIdSchema,
   SiegeIdSchema,
 } from '../ids.ts';
+import { DaySchema } from './day.ts';
 import { MapPointSchema } from './map-point.ts';
 
 export const STANCES = ['holdTheLine', 'allOutAssault', 'skirmishAndWithdraw'] as const;
@@ -52,6 +53,11 @@ export const ArmySchema = v.object({
   /** The general's skill, from 0 for none to 10 for the best. */
   generalSkill: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10)),
   activity: ArmyActivitySchema,
+  /**
+   * The day the army last changed its stance, absent if it never did. It re-forms for
+   * `REFORM_DAYS` after. It comes last, where a change adds it, so a save keeps its order.
+   */
+  stanceChangedOn: v.optional(DaySchema),
 });
 
 export type Army = v.InferOutput<typeof ArmySchema>;

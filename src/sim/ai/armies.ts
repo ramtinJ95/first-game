@@ -272,7 +272,7 @@ export function movements(context: Context, muster: CityView | undefined): Order
     if (!city || !besiegers.some((army) => army.owner === faction)) continue;
     const men = besiegers.reduce((sum, army) => sum + menOfArmy(state, army), 0);
     if (men >= BLOCKADE_ODDS * city.garrison || !muster) continue;
-    const reinforcements = reinforcementsInTime(state, faction, city, men);
+    const reinforcements = reinforcementsInTime(state, faction, city, men, used);
     if (reinforcements) {
       for (const army of reinforcements) used.add(army.id);
       continue;
@@ -315,20 +315,27 @@ export function movements(context: Context, muster: CityView | undefined): Order
   };
 
   /**
-   * The armies sent at the city suffice together, and the men there by the time this army
-   * arrives hold the blockade, so it does not start a siege that sallies wear down while
-   * the rest are still far off.
+   * Whether the men at the city by the time an army arrives after `km` of road and sea,
+   * counting those besieging and those sent there that arrive no later, and `men` more,
+   * hold the blockade, so it does not start a siege that sallies wear down while the rest
+   * are still far off.
    */
-  const feasible = (city: CityView, mover: Mover) => {
-    if (!suffices(city.id, joined(assigned.get(city.id) ?? NO_FORCE, mover))) return false;
-    const km = distance(mover.at, city.position);
-    const first = (arrivals.get(city.id) ?? [])
+  const holdsOnArrival = (city: CityView, km: number, men: number) =>
+    (arrivals.get(city.id) ?? [])
       .filter((sent) => sent.km <= km)
-      .reduce((sum, sent) => sum + sent.men, mover.men);
-    return first >= BLOCKADE_ODDS * city.garrison;
+      .reduce((sum, sent) => sum + sent.men, men) >=
+    BLOCKADE_ODDS * city.garrison;
+  const sufficesWith = (city: CityView, mover: Mover) =>
+    suffices(city.id, joined(assigned.get(city.id) ?? NO_FORCE, mover));
+  const sendAt = (city: CityView, mover: Mover, km: number) => assign(city.id, mover, km);
+  /** Whether the first of the marching armies to arrive, with those that come with it, hold the blockade. */
+  const firstHolds = (city: CityView, group: readonly Mover[]) => {
+    const first = Math.min(...group.map((mover) => marchKm(mover.army)));
+    const soon = group
+      .filter((mover) => marchKm(mover.army) <= first)
+      .reduce((sum, mover) => sum + mover.men, 0);
+    return holdsOnArrival(city, first, soon);
   };
-  const sendAt = (city: CityView, mover: Mover) =>
-    assign(city.id, mover, distance(mover.at, city.position));
 
   const keptTarget = (mover: Mover) => {
     const heading = destinationOf(mover.army);
@@ -371,8 +378,9 @@ export function movements(context: Context, muster: CityView | undefined): Order
       continue;
     if (mover.army.activity.kind === 'idle' && awaitsRecruits(state, faction, mover.at)) continue;
     const kept = keptTarget(mover);
-    if (kept && feasible(kept, mover)) {
-      sendAt(kept, mover);
+    const ahead = marchKm(mover.army);
+    if (kept && sufficesWith(kept, mover) && holdsOnArrival(kept, ahead, mover.men)) {
+      sendAt(kept, mover, ahead);
       used.add(mover.army.id);
       continue;
     }
@@ -383,12 +391,14 @@ export function movements(context: Context, muster: CityView | undefined): Order
     for (const { city, km } of byDistance) {
       // No route is shorter than the straight line, so no later city can be cheaper.
       if (best && km >= best.cost) break;
-      if (!feasible(city, mover)) continue;
+      if (!sufficesWith(city, mover)) continue;
       const route = context.router.routeTo(mover.at, city, best?.cost);
-      if (route) best = { city, cost: route.cost, step: route.step };
+      if (route && holdsOnArrival(city, route.cost, mover.men)) {
+        best = { city, cost: route.cost, step: route.step };
+      }
     }
     if (best) {
-      sendAt(best.city, mover);
+      sendAt(best.city, mover, best.cost);
       send(mover, best.step);
     } else left.push(mover);
   }
@@ -399,10 +409,12 @@ export function movements(context: Context, muster: CityView | undefined): Order
     const kept = keptTarget(mover);
     if (kept) heading.set(kept.id, [...(heading.get(kept.id) ?? []), mover]);
   }
-  for (const [city, group] of heading) {
-    const together = group.reduce<Force>(joined, assigned.get(city) ?? NO_FORCE);
-    if (!suffices(city, together)) continue;
-    assigned.set(city, together);
+  for (const [id, group] of heading) {
+    const city = state.cities[id];
+    const together = group.reduce<Force>(joined, assigned.get(id) ?? NO_FORCE);
+    if (!city || !suffices(id, together)) continue;
+    if (!firstHolds(city, group)) continue;
+    for (const mover of group) assign(id, mover, marchKm(mover.army));
     for (const mover of group) used.add(mover.army.id);
   }
 
@@ -413,11 +425,13 @@ export function movements(context: Context, muster: CityView | undefined): Order
     if (!group) break;
     // A group already on its way, such as one marching to its port to embark, keeps going.
     // A route costs a path search, so it is priced only for a member that is marching.
-    const onTheWay = group.members.every((m) => {
-      if (!destinationOf(m.army)) return false;
-      const step = context.router.routeTo(m.at, group.city)?.step;
-      return step?.kind === 'march' && marchingTo(m.army, step.to);
-    });
+    const onTheWay =
+      firstHolds(group.city, group.members) &&
+      group.members.every((m) => {
+        if (!destinationOf(m.army)) return false;
+        const step = context.router.routeTo(m.at, group.city)?.step;
+        return step?.kind === 'march' && marchingTo(m.army, step.to);
+      });
     const assembled =
       onTheWay ||
       (group.members.every((m) => m.army.activity.kind === 'idle') &&
@@ -449,7 +463,8 @@ export function movements(context: Context, muster: CityView | undefined): Order
 }
 
 /**
- * The faction's armies marching to the city, soonest first, that bring the siege up to
+ * The faction's armies marching to the city and not given another order today, soonest
+ * first, that bring the siege up to
  * the blockade before the garrison's sallies have cut down half of the men there now, or
  * undefined when they do not.
  */
@@ -458,11 +473,12 @@ function reinforcementsInTime(
   faction: FactionId,
   city: CityView,
   men: number,
+  ordered: ReadonlySet<ArmyId>,
 ): ArmyView[] | undefined {
   const coming: { army: ArmyView; days: number; men: number }[] = [];
   for (const army of sorted(state.armies)) {
     const { activity } = army;
-    if (army.owner !== faction || activity.kind !== 'marching') continue;
+    if (army.owner !== faction || activity.kind !== 'marching' || ordered.has(army.id)) continue;
     if (!marchingTo(army, city.position)) continue;
     let km = 0;
     let from = activity.position;
@@ -498,6 +514,19 @@ function atOwnCity(state: State, army: ArmyView): boolean {
 }
 
 /** Where the army marches, unless the march is longer than a march may be, as in an old save. */
+/** The km of road still ahead of a marching army, or 0 for one that stands. */
+function marchKm(army: ArmyView): number {
+  const { activity } = army;
+  if (activity.kind !== 'marching') return 0;
+  let km = 0;
+  let from = activity.position;
+  for (const point of activity.waypoints) {
+    km += distance(from, point);
+    from = point;
+  }
+  return km;
+}
+
 function destinationOf(army: ArmyView): MapPoint | undefined {
   const { activity } = army;
   if (activity.kind !== 'marching' || overlong(army)) return undefined;
