@@ -3,7 +3,13 @@ import type { CityId, FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import { standingOffer } from '../peace/offer.ts';
 import { warStanding } from '../peace/standing.ts';
-import { AS_THINGS_STAND, GOLD_PER_POINT, termsPoints, termsProblem } from '../peace/terms.ts';
+import {
+  AS_THINGS_STAND,
+  copyTerms,
+  GOLD_PER_POINT,
+  termsPoints,
+  termsProblem,
+} from '../peace/terms.ts';
 import type { City } from '../state/city.ts';
 import type { Day } from '../state/day.ts';
 import type { PeaceTerms } from '../state/peace.ts';
@@ -249,8 +255,8 @@ export function paymentBetween(
 /**
  * The terms the faction offers the enemy, or undefined when no terms satisfy both sides
  * by `peaceWish`. A faction that is winning asks for the most the enemy would give. Any
- * other offers the least the enemy would take, which is peace as things stand when the
- * enemy wants nothing.
+ * other asks for no more than it needs, or offers the least the enemy would take, which is
+ * peace as things stand when neither side wants anything.
  */
 export function proposal(
   state: State,
@@ -269,9 +275,9 @@ export function proposal(
   if (winning && most > 0) {
     const asked = paymentBetween(state, enemy, faction, Math.max(need, 0), most, 'most');
     if (asked) return asked;
-    return need <= 0 ? AS_THINGS_STAND : undefined;
   }
-  if (theirNeed <= 0) return AS_THINGS_STAND;
+  if (need <= 0 && theirNeed <= 0) return AS_THINGS_STAND;
+  if (need > 0) return paymentBetween(state, enemy, faction, need, most, 'least');
   return paymentBetween(state, faction, enemy, theirNeed, -need, 'least');
 }
 
@@ -291,7 +297,11 @@ export function peaceOrders({ state, faction }: Context): Order[] {
     if (!offer || offer.from === faction) continue;
     answered.add(enemy);
     const answer = peaceAnswer(state, faction, enemy, offer.terms);
-    orders.push({ kind: answer?.accepts ? 'acceptPeace' : 'refusePeace', faction, from: enemy });
+    orders.push(
+      answer?.accepts
+        ? { kind: 'acceptPeace', faction, from: enemy, terms: copyTerms(offer.terms) }
+        : { kind: 'refusePeace', faction, from: enemy },
+    );
   }
   for (const key of Object.keys(state.wars).sort()) {
     const sides = warSides(key);

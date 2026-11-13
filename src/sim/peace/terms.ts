@@ -40,7 +40,7 @@ export function termsProblem(
   if (!sides.includes(payer)) return `${payer} is not a side of the war`;
   if (gold === 0 && cities.length === 0) return 'a payment must give gold or cities';
   const stores = state.factions[payer]?.stores;
-  if (!stores || stores.gold < gold) {
+  if (!stores || (gold > 0 && stores.gold < gold)) {
     return `${payer} has ${Math.max(0, Math.floor(stores?.gold ?? 0))} gold, not the ${gold} the terms ask`;
   }
   if (new Set(cities).size !== cities.length) return 'the terms name a city twice';

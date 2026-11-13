@@ -30,7 +30,7 @@ function atWar(): GameState {
 
 function offerAndAccept(state: GameState, from: FactionId, to: FactionId, terms: PeaceTerms) {
   expect(run(state, { kind: 'offerPeace', faction: from, to, terms })).toBeUndefined();
-  return run(state, { kind: 'acceptPeace', faction: to, from });
+  return run(state, { kind: 'acceptPeace', faction: to, from, terms });
 }
 
 describe('how a war stands', () => {
@@ -163,12 +163,22 @@ describe('terms of peace', () => {
 
     expect(run(state, order)).toBeUndefined();
     state.day = (state.day + OFFER_DAYS) as Day;
-    expect(run(state, { kind: 'acceptPeace', faction: f.carthage, from: f.rome })).toBe(
-      'rome offers carthage no peace',
-    );
-    expect(run(state, { kind: 'acceptPeace', faction: f.rome, from: f.rome })).toBe(
-      'rome offers rome no peace',
-    );
+    expect(
+      run(state, {
+        kind: 'acceptPeace',
+        faction: f.carthage,
+        from: f.rome,
+        terms: { kind: 'asThingsStand' },
+      }),
+    ).toBe('rome offers carthage no peace');
+    expect(
+      run(state, {
+        kind: 'acceptPeace',
+        faction: f.rome,
+        from: f.rome,
+        terms: { kind: 'asThingsStand' },
+      }),
+    ).toBe('rome offers rome no peace');
     expect(areAtWar(state, f.rome, f.carthage)).toBe(true);
     expectConsistent(state);
   });
@@ -181,7 +191,7 @@ describe('terms of peace', () => {
     ).toBeUndefined();
     const rome = state.factions[f.rome];
     if (rome) rome.stores.gold = 100;
-    expect(run(state, { kind: 'acceptPeace', faction: f.carthage, from: f.rome })).toBe(
+    expect(run(state, { kind: 'acceptPeace', faction: f.carthage, from: f.rome, terms })).toBe(
       'rome has 100 gold, not the 4000 the terms ask',
     );
     expect(areAtWar(state, f.rome, f.carthage)).toBe(true);
@@ -217,5 +227,87 @@ describe('the truce', () => {
     expect(
       run(state, { kind: 'declareWar', faction: f.rome, against: f.syracusaeFaction }),
     ).toBeUndefined();
+  });
+});
+
+describe('what the review found', () => {
+  test('a storm ordered after the peace on the same day is refused, for no army besieges the city', () => {
+    let state = atWar();
+    const roman = state.armies[f.romanArmy];
+    const punic = state.armies[f.punicArmy];
+    if (!roman || !punic) throw new Error('fixture');
+    roman.activity = { kind: 'idle', position: CARTHAGO };
+    punic.activity = { kind: 'idle', position: { x: 2600, y: 2380 } };
+    state = tick(state, [], world).state;
+    expect(
+      run(state, {
+        kind: 'offerPeace',
+        faction: f.carthage,
+        to: f.rome,
+        terms: { kind: 'asThingsStand' },
+      }),
+    ).toBeUndefined();
+    const result = tick(
+      state,
+      [
+        {
+          kind: 'acceptPeace',
+          faction: f.rome,
+          from: f.carthage,
+          terms: { kind: 'asThingsStand' },
+        },
+        { kind: 'storm', faction: f.rome, city: f.carthago },
+      ],
+      world,
+    );
+    expect(result.rejected.map(({ order }) => order.kind)).toEqual(['storm']);
+    expect(result.state.cities[f.carthago]?.owner).toBe(f.carthage);
+    expectConsistent(result.state);
+  });
+
+  test('an acceptance names the terms it accepts, so a replaced offer is not accepted', () => {
+    const state = atWar();
+    const generous: PeaceTerms = { kind: 'payment', payer: f.rome, gold: 3000, cities: [] };
+    const greedy: PeaceTerms = { kind: 'payment', payer: f.carthage, gold: 3000, cities: [] };
+    expect(
+      run(state, { kind: 'offerPeace', faction: f.rome, to: f.carthage, terms: generous }),
+    ).toBeUndefined();
+    expect(
+      run(state, { kind: 'offerPeace', faction: f.rome, to: f.carthage, terms: greedy }),
+    ).toBeUndefined();
+    expect(
+      run(state, { kind: 'acceptPeace', faction: f.carthage, from: f.rome, terms: generous }),
+    ).toBe('rome offers carthage other terms now');
+    expect(areAtWar(state, f.rome, f.carthage)).toBe(true);
+  });
+
+  test('a payer short of gold may still hand over a city', () => {
+    const state = atWar();
+    const rome = state.factions[f.rome];
+    if (rome) rome.stores.gold = -10;
+    const terms: PeaceTerms = { kind: 'payment', payer: f.rome, gold: 0, cities: [f.capua] };
+    expect(offerAndAccept(state, f.rome, f.carthage, terms)).toBeUndefined();
+    expect(state.cities[f.capua]?.owner).toBe(f.carthage);
+    expectConsistent(state);
+  });
+
+  test('the men lost to a retreat count in the war', () => {
+    let state = atWar();
+    const punic = state.armies[f.punicArmy];
+    const roman = state.armies[f.romanArmy];
+    if (!punic || !roman || roman.activity.kind !== 'idle') throw new Error('fixture');
+    punic.activity = { kind: 'idle', position: { ...roman.activity.position } };
+    state = tick(state, [], world).state;
+    const before = warStanding(state, f.rome, f.carthage)?.menLost ?? 0;
+    const result = tick(state, [{ kind: 'retreat', faction: f.rome, army: f.romanArmy }], world);
+    const retreat = result.events.find(
+      (event) => event.kind === 'armyRetreated' && event.owner === f.rome,
+    );
+    const lost = retreat?.kind === 'armyRetreated' ? retreat.lost : 0;
+    expect(lost).toBeGreaterThan(0);
+    expect(warStanding(result.state, f.rome, f.carthage)?.menLost).toBeGreaterThanOrEqual(
+      before + lost,
+    );
+    expectConsistent(result.state);
   });
 });

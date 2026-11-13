@@ -32,10 +32,14 @@ export function landOwnerAt(state: DeepReadonly<GameState>, at: MapPoint): Facti
   return best?.owner;
 }
 
+/** The ports tried for a crossing home, nearest the owner's cities first. Farther ones are a longer way. */
+const LANDING_TRIES = 6;
+
 /**
  * Sends an idle or marching army home: by land to the nearest city of its owner a march
- * reaches, else by sea from the shore it stands on to its owner's port nearest it, else to
- * the nearest shore of the sea its owner's ports lie on, where its owner can take ship.
+ * reaches, else by sea from the shore it stands on, to its owner's port nearest it or, when
+ * its owner holds no port on that sea, to the port from which a march reaches the owner's
+ * nearest city, else to the nearest shore of such a port's sea, where it takes ship next.
  */
 export function sendHome(state: GameState, world: World, army: Army): void {
   const { activity } = army;
@@ -47,14 +51,20 @@ export function sendHome(state: GameState, world: World, army: Army): void {
   for (const city of own.slice(0, HOME_TRIES)) {
     if (startMarch(world, army, at, city.position) === undefined) return;
   }
-  const ports = own.filter((city) => world.harbours.has(city.id));
-  for (const port of ports) {
+  const landings = landingsHome(state, world, army.owner, own);
+  for (const { port, then } of landings) {
     const harbour = world.harbours.get(port.id) as MapPoint;
     if (!embarkationAt(state, world, army.owner, at, harbour)) continue;
-    const order = { kind: 'embark', faction: army.owner, army: army.id, to: port.id } as const;
+    const order = {
+      kind: 'embark',
+      faction: army.owner,
+      army: army.id,
+      to: port.id,
+      ...(then && { then }),
+    } as const;
     if (embark(state, order, world) === undefined) return;
   }
-  for (const port of ports) {
+  for (const { port } of landings) {
     const harbour = world.harbours.get(port.id) as MapPoint;
     const sea = world.mesh.component[locate(world.mesh, harbour, 'sea')];
     const shore = sea === undefined ? undefined : nearestSea(world.mesh, at, sea);
@@ -64,6 +74,40 @@ export function sendHome(state: GameState, world: World, army: Army): void {
     }
   }
   if (activity.kind === 'marching') army.activity = { kind: 'idle', position: at };
+}
+
+/**
+ * The ports an army of the owner may land at to reach home: the owner's own, and then the
+ * others nearest its cities from whose harbour a march reaches one, with that city as `then`.
+ */
+function landingsHome(
+  state: GameState,
+  world: World,
+  owner: FactionId,
+  own: readonly DeepReadonly<City>[],
+): { port: DeepReadonly<City>; then?: MapPoint }[] {
+  const ports = own.filter((city) => world.harbours.has(city.id)).map((port) => ({ port }));
+  const nearestOwn = (point: MapPoint) =>
+    [...own].sort((a, b) => distance(a.position, point) - distance(b.position, point))[0];
+  const foreign = Object.keys(state.cities)
+    .sort()
+    .flatMap((id) => {
+      const port = state.cities[id as CityId];
+      const harbour = port && world.harbours.get(port.id);
+      const home = harbour && nearestOwn(harbour);
+      return port && harbour && home && port.owner !== owner
+        ? [{ port, home, km: distance(harbour, home.position) }]
+        : [];
+    })
+    .sort((a, b) => a.km - b.km)
+    .slice(0, LANDING_TRIES)
+    .flatMap(({ port, home }) => {
+      const harbour = world.harbours.get(port.id) as MapPoint;
+      return typeof marchPath(world, harbour, home.position) === 'string'
+        ? []
+        : [{ port, then: { x: home.position.x, y: home.position.y } }];
+    });
+  return [...ports, ...foreign];
 }
 
 /**

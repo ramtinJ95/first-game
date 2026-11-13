@@ -148,6 +148,30 @@ describe("the AI's offers", () => {
     expect(proposal(state, f.rome, f.carthage)).toEqual(gold(f.rome, 500));
   });
 
+  test('a proposal is one that both sides accept by the same rule', () => {
+    for (const day of [150, 200, 260, 400]) {
+      for (const short of [false, true]) {
+        const state = warOn(day);
+        const carthage = state.factions[f.carthage];
+        if (carthage && short) carthage.stores.food = -5;
+        for (const [faction, enemy] of [
+          [f.rome, f.carthage],
+          [f.carthage, f.rome],
+        ] as const) {
+          const terms = proposal(state, faction, enemy);
+          if (!terms) continue;
+          expect(
+            peaceAnswer(state, faction, enemy, terms)?.accepts,
+            `${faction} on day ${day}`,
+          ).toBe(true);
+          expect(peaceAnswer(state, enemy, faction, terms)?.accepts, `${enemy} on day ${day}`).toBe(
+            true,
+          );
+        }
+      }
+    }
+  });
+
   test('a side with too little gold hands over a city instead', () => {
     const state = warOn(1 + WEARY_DAYS * (PEACE_RESOLVE + 10));
     const rome = state.factions[f.rome];
@@ -182,7 +206,12 @@ describe("the AI's offers", () => {
       world,
     ).state;
     const answer = decideOrders(state, world, f.carthage);
-    expect(answer[0]).toEqual({ kind: 'acceptPeace', faction: f.carthage, from: f.rome });
+    expect(answer[0]).toEqual({
+      kind: 'acceptPeace',
+      faction: f.carthage,
+      from: f.rome,
+      terms: AS_THINGS_STAND,
+    });
     const result = tick(state, answer, world);
     expect(result.rejected).toEqual([]);
     expect(result.events.some((event) => event.kind === 'peaceMade')).toBe(true);
@@ -216,7 +245,12 @@ describe('war during a truce', () => {
       to: f.syracusaeFaction,
       terms: AS_THINGS_STAND,
     });
-    run(state, { kind: 'acceptPeace', faction: f.syracusaeFaction, from: f.rome });
+    run(state, {
+      kind: 'acceptPeace',
+      faction: f.syracusaeFaction,
+      from: f.rome,
+      terms: AS_THINGS_STAND,
+    });
     const declarations = (s: GameState) =>
       decideOrders(s, world, f.rome).filter((order) => order.kind === 'declareWar');
     expect(declarations(state)).toEqual([]);
@@ -234,7 +268,7 @@ describe('war during a truce', () => {
     if (spears) spears.men = 500;
     run(state, { kind: 'declareWar', faction: f.rome, against: f.carthage });
     run(state, { kind: 'offerPeace', faction: f.rome, to: f.carthage, terms: AS_THINGS_STAND });
-    run(state, { kind: 'acceptPeace', faction: f.carthage, from: f.rome });
+    run(state, { kind: 'acceptPeace', faction: f.carthage, from: f.rome, terms: AS_THINGS_STAND });
     run(state, { kind: 'declareWar', faction: f.rome, against: f.syracusaeFaction });
     expect(
       decideOrders(state, world, f.rome).filter((order) => order.kind === 'declareWar'),

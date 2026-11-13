@@ -81,11 +81,13 @@
   }
 
   function answer(war: WarRow, accept: boolean) {
-    actions.issue({
-      kind: accept ? 'acceptPeace' : 'refusePeace',
-      faction: game.player,
-      from: war.enemy,
-    });
+    const terms = war.theirOffer?.terms;
+    if (!terms) return;
+    actions.issue(
+      accept
+        ? { kind: 'acceptPeace', faction: game.player, from: war.enemy, terms }
+        : { kind: 'refusePeace', faction: game.player, from: war.enemy },
+    );
     if (prompted === war.enemy) answered();
   }
 

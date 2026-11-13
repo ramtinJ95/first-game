@@ -805,7 +805,9 @@ describe('peace', () => {
     expect(sent.texts).toEqual([
       { kind: 'peaceOffered', tone: 'neutral', text: 'You offered Carthage peace as things stand' },
     ]);
-    const made = day(sent.next, [{ kind: 'acceptPeace', faction: f.carthage, from: f.rome }]);
+    const made = day(sent.next, [
+      { kind: 'acceptPeace', faction: f.carthage, from: f.rome, terms: asThingsStand },
+    ]);
     expect(made.texts).toEqual([
       {
         kind: 'peaceMade',

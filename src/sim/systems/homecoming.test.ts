@@ -6,6 +6,7 @@ import { landOwnerAt } from '../peace/home.ts';
 import { expectConsistent } from '../references.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
+import type { PeaceTerms } from '../state/peace.ts';
 import { tick } from '../tick.ts';
 import { distance } from '../world/find-path.ts';
 
@@ -15,7 +16,12 @@ const CARTHAGO = { x: 2224.9, y: 2870.1 };
 const CAPUA = { x: 2638.8, y: 2448.3 };
 /** Inland, between Capua and Roma, more than a siege distance from either. */
 const BETWEEN = { x: 2575, y: 2392 };
-const PEACE: Order = { kind: 'acceptPeace', faction: f.carthage, from: f.rome };
+const PEACE: Order = {
+  kind: 'acceptPeace',
+  faction: f.carthage,
+  from: f.rome,
+  terms: { kind: 'asThingsStand' },
+};
 
 function atWar(): GameState {
   const state = buildFixture();
@@ -95,7 +101,7 @@ describe('homecoming', () => {
     expectConsistent(home.state);
   });
 
-  test('on peace a battle between the two ends with no loss and both armies turn home', () => {
+  test("on peace a battle between the two ends with no loss, and the army on the other side's land turns home", () => {
     let state = atWar();
     place(state, f.punicArmy, BETWEEN);
     place(state, f.romanArmy, { x: BETWEEN.x + 5, y: BETWEEN.y });
@@ -108,8 +114,8 @@ describe('homecoming', () => {
     expect(menOf(state, f.rome)).toBe(men.rome);
     expect(menOf(state, f.carthage)).toBe(men.carthage);
     expect(result.events.map((event) => event.kind)).toEqual(['peaceMade']);
-    const roman = boundFor(state, f.romanArmy);
-    expect(roman && landOwnerAt(state, roman)).toBe(f.rome);
+    const roman = state.armies[f.romanArmy]?.activity;
+    expect(roman?.kind === 'idle' && landOwnerAt(state, roman.position)).toBe(f.rome);
     expectConsistent(state);
     expect(untilHome(state).days).toBeLessThan(90);
   });
@@ -142,5 +148,25 @@ describe('homecoming', () => {
     expect(untilHome(structuredClone(state)).days).toBeLessThan(90);
     expect(distance(boundFor(state, f.romanArmy) ?? CAPUA, CAPUA)).toBeLessThan(1);
     expectConsistent(state);
+  });
+
+  test('an army overseas whose owner cedes its last port lands at a foreign port and marches home', () => {
+    let state = atWar();
+    place(state, f.romanArmy, CARTHAGO);
+    place(state, f.punicArmy, { x: 2229.9, y: 2865.1 + 60 });
+    const terms: PeaceTerms = { kind: 'payment', payer: f.rome, gold: 0, cities: [f.roma] };
+    expect(
+      executeOrder(state, { kind: 'offerPeace', faction: f.rome, to: f.carthage, terms }, world),
+    ).toBeUndefined();
+    state = tick(
+      state,
+      [{ kind: 'acceptPeace', faction: f.carthage, from: f.rome, terms }],
+      world,
+    ).state;
+    expect(state.cities[f.roma]?.owner).toBe(f.carthage);
+    const home = untilHome(state);
+    const at = home.state.armies[f.romanArmy]?.activity;
+    expect(at?.kind === 'idle' && distance(at.position, CAPUA)).toBeLessThan(15);
+    expectConsistent(home.state);
   });
 });

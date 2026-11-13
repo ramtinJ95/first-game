@@ -12,7 +12,7 @@ import type { CityId, FactionId } from '../sim/ids.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import { standingOffer } from '../sim/peace/offer.ts';
 import { warStanding, type WarStanding } from '../sim/peace/standing.ts';
-import { AS_THINGS_STAND } from '../sim/peace/terms.ts';
+import { AS_THINGS_STAND, copyTerms } from '../sim/peace/terms.ts';
 import { truceDaysLeft } from '../sim/peace/truce.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { PeaceTerms } from '../sim/state/peace.ts';
@@ -36,7 +36,8 @@ export interface WarRow {
   readonly summary: string;
   readonly facts: readonly string[];
   /** The enemy's offer that waits for the player's answer. */
-  readonly theirOffer: { readonly text: string; readonly refusing: string } | undefined;
+  readonly theirOffer:
+    { readonly terms: PeaceTerms; readonly text: string; readonly refusing: string } | undefined;
   /** The player's offer that waits, sent or still queued for the next day. */
   readonly ourOffer: string | undefined;
   readonly choices: readonly PeaceChoice[];
@@ -148,6 +149,7 @@ export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
           theirOffer:
             offer && offer.from === enemy
               ? {
+                  terms: copyTerms(offer.terms),
                   text: `${name} offers ${peaceText(state, offer.terms, player)}.`,
                   refusing: `Refuse, and the war goes on. ${name} makes no new offer for ${OFFER_GAP_DAYS} days.`,
                 }

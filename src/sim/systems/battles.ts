@@ -13,7 +13,7 @@ import { landPath, MARCH_KM_PER_DAY, marchDays } from '../march.ts';
 import { connected, surfaceAt } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import { TROOPS } from '../troops.ts';
-import { recordBattleLosses } from '../peace/war-record.ts';
+import { recordBattleLosses, recordLoss } from '../peace/war-record.ts';
 import { areAtWar } from '../wars.ts';
 
 /**
@@ -484,6 +484,10 @@ export function retreatFromBattle(
     formation.morale = 0;
   }
   const lost = before - menOf(state, army);
+  const foesOf = battle
+    ? battle.sides[side === 'attackers' ? 'defenders' : 'attackers'].factions
+    : [];
+  recordLoss(state, army.owner, foesOf, lost);
   if (battle) {
     battle.sides[side].lost += lost;
     battle.attackers = battle.attackers.filter((id) => id !== army.id);
@@ -502,6 +506,7 @@ export function retreatFromBattle(
   const path = retreatPath(state, world, army.owner, from, foes, battle?.position ?? from);
   if (!path) {
     if (battle) battle.sides[side].lost += menOf(state, army);
+    recordLoss(state, army.owner, foesOf, menOf(state, army));
     removeArmy(state, army, 'surrender');
     return;
   }

@@ -62,6 +62,7 @@ describe('the wars panel', () => {
     });
     const [war] = warRoomOf(state, []).wars;
     expect(war?.theirOffer).toEqual({
+      terms: { kind: 'asThingsStand' },
       text: 'Carthage offers peace as things stand.',
       refusing: 'Refuse, and the war goes on. Carthage makes no new offer for 90 days.',
     });
@@ -84,7 +85,12 @@ describe('the wars panel', () => {
       to: f.carthage,
       terms: { kind: 'asThingsStand' },
     });
-    run(state, { kind: 'acceptPeace', faction: f.carthage, from: f.rome });
+    run(state, {
+      kind: 'acceptPeace',
+      faction: f.carthage,
+      from: f.rome,
+      terms: { kind: 'asThingsStand' },
+    });
     state.day = 301 as Day;
     expect(warRoomOf(state, [])).toEqual({
       wars: [],

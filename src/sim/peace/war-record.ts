@@ -26,6 +26,21 @@ export function recordCapture(
   if (war && !wonBack) war.sides[to]?.taken.push(city);
 }
 
+/** Adds men the faction lost to its wars with each of the enemies. */
+export function recordLoss(
+  state: GameState,
+  faction: FactionId,
+  enemies: readonly FactionId[],
+  men: number,
+): void {
+  if (men <= 0) return;
+  for (const enemy of enemies) {
+    const record =
+      enemy === faction ? undefined : state.wars[warKey(faction, enemy)]?.sides[faction];
+    if (record) record.lost += men;
+  }
+}
+
 /** Adds the men each faction lost today in a battle to its wars with the factions it fought there. */
 export function recordBattleLosses(
   state: GameState,
@@ -37,13 +52,6 @@ export function recordBattleLosses(
     [first, second],
     [second, first],
   ] as const) {
-    for (const [faction, men] of side.lost) {
-      if (men <= 0) continue;
-      for (const enemy of other.factions) {
-        if (enemy === faction) continue;
-        const record = state.wars[warKey(faction, enemy)]?.sides[faction];
-        if (record) record.lost += men;
-      }
-    }
+    for (const [faction, men] of side.lost) recordLoss(state, faction, other.factions, men);
   }
 }
