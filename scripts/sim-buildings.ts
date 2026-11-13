@@ -188,7 +188,9 @@ function ordersOf(state: DeepReadonly<GameState>, ruler: Ruler): Order[] {
   const recruits =
     ruler === 'recruits' || ruler === 'both' ? recruitment(state, rome, capitalOf(state)) : [];
   const builds =
-    ruler === 'builds' || ruler === 'both' ? construction(state, rome, recruits.length > 0) : [];
+    ruler === 'builds' || ruler === 'both'
+      ? construction(state, rome, recruits.length > 0, ruler === 'both')
+      : [];
   return [...recruits, ...builds];
 }
 

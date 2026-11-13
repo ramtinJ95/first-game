@@ -65,12 +65,18 @@ export function buildingWorth(state: State, city: CityView, kind: BuildingKind):
  * pays back its gold soonest among those its cities can start, if that is within
  * BUILD_PAYBACK_YEARS. It builds only while its gold and food balances are not falling
  * and only with gold left over the reserve for its men and the price of the recruit it
- * would raise next, so a building never stops it keeping or growing an army.
+ * would raise next, so a building never stops it keeping or growing an army. A ruler
+ * that never recruits, `keepsRecruits` false, keeps only the reserve for its men.
  */
-export function construction(state: State, faction: FactionId, recruiting: boolean): Order[] {
+export function construction(
+  state: State,
+  faction: FactionId,
+  recruiting: boolean,
+  keepsRecruits = true,
+): Order[] {
   const record = state.factions[faction];
   if (!record || recruiting) return [];
-  const next = TROOPS[mostNeeded(state, faction)].recruit.gold;
+  const next = keepsRecruits ? TROOPS[mostNeeded(state, faction)].recruit.gold : 0;
   const spare = record.stores.gold - reserveOf(state, faction, 'gold') - next;
   if (spare < CHEAPEST || record.stores.food < reserveOf(state, faction, 'food')) return [];
   const balance = balanceOf(state, faction);
