@@ -102,11 +102,10 @@ export function partition(land: MultiPolygon, seeds: Point[], terrain?: BorderTe
       }
       const recut = cutAlongLand(polygon, members, seeds, owned, terrain);
       stitched[component] = recut.land;
-      const recutPieces = recut.pieces;
-      if (mergeOrphans(recutPieces, merges).length > 0) {
-        throw new Error(`a piece of the re-cut land touches no province`);
+      if (mergeOrphans(recut.pieces, merges).length > 0) {
+        throw new Error('a piece of the re-cut land touches no province');
       }
-      for (const piece of recutPieces) {
+      for (const piece of recut.pieces) {
         if (piece.owner !== undefined) bent[piece.owner]?.push(piece.polygon);
       }
     }
