@@ -1,5 +1,6 @@
 import type { DeepReadonly } from './deep-readonly.ts';
 import { defeatFaction } from './defeat.ts';
+import { emit } from './events.ts';
 import type { CityId, FactionId } from './ids.ts';
 import type { GameState } from './state/game-state.ts';
 import type { Troop } from './troops.ts';
@@ -36,7 +37,8 @@ export const MAX_UNREST_DAYS = Math.max(UNREST_DAYS, SACK.unrestDays, ENSLAVE.un
 /**
  * Hands a city and its province to a new owner. The city starts its full period of
  * unrest. A city falls only to a siege, which musters what the city trains, so no
- * recruit is left to lose. A fate is never open after this alone: the siege that takes
+ * recruit is left to lose. The new owner keeps the finished buildings, and the building
+ * at work is lost with its gold. A fate is never open after this alone: the siege that takes
  * a city opens it. An old owner left without a city is out of the game.
  */
 export function changeCityOwner(state: GameState, cityId: CityId, owner: FactionId): void {
@@ -48,6 +50,17 @@ export function changeCityOwner(state: GameState, cityId: CityId, owner: Faction
   city.unrestDays = UNREST_DAYS;
   city.recruits = [];
   city.fellOn = null;
+  if (city.construction) {
+    emit(state, {
+      kind: 'buildingsLost',
+      city: city.id,
+      owner: previous,
+      buildings: [city.construction.building],
+      cause: 'siege',
+      position: city.position,
+    });
+    city.construction = null;
+  }
   if (!Object.values(state.cities).some((other) => other.owner === previous)) {
     defeatFaction(state, previous);
   }

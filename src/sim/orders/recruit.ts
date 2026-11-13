@@ -1,3 +1,4 @@
+import { trainingDaysAt } from '../buildings/buildings.ts';
 import type { CityId, FactionId } from '../ids.ts';
 import type { Day } from '../state/day.ts';
 import type { GameState } from '../state/game-state.ts';
@@ -33,6 +34,9 @@ export function recruit(state: GameState, order: RecruitOrder): string | undefin
   }
   stores.gold -= gold;
   stores.manpower -= men;
-  city.recruits.push({ troop: order.troop, readyOn: (state.day + days) as Day });
+  city.recruits.push({
+    troop: order.troop,
+    readyOn: (state.day + trainingDaysAt(city, days)) as Day,
+  });
   return undefined;
 }

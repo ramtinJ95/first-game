@@ -1,6 +1,6 @@
 <script lang="ts">
   import { dailyText, forgoneText } from '../app/fates.ts';
-  import { whole } from '../app/names.ts';
+  import { buildingList, whole } from '../app/names.ts';
   import type { ShownModal } from '../app/view.svelte.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { GameState } from '../sim/state/game-state.ts';
@@ -27,13 +27,18 @@
     if (choice.gold > 0) lines.push(`+${whole(choice.gold)} gold`);
     if (choice.manpower > 0) lines.push(`+${whole(choice.manpower)} manpower`);
     if (choice.peopleMoved > 0) lines.push(`${whole(choice.peopleMoved)} captives settle at home`);
-    if (lines.length === 0) lines.push('The city keeps all its people');
+    if (choice.peopleLost === 0) lines.push('The city keeps all its people');
+    if (choice.buildingsKept.length > 0)
+      lines.push(`Keeps its ${buildingList(choice.buildingsKept)}`);
     return lines;
   }
 
   function costs(choice: (typeof fate.choices)[number]): string[] {
     const lines: string[] = [];
     if (choice.peopleLost > 0) lines.push(`−${whole(choice.peopleLost)} people in the city`);
+    if (choice.buildingsLost.length > 0) {
+      lines.push(`Destroys its ${buildingList(choice.buildingsLost)}`);
+    }
     lines.push(`Unrest for ${choice.unrestDays} days`);
     return lines;
   }

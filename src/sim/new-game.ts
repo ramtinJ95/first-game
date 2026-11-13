@@ -203,6 +203,8 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
       fortified,
       fellOn: null,
       sackedOn: null,
+      buildings: [],
+      construction: null,
     };
   }
   pairLeagues(state, leagued);

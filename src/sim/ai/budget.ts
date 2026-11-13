@@ -49,7 +49,7 @@ export function recruitment(
   return [{ kind: 'recruit', faction, city: muster.id, troop }];
 }
 
-function mostNeeded(state: State, faction: FactionId): Troop {
+export function mostNeeded(state: State, faction: FactionId): Troop {
   const men = new Map<Troop, number>();
   let total = 0;
   const add = (troop: Troop, count: number) => {

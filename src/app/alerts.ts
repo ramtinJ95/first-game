@@ -1,4 +1,5 @@
 import type { Pick } from '../render/pick.ts';
+import { BUILDINGS } from '../sim/buildings/buildings.ts';
 import { earlyMusters, FATE_DAYS } from '../sim/cities.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { BattleSideOutcome, DayEvent } from '../sim/events.ts';
@@ -14,7 +15,7 @@ import type { Troop } from '../sim/troops.ts';
 import { BLOCKADE_ODDS } from '../sim/systems/sieges.ts';
 import { areAtWar } from '../sim/wars.ts';
 import type { World } from '../sim/world/world.ts';
-import { factionName, placeName, TROOP_NAMES, whole } from './names.ts';
+import { buildingList, factionName, placeName, TROOP_NAMES, whole } from './names.ts';
 
 export type AlertKind =
   | 'battleBegan'
@@ -34,7 +35,9 @@ export type AlertKind =
   | 'siegeTooWeak'
   | 'siegeBled'
   | 'columnLeft'
-  | 'columnArrived';
+  | 'columnArrived'
+  | 'buildingFinished'
+  | 'buildingsLost';
 
 export interface Alert {
   readonly kind: AlertKind;
@@ -589,6 +592,30 @@ function eventAlert(
         };
       }
       return undefined;
+    case 'buildingFinished': {
+      const city = after.cities[event.city];
+      if (event.owner !== player || !city) return undefined;
+      return {
+        kind: 'buildingFinished',
+        tone: 'good',
+        text: `${BUILDINGS[event.building].name} finished at ${city.name}`,
+        focus: { at: event.position, select: { kind: 'province', province: city.province } },
+      };
+    }
+    case 'buildingsLost': {
+      // The owner is the sacker, or the faction the city fell from.
+      const city = after.cities[event.city];
+      if (event.owner !== player || !city) return undefined;
+      return {
+        kind: 'buildingsLost',
+        tone: event.cause === 'sack' ? 'neutral' : 'bad',
+        text:
+          event.cause === 'sack'
+            ? `Sack of ${city.name} destroyed its ${buildingList(event.buildings)}`
+            : `${city.name} fell with its ${buildingList(event.buildings)} unfinished`,
+        focus: { at: event.position, select: { kind: 'province', province: city.province } },
+      };
+    }
   }
 }
 

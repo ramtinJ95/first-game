@@ -498,6 +498,52 @@ describe('alertsOfDay', () => {
     expect(ofKind(alertsOfDay(before, after, []), 'storeRanOut')).toEqual([]);
   });
 
+  it("tells when a building of the player's is finished, and not of another faction's", () => {
+    const state = buildFixture();
+    const roma = state.cities[f.roma];
+    const carthago = state.cities[f.carthago];
+    if (!roma || !carthago) throw new Error('fixture changed');
+    roma.construction = { building: 'forum', daysLeft: 1 };
+    carthago.construction = { building: 'temple', daysLeft: 1 };
+    const { state: next, events } = tick(state, [], world);
+    const told = alertsInSight(
+      alertsOfDay(state, next, events),
+      sightOf(state, world, f.rome),
+      sightOf(next, world, f.rome),
+    );
+    expect(ofKind(told, 'buildingFinished').map((a) => [a.text, a.tone, a.focus?.select])).toEqual([
+      ['Forum finished at Roma', 'good', { kind: 'province', province: f.latium }],
+    ]);
+  });
+
+  it('tells the sacker what the sack destroyed, and the old owner what was at work when its city fell', () => {
+    const sacked = buildFixture();
+    const roman = sacked.armies[f.romanArmy];
+    const syracusae = sacked.cities[f.syracusae];
+    if (!roman || !syracusae) throw new Error('fixture changed');
+    syracusae.buildings = ['forum', 'towers'];
+    roman.activity = { kind: 'idle', position: { ...syracusae.position } };
+    changeCityOwner(sacked, f.syracusae, f.rome);
+    syracusae.fellOn = sacked.day;
+    const sack = play(sacked, [{ kind: 'sack', faction: f.rome, city: f.syracusae }], () => true);
+    expect(ofKind(sack.alerts, 'buildingsLost').map((a) => [a.text, a.tone])).toEqual([
+      ['Sack of Syracusae destroyed its Forum and Towers', 'neutral'],
+    ]);
+
+    const besieged = buildFixture();
+    atWar(besieged);
+    const punic = besieged.armies[f.punicArmy];
+    const capua = besieged.cities[f.capua];
+    if (!punic || !capua) throw new Error('fixture changed');
+    capua.construction = { building: 'barracks', daysLeft: 10 };
+    capua.garrison = 0;
+    punic.activity = { kind: 'idle', position: { ...capua.position } };
+    const fall = play(besieged, [], (s) => s.cities[f.capua]?.owner === f.carthage);
+    expect(ofKind(fall.alerts, 'buildingsLost').map((a) => [a.text, a.tone])).toEqual([
+      ['Capua fell with its Barracks unfinished', 'bad'],
+    ]);
+  });
+
   it('tells once that a captured city is occupied when its days to choose a fate pass, and not after a sack or a choice to occupy', () => {
     const fallen = () => {
       const state = buildFixture();

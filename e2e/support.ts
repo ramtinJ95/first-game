@@ -547,6 +547,16 @@ export function sackedMediolanum(): GameState {
   return playDays(state, 30, [{ kind: 'sack', faction: rome, city: 'mediolanum' as CityId }]);
 }
 
+/** Mediolanum fell to Rome today with Canals and Towers standing, so its fate is open. */
+export function mediolanumFallenWithBuildings(): GameState {
+  const state = startGame();
+  const city = state.cities['mediolanum' as CityId];
+  if (!city) throw new Error('no Mediolanum');
+  city.buildings = ['canals', 'towers'];
+  fallenTo(state, 'mediolanum');
+  return state;
+}
+
 /** Rome's food and manpower stand at their limits, so neither grows tomorrow. */
 export function storesAtTheirLimits(): GameState {
   const state = startGame();

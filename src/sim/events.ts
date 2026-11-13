@@ -1,4 +1,5 @@
-import type { ArmyId, BattleId, FactionId } from './ids.ts';
+import type { BuildingKind } from './buildings/buildings.ts';
+import type { ArmyId, BattleId, CityId, FactionId } from './ids.ts';
 import type { Day } from './state/day.ts';
 import type { GameState } from './state/game-state.ts';
 import type { MapPoint } from './state/map-point.ts';
@@ -63,7 +64,24 @@ export type DayEvent =
       men: number;
     }
   | { kind: 'armyDeserted'; army: ArmyId; owner: FactionId; position: MapPoint; men: number }
-  | { kind: 'warDeclared'; by: FactionId; against: FactionId };
+  | { kind: 'warDeclared'; by: FactionId; against: FactionId }
+  | {
+      kind: 'buildingFinished';
+      city: CityId;
+      owner: FactionId;
+      building: BuildingKind;
+      position: MapPoint;
+    }
+  | {
+      kind: 'buildingsLost';
+      city: CityId;
+      /** The faction that held the buildings: the sacker, or the owner the city fell from. */
+      owner: FactionId;
+      /** The buildings destroyed, and the one at work, which is lost with its gold. */
+      buildings: readonly BuildingKind[];
+      cause: 'sack' | 'siege';
+      position: MapPoint;
+    };
 
 const sinks = new WeakMap<GameState, DayEvent[]>();
 

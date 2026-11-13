@@ -95,6 +95,8 @@ export function buildFixture(seed = 1): GameState {
         fortified: 1,
         fellOn: null,
         sackedOn: null,
+        buildings: [],
+        construction: null,
       },
       [f.capua]: {
         id: f.capua,
@@ -110,6 +112,8 @@ export function buildFixture(seed = 1): GameState {
         fortified: 1,
         fellOn: null,
         sackedOn: null,
+        buildings: [],
+        construction: null,
       },
       [f.carthago]: {
         id: f.carthago,
@@ -125,6 +129,8 @@ export function buildFixture(seed = 1): GameState {
         fortified: 1,
         fellOn: null,
         sackedOn: null,
+        buildings: [],
+        construction: null,
       },
       [f.syracusae]: {
         id: f.syracusae,
@@ -140,6 +146,8 @@ export function buildFixture(seed = 1): GameState {
         fortified: 1,
         fellOn: null,
         sackedOn: null,
+        buildings: [],
+        construction: null,
       },
     },
     armies: {

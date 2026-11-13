@@ -5,6 +5,7 @@ import { distance } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import { endOverlongMarches, fates, movements, retreats, storms, type Context } from './armies.ts';
 import { recruitment } from './budget.ts';
+import { construction } from './build.ts';
 import { minorOrders } from './minor.ts';
 import { createRouter } from './routes.ts';
 import { stances } from './stance.ts';
@@ -37,6 +38,7 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
   };
   if (record.kind === 'minor') return [...stances(context), ...minorOrders(context)];
   const muster = musterCity(context);
+  const recruits = recruitment(state, faction, muster);
   return [
     ...stances(context),
     ...endOverlongMarches(context),
@@ -44,7 +46,8 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
     ...fates(context),
     ...storms(context),
     ...movements(context, muster),
-    ...recruitment(state, faction, muster),
+    ...recruits,
+    ...construction(state, faction, recruits.length > 0),
     ...warDeclaration(context),
   ];
 }
