@@ -93,7 +93,8 @@ test.describe('the panels', () => {
 
     const target = view.city('mediolanum');
     await page.mouse.click(target.x, target.y, { button: 'right' });
-    await expect(page.getByTestId('orders-waiting')).toHaveText(
+    await expect(page.getByTestId('orders-waiting')).toHaveAttribute(
+      'title',
       '1 army has orders for the next day',
     );
     await resume(page);

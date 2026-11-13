@@ -70,7 +70,10 @@
   {/if}
   <TimeControls {view} controls={actions} />
   {#if waiting}
-    <span class="muted" data-testid="orders-waiting">{waiting}</span>
+    <span class="waiting" data-testid="orders-waiting" title={waiting.full}>
+      <span class="muted">Orders for</span>
+      <span>{waiting.short}</span>
+    </span>
   {/if}
   <span class="end">
     <button type="button" aria-expanded={overview} aria-controls="overview" onclick={toggleOverview}
@@ -87,6 +90,14 @@
     gap: 4px 14px;
     align-items: center;
     padding: 5px 12px;
+  }
+
+  .waiting {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap;
   }
 
   /* The Game menu opens leftward from the bar's right edge, so it stays on the page. */

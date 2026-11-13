@@ -1,6 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import {
+  camera,
+  cityPoint,
   dropSave,
   openGame,
   pause,
@@ -62,6 +64,9 @@ async function barItems(page: Page): Promise<Box[]> {
     await box('the date', bar.getByTestId('time-controls-day')),
     await box('Resume', bar.getByRole('button', { name: 'Resume' })),
     await box('Speed 3', bar.getByRole('button', { name: 'Speed 3', exact: true })),
+    ...((await bar.getByTestId('orders-waiting').count())
+      ? [await box('the orders waiting', bar.getByTestId('orders-waiting'))]
+      : []),
     await box('Overview', bar.getByRole('button', { name: 'Overview' })),
     await box('Game', bar.getByRole('button', { name: 'Game', exact: true })),
   ];
@@ -90,10 +95,22 @@ for (const width of [1024, 1280, 1600]) {
   test.describe(`the top bar at ${width} px`, () => {
     test.use({ viewport: { width, height: 768 } });
 
-    test('keeps one row with two stores run out, and says so on each', async ({ page }) => {
+    test('keeps one row with two stores run out and an order waiting, and says so on each', async ({
+      page,
+    }) => {
       await openGame(page);
       await load(page, storesRunOut());
+      const view = camera(page);
+      const banner = view.banner(cityPoint('roma'));
+      await page.mouse.click(banner.x, banner.y);
+      await page.getByTestId('army-panel').waitFor();
+      const capua = view.city('capua');
+      await page.mouse.click(capua.x, capua.y, { button: 'right' });
       const bar = page.getByTestId('top-bar');
+      await expect(bar.getByTestId('orders-waiting')).toHaveAttribute(
+        'title',
+        '1 army has orders for the next day',
+      );
       for (const store of ['gold', 'food']) {
         await expect(bar.getByTestId(`store-${store}-note`)).toBeVisible();
       }

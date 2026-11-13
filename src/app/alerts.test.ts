@@ -625,10 +625,50 @@ describe('weakSiegeNews', () => {
         'siegeBled',
         expect.any(Number),
         expect.stringMatching(
-          /^Sallies from Syracusae have killed a third of your besiegers: \d+ of 540 men are left$/,
+          /^Sallies from Syracusae have killed a third of your besiegers: \d+ men lost, \d+ left$/,
         ),
       ],
     ]);
+  });
+
+  it('counts an army that leaves the siege as no loss to the sallies', () => {
+    const state = buildFixture();
+    atWar(state, f.rome, f.syracusaeFaction);
+    const roman = state.armies[f.romanArmy];
+    const syracusae = state.cities[f.syracusae];
+    if (!roman || !syracusae) throw new Error('fixture changed');
+    roman.activity = { kind: 'idle', position: { ...syracusae.position } };
+    for (const id of roman.formations) {
+      const formation = state.formations[id];
+      if (formation) formation.men = 300;
+    }
+    const first = tick(state, [], world).state;
+    const siege = Object.values(first.sieges)[0];
+    const army = first.armies[f.romanArmy];
+    if (!siege || !army) throw new Error('no siege began');
+    // A second Roman army of the same men stands in the siege, and the next day marches off.
+    const both = structuredClone(first);
+    const second = {
+      ...structuredClone(army),
+      id: 'army-2' as ArmyId,
+      formations: [] as FormationId[],
+    };
+    for (const id of army.formations) {
+      const formation = both.formations[id];
+      if (!formation) continue;
+      const copy = { ...formation, id: `${id}-2` as FormationId, army: second.id };
+      both.formations[copy.id] = copy;
+      second.formations.push(copy.id);
+    }
+    both.armies[second.id] = second;
+    both.sieges[siege.id] = { ...siege, besiegers: [army.id, second.id] };
+    const told = weakSiegeNews(first, both, new Map());
+    expect(ofKind(told.alerts, 'siegeTooWeak')).toHaveLength(1);
+    const after = structuredClone(both);
+    after.sieges[siege.id] = { ...siege, besiegers: [army.id] };
+    const gone = after.armies[second.id];
+    if (gone) gone.activity = { kind: 'idle', position: { x: 0, y: 0 } };
+    expect(weakSiegeNews(both, after, told.watched).alerts).toEqual([]);
   });
 
   it('says nothing of a siege strong enough to cut the food', () => {

@@ -40,7 +40,7 @@ import {
   menOf,
 } from '../sim/systems/economy.ts';
 import { stormOdds } from '../sim/ai/situation.ts';
-import { BLOCKADE_ODDS } from '../sim/systems/sieges.ts';
+import { BLOCKADE_ODDS, defendersAt } from '../sim/systems/sieges.ts';
 import { areAtWar } from '../sim/wars.ts';
 import { distance } from '../sim/world/find-path.ts';
 
@@ -278,14 +278,17 @@ export function whyNotBesieging(
 export function ordersWaitingText(
   pending: readonly Order[],
   player: FactionId,
-): string | undefined {
+): { readonly short: string; readonly full: string } | undefined {
   const armies = new Set(
     pending.flatMap((order) => (order.faction === player && 'army' in order ? [order.army] : [])),
   );
   if (armies.size === 0) return undefined;
   return armies.size === 1
-    ? '1 army has orders for the next day'
-    : `${armies.size} armies have orders for the next day`;
+    ? { short: '1 army', full: '1 army has orders for the next day' }
+    : {
+        short: `${armies.size} armies`,
+        full: `${armies.size} armies have orders for the next day`,
+      };
 }
 
 /** What a click on a row selects, and where it centres the map. */
@@ -538,6 +541,9 @@ export function stormText(state: State, siege: DeepReadonly<Siege>): string | un
     return army?.owner === state.player ? [army] : [];
   });
   if (stormers.length === 0) return undefined;
+  if (defendersAt(state, city)) {
+    return `No storm while an army of ${factionName(state, city.owner)} defends ${city.name} in the field. Beat it first.`;
+  }
   const { chance, loss, men } = stormOdds(state, city, stormers);
   const percent = Math.round(chance * 100);
   const odds =

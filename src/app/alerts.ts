@@ -255,9 +255,11 @@ export function alertsOfDay(
 
 /** A siege of the player's that is too weak to cut the food, from the day it was told of. */
 export interface WeakSiege {
-  /** The besiegers' men on that day. */
-  readonly men: number;
-  /** Whether the player has been told that sallies killed a third of them. */
+  /** Each besieging army's men on the day before, so a loss is counted only while it stays. */
+  readonly men: ReadonlyMap<ArmyId, number>;
+  /** The men the besiegers lost while in the siege since it was told of. */
+  readonly killed: number;
+  /** Whether the player has been told that the sallies killed `BLED_SHARE` of them. */
   readonly bled: boolean;
 }
 
@@ -267,8 +269,10 @@ export const BLED_SHARE = 1 / 3;
 /**
  * The news of the player's sieges too weak to cut the food (besiegers fewer than
  * `BLOCKADE_ODDS` times the garrison): one alert on the day a siege is weak, and one
- * when the sallies have killed `BLED_SHARE` of its men since. `watched` is what was
- * told before, which the page keeps, and the result gives it for the next day.
+ * once the besiegers have lost `BLED_SHARE` of their men while in it. An army that
+ * leaves takes its men with it and counts as no loss, and one that joins adds its own.
+ * `watched` is what was told before, which the page keeps, and the result gives it for
+ * the next day.
  */
 export function weakSiegeNews(
   before: State,
@@ -282,8 +286,9 @@ export function weakSiegeNews(
     const city = after.cities[siege.city];
     const armies = siege.besiegers.flatMap((id) => after.armies[id] ?? []);
     if (!city || !armies.some((army) => army.owner === player)) continue;
-    const men = armies.reduce((sum, army) => sum + menOf(after, army), 0);
-    if (men >= BLOCKADE_ODDS * city.garrison) continue;
+    const men = new Map(armies.map((army) => [army.id, menOf(after, army)] as const));
+    const total = [...men.values()].reduce((sum, n) => sum + n, 0);
+    if (total >= BLOCKADE_ODDS * city.garrison) continue;
     const focus = {
       at: city.position,
       select: { kind: 'province', province: city.province },
@@ -294,23 +299,28 @@ export function weakSiegeNews(
         kind: 'siegeTooWeak',
         day: before.day,
         tone: 'bad',
-        text: `Your siege of ${city.name} is too weak to starve it: ${whole(men)} men against a garrison of ${whole(city.garrison)}, whose sallies kill besiegers each day`,
+        text: `Your siege of ${city.name} is too weak to starve it: ${whole(total)} men against a garrison of ${whole(city.garrison)}, whose sallies kill besiegers each day`,
         focus,
       });
-      next.set(siege.id, { men, bled: false });
+      next.set(siege.id, { men, killed: 0, bled: false });
       continue;
     }
-    const bled = !was.bled && men <= was.men * (1 - BLED_SHARE);
+    let killed = was.killed;
+    for (const [id, now] of men) {
+      const had = was.men.get(id);
+      if (had !== undefined) killed += Math.max(0, had - now);
+    }
+    const bled = !was.bled && killed >= BLED_SHARE * (total + killed);
     if (bled) {
       alerts.push({
         kind: 'siegeBled',
         day: before.day,
         tone: 'bad',
-        text: `Sallies from ${city.name} have killed a third of your besiegers: ${whole(men)} of ${whole(was.men)} men are left`,
+        text: `Sallies from ${city.name} have killed a third of your besiegers: ${whole(killed)} men lost, ${whole(total)} left`,
         focus,
       });
     }
-    next.set(siege.id, { men: was.men, bled: was.bled || bled });
+    next.set(siege.id, { men, killed, bled: was.bled || bled });
   }
   return { alerts, watched: next };
 }

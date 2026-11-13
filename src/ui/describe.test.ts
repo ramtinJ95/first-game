@@ -202,12 +202,14 @@ describe('ordersWaitingText', () => {
   const recruit: Order = { kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' };
 
   it('counts the armies that the waiting orders are for', () => {
-    expect(ordersWaitingText([army('army-1'), army('army-1'), recruit], f.rome)).toBe(
-      '1 army has orders for the next day',
-    );
-    expect(ordersWaitingText([army('army-1'), army('army-2')], f.rome)).toBe(
-      '2 armies have orders for the next day',
-    );
+    expect(ordersWaitingText([army('army-1'), army('army-1'), recruit], f.rome)).toEqual({
+      short: '1 army',
+      full: '1 army has orders for the next day',
+    });
+    expect(ordersWaitingText([army('army-1'), army('army-2')], f.rome)).toEqual({
+      short: '2 armies',
+      full: '2 armies have orders for the next day',
+    });
   });
 
   it('says nothing when no waiting order is for one of your armies', () => {
@@ -432,6 +434,26 @@ describe('weakSiegeText', () => {
   it('says nothing of a siege strong enough to cut the food', () => {
     const { state, siege } = siegeOfSyracusae(3000);
     expect(weakSiegeText(state, sightOf(state, world, f.rome), siege)).toBeUndefined();
+  });
+
+  it('promises no storm while a field army of the city defends it, as the storm order refuses', () => {
+    const { state, siege } = siegeOfSyracusae(6000);
+    const copy = structuredClone(state) as GameState;
+    const garrison = copy.armies[f.punicArmy];
+    const syracusae = copy.cities[f.syracusae];
+    if (!garrison || !syracusae) throw new Error('fixture changed');
+    garrison.owner = f.syracusaeFaction;
+    garrison.activity = { kind: 'idle', position: { ...syracusae.position } };
+    expect(stormText(copy, siege)).toBe(
+      'No storm while an army of Syracusae defends Syracusae in the field. Beat it first.',
+    );
+    expect(
+      executeOrder(
+        structuredClone(copy),
+        { kind: 'storm', faction: f.rome, city: f.syracusae },
+        world,
+      ),
+    ).toBeDefined();
   });
 
   it('gives the odds of a storm as often as storms played on many days take the city, and what one costs', () => {
