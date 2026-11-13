@@ -14,6 +14,7 @@ import {
   resume,
   rome,
   startGame,
+  untilDrawn,
 } from '../../../e2e/support.ts';
 import type { CityId } from '../../../src/sim/ids.ts';
 import type { Day } from '../../../src/sim/state/day.ts';
@@ -41,11 +42,7 @@ async function load(page: Page, state: GameState) {
     .getByTestId('time-controls-day')
     .and(page.locator(`[data-day="${state.day}"]`))
     .waitFor();
-  // The day shows before the map has drawn the loaded state, and a click picks what the
-  // map last drew. The page's draw and this wait can run in either order within a frame,
-  // so wait two.
-  await nextFrame(page);
-  await nextFrame(page);
+  await untilDrawn(page);
 }
 
 async function start(page: Page, viewport: { width: number; height: number }) {

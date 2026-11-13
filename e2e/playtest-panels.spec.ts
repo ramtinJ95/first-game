@@ -17,6 +17,7 @@ import {
   rome,
   startGame,
   untilDay,
+  untilDrawn,
 } from './support.ts';
 
 /** A click picks among the banners last drawn, so this waits for a frame of the loaded day. */
@@ -26,10 +27,7 @@ async function load(page: Page, state: GameState) {
     'data-day',
     String(state.day),
   );
-  await page.evaluate(
-    () =>
-      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
-  );
+  await untilDrawn(page);
 }
 
 async function clickCity(page: Page, id: string) {

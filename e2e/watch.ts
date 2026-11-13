@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import type { GameState } from '../src/sim/state/game-state.ts';
-import { dropSave } from './support.ts';
+import { dropSave, untilDrawn } from './support.ts';
 
 /**
  * Drops a save on the paused page and waits until the page shows its day and has drawn
@@ -12,10 +12,7 @@ export async function loadSave(page: Page, state: GameState) {
     .getByTestId('time-controls-day')
     .and(page.locator(`[data-day="${state.day}"]`))
     .waitFor();
-  await page.evaluate(
-    () =>
-      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
-  );
+  await untilDrawn(page);
 }
 
 /** Waits until the page shows the day, then `ms` more. */

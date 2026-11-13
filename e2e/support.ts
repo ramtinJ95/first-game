@@ -66,6 +66,27 @@ export async function openGame(
   await page.getByTestId('top-bar').waitFor({ state: 'visible' });
 }
 
+/**
+ * Waits until the map has drawn a frame since this call. Call it once the page shows
+ * the state the test wants, such as a loaded day: the clock holds that state by then,
+ * so the next frame drawn shows it, and a click picks what the map last drew. Counting
+ * animation frames is not enough, because a frame is held while the GPU still draws the
+ * one before.
+ */
+export async function untilDrawn(page: Page) {
+  const canvas = page.locator('canvas[data-renderer]');
+  const before = Number((await canvas.getAttribute('data-drawn-frames')) ?? 0);
+  await page.waitForFunction(
+    (count) =>
+      Number(
+        document.querySelector<HTMLCanvasElement>('canvas[data-renderer]')?.dataset[
+          'drawnFrames'
+        ] ?? 0,
+      ) > count,
+    before,
+  );
+}
+
 /** A new game like the one `openGame` starts, with Rome as the player. */
 export function startGame(): GameState {
   return newGame(map, { seed: 1, player: 'rome' });

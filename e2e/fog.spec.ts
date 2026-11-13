@@ -31,6 +31,7 @@ import {
   playDays,
   resume,
   untilDay,
+  untilDrawn,
 } from './support.ts';
 
 async function load(page: Page, state: GameState) {
@@ -39,10 +40,7 @@ async function load(page: Page, state: GameState) {
     'data-day',
     String(state.day),
   );
-  await page.evaluate(
-    () =>
-      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
-  );
+  await untilDrawn(page);
 }
 
 /** The name of the city whose province lies under a screen point at the widest zoom. */

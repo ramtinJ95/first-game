@@ -430,6 +430,7 @@ export async function createRenderer({
   let strokedAt = 0;
   let shown: DeepReadonly<GameState> | undefined;
   let laidOut: DeepReadonly<GameState> | undefined;
+  let drawnFrames = 0;
   let highlighted: { selection: Pick | undefined; scale: number } | undefined;
   let armies: DrawnArmy[] = [];
   let drawnCities: DrawnCity[] = [];
@@ -1131,6 +1132,9 @@ export async function createRenderer({
       app.render();
       if (waitForGpu) finish();
       else pacer.rendered();
+      // Tests and captures wait for this count to grow after a load: the next frame drawn
+      // shows the loaded state, and a click picks what the map last drew.
+      canvas.dataset['drawnFrames'] = String(++drawnFrames);
       return true;
     },
     focus(point) {

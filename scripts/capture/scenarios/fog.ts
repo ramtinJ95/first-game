@@ -10,6 +10,7 @@ import {
   pause,
   resume,
   rome,
+  untilDrawn,
 } from '../../../e2e/support.ts';
 import { fitCamera, mapToScreen, panBy, wheelFactor, zoomAt } from '../../../src/render/camera.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
@@ -38,7 +39,7 @@ async function open(page: Page, query: string, state: GameState) {
     .getByTestId('time-controls-day')
     .and(page.locator(`[data-day="${state.day}"]`))
     .waitFor({ state: 'attached' });
-  await frames(page);
+  await untilDrawn(page);
 }
 
 /** Points inside the land of a power's provinces, away from their cities and names. */

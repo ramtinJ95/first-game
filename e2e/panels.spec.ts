@@ -18,6 +18,7 @@ import {
   rome,
   setRich,
   startGame,
+  untilDrawn,
 } from './support.ts';
 
 const mediolanum = 'mediolanum' as CityId;
@@ -32,10 +33,7 @@ async function load(page: Page, state: GameState) {
     'data-day',
     String(state.day),
   );
-  await page.evaluate(
-    () =>
-      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
-  );
+  await untilDrawn(page);
 }
 
 /** Rome sees foreign armies only in its sight, so the Punic army visits Capua. */
