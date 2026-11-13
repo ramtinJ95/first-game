@@ -213,7 +213,7 @@ function play(seed: number): Seed {
  * it removed, which only a sally does.
  */
 function systemsCounting(sallies: { men: number }): readonly System[] {
-  const counted: System = (state, world) => {
+  const counted: System = (state) => {
     const menOf = (id: string) =>
       (state.armies[id as never]?.formations ?? []).reduce(
         (sum, f) => sum + (state.formations[f]?.men ?? 0),
@@ -224,7 +224,7 @@ function systemsCounting(sallies: { men: number }): readonly System[] {
         .filter((army) => army.activity.kind === 'idle' || army.activity.kind === 'besieging')
         .map((army) => [army.id as string, menOf(army.id)]),
     );
-    sieges(state, world);
+    sieges(state);
     for (const [id, men] of before) {
       const army = state.armies[id as never];
       if (!army) sallies.men += men;

@@ -97,7 +97,9 @@ describe('a siege the attack can hold', () => {
   }
 
   test('a siege too weak to blockade waits for an army that arrives before sallies wear it down, and the two blockade the city', () => {
-    let { state, target, besiegers, coming } = waiting();
+    const start = waiting();
+    const { target, besiegers, coming } = start;
+    let { state } = start;
     expect(state.armies[besiegers]?.activity.kind).toBe('besieging');
     for (let day = 0; day < 5; day++) {
       const orders = decideOrders(state, world, rome);
@@ -119,6 +121,27 @@ describe('a siege the attack can hold', () => {
     expect(decideOrders(state, world, rome)).not.toContainEqual(
       expect.objectContaining({ kind: 'moveArmy', army: besiegers }),
     );
+    expectConsistent(state);
+  });
+});
+
+describe('the strength a war holds back', () => {
+  test("an enemy's garrison, which never leaves its walls, holds back none of a power's strength", () => {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    const roma = cityOf(state, rome);
+    const [enemy] = Object.values(state.cities)
+      .filter((city) => state.factions[city.owner]?.kind === 'minor')
+      .sort((a, b) => distance(a.position, roma.position) - distance(b.position, roma.position));
+    if (!enemy) throw new Error('no minor city');
+    enemy.garrison = 9000;
+    expect(
+      executeOrder(state, { kind: 'declareWar', faction: rome, against: enemy.owner }, world),
+    ).toBeUndefined();
+    addArmy(state, rome, 6000, roma.position);
+    const declared = decideOrders(state, world, rome).flatMap((order) =>
+      order.kind === 'declareWar' ? [state.factions[order.against]?.kind] : [],
+    );
+    expect(declared).toEqual(['minor']);
     expectConsistent(state);
   });
 });
