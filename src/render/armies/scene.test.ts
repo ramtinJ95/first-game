@@ -10,7 +10,8 @@ import type { Sight } from '../../sim/sight.ts';
 import type { Formation } from '../../sim/state/formation.ts';
 import type { GameState } from '../../sim/state/game-state.ts';
 import type { MapPoint } from '../../sim/state/map-point.ts';
-import { mapToScreen } from '../camera.ts';
+import { mapToScreen, screenToMap } from '../camera.ts';
+import { Land } from '../terrain/marks.ts';
 import type { Box } from '../labels.ts';
 import { BURN_DAYS, buildScene, FIGURE_SCALE, type SceneInput } from './scene.ts';
 
@@ -240,6 +241,39 @@ describe('buildScene', () => {
     const still = figures(buildScene(input(state, state, { camera, land: inland })));
     const free = figures(buildScene(input(state, state, { camera })));
     expect(still.map((s) => [s.x, s.y])).toEqual(free.map((s) => [s.x, s.y]));
+  });
+
+  test('an army at rest on the Dalmatian shore keeps every figure on the land of the map', () => {
+    const land = new Land(fixtureWorld().map);
+    const state = buildFixture();
+    const army = state.armies[FIXTURE.romanArmy];
+    if (!army) throw new Error('fixture');
+    for (const id of army.formations) Reflect.deleteProperty(state.formations, id);
+    army.formations = (
+      [
+        ['spearmen', 1200],
+        ['swordsmen', 1000],
+        ['archers', 500],
+        ['heavyCavalry', 400],
+      ] as const
+    ).map(([troop, men]) => {
+      const id = `formation-coast-${troop}` as Formation['id'];
+      state.formations[id] = { id, army: army.id, troop, men, morale: 1 };
+      return id;
+    });
+    const at = { x: 2790, y: 2144 };
+    army.activity = { kind: 'idle', position: at };
+    const camera = { centre: at, scale: 4 };
+    const onLand = (p: MapPoint) => {
+      const point = screenToMap(camera, viewport, p);
+      return land.open(point.x, point.y);
+    };
+    const scene = buildScene(input(state, state, { camera, land: onLand }));
+    const figures = scene.sprites.filter((s) => s.army === FIXTURE.romanArmy);
+    expect(figures.length).toBeGreaterThan(40);
+    expect(figures.filter((s) => !onLand(s)).map((s) => screenToMap(camera, viewport, s))).toEqual(
+      [],
+    );
   });
 
   test('a battle fought at a coast draws both lines on land', () => {

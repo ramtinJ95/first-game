@@ -1466,12 +1466,11 @@ class LineLayout implements Layout {
     });
     // A battle's lines are kept on land by its anchor, which both sides share.
     if (mode.kind === 'line' && ctx.input.land) {
+      // Every figure's own place, its seeded step included, so none stands in the sea.
       const samples: MapPoint[] = [this.point(0.75, 0.15), this.point(0.75, -0.35)];
       for (const { block, at } of this.blocks.values()) {
-        for (const along of [at.along, at.along - block.depth / 2, at.along - block.depth]) {
-          for (const across of [-0.5, 0, 0.5]) {
-            samples.push(this.point(along, at.across + across * block.width));
-          }
+        for (const place of block.places) {
+          samples.push(this.point(at.along + place.along, at.across + place.across));
         }
       }
       const extra = landShift(ctx.input.land, samples, ctx.h);
