@@ -31,11 +31,11 @@ interface BuildingRow {
  *   new cities to work sooner.
  */
 export const BUILDINGS = {
-  forum: { name: 'Forum', gold: 6000, days: 60, needs: { people: 20_000 }, goldShare: 0.5 },
+  forum: { name: 'Forum', gold: 6500, days: 60, needs: { people: 20_000 }, goldShare: 0.5 },
   canals: { name: 'Canals', gold: 4000, days: 45, needs: { people: 0 }, food: 5 },
   barracks: {
     name: 'Barracks',
-    gold: 5000,
+    gold: 7000,
     days: 40,
     needs: { people: 10_000 },
     levyShare: 1.5,
@@ -55,7 +55,7 @@ export const BUILDINGS = {
     days: 30,
     needs: { people: 0 },
     unrestPace: 3,
-    reachKm: 300,
+    reachKm: 400,
   },
 } as const satisfies Record<BuildingKind, BuildingRow & { readonly [effect: string]: unknown }>;
 
