@@ -20,13 +20,18 @@ export const OUTPUT_PER_PERSON: Readonly<Stores> = {
 export const FOOD_PER_PERSON = 0.0004;
 /** What one man under arms costs his owner each day. */
 export const UPKEEP_PER_MAN = { gold: 0.01, food: 0.006 } as const;
+/**
+ * A faction's treasury holds this many days of the gold its people pay at full. More is
+ * spent by the court, so an idle realm does not pile gold up without end.
+ */
+export const TREASURY_DAYS = 240;
 /** A faction's granaries hold this many days of what its people and its men eat. More spoils. */
 export const GRANARY_DAYS = 90;
 /**
  * A faction can call up at most this share of its people, counting the men already under
  * arms and in training. The rest stay on the land.
  */
-export const MANPOWER_SHARE = 0.04;
+export const MANPOWER_SHARE = 0.05;
 /**
  * The share of its output that a city produces while more than UNREST_DAYS of unrest
  * are left. It rises evenly to 1 over the last UNREST_DAYS.
@@ -38,6 +43,13 @@ export const UNREST_OUTPUT = 0.25;
  * formation deserts to nothing.
  */
 export const DESERTION = 0.01;
+/**
+ * A realm of more than ADMIN_CITIES cities governs each less well: each of its cities
+ * yields (ADMIN_CITIES / cities) ** ADMIN_EXPONENT of its gold and manpower, so a
+ * realm's income grows ever more slowly with its size.
+ */
+export const ADMIN_CITIES = 8;
+export const ADMIN_EXPONENT = 0.75;
 /** A recruit joins an idle army of its owner this close to the city, in kilometres. */
 export const RALLY_DISTANCE = 10;
 
@@ -53,7 +65,7 @@ export function economy(state: GameState): void {
     const stores = state.factions[id]?.stores;
     const limit = limits.get(id);
     if (!stores || !limit) continue;
-    stores.gold += balance.gold;
+    stores.gold = fill(stores.gold, balance.gold, limit.gold);
     stores.food = fill(stores.food, balance.food, limit.food);
     stores.manpower = fill(stores.manpower, balance.manpower, limit.manpower);
   }
@@ -67,18 +79,16 @@ function fill(store: number, change: number, limit: number): number {
 }
 
 /**
- * The most food and manpower each faction can hold: GRANARY_DAYS of what its people
- * and its men eat, and MANPOWER_SHARE of its people less its men under arms and in
+ * The most gold, food, and manpower each faction can hold: TREASURY_DAYS of the gold its
+ * people pay at full, GRANARY_DAYS of what its people and its men eat, and MANPOWER_SHARE of its people less its men under arms and in
  * training, so a large army leaves few men to call up.
  */
-export function limitsOf(
-  state: DeepReadonly<GameState>,
-): Map<FactionId, { food: number; manpower: number }> {
-  const limits = new Map<FactionId, { food: number; manpower: number }>();
+export function limitsOf(state: DeepReadonly<GameState>): Map<FactionId, Stores> {
+  const limits = new Map<FactionId, Stores>();
   const of = (faction: FactionId) => {
     let limit = limits.get(faction);
     if (!limit) {
-      limit = { food: 0, manpower: 0 };
+      limit = { gold: 0, food: 0, manpower: 0 };
       limits.set(faction, limit);
     }
     return limit;
@@ -86,6 +96,7 @@ export function limitsOf(
   for (const faction of Object.keys(state.factions) as FactionId[]) of(faction);
   for (const city of Object.values(state.cities)) {
     const limit = of(city.owner);
+    limit.gold += TREASURY_DAYS * city.population * OUTPUT_PER_PERSON.gold;
     limit.food += GRANARY_DAYS * city.population * FOOD_PER_PERSON;
     limit.manpower += MANPOWER_SHARE * city.population;
     for (const recruit of city.recruits) limit.manpower -= TROOPS[recruit.troop].recruit.men;
@@ -111,12 +122,14 @@ export function dailyBalances(state: DeepReadonly<GameState>): Map<FactionId, St
     return balance;
   };
   for (const faction of Object.keys(state.factions) as FactionId[]) of(faction);
+  const governed = adminShares(state);
   for (const city of Object.values(state.cities)) {
     const balance = of(city.owner);
     const people = city.population * outputShare(city);
-    balance.gold += people * OUTPUT_PER_PERSON.gold * goldShare(state, city);
+    const admin = governed.get(city.owner) ?? 1;
+    balance.gold += people * OUTPUT_PER_PERSON.gold * goldShare(state, city) * admin;
     balance.food += people * OUTPUT_PER_PERSON.food - city.population * FOOD_PER_PERSON;
-    balance.manpower += people * OUTPUT_PER_PERSON.manpower;
+    balance.manpower += people * OUTPUT_PER_PERSON.manpower * admin;
   }
   for (const army of Object.values(state.armies)) {
     const balance = of(army.owner);
@@ -125,6 +138,30 @@ export function dailyBalances(state: DeepReadonly<GameState>): Map<FactionId, St
     balance.food -= men * UPKEEP_PER_MAN.food;
   }
   return balances;
+}
+
+/** The share of its gold and manpower each city of a faction yields for the realm's size. */
+function adminShares(state: DeepReadonly<GameState>): Map<FactionId, number> {
+  const cities = new Map<FactionId, number>();
+  for (const city of Object.values(state.cities)) {
+    cities.set(city.owner, (cities.get(city.owner) ?? 0) + 1);
+  }
+  const shares = new Map<FactionId, number>();
+  for (const [faction, count] of cities) shares.set(faction, adminShare(count));
+  return shares;
+}
+
+/** The share of its gold and manpower each city yields in a realm of this many cities. */
+function adminShare(cities: number): number {
+  return Math.min(1, ADMIN_CITIES / cities) ** ADMIN_EXPONENT;
+}
+
+/**
+ * The share of its gold and manpower each city of the faction yields for the size of its
+ * realm, for a panel that shows one city's output.
+ */
+export function adminShareOf(state: DeepReadonly<GameState>, faction: FactionId): number {
+  return adminShare(Object.values(state.cities).filter((city) => city.owner === faction).length);
 }
 
 function goldShare(state: DeepReadonly<GameState>, city: DeepReadonly<City>): number {

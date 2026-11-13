@@ -217,6 +217,7 @@ describe('a day of siege', () => {
       name: 'Numidia',
       kind: 'greatPower',
       stores: { gold: 1000, food: 1000, manpower: 0 },
+      league: null,
       defeatedOn: null,
     };
     executeOrder(state, { kind: 'declareWar', faction: numidia, against: FIXTURE.rome }, world);
@@ -421,6 +422,7 @@ describe('storming', () => {
       name: 'Numidia',
       kind: 'greatPower',
       stores: { gold: 1000, food: 1000, manpower: 0 },
+      league: null,
       defeatedOn: null,
     };
     executeOrder(state, { kind: 'declareWar', faction: numidia, against: FIXTURE.rome }, world);

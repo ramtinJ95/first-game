@@ -4,15 +4,20 @@ import * as v from 'valibot';
 import { describe, expect, test } from 'vitest';
 import type { CityId, FactionId } from './ids.ts';
 import { parseMap, POWERS, type PowerId } from './map.ts';
-import { newGame, STARTING_GENERAL_SKILL, STARTING_STORES } from './new-game.ts';
+import {
+  FRONTIER_KM,
+  MINOR_KINDS,
+  newGame,
+  STARTING_GENERAL_SKILL,
+  STARTING_STORES,
+} from './new-game.ts';
 import type { Order } from './orders/orders.ts';
 import { expectConsistent } from './references.ts';
-import { seedRng } from './rng.ts';
 import { loadGame, saveGame } from './save.ts';
 import { GameStateSchema, type GameState } from './state/game-state.ts';
 import { UNREST_DAYS } from './cities.ts';
 import { dailyBalances, menOf, UPKEEP_PER_MAN } from './systems/economy.ts';
-import { CITY_DEFENCES } from './systems/sieges.ts';
+import { fullDefences } from './systems/sieges.ts';
 import { tick } from './tick.ts';
 import { TROOPS, type Troop } from './troops.ts';
 import { buildWorld } from './world/world.ts';
@@ -73,10 +78,9 @@ describe('newGame on the committed map', () => {
     expectConsistent(state);
   });
 
-  test('each great power has one idle army at its capital and minor factions have none', () => {
+  test('each great power has one idle army at its capital, and each minor with a standing army one at its city', () => {
     const state = start();
     const armies = Object.values(state.armies);
-    expect(armies).toHaveLength(POWERS.length);
     for (const power of POWERS) {
       const capital = map.provinces.find((p) => p.owner === power && p.capital);
       const own = armies.filter((army) => army.owner === power);
@@ -87,6 +91,13 @@ describe('newGame on the committed map', () => {
       });
       expect(own[0]?.formations.length).toBeGreaterThan(0);
       expect(own[0]?.generalSkill).toBe(STARTING_GENERAL_SKILL);
+    }
+    const minorArmies = armies.filter((army) => state.factions[army.owner]?.kind === 'minor');
+    expect(minorArmies.length).toBeGreaterThan(0);
+    for (const army of minorArmies) {
+      const city = Object.values(state.cities).find((c) => c.owner === army.owner);
+      expect(army.activity).toEqual({ kind: 'idle', position: city?.position });
+      expect(state.factions[army.owner]?.stores).toEqual(MINOR_KINDS.standingArmy.stores);
     }
     const troopsOf = (power: PowerId) =>
       armies
@@ -102,7 +113,10 @@ describe('newGame on the committed map', () => {
   test('the player is the chosen power and the generator is seeded from the seed', () => {
     const state = newGame(map, { seed: 99, player: 'persia' });
     expect(state.player).toBe('persia');
-    expect(state.rng).toBe(seedRng(99));
+    const fortified = (seed: number) =>
+      Object.values(newGame(map, { seed, player: 'persia' }).cities).map((c) => c.fortified);
+    expect(fortified(99)).toEqual(fortified(99));
+    expect(fortified(99)).not.toEqual(fortified(100));
     expect(state.day).toBe(1);
     expectConsistent(state);
   });
@@ -155,6 +169,8 @@ describe('newGame on the committed map', () => {
     const punic = Object.values(state.armies).find((army) => army.owner === 'carthage');
     if (!roman || !punic || roman.activity.kind !== 'idle') throw new Error('missing armies');
     punic.activity = { kind: 'idle', position: { ...roman.activity.position } };
+    roman.stance = 'skirmishAndWithdraw';
+    punic.stance = 'allOutAssault';
     let battleDays = 0;
     let siegeDays = 0;
     for (let day = 0; day < 365; day++) {
@@ -181,8 +197,20 @@ describe('the economy of the new game meets its tuning targets', () => {
 
   test('each faction starts with the stores of its kind and calm cities with no recruits', () => {
     const state = start();
+    const kinds = Object.values(MINOR_KINDS);
     for (const faction of Object.values(state.factions)) {
-      expect(faction.stores).toEqual(STARTING_STORES[faction.kind]);
+      const city = Object.values(state.cities).find((c) => c.owner === faction.id);
+      if (faction.kind === 'greatPower') {
+        expect(faction.stores).toEqual(STARTING_STORES.greatPower);
+        continue;
+      }
+      expect(kinds).toContainEqual(
+        expect.objectContaining({
+          stores: faction.stores,
+          population: city?.population,
+          fortified: city?.fortified,
+        }),
+      );
     }
     for (const city of Object.values(state.cities)) {
       expect(city).toMatchObject({ unrestDays: 0, recruits: [] });
@@ -190,12 +218,13 @@ describe('the economy of the new game meets its tuning targets', () => {
     expectConsistent(state);
   });
 
-  test('every city starts with the full walls, garrison, and food of its rank', () => {
+  test('every city starts with the full walls, garrison, and food of its rank and fortification', () => {
     const state = start();
     const ranks = { capital: 0, greatPowerCity: 0, minorCity: 0 };
     for (const city of Object.values(state.cities)) {
       ranks[city.rank] += 1;
-      expect(city).toMatchObject({ ...CITY_DEFENCES[city.rank], fellOn: null });
+      expect(city).toMatchObject({ ...fullDefences(city), fellOn: null });
+      if (city.rank !== 'minorCity') expect(city.fortified).toBe(1);
       expect(city.rank === 'minorCity').toBe(state.factions[city.owner]?.kind === 'minor');
     }
     expect(ranks.capital).toBe(POWERS.length);
@@ -214,7 +243,7 @@ describe('the economy of the new game meets its tuning targets', () => {
     expectConsistent(state);
   });
 
-  test('after a year without recruiting a great power has the gold for three formations and the men for one or two', () => {
+  test('after a year without recruiting a great power has the gold for three formations and the men for two', () => {
     let state = start();
     for (let day = 0; day < 365; day++) state = tick(state, [], world).state;
     for (const power of POWERS) {
@@ -222,20 +251,27 @@ describe('the economy of the new game meets its tuning targets', () => {
       if (!stores) throw new Error(`${power} is missing`);
       const { gold, men } = TROOPS.spearmen.recruit;
       expect(stores.gold / gold).toBeGreaterThanOrEqual(3);
-      expect(stores.manpower / men).toBeGreaterThanOrEqual(1);
-      expect(stores.manpower / men).toBeLessThan(2);
+      expect(stores.manpower / men).toBeGreaterThanOrEqual(2);
+      expect(stores.manpower / men).toBeLessThan(3);
     }
     const roma = state.cities['roma' as CityId]?.population ?? 0;
     expect(roma / 40_000).toBeCloseTo(1.02, 6);
     expectConsistent(state);
   });
 
-  test('a minor state can keep a small army, a formation takes 10 to 30 days, unrest 60 to 120', () => {
+  test('a minor state can keep a small army, a standing army lasts its stores more than 600 days, a formation takes 10 to 30 days, unrest 60 to 120', () => {
     const state = start();
     for (const faction of Object.values(state.factions)) {
       if (faction.kind !== 'minor') continue;
-      const gold = dailyBalances(state).get(faction.id)?.gold ?? 0;
-      expect(gold / UPKEEP_PER_MAN.gold).toBeGreaterThanOrEqual(400);
+      const balance = dailyBalances(state).get(faction.id);
+      const fielded = Object.values(state.armies).some((army) => army.owner === faction.id);
+      if (!fielded) {
+        expect((balance?.gold ?? 0) / UPKEEP_PER_MAN.gold).toBeGreaterThanOrEqual(400);
+        continue;
+      }
+      for (const store of ['gold', 'food'] as const) {
+        expect(faction.stores[store] / -(balance?.[store] ?? 0)).toBeGreaterThanOrEqual(600);
+      }
     }
     for (const troop of Object.keys(TROOPS) as Troop[]) {
       expect(TROOPS[troop].recruit.days).toBeGreaterThanOrEqual(10);
@@ -248,7 +284,7 @@ describe('the economy of the new game meets its tuning targets', () => {
 });
 
 describe('a power that raises every troop it can afford', () => {
-  test('waits on gold alone and on manpower alone, each at least a quarter as often as the other', () => {
+  test('waits on gold, runs short of food, and falls back to the men its land feeds', () => {
     const round: readonly Troop[] = [
       'spearmen',
       'archers',
@@ -261,23 +297,56 @@ describe('a power that raises every troop it can afford', () => {
     const rome = 'rome' as FactionId;
     let state = newGame(map, { seed: 1, player: 'rome' });
     let next = 0;
-    const waits = { gold: 0, manpower: 0 };
-    for (let day = 0; day < 2 * 365; day++) {
+    let waitedOnGold = 0;
+    let hungry = 0;
+    for (let day = 0; day < 3 * 365; day++) {
       const stores = state.factions[rome]?.stores;
       if (!stores) throw new Error('rome is missing');
       const troop = round[next % round.length] as Troop;
       const { gold, men } = TROOPS[troop].recruit;
       const orders: Order[] = [];
-      if (stores.gold < gold && stores.manpower >= men) waits.gold++;
-      else if (stores.manpower < men && stores.gold >= gold) waits.manpower++;
-      else if (stores.gold >= gold) {
+      if (stores.food < 0) hungry++;
+      if (stores.gold < gold) waitedOnGold++;
+      else if (stores.manpower >= men) {
         orders.push({ kind: 'recruit', faction: rome, city: 'roma' as CityId, troop });
         next++;
       }
       state = tick(state, orders, world).state;
     }
-    expect(waits.gold).toBeGreaterThanOrEqual(waits.manpower / 4);
-    expect(waits.manpower).toBeGreaterThanOrEqual(waits.gold / 4);
+    const men = Object.values(state.armies)
+      .filter((army) => army.owner === rome)
+      .reduce((sum, army) => sum + menOf(state, army), 0);
+    const landFeeds =
+      ((dailyBalances(state).get(rome)?.food ?? 0) + men * UPKEEP_PER_MAN.food) /
+      UPKEEP_PER_MAN.food;
+    expect(waitedOnGold).toBeGreaterThan(365);
+    expect(hungry).toBeGreaterThan(0);
+    expect(men).toBeLessThanOrEqual(1.1 * landFeeds);
     expectConsistent(state);
+  });
+});
+
+describe('minor cities far from every great power', () => {
+  test(`beyond FRONTIER_KM of every great capital, a minor is more often a standing army or rich and walled`, () => {
+    const capitals = map.provinces.filter((p) => p.owner !== 'independent' && p.capital);
+    const tally = { far: { strong: 0, all: 0 }, near: { strong: 0, all: 0 } };
+    for (let seed = 1; seed <= 10; seed++) {
+      const state = newGame(map, { seed, player: 'rome' });
+      for (const city of Object.values(state.cities)) {
+        if (city.rank !== 'minorCity') continue;
+        const km = Math.min(
+          ...capitals.map((c) =>
+            Math.hypot(c.city[0] - city.position.x, c.city[1] - city.position.y),
+          ),
+        );
+        const side = km > FRONTIER_KM ? tally.far : tally.near;
+        const fielded = Object.values(state.armies).some((army) => army.owner === city.owner);
+        side.all += 1;
+        if (fielded || city.fortified > 1) side.strong += 1;
+      }
+    }
+    expect(tally.far.all).toBeGreaterThan(50);
+    expect(tally.far.strong / tally.far.all).toBeGreaterThan(0.65);
+    expect(tally.near.strong / tally.near.all).toBeLessThan(0.55);
   });
 });

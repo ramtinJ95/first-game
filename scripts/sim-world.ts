@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util';
 import { decideAll } from '../src/sim/ai/decide.ts';
 import { createRouter } from '../src/sim/ai/routes.ts';
 import { canFight, enemiesOf, sorted } from '../src/sim/ai/situation.ts';
+import { GARRISON_ODDS } from '../src/sim/ai/thresholds.ts';
 import type { CityId, FactionId } from '../src/sim/ids.ts';
 import { parseMap, POWERS, type PowerId } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
@@ -63,6 +64,8 @@ interface Seed {
   /** For each army in each battle, how many times it changed its stance in that battle. */
   stanceChanges: number[];
   quiet: { power: PowerId; days: number; from: number };
+  /** The same, counting only days on which its idle armies together could take an enemy city they have a route to. */
+  quietStrong: { power: PowerId; days: number; from: number };
   conquests: Partial<Record<PowerId, Conquest>>;
 }
 
@@ -82,6 +85,8 @@ function play(seed: number): Seed {
   const conquests: Partial<Record<PowerId, Conquest>> = {};
   const quietRun = new Map<PowerId, { days: number; from: number }>();
   let quiet: Seed['quiet'] = { power: 'rome', days: 0, from: 0 };
+  const strongRun = new Map<PowerId, { days: number; from: number }>();
+  let quietStrong: Seed['quiet'] = { power: 'rome', days: 0, from: 0 };
   let sieges = 0;
   let restarts = 0;
   let repeatedMarches = 0;
@@ -199,6 +204,13 @@ function play(seed: number): Seed {
           : { days: 0, from: day };
       quietRun.set(power, now);
       if (now.days > quiet.days) quiet = { power, ...now };
+      const strong = strongRun.get(power) ?? { days: 0, from: day };
+      const strongNow =
+        now.days > 0 && couldTake(next, faction)
+          ? { days: strong.days + 1, from: strong.days === 0 ? day : strong.from }
+          : { days: 0, from: day };
+      strongRun.set(power, strongNow);
+      if (strongNow.days > quietStrong.days) quietStrong = { power, ...strongNow };
     }
     state = next;
   }
@@ -221,6 +233,7 @@ function play(seed: number): Seed {
     sallyMen: sallies.men,
     stanceChanges: [...stanceChanges.values()],
     quiet,
+    quietStrong,
     conquests,
   };
 }
@@ -271,6 +284,32 @@ function couldFight(state: GameState, faction: FactionId): boolean {
   );
 }
 
+/**
+ * Whether the faction's idle armies together have GARRISON_ODDS times the garrison of an
+ * enemy city that one of them has a route to, so the war is one it could fight.
+ */
+function couldTake(state: GameState, faction: FactionId): boolean {
+  const enemies = enemiesOf(state, faction);
+  const idle = sorted(state.armies).filter(
+    (army) => army.owner === faction && army.activity.kind === 'idle' && canFight(state, army),
+  );
+  const men = idle.reduce(
+    (sum, army) => sum + army.formations.reduce((m, f) => m + (state.formations[f]?.men ?? 0), 0),
+    0,
+  );
+  const router = createRouter(state, world, faction);
+  return sorted(state.cities).some(
+    (city) =>
+      enemies.has(city.owner) &&
+      men >= GARRISON_ODDS * city.garrison &&
+      idle.some(
+        (army) =>
+          army.activity.kind === 'idle' &&
+          router.routeTo(army.activity.position, city) !== undefined,
+      ),
+  );
+}
+
 const median = (xs: number[]) => {
   const s = [...xs].sort((a, b) => a - b);
   return s.length === 0 ? Number.NaN : (s[Math.floor((s.length - 1) / 2)] as number);
@@ -302,7 +341,7 @@ for (const g of games) {
       g.restarts,
       g.repeatedMarches,
       `${g.sallyArmies} (${g.sallyMen})`,
-      `${g.quiet.days} days, ${g.quiet.power} from day ${g.quiet.from}`,
+      `${g.quiet.days} days, ${g.quiet.power} from day ${g.quiet.from}; could take: ${g.quietStrong.days} days, ${g.quietStrong.power} from day ${g.quietStrong.from}`,
     ].join(' | ')} |`,
   );
 }
@@ -339,6 +378,9 @@ console.log(
 );
 console.log(
   `- Longest stretch a power at war had an idle army that could reach an enemy city, no army on the move, and gave no order: median ${median(games.map((g) => g.quiet.days))} days, longest ${Math.max(...games.map((g) => g.quiet.days))} days.`,
+);
+console.log(
+  `- The same, counting only days on which its idle armies together had the men to take an enemy city they had a route to: median ${median(games.map((g) => g.quietStrong.days))} days, longest ${Math.max(...games.map((g) => g.quietStrong.days))} days.`,
 );
 
 if (CONQUEST_SEEDS > 0) {

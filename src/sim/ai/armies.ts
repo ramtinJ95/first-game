@@ -5,7 +5,7 @@ import type { MapPoint } from '../state/map-point.ts';
 import { RALLY_DISTANCE } from '../systems/economy.ts';
 import { BLOCKADE_ODDS, defendersAt, SALLY_SHARE, SIEGE_DISTANCE } from '../systems/sieges.ts';
 import { MARCH_KM_PER_DAY, marchDays, MAX_MARCH_DAYS } from '../march.ts';
-import { distance } from '../world/find-path.ts';
+import { distance, surfaceAt } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import type { Router, Step } from './routes.ts';
 import {
@@ -165,7 +165,8 @@ function menOfArmy(state: State, army: ArmyView): number {
  * cities is within CAPITAL_GUARD_KM of it. Then armies relieve each besieged city
  * they are strong enough to relieve, and armies leave for the muster city from each
  * siege whose besiegers are too few to hold the blockade, before the garrison's sallies
- * wear them down, unless armies marching there bring it up to the blockade in time. The rest go on the offence, each target needing at least
+ * wear them down, unless armies marching there bring it up to the blockade in time. With
+ * no way to the muster city, they step out of the siege onto the land nearby. The rest go on the offence, each target needing at least
  * GARRISON_ODDS times its garrison: an army that marches on
  * a target it is still strong enough for keeps its course, and the others take the
  * cheapest such target by road and sea. Armies too weak alone form groups that can win
@@ -271,7 +272,7 @@ export function movements(context: Context, muster: CityView | undefined): Order
     const besiegers = siege.besiegers.flatMap((id) => state.armies[id] ?? []);
     if (!city || !besiegers.some((army) => army.owner === faction)) continue;
     const men = besiegers.reduce((sum, army) => sum + menOfArmy(state, army), 0);
-    if (men >= BLOCKADE_ODDS * city.garrison || !muster) continue;
+    if (men >= BLOCKADE_ODDS * city.garrison) continue;
     const reinforcements = reinforcementsInTime(state, faction, city, men, used);
     if (reinforcements) {
       for (const army of reinforcements) used.add(army.id);
@@ -280,10 +281,16 @@ export function movements(context: Context, muster: CityView | undefined): Order
     for (const army of besiegers) {
       const at = positionOf(army);
       if (army.owner !== faction || !at) continue;
-      const step = context.router.routeTo(at, muster)?.step;
-      if (step?.kind !== 'march') continue;
+      const step =
+        (muster && context.router.routeTo(at, muster)?.step) ||
+        stepOut(world, context.router, at, city);
+      if (!step) continue;
       used.add(army.id);
-      orders.push({ kind: 'moveArmy', faction, army: army.id, to: step.to });
+      orders.push(
+        step.kind === 'embark'
+          ? { kind: 'embark', faction, army: army.id, to: step.to }
+          : { kind: 'moveArmy', faction, army: army.id, to: step.to },
+      );
     }
   }
 
@@ -516,6 +523,31 @@ function atOwnCity(state: State, army: ArmyView): boolean {
 }
 
 /** Where the army marches, unless the march is longer than a march may be, as in an old save. */
+/** How far from a city an army steps out of a siege it cannot hold and has no way home from. */
+const STEP_OUT_KM = 2.5 * SIEGE_DISTANCE;
+
+/**
+ * A march to land STEP_OUT_KM from the city, as directly away from it as the land
+ * allows, so a siege that has no way home at least ends before sallies destroy it.
+ */
+function stepOut(world: World, router: Router, at: MapPoint, city: CityView): Step | undefined {
+  const dx = at.x - city.position.x;
+  const dy = at.y - city.position.y;
+  const length = Math.hypot(dx, dy) || 1;
+  for (let turn = 0; turn < 8; turn++) {
+    const angle =
+      Math.atan2(dy / length, dx / length) +
+      (turn % 2 === 0 ? 1 : -1) * Math.ceil(turn / 2) * (Math.PI / 4);
+    const to = {
+      x: Math.round((city.position.x + STEP_OUT_KM * Math.cos(angle)) * 10) / 10,
+      y: Math.round((city.position.y + STEP_OUT_KM * Math.sin(angle)) * 10) / 10,
+    };
+    if (surfaceAt(world.mesh, to) === 'land' && router.marches(at, to))
+      return { kind: 'march', to };
+  }
+  return undefined;
+}
+
 /** Whether a march to the point goes straight to the city, not to a port on the way. */
 function marchesOn(to: MapPoint, city: CityView): boolean {
   return distance(to, city.position) <= SAME_POINT_KM;

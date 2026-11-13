@@ -4,7 +4,7 @@ import { POWERS, type PowerId } from '../src/sim/map.ts';
 import type { Order } from '../src/sim/orders/orders.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { warSides } from '../src/sim/state/war.ts';
-import { CITY_DEFENCES, RECOVERY_DAYS } from '../src/sim/systems/sieges.ts';
+import { fullDefences, RECOVERY_DAYS } from '../src/sim/systems/sieges.ts';
 
 /**
  * The conquest and economy lines of `npm run sim:ai`: what one game did in each year.
@@ -137,7 +137,7 @@ export function observeDay(
     const stormed = ownersAfterOrders.get(city.id) !== was;
     // A city that fell overnight has already rebuilt one day of walls, so walls of no
     // more than that were down when it fell.
-    const breached = city.walls <= CITY_DEFENCES[city.rank].walls / RECOVERY_DAYS + 1e-9;
+    const breached = city.walls <= fullDefences(city).walls / RECOVERY_DAYS + 1e-9;
     const how: Capture = stormed ? 'storm' : breached ? 'surrender' : 'siege';
     year.captures[how]++;
     ledger.fellIn.set(city.id, ledger.years.length - 1);

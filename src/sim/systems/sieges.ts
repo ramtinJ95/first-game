@@ -28,6 +28,18 @@ export const CITY_DEFENCES: Readonly<
   minorCity: { walls: 100, garrison: 1200, foodDays: 40 },
 };
 
+/** A city's full walls, garrison, and food: its rank's, with walls and food scaled by how well it is fortified. */
+export function fullDefences(
+  city: DeepReadonly<Pick<City, 'rank' | 'fortified'>>,
+): Pick<City, 'walls' | 'garrison' | 'foodDays'> {
+  const full = CITY_DEFENCES[city.rank];
+  return {
+    walls: full.walls * city.fortified,
+    garrison: full.garrison,
+    foodDays: full.foodDays * city.fortified,
+  };
+}
+
 /**
  * A siege cuts the city's food only while the besiegers' men are at least this many
  * times its garrison. Below that, the garrison sallies each day instead.
@@ -139,7 +151,7 @@ function besiegeOneDay(state: GameState, id: SiegeId) {
   if (city.foodDays > 0) {
     city.foodDays = Math.max(0, city.foodDays - 1);
   } else {
-    const hunger = Math.ceil(CITY_DEFENCES[city.rank].garrison * HUNGER_SHARE);
+    const hunger = Math.ceil(fullDefences(city).garrison * HUNGER_SHARE);
     city.garrison = Math.max(0, city.garrison - hunger);
   }
   if (defendersAt(state, city)) return;
@@ -194,7 +206,7 @@ function recover(state: GameState) {
   const besieged = new Set(Object.values(state.sieges).map((siege) => siege.city));
   for (const city of Object.values(state.cities)) {
     if (besieged.has(city.id)) continue;
-    const full = CITY_DEFENCES[city.rank];
+    const full = fullDefences(city);
     city.walls = Math.min(full.walls, city.walls + full.walls / RECOVERY_DAYS);
     city.garrison = Math.min(
       full.garrison,
@@ -225,7 +237,7 @@ export function cityFalls(state: GameState, siege: Siege): void {
   const men = occupiers.reduce((sum, army) => sum + menOf(state, army), 0);
   const garrison = Math.min(
     Math.floor(men / 2),
-    Math.round(CITY_DEFENCES[city.rank].garrison * OCCUPATION_SHARE),
+    Math.round(fullDefences(city).garrison * OCCUPATION_SHARE),
   );
   killMen(state, occupiers, garrison, 'storm');
   city.garrison = garrison;

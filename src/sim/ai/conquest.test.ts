@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { fixtureWorld } from '../fixture.ts';
 import { allocateId, type ArmyId, type CityId, type FactionId } from '../ids.ts';
+import { changeCityOwner } from '../cities.ts';
+import { landPath } from '../march.ts';
 import { newGame } from '../new-game.ts';
+import { SIEGE_DISTANCE } from '../systems/sieges.ts';
+import { LEADER_SHARE } from './thresholds.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
 import { removeRecord } from '../records.ts';
 import { expectConsistent } from '../references.ts';
@@ -65,6 +69,89 @@ function war() {
   if (!far) throw new Error('rome holds no city');
   return { state, target, far };
 }
+describe('a league of minor cities', () => {
+  /** The first league, in id order, whose two cities a land route joins. */
+  function leagued() {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    const first = Object.values(state.factions)
+      .sort((a, b) => (a.id < b.id ? -1 : 1))
+      .find(
+        (f) =>
+          f.league != null &&
+          byLand(world, cityOf(state, f.id).position, cityOf(state, f.league).position),
+      );
+    const partner = first?.league ? state.factions[first.league] : undefined;
+    if (!first || !partner) throw new Error('the new game has no league by land');
+    return { state, first: first.id, partner: partner.id };
+  }
+
+  test('a minor joins the war on its league partner', () => {
+    const { state, first, partner } = leagued();
+    expect(
+      executeOrder(state, { kind: 'declareWar', faction: rome, against: first }, world),
+    ).toBeUndefined();
+    expect(decideOrders(state, world, partner)).toContainEqual({
+      kind: 'declareWar',
+      faction: partner,
+      against: rome,
+    });
+    expectConsistent(state);
+  });
+
+  test("a minor marches to lift the siege of its partner's city", () => {
+    const { state, first, partner } = leagued();
+    for (const id of [first, partner]) {
+      expect(
+        executeOrder(state, { kind: 'declareWar', faction: rome, against: id }, world),
+      ).toBeUndefined();
+    }
+    const besieged = cityOf(state, first);
+    const home = cityOf(state, partner);
+    addArmy(state, rome, 2000, besieged.position);
+    const relief = addArmy(state, partner, 500, home.position);
+    const next = tick(state, [], world).state;
+    expect(Object.values(next.sieges).some((siege) => siege.city === besieged.id)).toBe(true);
+    const orders = decideOrders(next, world, partner);
+    expect(orders).toContainEqual(
+      expect.objectContaining({ kind: 'moveArmy', army: relief, to: besieged.position }),
+    );
+    expectConsistent(next);
+  });
+});
+
+describe('a relief march for a partner that has fallen', () => {
+  test('a leagued minor marching to relieve its partner turns home once the partner city has fallen', () => {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    const first = Object.values(state.factions)
+      .sort((a, b) => (a.id < b.id ? -1 : 1))
+      .find(
+        (f) =>
+          f.league != null &&
+          byLand(world, cityOf(state, f.id).position, cityOf(state, f.league).position),
+      );
+    const partner = first?.league ?? undefined;
+    if (!first || !partner) throw new Error('the new game has no league by land');
+    const fallen = cityOf(state, first.id);
+    const home = cityOf(state, partner);
+    expect(
+      executeOrder(state, { kind: 'declareWar', faction: rome, against: partner }, world),
+    ).toBeUndefined();
+    const relief = addArmy(state, partner, 500, home.position);
+    const army = state.armies[relief];
+    if (!army) throw new Error('no relief army');
+    const path = landPath(world, home.position, fallen.position);
+    if (typeof path === 'string') throw new Error(path);
+    const ahead = path.findIndex((point) => distance(point, home.position) > 20);
+    const along = path[ahead];
+    if (!along) throw new Error('the march is too short');
+    army.activity = { kind: 'marching', position: { ...along }, waypoints: path.slice(ahead + 1) };
+    changeCityOwner(state, fallen.id, rome);
+    expect(decideOrders(state, world, partner)).toContainEqual(
+      expect.objectContaining({ kind: 'moveArmy', army: relief, to: home.position }),
+    );
+  });
+});
+
 describe('a siege the attack can hold', () => {
   test('an army too few to blockade alone does not march ahead of the army that makes it enough', () => {
     const { state, target, far } = war();
@@ -256,5 +343,79 @@ describe('the strength a war holds back', () => {
     );
     expect(declared).toEqual(['minor']);
     expectConsistent(state);
+  });
+});
+
+describe('a siege with no way home', () => {
+  test('besiegers too few to blockade, with no road or port to their muster city, step out of the siege', () => {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    for (const army of Object.values(state.armies)) {
+      for (const id of army.formations) removeRecord(state.formations, id);
+      removeRecord(state.armies, army.id);
+    }
+    const carthage = 'carthage' as FactionId;
+    expect(
+      executeOrder(state, { kind: 'declareWar', faction: rome, against: carthage }, world),
+    ).toBeUndefined();
+    const carthago = cityOf(state, carthage);
+    const besiegers = addArmy(state, rome, 300, carthago.position);
+    const next = tick(state, [], world).state;
+    expect(next.armies[besiegers]?.activity.kind).toBe('besieging');
+    const order = decideOrders(next, world, rome).find(
+      (o) => o.kind === 'moveArmy' && o.army === besiegers,
+    );
+    expect(order).toBeDefined();
+    if (order?.kind !== 'moveArmy') return;
+    expect(distance(order.to, carthago.position)).toBeGreaterThan(SIEGE_DISTANCE);
+    const after = tick(next, [order], world).state;
+    expectConsistent(after);
+  });
+});
+
+describe('the leader', () => {
+  const carthage = 'carthage' as FactionId;
+  /** Carthage at peace, with an army as strong as Rome's city nearest to it, and Rome holding `extra` more cities far from Carthage. */
+  function carthageFacing(extra: number) {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    for (const army of Object.values(state.armies)) {
+      if (army.owner === carthage || army.owner === rome) {
+        for (const id of army.formations) removeRecord(state.formations, id);
+        removeRecord(state.armies, army.id);
+      }
+    }
+    const carthago = cityOf(state, carthage);
+    const far = Object.values(state.cities)
+      .filter((city) => state.factions[city.owner]?.kind === 'minor')
+      .sort(
+        (a, b) => distance(b.position, carthago.position) - distance(a.position, carthago.position),
+      )
+      .slice(0, extra);
+    for (const city of far) {
+      changeCityOwner(state, city.id, rome);
+      city.unrestDays = 0;
+    }
+    const front = Object.values(state.cities)
+      .filter((city) => city.owner === rome)
+      .sort(
+        (a, b) => distance(a.position, carthago.position) - distance(b.position, carthago.position),
+      )[0];
+    if (!front) throw new Error('rome holds no city');
+    addArmy(
+      state,
+      carthage,
+      Math.ceil(front.garrison / (Math.sqrt(1.2) * 1.045)),
+      carthago.position,
+    );
+    return state;
+  }
+  const declaredOnRome = (state: GameState) =>
+    decideOrders(state, world, carthage).some(
+      (order) => order.kind === 'declareWar' && order.against === rome,
+    );
+
+  test(`neighbours declare war on a power that holds ${LEADER_SHARE * 100}% of the cities at odds they would not take against a rival`, () => {
+    const total = Object.keys(carthageFacing(0).cities).length;
+    expect(declaredOnRome(carthageFacing(Math.ceil(LEADER_SHARE * total)))).toBe(true);
+    expect(declaredOnRome(carthageFacing(2))).toBe(false);
   });
 });

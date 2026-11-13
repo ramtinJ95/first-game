@@ -31,6 +31,13 @@ export const RIVAL_ODDS = 1.2;
  * to its homeland once its own armies outweigh that neighbour's this many times.
  */
 export const RIVAL_PRESSURE_ODDS = 2;
+/**
+ * A great power that holds at least this share of all cities, and more than any other,
+ * leads. Its neighbours declare war on it with no more than COALITION_ODDS, so the
+ * others turn on a power that runs away.
+ */
+export const LEADER_SHARE = 0.2;
+export const COALITION_ODDS = 0.8;
 /** The odds a power at peace with everyone needs, whatever the distance, so that a long peace can end. */
 export const PEACE_WAR_ODDS = 1.6;
 /** The odds needed grow by their own size for each this many km between the nearest cities. */

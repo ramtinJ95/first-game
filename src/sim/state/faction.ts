@@ -20,6 +20,8 @@ export const FactionSchema = v.object({
   /** Saves from before minor factions existed hold only great powers. */
   kind: v.optional(v.picklist(FACTION_KINDS), 'greatPower'),
   stores: StoresSchema,
+  /** The minor whose wars this minor joins, and which joins its wars, or null. */
+  league: v.optional(v.nullable(FactionIdSchema)),
   /** The day the faction lost its last city and left the game, or null while it plays. */
   defeatedOn: v.nullable(DaySchema),
 });
