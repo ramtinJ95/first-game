@@ -361,3 +361,20 @@ describe('a captured city', () => {
     expectConsistent(state);
   });
 });
+
+describe('loading a save', () => {
+  test('refuses a city with a building twice, or at work on one it has finished', () => {
+    for (const change of [
+      (city: { buildings: BuildingKind[] }) => city.buildings.push('forum', 'forum'),
+      (city: { buildings: BuildingKind[]; construction: unknown }) => {
+        city.buildings.push('forum');
+        city.construction = { building: 'forum', daysLeft: 3 };
+      },
+    ]) {
+      const state = buildFixture();
+      change(need(state.cities[FIXTURE.roma]));
+      const loaded = loadGame(saveGame(state));
+      expect(loaded.ok).toBe(false);
+    }
+  });
+});

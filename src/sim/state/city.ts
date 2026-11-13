@@ -21,34 +21,42 @@ export const ConstructionSchema = v.object({
 });
 export type Construction = v.InferOutput<typeof ConstructionSchema>;
 
-export const CitySchema = v.object({
-  id: CityIdSchema,
-  name: v.string(),
-  province: ProvinceIdSchema,
-  rank: v.picklist(CITY_RANKS),
-  owner: FactionIdSchema,
-  position: MapPointSchema,
-  /** A fraction of a person is kept, so slow daily growth adds up. */
-  population: v.pipe(v.number(), v.finite(), v.minValue(0)),
-  /** Days of unrest left. 0 is a calm city. */
-  unrestDays: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(MAX_UNREST_DAYS)),
-  recruits: v.array(RecruitSchema),
-  /**
-   * What is left of the walls, the garrison, and the food. A siege wears them down
-   * and they stay worn when it ends, so the next siege starts where this one stopped.
-   */
-  walls: v.pipe(v.number(), v.finite(), v.minValue(0)),
-  garrison: v.pipe(v.number(), v.integer(), v.minValue(0)),
-  foodDays: v.pipe(v.number(), v.finite(), v.minValue(0)),
-  /** Scales its rank's full walls and food, which a siege wears down and the city recovers to. */
-  fortified: v.pipe(v.number(), v.finite(), v.minValue(0)),
-  /** The day the city fell to its owner, until the owner decides its fate. */
-  fellOn: v.nullable(DaySchema),
-  /** The day the city was last sacked, or null if it never was. Its gold stays low for `SACK.poorDays` after. */
-  sackedOn: v.nullable(DaySchema),
-  /** The buildings the city stands with, in the order they were finished. Saves from before buildings have none. */
-  buildings: v.optional(v.array(v.picklist(BUILDING_KINDS)), []),
-  construction: v.optional(v.nullable(ConstructionSchema), null),
-});
+export const CitySchema = v.pipe(
+  v.object({
+    id: CityIdSchema,
+    name: v.string(),
+    province: ProvinceIdSchema,
+    rank: v.picklist(CITY_RANKS),
+    owner: FactionIdSchema,
+    position: MapPointSchema,
+    /** A fraction of a person is kept, so slow daily growth adds up. */
+    population: v.pipe(v.number(), v.finite(), v.minValue(0)),
+    /** Days of unrest left. 0 is a calm city. */
+    unrestDays: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(MAX_UNREST_DAYS)),
+    recruits: v.array(RecruitSchema),
+    /**
+     * What is left of the walls, the garrison, and the food. A siege wears them down
+     * and they stay worn when it ends, so the next siege starts where this one stopped.
+     */
+    walls: v.pipe(v.number(), v.finite(), v.minValue(0)),
+    garrison: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    foodDays: v.pipe(v.number(), v.finite(), v.minValue(0)),
+    /** Scales its rank's full walls and food, which a siege wears down and the city recovers to. */
+    fortified: v.pipe(v.number(), v.finite(), v.minValue(0)),
+    /** The day the city fell to its owner, until the owner decides its fate. */
+    fellOn: v.nullable(DaySchema),
+    /** The day the city was last sacked, or null if it never was. Its gold stays low for `SACK.poorDays` after. */
+    sackedOn: v.nullable(DaySchema),
+    /** The buildings the city stands with, in the order they were finished. Saves from before buildings have none. */
+    buildings: v.optional(v.array(v.picklist(BUILDING_KINDS)), []),
+    construction: v.optional(v.nullable(ConstructionSchema), null),
+  }),
+  v.check(
+    (city) =>
+      new Set(city.buildings).size === city.buildings.length &&
+      !(city.construction && city.buildings.includes(city.construction.building)),
+    'a city has each building once, and works only on one it has not finished',
+  ),
+);
 
 export type City = v.InferOutput<typeof CitySchema>;

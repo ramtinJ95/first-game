@@ -1,5 +1,5 @@
 import { buildRefusal } from '../buildings/build.ts';
-import { BUILDING_KINDS, BUILDINGS, type BuildingKind } from '../buildings/buildings.ts';
+import { BUILDING_KINDS, BUILDINGS, hasBuilt, type BuildingKind } from '../buildings/buildings.ts';
 import { buildingGain } from '../buildings/gains.ts';
 import { UNREST_DAYS } from '../cities.ts';
 import type { FactionId } from '../ids.ts';
@@ -7,8 +7,8 @@ import type { Order } from '../orders/orders.ts';
 import { OUTPUT_PER_PERSON, UNREST_OUTPUT, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import { TROOPS } from '../troops.ts';
 import { areAtWar } from '../wars.ts';
+import { mostNeeded } from './budget.ts';
 import { balanceOf, reserveOf, sorted, type CityView, type State } from './situation.ts';
-import { TROOP_MIX } from './thresholds.ts';
 
 /** Gold a day that one food and one manpower are worth: what the same people yield of each. */
 export const FOOD_PRICE = OUTPUT_PER_PERSON.gold / OUTPUT_PER_PERSON.food;
@@ -26,10 +26,6 @@ export const CONQUESTS_A_YEAR = 1;
  */
 export const FOOD_MARGIN_MEN = 2000;
 
-/** The cheapest troop the AI raises, whose price a building never takes from it. */
-const RECRUIT_RESERVE = Math.min(
-  ...(Object.keys(TROOP_MIX) as (keyof typeof TROOPS)[]).map((troop) => TROOPS[troop].recruit.gold),
-);
 const CHEAPEST = Math.min(...BUILDING_KINDS.map((kind) => BUILDINGS[kind].gold));
 
 /**
@@ -50,7 +46,7 @@ export function buildingWorth(state: State, city: CityView, kind: BuildingKind):
   }
   if (kind === 'temple') {
     const target = nearestForeign(state, city, BUILDINGS.temple.reachKm, true);
-    if (target) {
+    if (target && !calmedAlready(state, city, target)) {
       const output =
         target.population *
         (OUTPUT_PER_PERSON.gold +
@@ -68,13 +64,14 @@ export function buildingWorth(state: State, city: CityView, kind: BuildingKind):
  * Orders at most one building a day, on a day the power raised no recruit: the one that
  * pays back its gold soonest among those its cities can start, if that is within
  * BUILD_PAYBACK_YEARS. It builds only while its gold and food balances are not falling
- * and only with gold left over the reserve for its men and the price of its cheapest
- * recruit, so a building never stops it keeping an army or raising one in haste.
+ * and only with gold left over the reserve for its men and the price of the recruit it
+ * would raise next, so a building never stops it keeping or growing an army.
  */
 export function construction(state: State, faction: FactionId, recruiting: boolean): Order[] {
   const record = state.factions[faction];
   if (!record || recruiting) return [];
-  const spare = record.stores.gold - reserveOf(state, faction, 'gold') - RECRUIT_RESERVE;
+  const next = TROOPS[mostNeeded(state, faction)].recruit.gold;
+  const spare = record.stores.gold - reserveOf(state, faction, 'gold') - next;
   if (spare < CHEAPEST || record.stores.food < reserveOf(state, faction, 'food')) return [];
   const balance = balanceOf(state, faction);
   if (!balance || balance.gold < 0 || balance.food < 0) return [];
@@ -93,6 +90,18 @@ export function construction(state: State, faction: FactionId, recruiting: boole
     }
   }
   return best ? [{ kind: 'build', faction, city: best.city.id, building: best.kind }] : [];
+}
+
+/** Whether another temple of the city's owner already reaches the target. */
+function calmedAlready(state: State, city: CityView, target: CityView): boolean {
+  return sorted(state.cities).some(
+    (other) =>
+      other.id !== city.id &&
+      other.owner === city.owner &&
+      hasBuilt(other, 'temple') &&
+      Math.hypot(other.position.x - target.position.x, other.position.y - target.position.y) <=
+        BUILDINGS.temple.reachKm,
+  );
 }
 
 function onBorder(state: State, city: CityView): boolean {

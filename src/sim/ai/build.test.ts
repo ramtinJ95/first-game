@@ -7,6 +7,7 @@ import type { GameState } from '../state/game-state.ts';
 import { buildingWorth, construction } from './build.ts';
 import { decideOrders } from './decide.ts';
 import { TROOPS } from '../troops.ts';
+import { mostNeeded } from './budget.ts';
 import { reserveOf } from './situation.ts';
 
 /** The value, or a thrown error naming what the test expected to exist. */
@@ -54,11 +55,11 @@ describe('the AI builds', () => {
     expect(construction(idleAndRich(), f.rome, true)).toEqual([]);
   });
 
-  test('nothing with the gold that keeps its men and pays for its next recruit', () => {
+  test('nothing with the gold that keeps its men and pays for the recruit it would raise next', () => {
     const tight = buildFixture();
     const reserve = reserveOf(tight, f.rome, 'gold');
     need(tight.factions[f.rome]).stores.gold =
-      reserve + TROOPS.skirmishers.recruit.gold + BUILDINGS.temple.gold - 1;
+      reserve + TROOPS[mostNeeded(tight, f.rome)].recruit.gold + BUILDINGS.temple.gold - 1;
     expect(construction(tight, f.rome, false)).toEqual([]);
     need(tight.factions[f.rome]).stores.gold += 1 + BUILDINGS.canals.gold;
     expect(construction(tight, f.rome, false)).toHaveLength(1);
@@ -68,5 +69,16 @@ describe('the AI builds', () => {
     const state = idleAndRich();
     need(state.formations[f.hastati]).men = 5000;
     expect(construction(state, f.rome, false)).toEqual([]);
+  });
+
+  test('no temple where another of its temples already reaches the city it would take', () => {
+    const state = idleAndRich();
+    const capua = need(state.cities[f.capua]);
+    const covered = need(state.cities[f.roma]);
+    need(state.cities[f.syracusae]).position = { x: 2838, y: 2448 };
+    const before = buildingWorth(state, capua, 'temple');
+    covered.buildings.push('temple');
+    expect(buildingWorth(state, capua, 'temple')).toBeLessThan(before);
+    expect(buildingWorth(state, capua, 'temple')).toBe(0);
   });
 });
