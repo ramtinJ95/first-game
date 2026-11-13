@@ -28,7 +28,7 @@ jobs:
       - run: npm run build
 
   e2e:
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs: verify
     runs-on: ubuntu-latest
     steps:

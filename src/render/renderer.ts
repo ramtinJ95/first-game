@@ -430,7 +430,19 @@ export async function createRenderer({
   let strokedAt = 0;
   let shown: DeepReadonly<GameState> | undefined;
   let laidOut: DeepReadonly<GameState> | undefined;
-  let drawnFrames = 0;
+  // Each game state the page hands over gets a number, and the canvas says the latest it
+  // was given and the latest it has drawn, so a test or a capture can wait until the
+  // map shows a state it loaded: a click picks what the map last drew.
+  const stateIds = new WeakMap<object, number>();
+  let lastStateId = 0;
+  function stateId(state: object): number {
+    let id = stateIds.get(state);
+    if (id === undefined) {
+      id = ++lastStateId;
+      stateIds.set(state, id);
+    }
+    return id;
+  }
   let highlighted: { selection: Pick | undefined; scale: number } | undefined;
   let armies: DrawnArmy[] = [];
   let drawnCities: DrawnCity[] = [];
@@ -970,6 +982,8 @@ export async function createRenderer({
 
   return {
     draw({ previous, current, progress, selection, planned, replaced, previousSight, sight }) {
+      const given = String(stateId(current));
+      if (canvas.dataset['latestState'] !== given) canvas.dataset['latestState'] = given;
       // While the GPU still draws the last frame, this one sends it nothing and keeps every
       // change for the next, but lays the cities out again, which costs the GPU nothing,
       // so a click picks what the screen will show.
@@ -1132,9 +1146,7 @@ export async function createRenderer({
       app.render();
       if (waitForGpu) finish();
       else pacer.rendered();
-      // Tests and captures wait for this count to grow after a load: the next frame drawn
-      // shows the loaded state, and a click picks what the map last drew.
-      canvas.dataset['drawnFrames'] = String(++drawnFrames);
+      canvas.dataset['drawnState'] = String(stateId(current));
       return true;
     },
     focus(point) {
