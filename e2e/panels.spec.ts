@@ -129,44 +129,52 @@ test.describe('the panels', () => {
     await pause(page);
     const view = camera(page);
     await page.mouse.click(view.banner(cityPoint('roma')).x, view.banner(cityPoint('roma')).y);
-    const salona = view.city('salona');
-    await page.mouse.click(salona.x, salona.y, { button: 'right' });
+    const massalia = view.city('massalia');
+    await page.mouse.click(massalia.x, massalia.y, { button: 'right' });
     const menu = page.getByTestId('command-menu');
     await expect(menu.getByRole('menuitem')).toHaveText([
-      /^Sail from Roma to Salona \d+ days$/,
-      /^March to Salona \d+ days$/,
+      /^Sail from Roma to Massalia \d+ days$/,
+      /^March to Massalia \d+ days$/,
       'Cancel',
     ]);
-    await menu.getByRole('menuitem', { name: 'Sail from Roma to Salona' }).click();
+    await menu.getByRole('menuitem', { name: 'Sail from Roma to Massalia' }).click();
     await expect(menu).toHaveCount(0);
     await resume(page);
     await expect(page.getByTestId('army-activity')).toHaveText(
-      /^At sea (to|toward) Salona · \d+ days left$/,
+      /^At sea (to|toward) Massalia · \d+ days left$/,
     );
   });
 
   test('a right click on a port covered by a battle marker still offers the crossing by sea', async ({
     page,
   }) => {
-    const state = startGame();
+    const start = startGame();
     const macedon = 'macedon' as FactionId;
-    declareWar(state, carthage, macedon);
+    declareWar(start, carthage, macedon);
     const salona = cityPoint('salona');
-    armyOf(state, carthage).activity = { kind: 'idle', position: salona };
-    armyOf(state, macedon).activity = { kind: 'idle', position: { x: salona.x, y: salona.y } };
+    armyOf(start, carthage).activity = { kind: 'idle', position: salona };
+    armyOf(start, macedon).activity = { kind: 'idle', position: { x: salona.x, y: salona.y } };
     // Rome sees a foreign battle only in its sight, so Salona is Roman here.
-    changeCityOwner(state, 'salona' as CityId, rome);
-    await load(page, state);
-    await page.getByTestId('time-controls-day').and(page.locator('[data-day="2"]')).waitFor();
+    changeCityOwner(start, 'salona' as CityId, rome);
+    // From Ariminum the crossing to Salona is the quicker way, so the menu offers it.
+    armyOf(start, rome).activity = { kind: 'idle', position: cityPoint('ariminum') };
+    const state = playDays(start, 1);
+    expect(Object.keys(state.battles)).toHaveLength(1);
     await pause(page);
+    await load(page, state);
     const view = camera(page);
     const at = view.city('salona');
     await page.mouse.click(at.x, at.y);
     await expect(page.getByTestId('battle-panel')).toBeVisible();
-    await page.mouse.click(view.banner(cityPoint('roma')).x, view.banner(cityPoint('roma')).y);
+    await page.mouse.click(
+      view.banner(cityPoint('ariminum')).x,
+      view.banner(cityPoint('ariminum')).y,
+    );
     await page.mouse.click(at.x, at.y, { button: 'right' });
     await expect(
-      page.getByTestId('command-menu').getByRole('menuitem', { name: 'Sail from Roma to Salona' }),
+      page
+        .getByTestId('command-menu')
+        .getByRole('menuitem', { name: 'Sail from Ariminum to Salona' }),
     ).toBeVisible();
   });
 

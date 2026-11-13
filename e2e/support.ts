@@ -567,3 +567,34 @@ export function weakSiegeOfMediolanum(): GameState {
   army.activity = { kind: 'idle', position: { x: city.position.x + 4, y: city.position.y } };
   return playDays(state, 1);
 }
+
+/**
+ * The power's starting army, cut to 500 men, is beaten by the enemy's starting army at
+ * the enemy's city across the sea. The state is the first day the beaten army retreats,
+ * with the power as the player, so its panel shows where the retreat goes.
+ */
+export function beatenOverseas(power: PowerId, enemy: PowerId, at: string): GameState {
+  world ??= buildWorld(map);
+  let state = newGame(map, { seed: 1, player: power });
+  const ours = power as string as FactionId;
+  const theirs = enemy as string as FactionId;
+  declareWar(state, ours, theirs);
+  const where = cityPoint(at);
+  const [loser, ...others] = Object.values(state.armies).filter((a) => a.owner === ours);
+  const winner = armyOf(state, theirs);
+  if (!loser) throw new Error(`no army of ${power}`);
+  for (const other of others) other.activity = { kind: 'idle', position: { x: 0, y: 0 } };
+  for (const id of loser.formations.slice(1)) removeRecord(state.formations, id);
+  loser.formations = loser.formations.slice(0, 1);
+  const formation = state.formations[loser.formations[0] as FormationId];
+  if (formation) formation.men = 500;
+  loser.activity = { kind: 'idle', position: { x: where.x - 4, y: where.y } };
+  winner.activity = { kind: 'idle', position: { x: where.x - 2, y: where.y } };
+  for (let day = 0; day < 60; day++) {
+    state = tick(state, [], world).state;
+    const activity = state.armies[loser.id]?.activity.kind;
+    if (activity === 'retreating') return state;
+    if (!activity) throw new Error(`${power} lost its army at ${at}`);
+  }
+  throw new Error(`${power} was not beaten at ${at}`);
+}

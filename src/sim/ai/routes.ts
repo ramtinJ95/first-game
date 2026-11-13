@@ -13,6 +13,14 @@ export type Step = { kind: 'march'; to: MapPoint } | { kind: 'embark'; to: CityI
 /** The longest march the rules allow, in km of road. */
 const MAX_MARCH_KM = MAX_MARCH_DAYS * MARCH_KM_PER_DAY;
 
+/**
+ * The road km between two points, kept for each world from day to day because the land
+ * never changes, so an army that stands where no march takes it pays for the search once.
+ * Past ROADS_KEPT entries the list starts again.
+ */
+const roadsOf = new WeakMap<World, Map<string, number>>();
+const ROADS_KEPT = 50_000;
+
 export interface Route {
   /** Km along the land path, plus straight km at sea weighted by SEA_KM_FACTOR. */
   cost: number;
@@ -70,14 +78,19 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
     return best;
   }
 
-  const roads = new Map<string, number>();
+  let roads = roadsOf.get(world);
+  if (!roads || roads.size > ROADS_KEPT) {
+    roads = new Map();
+    roadsOf.set(world, roads);
+  }
+  const known = roads;
   /**
    * The length of the land path, which only the chosen few routes pay to find. A path
    * longer than a march may be costs infinity, so no route takes it.
    */
   function roadKm(from: MapPoint, to: MapPoint): number {
     const key = `${from.x},${from.y};${to.x},${to.y}`;
-    let km = roads.get(key);
+    let km = known.get(key);
     if (km === undefined) {
       const path = findPath(world.mesh, from, to, 'land');
       km = Number.POSITIVE_INFINITY;
@@ -90,7 +103,7 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
         }
         if (km > MAX_MARCH_KM) km = Number.POSITIVE_INFINITY;
       }
-      roads.set(key, km);
+      known.set(key, km);
     }
     return km;
   }
