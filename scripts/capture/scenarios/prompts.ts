@@ -80,12 +80,12 @@ export default defineScenario({
     await page.getByTestId('overview-columns').waitFor();
     await shot(
       'evacuation-left',
-      'The people of Roma leave for Capua: an alert tells of it, and the overview lists them on the road',
+      'A quarter of Roma leaves for Ariminum: Roma had 40,000 people and keeps 30,000, the city panel says where the other 10,000 went, an alert tells of it, and the overview lists them on the road',
     );
     await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
     await resume(page);
     await alerts.getByText(/people from Roma settled in/).waitFor();
     await pause(page);
-    await shot('evacuation-arrived', 'They settle in Capua, and an alert tells of that too');
+    await shot('evacuation-arrived', 'They settle in Ariminum, and an alert tells of that too');
   },
 });

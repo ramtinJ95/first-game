@@ -16,6 +16,7 @@ import {
   sackText,
   storeNote,
   activityText,
+  leavingText,
   stormText,
   weakSiegeText,
   ordersWaitingText,
@@ -512,5 +513,24 @@ describe('activityText', () => {
     expect(retreatingTo({ x: carthago.x, y: carthago.y + 30 })).toBe(
       'Falling back into the field · 3 days left',
     );
+  });
+});
+
+describe('leavingText', () => {
+  it("says how many of a city's people are on the road and where, and that its population no longer counts them", () => {
+    const state = buildFixture();
+    const had = state.cities[f.roma]?.population ?? 0;
+    const next = tick(
+      state,
+      [{ kind: 'evacuate', faction: f.rome, city: f.roma, to: f.capua, share: 0.25 }],
+      world,
+    ).state;
+    const roma = next.cities[f.roma];
+    if (!roma) throw new Error('no Roma');
+    // The rule takes the people from the city at once; only a day's growth is added back.
+    expect(had - roma.population).toBeGreaterThan(had * 0.249);
+    expect(leavingText(next, roma)).toBe('10,000 of its people are on the road to Capua');
+    const capua = next.cities[f.capua];
+    if (capua) expect(leavingText(next, capua)).toBeUndefined();
   });
 });

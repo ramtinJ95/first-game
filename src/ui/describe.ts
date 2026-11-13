@@ -562,3 +562,20 @@ export function stormText(state: State, siege: DeepReadonly<Siege>): string | un
         : `A storm takes ${city.name} ${percent === 0 ? 'less than 1' : percent === 100 ? 'more than 99' : percent} times in 100`;
   return `${odds}. It is expected to cost ${whole(loss)} of your ${whole(men)} men, whether it takes the city or not.`;
 }
+
+/**
+ * The people of the city who are on the road to another city of its owner, so the panel
+ * says where the people missing from its population went.
+ */
+export function leavingText(state: State, city: DeepReadonly<City>): string | undefined {
+  const columns = Object.values(state.refugeeColumns).filter(
+    (column) => column.from === city.id && column.owner === city.owner,
+  );
+  if (columns.length === 0) return undefined;
+  return columns
+    .map((column) => {
+      const to = state.cities[column.to]?.name ?? 'another city';
+      return `${whole(column.people)} of its people are on the road to ${to}`;
+    })
+    .join('. ');
+}
