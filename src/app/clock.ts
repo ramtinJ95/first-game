@@ -116,8 +116,8 @@ export function createClock({
   }
 
   // Runs the days that the time since the last call has earned, at the rate it passed
-  // at, so a later change of speed or pause neither rewrites that time nor leaves a
-  // whole day owed. Afterwards progress is below 1.
+  // at, so a later change of speed neither rewrites that time nor leaves a whole day
+  // owed. Afterwards progress is below 1.
   function catchUp() {
     const at = now();
     if (!paused) progress += ((at - lastFrameAt) * DAYS_PER_SECOND[speed]) / 1000;
@@ -128,8 +128,11 @@ export function createClock({
     progress = owed > maxTicksPerFrame ? progress % 1 : progress - ticks;
   }
 
+  // The player pauses on the day the last frame showed, so the time since that frame
+  // runs no day. A frame held back by a slow page would otherwise run its days now.
   function setPaused(next: boolean) {
-    catchUp();
+    if (next === paused) return;
+    lastFrameAt = now();
     paused = next;
   }
 

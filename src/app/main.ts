@@ -333,7 +333,11 @@ const renderer = await createRenderer({
 const meter = metering ? showFrameMeter(host) : undefined;
 
 function loop() {
+  const shown = clock.state;
   clock.frame();
+  // The top bar shows a new day in the frame that draws it, so Space pauses on the
+  // day the player reads, not one the panels have yet to show.
+  if (clock.state !== shown) view.refresh();
   if (stopAsked) {
     stopAsked = false;
     if (!clock.paused) {

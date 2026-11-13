@@ -118,24 +118,26 @@ describe('clock', () => {
     expect(clock.progress).toBeCloseTo(0.4);
   });
 
-  it('runs the day a delayed pause owes, then runs no tick until resume', () => {
+  it('stops a delayed pause on the day the last frame showed, then runs no tick until resume', () => {
     const time = fakeTime();
     const clock = createClock({ world, state: buildFixture(), now: time.now });
+    time.advance(500);
+    clock.frame();
     time.advance(1500);
     clock.pause();
-    expect(clock.state.day).toBe(2);
+    expect(clock.state.day).toBe(1);
     expect(clock.progress).toBeCloseTo(0.5);
 
     time.advance(5000);
     clock.frame();
-    expect(clock.state.day).toBe(2);
+    expect(clock.state.day).toBe(1);
     expect(clock.progress).toBeCloseTo(0.5);
 
     clock.resume();
     expect(clock.progress).toBeCloseTo(0.5);
     time.advance(500);
     clock.frame();
-    expect(clock.state.day).toBe(3);
+    expect(clock.state.day).toBe(2);
     expect(clock.progress).toBeCloseTo(0);
   });
 
