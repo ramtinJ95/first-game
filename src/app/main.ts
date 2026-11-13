@@ -30,7 +30,7 @@ import {
   type WeakSiege,
 } from './alerts.ts';
 import { createClock } from './clock.ts';
-import { planCommand, plannedRoutes, type CommandTarget } from './command.ts';
+import { planCommand, plannedRoutes, type CommandTarget, type Plan } from './command.ts';
 import { fateChoices, type FateChoice } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
 import { refusalText } from './names.ts';
@@ -269,6 +269,11 @@ const view = createView(
   'panels',
 );
 
+/** Tells what an accepted march does, and warns when it begins a siege too weak to hold. */
+function tellIssued(plan: Extract<Plan, { kind: 'issue' }>) {
+  showNotice(plan.notice ? `${plan.info} ${plan.notice}` : plan.info, plan.notice ? 'bad' : 'info');
+}
+
 /** A right click with one of the player's armies selected plans an order for the city or point. */
 function command({ point, city, screen }: Command) {
   menu = undefined;
@@ -282,10 +287,7 @@ function command({ point, city, screen }: Command) {
     const plan = planCommand(state, world, army, target, clock.pending);
     if (plan.kind === 'issue') {
       clock.issue(plan.order);
-      showNotice(
-        plan.notice ? `${plan.info} ${plan.notice}` : plan.info,
-        plan.notice ? 'bad' : 'info',
-      );
+      tellIssued(plan);
     } else {
       if (plan.kind === 'menu') menu = { ...plan.menu, screen };
       if (plan.notice) showNotice(plan.notice);
@@ -574,6 +576,13 @@ const actions: Actions = {
   },
   issue(order) {
     clock.issue(order);
+    // A march a panel gives, such as Besiege, says what a right click would.
+    const army = order.kind === 'moveArmy' ? clock.state.armies[order.army] : undefined;
+    if (order.kind === 'moveArmy' && army) {
+      const target = { kind: 'point', point: order.to } as const;
+      const plan = planCommand(clock.state, world, army, target, clock.pending);
+      if (plan.kind === 'issue') tellIssued(plan);
+    }
     const front = modals[0];
     if (
       front?.kind === 'fate' &&
