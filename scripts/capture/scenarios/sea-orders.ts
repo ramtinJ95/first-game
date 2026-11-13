@@ -32,7 +32,7 @@ async function beaten(page: Page, power: PowerId, enemy: PowerId, at: string) {
     (a) => a.owner === power && a.activity.kind === 'retreating',
   );
   if (army?.activity.kind !== 'retreating') throw new Error(`no army of ${power} retreats`);
-  await selectArmy(page, army.activity.position, /^Retreating/);
+  await selectArmy(page, army.activity.position, /^(Retreating to|Falling back into the field)/);
 }
 
 export default defineScenario({

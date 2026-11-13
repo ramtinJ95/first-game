@@ -13,6 +13,17 @@ async function load(page: Page, state: GameState) {
   await untilDrawn(page);
 }
 
+/**
+ * Resizes the page and waits, as the resize scenario does, until the map has drawn at
+ * the new size and the shot no longer holds the old one.
+ */
+async function resize(page: Page, size: { width: number; height: number }) {
+  await page.setViewportSize(size);
+  await untilDrawn(page);
+  await page.locator('canvas[data-terrain="ready"]').waitFor();
+  await page.waitForTimeout(1500);
+}
+
 /** Rome's gold and food ran out. */
 function storesRunOut(): GameState {
   const state = startGame();
@@ -36,15 +47,16 @@ export default defineScenario({
     await shot('game-menu-1280', 'The Game menu at 1280 px opens inside the page');
     await page.keyboard.press('Escape');
 
-    await page.setViewportSize({ width: 1024, height: 768 });
+    await resize(page, { width: 1024, height: 768 });
     await load(page, storesRunOut());
     await page.getByTestId('store-gold-note').waitFor();
+    await resize(page, { width: 1024, height: 768 });
     await shot(
       'top-bar-1024',
       'The top bar at 1024 px on one row with gold and food run out: "Ran out" on each, and why on hover',
     );
 
-    await page.setViewportSize({ width: 1280, height: 720 });
+    await resize(page, { width: 1280, height: 720 });
     await page.getByRole('button', { name: 'Game', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Start screen' }).click();
     await page.getByTestId('leave-confirm').waitFor();
