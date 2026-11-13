@@ -375,13 +375,13 @@ describe('cityFoodText', () => {
     expect(cityFoodText(state, roma)).toBe('Grows 6.0, eats 4.0 a day · +2.0');
   });
 
-  it('grows less in unrest but eats as much', () => {
+  it('in unrest still grows what its people eat and more', () => {
     const state = buildFixture();
     const roma = state.cities[f.roma];
     if (!roma) throw new Error('fixture changed');
     roma.population = 10_000;
     roma.unrestDays = 365;
-    expect(cityFoodText(state, roma)).toBe('Grows 1.5, eats 4.0 a day · −2.5');
+    expect(cityFoodText(state, roma)).toBe('Grows 6.0, eats 4.0 a day · +2.0');
   });
 });
 

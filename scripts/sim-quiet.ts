@@ -40,10 +40,17 @@ function play(seed: number, passive: boolean) {
   let run = 0;
   let longest = 0;
   let played = 0;
+  let attackedOn: number | undefined;
   for (let day = 0; day < DAYS && state.factions[rome]?.defeatedOn === null; day++) {
     const before = state;
     const result = tick(before, decideAll(before, world, passive ? [rome] : []), world);
     const after = result.state;
+    if (
+      attackedOn === undefined &&
+      result.events.some((event) => event.kind === 'warDeclared' && event.against === rome)
+    ) {
+      attackedOn = before.day;
+    }
     const saw = sightOf(before, world, rome);
     const sees = sightOf(after, world, rome);
     const weak = weakSiegeNews(before, after, watched);
@@ -61,7 +68,7 @@ function play(seed: number, passive: boolean) {
     } else run = 0;
     state = after;
   }
-  return { silent, longest, played };
+  return { silent, longest, played, attackedOn };
 }
 
 const median = (xs: number[]) =>
@@ -70,13 +77,14 @@ console.log(
   `Days without news for the player, Rome, over ${DAYS / 365} years, seeds 1 to ${SEEDS}.\n`,
 );
 console.log(
-  '| Rome | days played, median | days without news, median | share | longest stretch, median | longest stretch, most |',
+  '| Rome | days played, median | days without news, median | share | longest stretch, median | longest stretch, most | war first declared on Rome, median day | latest | seeds never attacked |',
 );
-console.log('| --- | --- | --- | --- | --- | --- |');
+console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- |');
 for (const passive of [true, false]) {
   const games = Array.from({ length: SEEDS }, (_, i) => play(i + 1, passive));
   const share = games.reduce((s, g) => s + g.silent, 0) / games.reduce((s, g) => s + g.played, 0);
+  const attacked = games.flatMap((g) => (g.attackedOn === undefined ? [] : [g.attackedOn]));
   console.log(
-    `| ${passive ? 'gives no orders' : 'under the AI'} | ${median(games.map((g) => g.played))} | ${median(games.map((g) => g.silent))} | ${Math.round(share * 100)}% | ${median(games.map((g) => g.longest))} | ${Math.max(...games.map((g) => g.longest))} |`,
+    `| ${passive ? 'gives no orders' : 'under the AI'} | ${median(games.map((g) => g.played))} | ${median(games.map((g) => g.silent))} | ${Math.round(share * 100)}% | ${median(games.map((g) => g.longest))} | ${Math.max(...games.map((g) => g.longest))} | ${median(attacked)} | ${Math.max(0, ...attacked)} | ${games.length - attacked.length} |`,
   );
 }

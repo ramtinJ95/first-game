@@ -67,6 +67,8 @@ interface Seed {
   stanceChanges: number[];
   /** For each war a great power declared, the days until it first fought, besieged, or marched on the enemy, or undefined if it never did within a year. */
   firstActs: (number | undefined)[];
+  /** Attacks a great power lost to the same enemy within 50 km and 90 days of an attack it lost before. */
+  lostAgain: number;
   /** Wars declared less than a year before the end that had seen no act yet. */
   pendingActs: number;
   quiet: { power: PowerId; days: number; from: number };
@@ -99,6 +101,8 @@ function play(seed: number): Seed {
   let repeatedMarches = 0;
   let sallyArmies = 0;
   const sallies = { men: 0 };
+  const losses = new Map<string, { day: number; at: { x: number; y: number } }[]>();
+  let lostAgain = 0;
   const declared: { by: FactionId; against: FactionId; on: number }[] = [];
   const firstActs: (number | undefined)[] = [];
   const stanceChanges = new Map<string, number>();
@@ -169,6 +173,31 @@ function play(seed: number): Seed {
       if (event.kind === 'armyDestroyed' && event.cause === 'sally') {
         sallyArmies++;
       } else if (event.kind === 'battleEnded') {
+        if (event.winner === 'defenders') {
+          const losers = event.attackers;
+          const winners = event.defenders;
+          for (const loser of losers.factions.filter(
+            (id) => state.factions[id]?.kind === 'greatPower',
+          )) {
+            for (const winner of winners.factions) {
+              const key = `${loser}|${winner}`;
+              const before = losses.get(key) ?? [];
+              if (
+                before.some(
+                  (l) =>
+                    day - l.day <= 90 &&
+                    Math.hypot(l.at.x - event.position.x, l.at.y - event.position.y) <= 50,
+                )
+              ) {
+                lostAgain++;
+              }
+              losses.set(key, [
+                ...before.filter((l) => day - l.day <= 90),
+                { day, at: event.position },
+              ]);
+            }
+          }
+        }
         battles.push({
           day: event.startedOn,
           days: event.days,
@@ -277,6 +306,7 @@ function play(seed: number): Seed {
     repeatedMarches,
     sallyArmies,
     sallyMen: sallies.men,
+    lostAgain,
     firstActs,
     pendingActs: declared.length,
     stanceChanges: [...stanceChanges.values()],
@@ -424,6 +454,9 @@ const acted = acts.filter((d): d is number => d !== undefined);
 const pending = games.reduce((sum, g) => sum + g.pendingActs, 0);
 console.log(
   `- Wars declared by a great power: ${acts.length + pending}, of which ${pending} were declared less than a year before the end and had seen no act yet, and are left out of what follows. Of the other ${acts.length}: days until it first fought, besieged, or marched on the enemy: median ${median(acted)}, 90th percentile ${[...acted].sort((a, b) => a - b)[Math.floor(acted.length * 0.9)] ?? 0}. Never within a year, or before the war ended: ${acts.length - acted.length}.`,
+);
+console.log(
+  `- Attacks a great power lost to the same enemy within 50 km and 90 days of one it lost before: ${games.reduce((sum, g) => sum + g.lostAgain, 0)}.`,
 );
 const changes = games.flatMap((g) => g.stanceChanges);
 console.log(

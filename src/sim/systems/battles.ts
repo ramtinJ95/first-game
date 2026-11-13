@@ -121,6 +121,16 @@ export function edgeBetween(
   return stanceEdge(mine.stance, theirs.stance);
 }
 
+/**
+ * What the two stances make of one army's blows on another: the striker's `dealt` times
+ * the target's `taken`. Two armies that both skirmish cannot both keep their distance, so
+ * between them the blows are normal, and their battle lasts as long as two that hold.
+ */
+export function stanceBlows(striker: Stance, target: Stance): number {
+  if (striker === 'skirmishAndWithdraw' && target === 'skirmishAndWithdraw') return 1;
+  return STANCE_EFFECTS[striker].dealt * STANCE_EFFECTS[target].taken;
+}
+
 /** What one army's stance multiplies its blows on another army by. */
 export function stanceEdge(mine: Stance, theirs: Stance): number {
   if (STANCE_BEATS[mine] === theirs) return STANCE_EDGE;
@@ -322,21 +332,16 @@ function fightOneDay(state: GameState, id: BattleId) {
     for (const { formation, army } of from) {
       const troop = TROOPS[formation.troop];
       const luck = 1 + LUCK * (2 * nextRandom(state) - 1);
-      const blows =
-        formation.men *
-        troop.attack *
-        STANCE_EFFECTS[army.stance].dealt *
-        generalFactor(army) *
-        luck;
+      const blows = formation.men * troop.attack * generalFactor(army) * luck;
       for (const target of at) {
         const bonus = troop.bonus[TROOPS[target.formation.troop].category] ?? 1;
         const killed =
           (blows *
+            stanceBlows(army.stance, target.army.stance) *
             edgeBetween(state, army, target.army) *
             (target.formation.men / atMen) *
             bonus *
-            KILL_RATE *
-            STANCE_EFFECTS[target.army.stance].taken) /
+            KILL_RATE) /
           TROOPS[target.formation.troop].defence;
         losses.set(target.formation, (losses.get(target.formation) ?? 0) + killed);
       }

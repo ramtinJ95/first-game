@@ -10,6 +10,7 @@ import type { Order } from '../src/sim/orders/orders.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { SIEGE_DISTANCE } from '../src/sim/systems/sieges.ts';
 import { tick } from '../src/sim/tick.ts';
+import { TROOPS, type Troop } from '../src/sim/troops.ts';
 import { distance } from '../src/sim/world/find-path.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 
@@ -18,7 +19,9 @@ import { buildWorld } from '../src/sim/world/world.ts';
  * day it is at war with no minor, it declares war on the nearest minor city its capital
  * reaches by land. Otherwise it gives the orders the faction AI gives it, except for the
  * fates: always occupy, always sack, or the AI's own mix, which sacks while gold is below
- * its reserve. A Rome that gives no orders is the realm that takes no city.
+ * its reserve. Two more lines raise every formation they can afford at the capital, in a
+ * round of troops, in place of the AI's budget, as a player who wants the largest army
+ * does. A Rome that gives no orders is the realm that takes no city.
  */
 
 const { values } = parseArgs({
@@ -31,13 +34,22 @@ const map = parseMap(
 );
 const world = buildWorld(map);
 const rome = 'rome' as FactionId;
-type Line = 'gives no orders' | 'conquers, occupies' | 'conquers, sacks' | 'conquers, AI mix';
+type Line =
+  | 'gives no orders'
+  | 'conquers, occupies'
+  | 'conquers, sacks'
+  | 'conquers, AI mix'
+  | 'conquers, raises all it can, occupies'
+  | 'conquers, raises all it can, sacks';
 const LINES: readonly Line[] = [
   'gives no orders',
   'conquers, occupies',
   'conquers, sacks',
   'conquers, AI mix',
+  'conquers, raises all it can, occupies',
+  'conquers, raises all it can, sacks',
 ];
+const ROUND: readonly Troop[] = ['spearmen', 'archers', 'swordsmen', 'lightCavalry'];
 
 function romanOrders(state: GameState, line: Line): Order[] {
   if (line === 'gives no orders') return [];

@@ -223,7 +223,7 @@ describe('a great power', () => {
       expect(orders).toContainEqual({ kind: 'moveArmy', faction: f.rome, army: second, to: CAPUA });
     });
 
-    test('takes two armies that win only together from inland to their port, across the sea, and on to the target', () => {
+    test('takes two armies that win only together, as one army, from inland to their port, across the sea, and on to the target', () => {
       let state = buildFixture();
       declare(state, f.rome, f.syracusaeFaction);
       setMen(state, f.citizenSpears, 50_000);
@@ -252,7 +252,11 @@ describe('a great power', () => {
         activity: { kind: 'idle', position: city(state, f.syracusae).position },
       };
 
-      const romans = [f.romanArmy, second];
+      const romans: string[] = [f.romanArmy];
+      const formations = [
+        ...army(state, f.romanArmy).formations,
+        ...army(state, second).formations,
+      ];
       const embarked = new Set<string>();
       const reachedSyracusae = new Set<string>();
       for (let day = 0; day < 90 && reachedSyracusae.size < 2; day++) {
@@ -271,6 +275,8 @@ describe('a great power', () => {
       expectConsistent(state);
       expect([...embarked].sort()).toEqual([...romans].sort());
       expect([...reachedSyracusae].sort()).toEqual([...romans].sort());
+      expect(state.armies[second as never]).toBeUndefined();
+      expect([...army(state, f.romanArmy).formations].sort()).toEqual(formations.sort());
     });
 
     test('embarks at its port for an enemy city across the sea', () => {
