@@ -1,5 +1,5 @@
 import type { Pick } from '../render/pick.ts';
-import { FATE_DAYS } from '../sim/cities.ts';
+import { earlyMusters, FATE_DAYS } from '../sim/cities.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { BattleSideOutcome, DayEvent } from '../sim/events.ts';
 import type { ArmyId, FactionId } from '../sim/ids.ts';
@@ -8,6 +8,8 @@ import type { Day } from '../sim/state/day.ts';
 import type { Stores } from '../sim/state/faction.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
+import { RALLY_DISTANCE } from '../sim/systems/economy.ts';
+import type { Troop } from '../sim/troops.ts';
 import { areAtWar } from '../sim/wars.ts';
 import { factionName, placeName, TROOP_NAMES } from './names.ts';
 
@@ -20,6 +22,7 @@ export type AlertKind =
   | 'warDeclared'
   | 'armyArrived'
   | 'formationMustered'
+  | 'musteredEarly'
   | 'cityChangedOwner'
   | 'siegeBegan'
   | 'storeRanOut'
@@ -35,6 +38,8 @@ export interface Alert {
   readonly focus?: { readonly at: MapPoint; readonly select?: Pick };
   /** A battle or an army that is gone by the end of the day, which the player may have seen the day before. */
   readonly seenAs?: Pick;
+  /** How many alerts of the same kind, text, and place on the day this one line stands for. */
+  readonly count?: number;
 }
 
 type State = DeepReadonly<GameState>;
@@ -93,11 +98,35 @@ export function alertsOfDay(
     }
   }
 
+  const musters = earlyMusters(before, after);
+  const musteredAt: MapPoint[] = [];
+  for (const muster of musters) {
+    const city = after.cities[muster.city];
+    if (!city) continue;
+    const besieging = Object.values(after.sieges).some(
+      (siege) =>
+        siege.city === city.id && siege.besiegers.some((id) => after.armies[id]?.owner === player),
+    );
+    if (muster.owner !== player && !besieging) continue;
+    if (muster.owner === player) musteredAt.push(city.position);
+    const troops = troopsText(muster.troops);
+    add({
+      kind: 'musteredEarly',
+      tone: muster.owner === player ? 'good' : 'bad',
+      text:
+        muster.owner === player
+          ? `Besieged ${city.name} mustered its recruits early: ${troops}. It cannot fall or be stormed while they stand`
+          : `${city.name} mustered its recruits against your siege: ${troops}. It cannot fall or be stormed while they stand`,
+      focus: { at: city.position, select: { kind: 'province', province: city.province } },
+    });
+  }
+
   for (const formation of Object.values(after.formations)) {
     if (before.formations[formation.id]) continue;
     const army = after.armies[formation.army];
     const at = army && positionOf(after, army);
     if (!army || army.owner !== player || !at) continue;
+    if (musteredAt.some((city) => distanceKm(city, at) <= RALLY_DISTANCE)) continue;
     add({
       kind: 'formationMustered',
       tone: 'good',
@@ -164,6 +193,41 @@ export function alertsOfDay(
   }
 
   return alerts;
+}
+
+/**
+ * Folds the alerts of one kind with the same text at the same place into one line with
+ * a count, in the place of the first, so six formations that muster at one city on one
+ * day read as one line.
+ */
+export function groupAlerts(alerts: readonly Alert[]): Alert[] {
+  const grouped: Alert[] = [];
+  const at = new Map<string, number>();
+  for (const alert of alerts) {
+    const place = alert.focus ? `${alert.focus.at.x},${alert.focus.at.y}` : '';
+    const key = `${alert.day}|${alert.kind}|${place}|${alert.text}`;
+    const index = at.get(key);
+    const first = index === undefined ? undefined : grouped[index];
+    if (index === undefined || !first) {
+      at.set(key, grouped.length);
+      grouped.push(alert);
+    } else {
+      grouped[index] = { ...first, count: (first.count ?? 1) + (alert.count ?? 1) };
+    }
+  }
+  return grouped;
+}
+
+/** "2 Spearmen and Archers", by troop in the order they trained. */
+function troopsText(troops: readonly Troop[]): string {
+  const counts = new Map<Troop, number>();
+  for (const troop of troops) counts.set(troop, (counts.get(troop) ?? 0) + 1);
+  const parts = [...counts].map(([troop, n]) =>
+    n > 1 ? `${n} ${TROOP_NAMES[troop]}` : TROOP_NAMES[troop],
+  );
+  return parts.length > 1
+    ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`
+    : (parts[0] ?? '');
 }
 
 function eventAlert(

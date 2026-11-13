@@ -20,7 +20,7 @@ import type { Actions } from '../ui/actions.ts';
 import { GAME_NAME, type FrameActions } from '../ui/frame-actions.ts';
 import Hud from '../ui/Hud.svelte';
 import '../ui/panels.css';
-import { alertsOfDay, type Alert } from './alerts.ts';
+import { alertsOfDay, groupAlerts, type Alert } from './alerts.ts';
 import { createClock } from './clock.ts';
 import { planCommand, plannedRoutes, type CommandTarget } from './command.ts';
 import { fateChoices, type FateChoice } from './fates.ts';
@@ -181,10 +181,8 @@ const clock = createClock({
     if (last) showNotice(refusalText(clock.state, last.reason));
   },
   onDay(before, after, events) {
-    const news = alertsInSight(
-      alertsOfDay(before, after, events),
-      sightFor(before),
-      sightFor(after),
+    const news = groupAlerts(
+      alertsInSight(alertsOfDay(before, after, events), sightFor(before), sightFor(after)),
     );
     if (news.length > 0) alerts = [...news.reverse(), ...alerts].slice(0, ALERTS_KEPT);
     for (const point of turningPoints(before, after, world)) {

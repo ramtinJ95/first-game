@@ -8,7 +8,7 @@ import { tick } from '../sim/tick.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { ArmyId, FormationId } from '../sim/ids.ts';
 import { sightOf } from '../sim/sight.ts';
-import { alertsOfDay, type Alert } from './alerts.ts';
+import { alertsOfDay, groupAlerts, type Alert } from './alerts.ts';
 import { alertsInSight } from './sighted.ts';
 
 const world = fixtureWorld();
@@ -299,6 +299,81 @@ describe('alertsOfDay', () => {
     const mustered = ofKind(alerts, 'formationMustered');
     expect(mustered.map((a) => [a.text, a.day])).toEqual([['Skirmishers mustered at Roma', 12]]);
     expect(mustered[0]?.focus?.select).toEqual({ kind: 'army', army: f.romanArmy });
+  });
+
+  it('tells of six formations that muster at one city on one day in one line with a count', () => {
+    const recruit: Order = { kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' };
+    const state = buildFixture();
+    const stores = state.factions[f.rome]?.stores;
+    if (stores) Object.assign(stores, { gold: 20_000, manpower: 10_000 });
+    const { alerts } = play(state, Array(6).fill(recruit), () => false, 30);
+    const lines = groupAlerts(ofKind(alerts, 'formationMustered'));
+    expect(lines.map((a) => [a.text, a.count])).toEqual([['Spearmen mustered at Roma', 6]]);
+  });
+
+  it('keeps alerts of one kind at different places on separate lines', () => {
+    const at = (x: number) => ({ at: { x, y: 0 } });
+    const alert = {
+      kind: 'armyArrived',
+      day: 3 as Day,
+      tone: 'neutral',
+      text: 'Your army arrived',
+    } as const;
+    const lines = groupAlerts([
+      { ...alert, focus: at(1) },
+      { ...alert, focus: at(2) },
+      { ...alert, focus: at(1) },
+    ]);
+    expect(lines.map((a) => [a.focus?.at.x, a.count])).toEqual([
+      [1, 2],
+      [2, undefined],
+    ]);
+  });
+
+  it("tells when the player's besieged city musters its recruits early, in place of each muster", () => {
+    const state = buildFixture();
+    atWar(state);
+    const roma = state.cities[f.roma];
+    const roman = state.armies[f.romanArmy];
+    const punic = state.armies[f.punicArmy];
+    const capua = state.cities[f.capua];
+    if (!roma || !roman || !punic || !capua) throw new Error('fixture changed');
+    roma.recruits = [
+      { troop: 'spearmen', readyOn: 40 as Day },
+      { troop: 'spearmen', readyOn: 40 as Day },
+      { troop: 'archers', readyOn: 45 as Day },
+    ];
+    roman.activity = { kind: 'idle', position: { ...capua.position } };
+    punic.activity = { kind: 'idle', position: { x: roma.position.x + 5, y: roma.position.y } };
+    const { alerts } = play(state, [], (s) => Object.keys(s.sieges).length > 0);
+    expect(ofKind(alerts, 'musteredEarly').map((a) => [a.text, a.tone, a.focus?.select])).toEqual([
+      [
+        'Besieged Roma mustered its recruits early: 2 Spearmen and Archers. It cannot fall or be stormed while they stand',
+        'good',
+        { kind: 'province', province: f.latium },
+      ],
+    ]);
+    expect(ofKind(alerts, 'formationMustered')).toEqual([]);
+  });
+
+  it('tells when a city the player besieges musters its recruits, and not of a siege of others', () => {
+    const besieged = (owner: typeof f.rome) => {
+      const state = buildFixture();
+      atWar(state, owner, f.syracusaeFaction);
+      const army = state.armies[owner === f.rome ? f.romanArmy : f.punicArmy];
+      const syracusae = state.cities[f.syracusae];
+      if (!army || !syracusae) throw new Error('fixture changed');
+      syracusae.recruits = [{ troop: 'spearmen', readyOn: 40 as Day }];
+      army.activity = { kind: 'idle', position: { ...syracusae.position } };
+      return play(state, [], (s) => Object.keys(s.sieges).length > 0).alerts;
+    };
+    expect(ofKind(besieged(f.rome), 'musteredEarly').map((a) => [a.text, a.tone])).toEqual([
+      [
+        'Syracusae mustered its recruits against your siege: Spearmen. It cannot fall or be stormed while they stand',
+        'bad',
+      ],
+    ]);
+    expect(ofKind(besieged(f.carthage), 'musteredEarly')).toEqual([]);
   });
 
   it("tells of a city the player gains or loses, and of no other faction's", () => {

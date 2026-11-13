@@ -22,6 +22,9 @@
         >
           <span class="day">Day {alert.day}</span>
           <span class="text">{alert.text}</span>
+          {#if alert.count && alert.count > 1}
+            <span class="count" data-testid="alert-count">×{alert.count}</span>
+          {/if}
         </button>
       </li>
     {/each}
@@ -72,6 +75,13 @@
     flex: none;
     font-size: 12px;
     color: var(--muted);
+  }
+
+  .count {
+    flex: none;
+    margin-left: auto;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
   }
 
   .fresh .day {
