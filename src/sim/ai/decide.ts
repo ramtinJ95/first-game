@@ -7,6 +7,7 @@ import { endOverlongMarches, fates, movements, retreats, storms, type Context } 
 import { recruitment } from './budget.ts';
 import { minorOrders } from './minor.ts';
 import { createRouter } from './routes.ts';
+import { stances } from './stance.ts';
 import {
   besieged,
   enemiesOf,
@@ -34,9 +35,10 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
     enemies: enemiesOf(state, faction),
     router: createRouter(state, world, faction),
   };
-  if (record.kind === 'minor') return minorOrders(context);
+  if (record.kind === 'minor') return [...stances(context), ...minorOrders(context)];
   const muster = musterCity(context);
   return [
+    ...stances(context),
     ...endOverlongMarches(context),
     ...retreats(context),
     ...fates(context),

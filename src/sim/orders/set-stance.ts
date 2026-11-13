@@ -13,6 +13,9 @@ export interface SetStanceOrder {
 export function setStance(state: GameState, order: SetStanceOrder): string | undefined {
   const army = ownedArmy(state, order.faction, order.army);
   if (typeof army === 'string') return army;
-  army.stance = order.stance;
+  if (army.stance !== order.stance) {
+    army.stance = order.stance;
+    army.stanceChangedOn = state.day;
+  }
   return undefined;
 }

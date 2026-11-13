@@ -7,8 +7,12 @@ import {
 } from '../src/sim/battle-trial.ts';
 import { fixtureWorld } from '../src/sim/fixture.ts';
 import type { Order } from '../src/sim/orders/orders.ts';
+import { STANCES, type Stance } from '../src/sim/state/army.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { tick } from '../src/sim/tick.ts';
+import { decideOrders } from '../src/sim/ai/decide.ts';
+import { FIXTURE } from '../src/sim/fixture.ts';
+import { STANCE_BEATS } from '../src/sim/systems/battles.ts';
 
 const MIX: Matchup['a']['troops'] = {
   spearmen: 1500,
@@ -16,8 +20,11 @@ const MIX: Matchup['a']['troops'] = {
   archers: 300,
   lightCavalry: 300,
 };
-const double = (troops: Matchup['a']['troops']) =>
-  Object.fromEntries(Object.entries(troops).map(([troop, men]) => [troop, men * 2]));
+const scaled = (troops: Matchup['a']['troops'], by: number) =>
+  Object.fromEntries(Object.entries(troops).map(([troop, men]) => [troop, Math.round(men * by)]));
+const double = (troops: Matchup['a']['troops']) => scaled(troops, 2);
+const FOOT: Matchup['a']['troops'] = { spearmen: 1800, swordsmen: 1200 };
+const MOUNTED: Matchup['a']['troops'] = { archers: 1200, lightCavalry: 1000, heavyCavalry: 800 };
 
 /** Edit this list to tune. Army a is the first side of each row. */
 const MATCHUPS: Matchup[] = [
@@ -256,13 +263,128 @@ function printChases() {
   console.table(CHASES.map(summariseChase));
 }
 
+const STANCE_SEEDS = 200;
+const STANCE_NAMES: Record<Stance, string> = {
+  holdTheLine: 'hold',
+  allOutAssault: 'assault',
+  skirmishAndWithdraw: 'skirmish',
+};
+
+/**
+ * Plays every stance of army a against every stance of army b and prints how often a
+ * wins, with the median days fought, one row for each of a's stances.
+ */
+function printStances(title: string, a: Matchup['a']['troops'], b: Matchup['b']['troops']) {
+  const rows = STANCES.map((mine) => {
+    const row: Record<string, string> = { [`a ${title}`]: STANCE_NAMES[mine] };
+    for (const theirs of STANCES) {
+      const results = Array.from({ length: STANCE_SEEDS }, (_, seed) =>
+        playTrial(
+          { name: '', a: { troops: a, stance: mine }, b: { troops: b, stance: theirs } },
+          seed + 1,
+        ),
+      );
+      const wins = results.filter((r) => r.winner === 'a').length / STANCE_SEEDS;
+      row[`v ${STANCE_NAMES[theirs]}`] = `${percent(wins)}, ${quantile(
+        results.map((r) => r.days),
+        0.5,
+      )} days`;
+    }
+    return row;
+  });
+  console.table(rows);
+}
+
+/** The stance that beats the given one. */
+const counterTo = (stance: Stance) => STANCES.find((s) => STANCE_BEATS[s] === stance) as Stance;
+
+/** How the player's side a steers its stance against side b, which the AI steers. */
+const LINES = {
+  'holds and never changes': () => undefined,
+  "answers the AI's stance every day": ({ theirs }) => counterTo(theirs),
+  'answers once, on the first day of the battle, and stays': ({ theirs, answered }) =>
+    answered ? undefined : counterTo(theirs),
+  'answers the answer the AI will give, every day': ({ ours }) => counterTo(counterTo(ours)),
+} as const satisfies Record<
+  string,
+  (seen: { ours: Stance; theirs: Stance; answered: boolean }) => Stance | undefined
+>;
+
+/**
+ * Plays one battle through the real tick, with side b's stance orders from the faction
+ * AI and side a's from the line of play, both given on each day's state before it is
+ * played, as the clock gives them.
+ */
+function playLine(
+  a: Matchup['a']['troops'],
+  b: Matchup['b']['troops'],
+  line: keyof typeof LINES,
+  seed: number,
+): 'a' | 'b' | 'none' {
+  const world = fixtureWorld();
+  let state = buildTrial({ name: '', a: { troops: a }, b: { troops: b } }, seed);
+  let answered = false;
+  for (let day = 0; day < 200; day++) {
+    const orders: Order[] = decideOrders(state, world, FIXTURE.carthage).filter(
+      (order) => order.kind === 'setStance',
+    );
+    const ours = state.armies[TRIAL_ARMIES.a];
+    const theirs = state.armies[TRIAL_ARMIES.b];
+    if (ours?.activity.kind === 'inBattle' && theirs) {
+      const answer = LINES[line]({ ours: ours.stance, theirs: theirs.stance, answered });
+      if (answer && ours.stance !== answer) {
+        orders.push({ kind: 'setStance', faction: FIXTURE.rome, army: ours.id, stance: answer });
+      }
+      answered = true;
+    }
+    state = tick(state, orders, world).state;
+    if (day > 0 && Object.keys(state.battles).length === 0) break;
+  }
+  const won = (id: string) => state.armies[id as never]?.activity.kind === 'idle';
+  return won(TRIAL_ARMIES.a) ? 'a' : won(TRIAL_ARMIES.b) ? 'b' : 'none';
+}
+
+function printLines() {
+  console.log(
+    `\n${STANCE_SEEDS} seeds per cell. Side b chooses its stance by the faction AI's rule. Each cell is how often side a wins.`,
+  );
+  console.table(
+    (Object.keys(LINES) as (keyof typeof LINES)[]).map((line) => {
+      const row: Record<string, string> = { 'side a': line };
+      for (const [name, b] of [
+        ['3000 v 3000', MIX],
+        ['3000 v 3900', scaled(MIX, 1.3)],
+      ] as const) {
+        const wins = Array.from({ length: STANCE_SEEDS }, (_, seed) =>
+          playLine(MIX, b, line, seed + 1),
+        ).filter((w) => w === 'a').length;
+        row[name] = percent(wins / STANCE_SEEDS);
+      }
+      return row;
+    }),
+  );
+}
+
+function printStanceTables() {
+  console.log(
+    `\n${STANCE_SEEDS} seeds per cell. Each cell is how often army a wins, and the median days fought.`,
+  );
+  printStances('3000 mix v 3000 mix', MIX, MIX);
+  printStances('3000 mix v 3900 mix', MIX, scaled(MIX, 1.3));
+  printStances('3000 foot v 3000 horse and bows', FOOT, MOUNTED);
+  printLines();
+}
+
 const logAt = process.argv.indexOf('--log');
 if (logAt >= 0) {
   printLog(Number(process.argv[logAt + 1] ?? 0), Number(process.argv[logAt + 2] ?? 1));
 } else if (process.argv.includes('--chase')) {
   printChases();
+} else if (process.argv.includes('--stances')) {
+  printStanceTables();
 } else {
   console.log(`${SEEDS} seeds per matchup. Keeps are shares of the men a side started with.`);
   console.table(MATCHUPS.map(summarise));
+  printStanceTables();
   printChases();
 }

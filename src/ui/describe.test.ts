@@ -89,10 +89,8 @@ describe('shownBattles', () => {
 describe('stanceEffectText', () => {
   it('says what each stance does to the blows and the morale', () => {
     expect(stanceEffectText('holdTheLine')).toBe('Deals and takes normal blows');
-    expect(stanceEffectText('allOutAssault')).toBe('Deals 50% more, takes 40% more');
-    expect(stanceEffectText('skirmishAndWithdraw')).toBe(
-      'Deals and takes 40% less, morale falls 2.5 times as fast',
-    );
+    expect(stanceEffectText('allOutAssault')).toBe('Deals and takes 25% more');
+    expect(stanceEffectText('skirmishAndWithdraw')).toBe('Deals and takes 25% less');
   });
 });
 

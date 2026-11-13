@@ -159,11 +159,11 @@ test.describe('the panels after the playtest', () => {
     ).toHaveAccessibleDescription('Deals and takes normal blows');
     await expect(
       stances.getByRole('button', { name: 'All-out assault' }),
-    ).toHaveAccessibleDescription('Deals 50% more, takes 40% more');
+    ).toHaveAccessibleDescription('Deals and takes 25% more');
     await expect(
       stances.getByRole('button', { name: 'Skirmish and withdraw' }),
-    ).toHaveAccessibleDescription('Deals and takes 40% less, morale falls 2.5 times as fast');
-    await expect(stances).toContainText('Deals 50% more, takes 40% more');
+    ).toHaveAccessibleDescription('Deals and takes 25% less');
+    await expect(stances).toContainText('Deals and takes 25% more');
 
     const army = page.getByTestId('army-panel');
     await battle.getByRole('button', { name: /^Mediolanum · Hold the line · [\d,]+ men$/ }).click();

@@ -26,6 +26,7 @@
     "sim:sieges": "node scripts/sim-sieges.ts",
     "sim:ai": "node scripts/sim-ai.ts",
     "sim:opening": "node scripts/sim-opening.ts",
+    "sim:world": "node scripts/sim-world.ts",
     "sim:recruit": "node scripts/sim-recruit.ts"
   },
   "dependencies": {

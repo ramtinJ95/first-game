@@ -25,7 +25,8 @@ import {
  * holds a city within WAR_REACH_KM of one of its cities, reachable by land or sea. Its
  * strength is its armies on land within WAR_FRONT_KM of that nearest city plus the
  * city's garrison. Each war in which the power can still take a city holds back all that
- * enemy's armies and the garrison, and what is left is its free strength. It declares on the neighbour with the best odds, free strength over the
+ * enemy's armies, but not its garrisons, which never leave their walls, and what is left
+ * is its free strength. It declares on the neighbour with the best odds, free strength over the
  * neighbour's, once they reach WAR_ODDS raised by distance over WAR_DISTANCE_KM. A power
  * at peace with everyone needs only PEACE_WAR_ODDS, whatever the distance. Against a
  * rival great power it needs no more than RIVAL_ODDS in either case.
@@ -72,7 +73,7 @@ export function warDeclaration(context: Context): Order[] {
   let free = strength.get(faction) ?? 0;
   for (const enemy of [...fighting].sort()) {
     const front = frontOf(enemy);
-    if (front) free -= (strength.get(enemy) ?? 0) + front.city.garrison;
+    if (front) free -= strength.get(enemy) ?? 0;
   }
   const rivals = new Set(
     sorted(state.factions)
