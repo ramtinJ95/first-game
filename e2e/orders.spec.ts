@@ -124,9 +124,10 @@ test.describe('orders by right click', () => {
           await expect(activity).toHaveText(`Idle near ${name}`);
           const icon = view.city(id);
           await rightClick(page, { x: icon.x + dx, y: icon.y + dy });
+          await expect(page.getByTestId('notice')).toHaveText(`March to ${name}: 1 day.`);
+          await expect(page.getByTestId('notice')).toHaveAttribute('data-tone', 'info');
           await resume(page);
           await expect(activity).toHaveText(new RegExp(`^Besieging ${name} · day \\d+$`));
-          await expect(page.getByTestId('notice')).toHaveCount(0);
         });
       }
     }
@@ -143,7 +144,7 @@ test.describe('orders by right click', () => {
     await load(page, armyBeside('massalia', { war: false }));
     await rightClick(page, view.city('massalia'));
     await expect(page.getByTestId('notice')).toHaveText(
-      'At peace with Massalia. Declare war to besiege it.',
+      'March to Massalia: 1 day. At peace with Massalia. Declare war to besiege it.',
     );
     await resume(page);
     await expect(activity).toHaveText('Idle at Massalia');
@@ -159,9 +160,9 @@ test.describe('orders by right click', () => {
     await pause(page);
     await load(page, armyBeside('massalia', { war: true }));
     await rightClick(page, view.city('massalia'));
+    await expect(page.getByTestId('notice')).toHaveAttribute('data-tone', 'info');
     await resume(page);
     await expect(activity).toHaveText(/^Besieging Massalia · day \d+$/);
-    await expect(page.getByTestId('notice')).toHaveCount(0);
   });
 
   test('twenty right clicks in a pause leave one order for the army, which marches to the last place', async ({
@@ -191,7 +192,7 @@ test.describe('orders by right click', () => {
     await rightClick(page, view.city('caralis'));
     const menu = page.getByRole('menu', { name: 'Orders for Caralis' });
     await expect(menu.getByRole('group', { name: 'By sea' }).getByRole('menuitem')).toHaveText([
-      /^Sail from Roma to Caralis\s*\d+ days?$/,
+      /^Sail from Roma to Caralis\s*\d+ days? by sea$/,
     ]);
     await expect(menu.getByRole('group', { name: 'By land' })).toHaveCount(0);
     await expect(menu.getByRole('menuitem', { name: /March/ })).toHaveCount(0);
@@ -214,7 +215,7 @@ test.describe('orders by right click', () => {
     await rightClick(page, view.city('massalia'));
     const menu = page.getByRole('menu', { name: 'Orders for Massalia' });
     await expect(menu.getByRole('group', { name: 'By sea' }).getByRole('menuitem')).toHaveText([
-      /^Sail from Roma to Massalia\s*\d+ days?$/,
+      /^Sail from Roma to Massalia\s*\d+ days? by sea$/,
     ]);
     await expect(menu.getByRole('group', { name: 'By land' }).getByRole('menuitem')).toHaveText([
       /^March to Massalia\s*\d+ days?$/,
@@ -277,14 +278,14 @@ test.describe('orders across the sea', () => {
     await rightClick(page, camera(page).city('capua'));
     const menu = page.getByRole('menu', { name: 'Orders for Capua' });
     await expect(menu.getByRole('group', { name: 'By sea' }).getByRole('menuitem')).toHaveText([
-      /^Sail from Carthago to Roma\s*\d+ days, then \d+ days? by land$/,
+      /^Sail from Carthago to Roma\s*\d+ days by sea, then \d+ days? by land$/,
     ]);
     await expect(menu.getByRole('group', { name: 'By land' })).toHaveCount(0);
     await page.keyboard.press('Enter');
     await expect(menu).toHaveCount(0);
     await resume(page);
     await expect(page.getByTestId('army-activity')).toHaveText(
-      /^At sea (to|toward) Roma · \d+ days? left$/,
+      /^At sea (to|toward) Roma · \d+ days? left, then marching to Capua · \d+ days? left$/,
     );
   });
 
@@ -294,7 +295,7 @@ test.describe('orders across the sea', () => {
     await rightClick(page, camera(page).city('roma'));
     const menu = page.getByRole('menu', { name: 'Orders for Roma' });
     await expect(menu.getByRole('menuitem')).toHaveText([
-      /^Sail from Carthago to Roma\s*\d+ days$/,
+      /^Sail from Carthago to Roma\s*\d+ days by sea, then 1 day by land$/,
       'Cancel',
     ]);
     await expect(menu.getByRole('menuitem', { name: /March/ })).toHaveCount(0);
@@ -309,7 +310,7 @@ test.describe('orders across the sea', () => {
     }) => {
       await rightClick(page, camera(page).city('alexandria-arachosion'));
       await expect(page.getByTestId('notice')).toHaveText(
-        /^Order refused\. The march to Alexandria Arachosion takes \d+ days, more than the 90 a march may take\. No way by sea from a port of yours lands within 90 days' march of it\.$/,
+        /^Order refused\. The march to Alexandria Arachosion takes \d+ days, more than the 90 a march may take\. No way by sea lands within 90 days' march of it\.$/,
       );
       await expect(page.getByTestId('command-menu')).toHaveCount(0);
       await expect(page.getByTestId('orders-waiting')).toHaveCount(0);

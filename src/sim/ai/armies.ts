@@ -5,8 +5,9 @@ import type { MapPoint } from '../state/map-point.ts';
 import { RALLY_DISTANCE } from '../systems/economy.ts';
 import { BLOCKADE_ODDS, defendersAt, SALLY_SHARE, SIEGE_DISTANCE } from '../systems/sieges.ts';
 import { MARCH_KM_PER_DAY, marchDays, MAX_MARCH_DAYS } from '../march.ts';
-import { distance, surfaceAt } from '../world/find-path.ts';
-import type { World } from '../world/world.ts';
+import { embarkationAt } from '../orders/embark.ts';
+import { distance, locate, surfaceAt } from '../world/find-path.ts';
+import { nearestSea, type World } from '../world/world.ts';
 import type { Router, Step } from './routes.ts';
 import {
   byLand,
@@ -193,10 +194,12 @@ export function movements(context: Context, muster: CityView | undefined): Order
     ];
   });
 
-  const send = (mover: Mover, step: Step) => {
+  /** Sends the mover one step on its way to the city. A crossing lands it and marches it on to the city. */
+  const send = (mover: Mover, step: Step, city?: CityView) => {
     used.add(mover.army.id);
     if (step.kind === 'embark') {
-      orders.push({ kind: 'embark', faction, army: mover.army.id, to: step.to });
+      const then = city && city.id !== step.to ? { then: city.position } : {};
+      orders.push({ kind: 'embark', faction, army: mover.army.id, to: step.to, ...then });
     } else if (!marchingTo(mover.army, step.to)) {
       orders.push({ kind: 'moveArmy', faction, army: mover.army.id, to: step.to });
     }
@@ -215,8 +218,13 @@ export function movements(context: Context, muster: CityView | undefined): Order
       return true;
     }
     const route = context.router.routeTo(mover.at, city);
-    if (route) send(mover, route.step);
-    return route !== undefined;
+    if (route) send(mover, route.step, city);
+    else {
+      const away = wayFromShore(context, mover.at, city);
+      if (away) send(mover, away, city);
+      return away !== undefined;
+    }
+    return true;
   };
 
   const capital = homeCapital(state, world, faction);
@@ -408,7 +416,7 @@ export function movements(context: Context, muster: CityView | undefined): Order
     if (best) {
       const byRoad = best.step.kind === 'march' && marchesOn(best.step.to, best.city);
       sendAt(best.city, mover, byRoad ? best.cost : Number.POSITIVE_INFINITY);
-      send(mover, best.step);
+      send(mover, best.step, best.city);
     } else left.push(mover);
   }
 
@@ -447,7 +455,7 @@ export function movements(context: Context, muster: CityView | undefined): Order
         group.members.every((m) => distance(m.at, group.members[0]?.at ?? m.at) <= RALLY_DISTANCE));
     for (const mover of group.members) {
       const route = assembled && context.router.routeTo(mover.at, group.city);
-      if (route) send(mover, route.step);
+      if (route) send(mover, route.step, group.city);
       else {
         const to = meeting ?? (group.members[0] as Mover).at;
         if (distance(mover.at, to) <= RALLY_DISTANCE) used.add(mover.army.id);
@@ -464,11 +472,42 @@ export function movements(context: Context, muster: CityView | undefined): Order
   }
 
   for (const mover of rest) {
-    if (targets.length > 0 && muster && distance(mover.at, muster.position) > RALLY_DISTANCE) {
-      headFor(mover, muster);
-    }
+    if (!muster || distance(mover.at, muster.position) <= RALLY_DISTANCE) continue;
+    if (targets.length > 0 || !context.router.routeTo(mover.at, muster)) headFor(mover, muster);
   }
   return orders;
+}
+
+/**
+ * The step home for an army that no road and no port of its own takes to the city: a
+ * crossing to the port nearest the city from which the city is a march, one of its owner's
+ * first, from the shore of that port's sea it stands on, after the days that gather ships,
+ * or else the march to the nearest shore of that sea. It costs a scan of the coast for each
+ * sea and a search for each port tried, so only an army with no other way pays it.
+ */
+function wayFromShore(context: Context, at: MapPoint, city: CityView): Step | undefined {
+  const { state, world, faction, router } = context;
+  const harbour = (port: CityView) => world.harbours.get(port.id) as MapPoint;
+  const landings = sorted(state.cities)
+    .filter((port) => world.harbours.has(port.id))
+    .sort(
+      (a, b) =>
+        Number(b.owner === faction) - Number(a.owner === faction) ||
+        distance(a.position, city.position) - distance(b.position, city.position),
+    );
+  const seas = new Set<number>();
+  for (const landing of landings) {
+    const toward = harbour(landing);
+    const sea = world.mesh.component[locate(world.mesh, toward, 'sea')] as number;
+    if (seas.has(sea)) continue;
+    if (landing.id !== city.id && !router.marches(toward, city.position)) continue;
+    seas.add(sea);
+    const start = embarkationAt(state, world, faction, at, toward);
+    if (start && distance(start.from, toward) >= 1) return { kind: 'embark', to: landing.id };
+    const shore = start ? undefined : nearestSea(world.mesh, at, sea);
+    if (shore && router.marches(at, shore)) return { kind: 'march', to: shore };
+  }
+  return undefined;
 }
 
 /**

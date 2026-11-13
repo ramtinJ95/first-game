@@ -20,6 +20,7 @@ import type {
 } from '../sim/ids.ts';
 import type { GameMap } from '../sim/map.ts';
 import { CONVOY_KM_PER_DAY, MARCH_KM_PER_DAY } from '../sim/march.ts';
+import type { MoveArmyOrder } from '../sim/orders/move-army.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { Sight } from '../sim/sight.ts';
 import type { Army, Stance } from '../sim/state/army.ts';
@@ -35,6 +36,7 @@ import {
   reforming,
   STANCE_BEATS,
   STANCE_EFFECTS,
+  ENGAGEMENT_DISTANCE,
 } from '../sim/systems/battles.ts';
 import { SACK } from '../sim/cities.ts';
 import type { Siege } from '../sim/state/siege.ts';
@@ -116,10 +118,23 @@ export function activityText(state: State, army: DeepReadonly<Army>): string {
     case 'embarked': {
       const convoy = state.convoys[activity.convoy];
       if (!convoy) return 'At sea';
-      return `At sea${destination(state, convoy.waypoints.at(-1))} · ${daysLeft(
+      const landing = convoy.waypoints.at(-1);
+      const onward =
+        activity.march && landing
+          ? `, then marching${destination(state, activity.march.at(-1))} · ${daysLeft(
+              pathKm(landing, activity.march),
+              MARCH_KM_PER_DAY,
+            )}`
+          : '';
+      const sailing = `${destination(state, landing)} · ${daysLeft(
         pathKm(convoy.position, convoy.waypoints),
         CONVOY_KM_PER_DAY,
-      )}`;
+      )}${onward}`;
+      if (convoy.departsOn !== undefined && convoy.departsOn > state.day) {
+        const wait = convoy.departsOn - state.day;
+        return `Gathering ships ${placeName(state, convoy.position)} · ${wait} ${wait === 1 ? 'day' : 'days'}, then sailing${sailing}`;
+      }
+      return `At sea${sailing}`;
     }
   }
 }
@@ -245,22 +260,33 @@ export function rankText(
 }
 
 /**
- * Why the idle army stands at a foreign city without besieging it, or nothing when it
- * stands at none or besieges with the next day. It follows `canBesiege` and
- * `beginSieges`: at war with the owner, neither gold nor food below zero, and a
- * formation with men and morale.
+ * Why the idle army stands at or beside a foreign city without besieging it, or nothing
+ * when it stands beside none or besieges with the next day. It follows `canBesiege` and
+ * `beginSieges`: within AT_CITY_KM, at war with the owner, neither gold nor food below
+ * zero, and a formation with men and morale. An army beside an enemy city, within
+ * ENGAGEMENT_DISTANCE but too far to besiege it, is offered the march there that besieges it.
  */
 export function whyNotBesieging(
   state: State,
   army: DeepReadonly<Army>,
   pending: readonly Order[],
-): string | undefined {
+): { readonly text: string; readonly besiege?: MoveArmyOrder } | undefined {
   if (army.activity.kind !== 'idle') return undefined;
   const at = army.activity.position;
   const near = Object.values(state.cities)
-    .filter((city) => city.owner !== army.owner && distance(city.position, at) <= AT_CITY_KM)
+    .filter(
+      (city) => city.owner !== army.owner && distance(city.position, at) <= ENGAGEMENT_DISTANCE,
+    )
     .sort((a, b) => distance(a.position, at) - distance(b.position, at));
-  const city = near.find((c) => areAtWar(state, army.owner, c.owner)) ?? near[0];
+  const declaredOn = (c: DeepReadonly<City>) =>
+    pendingOrder(
+      pending,
+      'declareWar',
+      (order) => order.faction === army.owner && order.against === c.owner,
+    );
+  const city =
+    near.find((c) => areAtWar(state, army.owner, c.owner) || declaredOn(c)) ??
+    near.find((c) => distance(c.position, at) <= AT_CITY_KM);
   if (!city) return undefined;
   const owner = factionName(state, city.owner);
   const stores = state.factions[army.owner]?.stores;
@@ -275,18 +301,30 @@ export function whyNotBesieging(
       : fit
         ? undefined
         : `Every formation is broken. The siege of ${city.name} waits for morale.`;
-  if (!areAtWar(state, army.owner, city.owner)) {
-    const declared = pendingOrder(
-      pending,
-      'declareWar',
-      (order) => order.faction === army.owner && order.against === city.owner,
-    );
-    if (declared)
-      return blocked ?? `War on ${owner} begins with the next day, and the siege with it.`;
+  const declared = declaredOn(city);
+  const atWar = areAtWar(state, army.owner, city.owner) || !!declared;
+  const km = distance(city.position, at);
+  if (blocked && atWar) return { text: blocked };
+  if (!atWar) {
     const target = city.name === owner ? 'it' : city.name;
-    return `At peace with ${owner}. Declare war to besiege ${target}.`;
+    return { text: `At peace with ${owner}. Declare war to besiege ${target}.` };
   }
-  return blocked;
+  if (km <= AT_CITY_KM) {
+    return declared
+      ? { text: `War on ${owner} begins with the next day, and the siege with it.` }
+      : undefined;
+  }
+  const moving = pendingOrder(pending, 'moveArmy', (order) => order.army === army.id);
+  if (moving) return undefined;
+  return {
+    text: `Stands ${whole(km)} km from ${city.name}, too far to besiege it. An army besieges a city it stands within ${AT_CITY_KM} km of.`,
+    besiege: {
+      kind: 'moveArmy',
+      faction: army.owner,
+      army: army.id,
+      to: { x: city.position.x, y: city.position.y },
+    },
+  };
 }
 
 /** How many of the player's armies have orders waiting, or nothing when none has. */

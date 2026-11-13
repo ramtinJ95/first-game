@@ -41,7 +41,12 @@ export const ArmyActivitySchema = v.variant('kind', [
     march: v.array(MapPointSchema),
   }),
   v.object({ kind: v.literal('besieging'), position: MapPointSchema, siege: SiegeIdSchema }),
-  v.object({ kind: v.literal('embarked'), convoy: ConvoyIdSchema }),
+  v.object({
+    kind: v.literal('embarked'),
+    convoy: ConvoyIdSchema,
+    /** The land path the army marches on from its landing. Without one it stands where it lands. */
+    march: v.optional(v.pipe(v.array(MapPointSchema), v.nonEmpty())),
+  }),
 ]);
 export type ArmyActivity = v.InferOutput<typeof ArmyActivitySchema>;
 

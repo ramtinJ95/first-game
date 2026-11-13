@@ -224,6 +224,32 @@ describe('engagement', () => {
     expectConsistent(next);
   });
 
+  test('an enemy in reach of an army that another battle took today joins that battle and does not walk past', () => {
+    const state = atWar();
+    place(state, FIXTURE.punicArmy, FAR_AWAY);
+    const bait = addArmy(
+      state,
+      'army-a-bait',
+      100,
+      { kind: 'idle', position: { x: 2516.3 - 5, y: 2340.8 } },
+      FIXTURE.carthage,
+    );
+    const passer = addArmy(
+      state,
+      'army-z-passer',
+      1000,
+      { kind: 'idle', position: { x: 2516.3 + ENGAGEMENT_DISTANCE - 1, y: 2340.8 } },
+      FIXTURE.carthage,
+    );
+    const next = tick(state, [], world).state;
+    const [battle] = Object.values(next.battles);
+    expect(Object.values(next.battles)).toHaveLength(1);
+    expect([...(battle?.attackers ?? []), ...(battle?.defenders ?? [])].sort()).toEqual(
+      [bait, passer, FIXTURE.romanArmy].sort(),
+    );
+    expectConsistent(next);
+  });
+
   test('a third army joins only a side whose enemies are all its enemies', () => {
     const state = atWar();
     const egypt = 'egypt' as FactionId;

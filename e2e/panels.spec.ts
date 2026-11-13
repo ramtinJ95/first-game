@@ -134,7 +134,7 @@ test.describe('the panels', () => {
     await page.mouse.click(massalia.x, massalia.y, { button: 'right' });
     const menu = page.getByTestId('command-menu');
     await expect(menu.getByRole('menuitem')).toHaveText([
-      /^Sail from Roma to Massalia \d+ days$/,
+      /^Sail from Roma to Massalia \d+ days by sea$/,
       /^March to Massalia \d+ days$/,
       'Cancel',
     ]);

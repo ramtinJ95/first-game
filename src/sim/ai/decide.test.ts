@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
-import type { CityId, FactionId, FormationId } from '../ids.ts';
+import type { ArmyId, CityId, FactionId, FormationId } from '../ids.ts';
 import { changeCityOwner } from '../cities.ts';
 import { landPath, marchDays, marchPath, MAX_MARCH_DAYS, startMarch } from '../march.ts';
 import { newGame } from '../new-game.ts';
@@ -641,4 +641,41 @@ function deepFreeze<T>(value: T): T {
     Object.freeze(value);
   }
   return value;
+}
+
+describe('a way home from overseas', () => {
+  test('an army beaten overseas on a shore with no port of its owner sails home and marches on to its city', () => {
+    let state = buildFixture();
+    armyOf(state, f.romanArmy).activity = { kind: 'idle', position: { x: 2225, y: 2960 } };
+    const orders = decideOrders(state, world, f.rome);
+    expect(orders).toContainEqual(
+      expect.objectContaining({ kind: 'embark', army: f.romanArmy, to: f.roma }),
+    );
+    for (let day = 0; day < 120; day++) {
+      const army = armyOf(state, f.romanArmy);
+      if (army.activity.kind === 'idle' && day > 0) break;
+      state = tick(state, day === 0 ? orders : [], world).state as GameState;
+    }
+    expect(armyOf(state, f.romanArmy).activity).toEqual({ kind: 'idle', position: ROMA });
+    expectConsistent(state);
+  });
+
+  test('a stranded army whose owner holds no port lands at a port of another and marches on to its own city', () => {
+    const state = buildFixture();
+    changeCityOwner(state, f.roma, f.syracusaeFaction);
+    armyOf(state, f.romanArmy).activity = {
+      kind: 'idle',
+      position: { ...(world.harbours.get(f.syracusae) as MapPoint) },
+    };
+    const capua = state.cities[f.capua]?.position;
+    expect(decideOrders(state, world, f.rome)).toContainEqual(
+      expect.objectContaining({ kind: 'embark', army: f.romanArmy, to: f.roma, then: capua }),
+    );
+  });
+});
+
+function armyOf(state: GameState, id: ArmyId) {
+  const army = state.armies[id];
+  if (!army) throw new Error(`no army ${id}`);
+  return army;
 }

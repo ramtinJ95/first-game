@@ -4,8 +4,9 @@ import type { GameState } from '../state/game-state.ts';
 
 /**
  * Moves every marching or retreating army, convoy, and refugee column one day along
- * the path it already holds. An army that arrives stands idle. A convoy that arrives lands its
- * armies idle at the harbour and is gone. A column stays where it arrives.
+ * the path it already holds. An army that arrives stands idle. A convoy waits on its shore
+ * until the day it sails. One that arrives lands its armies at the harbour, each to march on
+ * along the land path it embarked with or to stand idle, and is gone. A column stays where it arrives.
  */
 export function movement(state: GameState): void {
   for (const army of Object.values(state.armies)) {
@@ -18,11 +19,17 @@ export function movement(state: GameState): void {
         : { kind: activity.kind, position, waypoints: activity.waypoints };
   }
   for (const convoy of Object.values(state.convoys)) {
+    if (convoy.departsOn !== undefined && state.day < convoy.departsOn) continue;
     convoy.position = advanceAlong(convoy.position, convoy.waypoints, CONVOY_KM_PER_DAY);
     if (convoy.waypoints.length > 0) continue;
     for (const id of convoy.armies) {
       const army = state.armies[id];
-      if (army) army.activity = { kind: 'idle', position: { ...convoy.position } };
+      if (army?.activity.kind !== 'embarked') continue;
+      const position = { ...convoy.position };
+      const { march } = army.activity;
+      army.activity = march
+        ? { kind: 'marching', position, waypoints: march }
+        : { kind: 'idle', position };
     }
     removeRecord(state.convoys, convoy.id);
   }

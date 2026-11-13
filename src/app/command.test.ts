@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { changeCityOwner } from '../sim/cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
-import type { ArmyId, CityId } from '../sim/ids.ts';
+import type { ArmyId, CityId, FactionId, SiegeId } from '../sim/ids.ts';
 import { newGame } from '../sim/new-game.ts';
 import { MAX_MARCH_DAYS } from '../sim/march.ts';
+import { GATHER_DAYS } from '../sim/orders/embark.ts';
+import type { MoveArmyOrder } from '../sim/orders/move-army.ts';
 import type { Order } from '../sim/orders/orders.ts';
+import { removeRecord } from '../sim/records.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
@@ -12,6 +15,7 @@ import { warKey } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import type { World } from '../sim/world/world.ts';
 import { FAR_LONGER, planCommand, plannedRoutes, route, type CommandTarget } from './command.ts';
+import { placeName } from './names.ts';
 
 const world = fixtureWorld();
 const f = FIXTURE;
@@ -51,10 +55,11 @@ function playOut(state: GameState, order: Order, army: ArmyId = f.romanArmy) {
   return { state: current, days };
 }
 
+/** The days of every leg in a menu line, summed. */
 function daysOf(detail: string): number {
-  const days = /^(\d+) days?$/.exec(detail)?.[1];
-  if (!days) throw new Error(`no days in "${detail}"`);
-  return Number(days);
+  const days = [...detail.matchAll(/(\d+) days?/g)].map((match) => Number(match[1]));
+  if (days.length === 0) throw new Error(`no days in "${detail}"`);
+  return days.reduce((sum, n) => sum + n, 0);
 }
 
 describe('a right click on a city', () => {
@@ -68,6 +73,7 @@ describe('a right click on a city', () => {
     expect(planned).toEqual({
       kind: 'issue',
       order: { kind: 'moveArmy', faction: f.rome, army: f.romanArmy, to: capua.position },
+      info: expect.stringMatching(/^March to Capua: \d+ days?\.$/),
     });
     if (planned.kind !== 'issue') return;
     const { activity } = armyOf(playOut(state, planned.order).state);
@@ -106,40 +112,52 @@ describe('a right click on a city', () => {
         army: f.romanArmy,
         to: cityOf(state, f.capua).position,
       },
+      info: expect.stringMatching(/^March to Capua: \d+ days?\.$/),
     });
   });
 
-  it('names the city when no land route reaches it and no port of the army sails near it', () => {
+  it('offers the march to the shore and the days that gather ships there when no port of its own sails near and no land route reaches the city', () => {
     const state = buildFixture();
     changeCityOwner(state, f.roma, f.carthage);
-    armyOf(state).activity = { kind: 'idle', position: { ...cityOf(state, f.capua).position } };
-    expect(plan(state, atCity(state, f.syracusae))).toEqual({
-      kind: 'refuse',
-      notice: `Order refused. No land route reaches Syracusae. No way by sea from a port of yours lands within ${MAX_MARCH_DAYS} days' march of it.`,
-    });
-  });
-
-  it('offers the march to a port of its own and the crossing when no land route reaches the city', () => {
-    const state = buildFixture();
     armyOf(state).activity = { kind: 'idle', position: { ...cityOf(state, f.capua).position } };
     const planned = plan(state, atCity(state, f.syracusae));
     if (planned.kind !== 'menu') throw new Error(`expected a menu, got ${planned.kind}`);
     expect(planned.menu.options).toMatchObject([
       {
         group: 'sea',
+        label: 'March to the shore near Capua to sail for Syracusae',
+        detail: expect.stringMatching(
+          new RegExp(
+            `^\\d+ days? to the shore, then ${GATHER_DAYS} days to gather ships, then \\d+ days by sea$`,
+          ),
+        ),
+        order: { kind: 'moveArmy' },
+      },
+    ]);
+  });
+
+  it('offers the march to a port of its own and the crossing when no land route reaches the city', () => {
+    const state = buildFixture();
+    armyOf(state).activity = { kind: 'idle', position: { x: 2545, y: 2330 } };
+    const planned = plan(state, atCity(state, f.syracusae));
+    if (planned.kind !== 'menu') throw new Error(`expected a menu, got ${planned.kind}`);
+    expect(planned.menu.options).toMatchObject([
+      {
+        group: 'sea',
         label: 'March to Roma to sail for Syracusae',
-        detail: expect.stringMatching(/^\d+ days, then \d+ days by sea$/),
+        detail: expect.stringMatching(/^\d+ days? to the port, then \d+ days by sea$/),
         order: { kind: 'moveArmy', to: cityOf(state, f.roma).position },
       },
     ]);
   });
 
-  it('opens the menu with the crossing, and no march, for a city across the sea that is not a port', () => {
+  it('Carthage to Capua by way of Roma: one order sails, lands, and marches on to Capua in the days the menu gave', () => {
     const state = buildFixture();
     armyOf(state, f.punicArmy).activity = {
       kind: 'idle',
       position: { ...cityOf(state, f.carthago).position },
     };
+    const capua = cityOf(state, f.capua).position;
     const planned = plan(state, atCity(state, f.capua), f.punicArmy);
     if (planned.kind !== 'menu') throw new Error(`expected a menu, got ${planned.kind}`);
     expect(planned.menu.title).toBe('Orders for Capua');
@@ -147,26 +165,29 @@ describe('a right click on a city', () => {
       {
         group: 'sea',
         label: 'Sail from Carthago to Roma',
-        order: { kind: 'embark', army: f.punicArmy, to: f.roma },
+        order: { kind: 'embark', army: f.punicArmy, to: f.roma, then: capua },
       },
     ]);
     const [sail] = planned.menu.options;
     const [, atSea, ashore] =
-      /^(\d+) days, then (\d+) days by land$/.exec(sail?.detail ?? '') ?? [];
+      /^(\d+) days by sea, then (\d+) days by land$/.exec(sail?.detail ?? '') ?? [];
     if (!sail || !atSea || !ashore) throw new Error(`no legs in "${sail?.detail}"`);
-    const landed = playOut(state, sail.order, f.punicArmy);
-    expect(landed.days).toBe(Number(atSea));
-    const marched = playOut(
-      landed.state,
-      {
-        kind: 'moveArmy',
-        faction: f.carthage,
-        army: f.punicArmy,
-        to: cityOf(state, f.capua).position,
-      },
-      f.punicArmy,
-    );
-    expect(marched.days).toBe(Number(ashore));
+    let current = tick(state, [sail.order], world).state;
+    let days = 1;
+    while (armyOf(current, f.punicArmy).activity.kind === 'embarked') {
+      current = tick(current, [], world).state;
+      days++;
+    }
+    expect(days).toBe(Number(atSea));
+    while (armyOf(current, f.punicArmy).activity.kind === 'marching') {
+      const { activity } = armyOf(current, f.punicArmy);
+      expect(activity.kind === 'marching' && activity.waypoints.at(-1)).toEqual(capua);
+      current = tick(current, [], world).state;
+      days++;
+    }
+    expect(days).toBe(Number(atSea) + Number(ashore));
+    expect(armyOf(current, f.punicArmy).activity).toEqual({ kind: 'idle', position: capua });
+    expectConsistent(current);
   });
 
   it('opens the menu, and drops the march, when the march takes more than FAR_LONGER times the way by sea', () => {
@@ -203,6 +224,7 @@ describe('a right click on a point', () => {
     expect(plan(state, atPoint(to))).toEqual({
       kind: 'issue',
       order: { kind: 'moveArmy', faction: f.rome, army: f.romanArmy, to },
+      info: 'March to a point near Roma: 2 days.',
     });
   });
 
@@ -284,7 +306,7 @@ describe('a right click on a port from a port', () => {
     const lake: World = { ...world, harbours: new Map(world.harbours).set(f.syracusae, inland) };
     expect(plan(state, atCity(state, f.syracusae), f.romanArmy, lake)).toEqual({
       kind: 'refuse',
-      notice: 'Order refused. No way by sea or by land leads from Roma to Syracusae.',
+      notice: `Order refused. No land route reaches Syracusae. No way by sea lands within ${MAX_MARCH_DAYS} days' march of it.`,
     });
   });
 
@@ -324,15 +346,188 @@ describe('a right click on a port from a port', () => {
     ]);
   });
 
-  it('refuses in words a march longer than MAX_MARCH_DAYS when no port of the army sails near', () => {
-    const state = buildFixture();
-    changeCityOwner(state, f.roma, f.carthage);
-    const planned = plan(state, atCity(state, f.carthago));
+  it('refuses in words a march longer than MAX_MARCH_DAYS when no way by sea lands near the city', () => {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    const romans = Object.values(state.armies).find((army) => army.owner === state.player);
+    if (!romans) throw new Error('no Roman army');
+    const planned = plan(state, atCity(state, 'alexandria-arachosion' as CityId), romans.id);
     expect(planned).toMatchObject({ kind: 'refuse' });
     expect(planned.notice).toMatch(
       new RegExp(
-        `^Order refused\\. The march to Carthago takes \\d+ days, more than the ${MAX_MARCH_DAYS} a march may take\\. No way by sea from a port of yours`,
+        `^Order refused\\. The march to Alexandria Arachosion takes \\d+ days, more than the ${MAX_MARCH_DAYS} a march may take\\. No way by sea lands within ${MAX_MARCH_DAYS} days' march of it\\.$`,
       ),
+    );
+  });
+});
+
+describe('a way home from overseas', () => {
+  it('Rome beaten at Carthago falls back into the field near Hadrumetum, and a right click on Roma sails it home', () => {
+    let state = newGame(world.map, { seed: 1, player: 'rome' });
+    const carthage = 'carthage' as FactionId;
+    state.wars[warKey(f.rome, carthage)] = { since: state.day };
+    const romans = Object.values(state.armies).find((army) => army.owner === f.rome);
+    if (!romans) throw new Error('no Roman army');
+    romans.activity = {
+      kind: 'idle',
+      position: { ...(world.harbours.get(f.carthago) as MapPoint) },
+    };
+    for (const army of Object.values(state.armies).filter((a) => a.owner === carthage)) {
+      for (const id of army.formations) {
+        const formation = state.formations[id];
+        if (formation) formation.men *= 3;
+      }
+    }
+    for (let day = 0; day < 60 && armyOf(state, romans.id).activity.kind !== 'retreating'; day++) {
+      state = tick(state, [], world).state;
+    }
+    for (let day = 0; day < 60 && armyOf(state, romans.id).activity.kind !== 'idle'; day++) {
+      state = tick(state, [], world).state;
+    }
+    const beaten = armyOf(state, romans.id).activity;
+    if (beaten.kind !== 'idle') throw new Error(`the Roman army is ${beaten.kind}`);
+    expect(placeName(state, beaten.position)).toBe('near Hadrumetum');
+
+    const roma = atCity(state, f.roma);
+    const planned = plan(state, roma, romans.id);
+    if (planned.kind !== 'menu') throw new Error(`expected a menu, got "${planned.notice}"`);
+    expect(planned.menu.options).toMatchObject([{ group: 'sea' }]);
+    let current = state;
+    for (let leg = 0; leg < 3; leg++) {
+      const next = plan(current, roma, romans.id);
+      const order =
+        next.kind === 'menu'
+          ? next.menu.options[0]?.order
+          : next.kind === 'issue'
+            ? next.order
+            : undefined;
+      if (!order) throw new Error(`no order home: "${next.notice}"`);
+      current = playOut(current, order, romans.id).state;
+      const { activity } = armyOf(current, romans.id);
+      if (activity.kind === 'idle' && placeName(current, activity.position) === 'at Roma') break;
+    }
+    expect(armyOf(current, romans.id).activity).toEqual({
+      kind: 'idle',
+      position: cityOf(current, f.roma).position,
+    });
+  });
+});
+
+describe('a shore beside a port of its own', () => {
+  it('offers the march to the port of its own when it sails sooner than ships gathered on the shore', () => {
+    const state = buildFixture();
+    armyOf(state, f.punicArmy).activity = { kind: 'idle', position: { x: 2225, y: 2960 } };
+    const planned = plan(state, atCity(state, f.syracusae), f.punicArmy);
+    if (planned.kind !== 'menu') throw new Error(`expected a menu, got ${planned.kind}`);
+    expect(planned.menu.options).toMatchObject([
+      {
+        group: 'sea',
+        label: 'March to Carthago to sail for Syracusae',
+        order: { kind: 'moveArmy', to: cityOf(state, f.carthago).position },
+      },
+    ]);
+  });
+});
+
+describe('what an order says at once', () => {
+  it('an accepted march says its days, the days the rules then take', () => {
+    const state = buildFixture();
+    const planned = plan(state, atCity(state, f.capua));
+    if (planned.kind !== 'issue') throw new Error(`expected an order, got ${planned.kind}`);
+    const way = route(state, world, planned.order as MoveArmyOrder);
+    if (typeof way === 'string') throw new Error(way);
+    expect(planned.info).toBe(`March to Capua: ${way.days} days.`);
+    expect(playOut(state, planned.order).days).toBe(way.days);
+  });
+
+  it('a landing too weak to cut the food says so at the order, with the garrison, the army, and the men it lacks, and is still offered', () => {
+    const state = buildFixture();
+    state.wars[warKey(f.rome, f.carthage)] = { since: state.day };
+    const planned = plan(state, atCity(state, f.carthago));
+    if (planned.kind !== 'menu') throw new Error(`expected a menu, got ${planned.kind}`);
+    const men = armyOf(state).formations.reduce(
+      (sum, id) => sum + (state.formations[id]?.men ?? 0),
+      0,
+    );
+    const garrison = cityOf(state, f.carthago).garrison;
+    expect(men).toBeLessThan(garrison);
+    expect(planned.notice).toBe(
+      `Carthago holds a garrison of ${garrison.toLocaleString('en')}, more than the ${men.toLocaleString('en')} men who would besiege it. Its food would not fall, and sallies would cut the besiegers down. ${(garrison - men).toLocaleString('en')} more men would hold the siege.`,
+    );
+    expect(planned.menu.options).toMatchObject([
+      { group: 'sea', label: 'Sail from Roma to Carthago' },
+    ]);
+  });
+
+  it('a march to a point beside an enemy city warns as a march to the city does', () => {
+    const state = buildFixture();
+    changeCityOwner(state, f.capua, f.carthage);
+    state.wars[warKey(f.rome, f.carthage)] = { since: state.day };
+    const [first] = armyOf(state).formations;
+    const formation = first && state.formations[first];
+    if (!formation) throw new Error('fixture changed');
+    for (const id of armyOf(state).formations.slice(1)) removeRecord(state.formations, id);
+    armyOf(state).formations = [formation.id];
+    formation.men = 200;
+    const capua = cityOf(state, f.capua);
+    const planned = plan(state, atPoint({ x: capua.position.x + 9, y: capua.position.y }));
+    expect(planned).toMatchObject({
+      kind: 'issue',
+      info: expect.stringMatching(/^March to Capua: /),
+    });
+    expect(planned.notice).toMatch(
+      /^Capua holds a garrison of [\d,]+, more than the 200 men who would besiege it\./,
+    );
+  });
+
+  it('a march that joins a siege another faction already holds with enough men gives no warning', () => {
+    const state = buildFixture();
+    state.wars[warKey(f.rome, f.syracusaeFaction)] = { since: state.day };
+    state.wars[warKey(f.carthage, f.syracusaeFaction)] = { since: state.day };
+    const syracusae = cityOf(state, f.syracusae);
+    const [first] = armyOf(state).formations;
+    const formation = first && state.formations[first];
+    if (!formation) throw new Error('fixture changed');
+    for (const id of armyOf(state).formations.slice(1)) removeRecord(state.formations, id);
+    armyOf(state).formations = [formation.id];
+    formation.men = 100;
+    armyOf(state).activity = {
+      kind: 'idle',
+      position: { x: syracusae.position.x - 15, y: syracusae.position.y },
+    };
+    const punic = armyOf(state, f.punicArmy);
+    for (const id of punic.formations) {
+      const own = state.formations[id];
+      if (own) own.men = syracusae.garrison * 2;
+    }
+    const siege = 'siege-1' as SiegeId;
+    state.nextSerial = 2;
+    state.sieges[siege] = {
+      id: siege,
+      city: f.syracusae,
+      besiegers: [punic.id],
+      startedOn: state.day,
+    };
+    punic.activity = { kind: 'besieging', position: { ...syracusae.position }, siege };
+    expectConsistent(state);
+    const joining = plan(state, atCity(state, f.syracusae));
+    expect(joining.kind).toBe('issue');
+    expect(joining.notice).toBeUndefined();
+    removeRecord(state.sieges, siege);
+    punic.activity = { kind: 'idle', position: { x: 0, y: 0 } };
+    expect(plan(state, atCity(state, f.syracusae)).notice).toMatch(
+      /^Syracusae holds a garrison of [\d,]+, more than the 100 men who would besiege it\./,
+    );
+  });
+
+  it('a march given after a war declared on a paused day says nothing of peace', () => {
+    const state = buildFixture();
+    changeCityOwner(state, f.capua, f.carthage);
+    const declare: Order = { kind: 'declareWar', faction: f.rome, against: f.carthage };
+    const planned = planCommand(state, world, armyOf(state), atCity(state, f.capua), [declare]);
+    expect(planned).toMatchObject({ kind: 'issue' });
+    expect(planned.notice).toBeUndefined();
+    expect(plan(state, atCity(state, f.capua)).notice).toBe(
+      'At peace with Carthage. Declare war to besiege it.',
     );
   });
 });
