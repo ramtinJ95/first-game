@@ -1,0 +1,47 @@
+[
+  {
+    "file": "start.png",
+    "title": "On load: the top bar reads Rome, its gold, food, and manpower with their daily change, Year 1, day 1, and speed 1",
+    "kind": "screenshot"
+  },
+  {
+    "file": "running.png",
+    "title": "After 2.5 seconds at speed 1: the day counter has advanced",
+    "kind": "screenshot"
+  },
+  {
+    "file": "paused.png",
+    "title": "Space pressed: the top bar reads Paused and the button offers Resume",
+    "kind": "screenshot"
+  },
+  {
+    "file": "still-paused.png",
+    "title": "Two seconds later: the day has not moved while paused",
+    "kind": "screenshot"
+  },
+  {
+    "file": "speed-3.png",
+    "title": "Resumed and switched to speed 3: the speed 3 button is pressed",
+    "kind": "screenshot"
+  },
+  {
+    "file": "fast.png",
+    "title": "After 2.5 seconds at speed 3: the day has jumped about twelve days",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Time controls: the day counter runs, pauses on Space, and runs faster at speed 3",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Time controls: the day counter runs, pauses on Space, and runs faster at speed 3 (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Time controls: the day counter runs, pauses on Space, and runs faster at speed 3 (Playwright trace)",
+    "kind": "trace"
+  }
+]
