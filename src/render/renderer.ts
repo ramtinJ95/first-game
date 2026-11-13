@@ -47,7 +47,7 @@ import {
 import { paperTexture, waterTexture } from './paper.ts';
 import { toPixels } from './lines.ts';
 import { FramePacer } from './frame-pacer.ts';
-import { cityAt, pickAt, provinceAt, type DrawnCity, type Pick } from './pick.ts';
+import { cityAt, pickAt, type DrawnCity, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
 import { citySymbols } from './symbols.ts';
 import { createLife } from './terrain/life.ts';
@@ -855,17 +855,9 @@ export async function createRenderer({
     }
   }
 
-  const landAt = new Map<string, boolean>();
   const onLand = (screen: MapPoint) => {
     const point = screenToMap(camera, viewport(), screen);
-    const key = `${Math.round(point.x)},${Math.round(point.y)}`;
-    let found = landAt.get(key);
-    if (found === undefined) {
-      if (landAt.size > 4000) landAt.clear();
-      found = provinceAt(map, point) !== undefined;
-      landAt.set(key, found);
-    }
-    return found;
+    return terrain.land.open(point.x, point.y);
   };
   /** At the zooms that draw figures, a battle's marker stands above its fighting. */
   const battleLift = () =>

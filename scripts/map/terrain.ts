@@ -53,6 +53,15 @@ const BUFFER_SIDES = 16;
 export const FOREST_BIOMES: readonly number[] = [4, 5, 6];
 /** Forest steppe is open grassland with groves, and the biome lists it as forest. */
 const NOT_FOREST = /steppe/i;
+/**
+ * Italy's woods are Mediterranean ecoregions, biome 12, which also covers the scrub of
+ * Iberia, Greece, Anatolia, and the Maghreb. These three are admitted by name.
+ */
+export const FOREST_ECOREGIONS: readonly string[] = [
+  'Italian sclerophyllous and semi-deciduous forests',
+  'South Apennine mixed montane forests',
+  'Tyrrhenian-Adriatic sclerophyllous and mixed forests',
+];
 /** Reservoirs are modern dams. */
 export const LAKE_CLASSES: readonly string[] = ['Lake', 'Alkaline Lake'];
 /** Natural Earth lists a modern polder lake and a lagoon of the Sea of Azov as lakes. */
@@ -112,7 +121,11 @@ export function terrainAreas(
     { name: '', outline: subtract(shape, ranges) },
   ];
   const forests = sources.ecoregions
-    .filter((region) => FOREST_BIOMES.includes(region.biome) && !NOT_FOREST.test(region.name))
+    .filter(
+      (region) =>
+        (FOREST_BIOMES.includes(region.biome) && !NOT_FOREST.test(region.name)) ||
+        FOREST_ECOREGIONS.includes(region.name),
+    )
     .map((region) => ({ name: region.name, outline: toPlane(region.polygons) }));
   const lakes = sources.lakes
     .filter(

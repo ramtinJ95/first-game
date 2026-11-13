@@ -56,6 +56,8 @@ export default defineScenario({
     await panel.getByRole('button', { name: 'Confirm storm' }).click();
     // A frame this close takes long enough in software that the day would be over by the
     // time the clock pauses, so the day is entered at the widest zoom and shown close.
+    // The city stays unselected, so its outline does not cross the storm.
+    await page.keyboard.press('Escape');
     const here = { x: carthago.x + 14, y: carthago.y };
     await view.jumpTo(here, 0.1);
     await intoNextDay(page, 0);
