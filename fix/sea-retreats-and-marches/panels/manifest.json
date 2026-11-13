@@ -1,0 +1,37 @@
+[
+  {
+    "file": "top-bar.png",
+    "title": "The top bar: Rome's gold marked red because a large army's upkeep empties it within days",
+    "kind": "screenshot"
+  },
+  {
+    "file": "army-own.png",
+    "title": "Your army selected: formations, general, activity with days left, stance, halt, and its path on the map",
+    "kind": "screenshot"
+  },
+  {
+    "file": "army-foreign.png",
+    "title": "A foreign army: the same facts, no orders, and the declaration of war waiting for its confirmation",
+    "kind": "screenshot"
+  },
+  {
+    "file": "city-recruiting.png",
+    "title": "Roma raising skirmishers and heavy cavalry with days left, the troop buttons with their costs, and the evacuation",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Each panel in use: the top bar, your army and a foreign one, a city raising troops, the sea crossing, a battle, a siege, a fallen city, a refused order, and the alerts",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Each panel in use: the top bar, your army and a foreign one, a city raising troops, the sea crossing, a battle, a siege, a fallen city, a refused order, and the alerts (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Each panel in use: the top bar, your army and a foreign one, a city raising troops, the sea crossing, a battle, a siege, a fallen city, a refused order, and the alerts (Playwright trace)",
+    "kind": "trace"
+  }
+]
