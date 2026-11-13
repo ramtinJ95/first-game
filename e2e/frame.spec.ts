@@ -218,6 +218,21 @@ test.describe('the frame round the game', () => {
     expect(loot).toBeGreaterThan(0);
     await sack.click();
     await expect(prompt).toHaveCount(0);
+    // The game opened paused and stays so, so the sack waits for the next day, and the
+    // page says so rather than seeming to ignore the click.
+    await expect(page.getByTestId('notice')).toHaveText(
+      'Mediolanum will be sacked when the next day runs',
+    );
+    await page.getByRole('button', { name: 'Overview' }).click();
+    await page
+      .getByTestId('overview-cities')
+      .getByRole('button', { name: /^Mediolanum/ })
+      .click();
+    const panel = page.getByTestId('city-panel');
+    await expect(panel.getByTestId('city-fate-ordered')).toHaveText(
+      'Sack ordered for the next day',
+    );
+    await expect(panel.getByRole('button', { name: /^Sack for/ })).toHaveCount(0);
     await page.keyboard.press('Space');
     await untilDay(page, fallen.day + 1);
     await pause(page);

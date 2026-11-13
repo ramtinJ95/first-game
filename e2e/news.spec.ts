@@ -4,6 +4,7 @@ import {
   camera,
   cityPoint,
   dropSave,
+  fiveFleetsOnRoma,
   openGame,
   pause,
   resume,
@@ -13,6 +14,7 @@ import {
   storesAtTheirLimits,
   untilDrawn,
   weakSiegeOfMediolanum,
+  worldNewsTomorrow,
 } from './support.ts';
 
 async function load(page: Page, state: GameState) {
@@ -102,4 +104,44 @@ test.describe('what the page tells of stores, cities, and sieges', () => {
       .click();
     await expect(page.getByTestId('army-weak-siege')).toHaveText(text);
   });
+});
+
+test('news of the world out of sight reaches the player: a fallen capital in the corner, a city near its land in the chronicle only', async ({
+  page,
+}) => {
+  await openGame(page);
+  const state = worldNewsTomorrow();
+  await load(page, state);
+  await resume(page);
+  const corner = page.getByTestId('alerts');
+  const capital = corner.getByRole('button', {
+    name: /Carthago, the capital of Carthage, fell to Egypt/,
+  });
+  await expect(capital).toBeVisible();
+  await pause(page);
+  await expect(corner).not.toContainText('Mediolanum fell to Macedon');
+
+  await page.getByRole('button', { name: 'Chronicle' }).click();
+  const chronicle = page.getByTestId('chronicle');
+  await expect(chronicle).toContainText('Carthago, the capital of Carthage, fell to Egypt');
+  await expect(chronicle).toContainText('Mediolanum fell to Macedon, 306 km from your land');
+
+  // The world's news is drawn quieter than the player's own.
+  const style = (text: string) =>
+    chronicle
+      .getByRole('button', { name: new RegExp(text) })
+      .locator('.text')
+      .evaluate((element) => getComputedStyle(element).fontStyle);
+  expect(await style('fell to Egypt')).toBe('italic');
+});
+
+test("five of an enemy's fleets seen on one day sailing for Roma read as one alert with all their men", async ({
+  page,
+}) => {
+  await openGame(page);
+  await load(page, fiveFleetsOnRoma());
+  await resume(page);
+  const line = page.getByTestId('alerts').getByRole('button', { name: /fleets? of Carthage/ });
+  await expect(line).toHaveCount(1);
+  await expect(line).toContainText('5 fleets of Carthage with 2,129 men are sailing for Roma');
 });

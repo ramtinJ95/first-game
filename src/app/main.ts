@@ -50,6 +50,7 @@ import {
 } from './saves.ts';
 import { turningPoints } from './turning-points.ts';
 import { standingOffer } from '../sim/peace/offer.ts';
+import { worldNewsOfDay } from './world-news.ts';
 import {
   createView,
   type CommandMenu,
@@ -230,6 +231,8 @@ const clock = createClock({
         ...alertsInSight(alertsOfDay(before, after, events, occupied), saw, sees),
         ...sightingsOfDay(before, after, saw, sees, world),
         ...weak.alerts,
+        // The world's news reaches every power, whether it sees the place or not.
+        ...worldNewsOfDay(before, after, events),
       ]),
       newsPauses ? pauses : NO_PAUSES,
       toldOnce,
@@ -580,6 +583,16 @@ const frame: FrameActions = {
     if (order) clock.issue(order);
     else if (front?.kind === 'fate') occupy(front.city);
     closeModal();
+    // A game already paused, by other news of the day or by the player, stays paused,
+    // so the order waits for the next day and the player is told so.
+    const fate = order?.kind === 'sack' || order?.kind === 'enslave' ? order : undefined;
+    const city = fate && clock.state.cities[fate.city];
+    if (fate && city && clock.paused) {
+      showNotice(
+        `${city.name} will be ${fate.kind === 'sack' ? 'sacked' : 'enslaved'} when the next day runs`,
+        'info',
+      );
+    }
   },
   setPauseOnFate(on) {
     pauseOnFate = on;

@@ -43,6 +43,12 @@ export const ALERT_KINDS = [
   'peaceOffered',
   'peaceRefused',
   'peaceMade',
+  'powersAtWar',
+  'powersMadePeace',
+  'capitalFell',
+  'powerFell',
+  'newLeader',
+  'cityNearFell',
 ] as const;
 export type AlertKind = (typeof ALERT_KINDS)[number];
 
@@ -73,6 +79,19 @@ export interface Alert {
   readonly pause?: { readonly kind: PauseKind; readonly once?: string };
   /** The game paused for this news. */
   readonly paused?: true;
+  /**
+   * News of the world beyond the player's own affairs, drawn quieter than the player's
+   * own. The chronicle keeps it all, and the corner shows only the `corner` kind.
+   */
+  readonly world?: WorldReach;
+}
+
+export const WORLD_REACHES = ['corner', 'chronicle'] as const;
+export type WorldReach = (typeof WORLD_REACHES)[number];
+
+/** The alerts the corner list shows, newest first: all but the world news kept for the chronicle. */
+export function cornerAlerts(alerts: readonly Alert[], shown: number): Alert[] {
+  return alerts.filter((alert) => alert.world !== 'chronicle').slice(0, shown);
 }
 
 type State = DeepReadonly<GameState>;
@@ -387,7 +406,7 @@ export function sightingsOfDay(
     )[0];
     return city && distanceKm(city.position, to) <= THREAT_KM ? city.name : 'your land';
   };
-  const alerts: Alert[] = [];
+  const seen: Sighting[] = [];
 
   for (const convoy of Object.values(after.convoys)) {
     if (!sees.convoys.has(convoy.id) || saw.convoys.has(convoy.id)) continue;
@@ -399,16 +418,16 @@ export function sightingsOfDay(
       return sum + (army ? menOf(after, army) : 0);
     }, 0);
     const first = convoy.armies[0];
-    alerts.push({
-      kind: 'enemySighted',
-      day,
-      tone: 'bad',
-      text: `A fleet of ${factionName(after, convoy.owner)} with ${namesOfArmies(after, convoy.armies)}, ${whole(men)} men, is sailing for ${target(to)}`,
+    seen.push({
+      by: 'sea',
+      owner: convoy.owner,
+      target: target(to),
+      men,
+      alone: `A fleet of ${factionName(after, convoy.owner)} with ${namesOfArmies(after, convoy.armies)}, ${whole(men)} men, is sailing for ${target(to)}`,
       focus: {
         at: convoy.position,
         ...(first && { select: { kind: 'army', army: first } as const }),
       },
-      pause: { kind: 'sighted', once: warOnce(after, convoy.owner) },
     });
   }
 
@@ -418,16 +437,57 @@ export function sightingsOfDay(
     if (!areAtWar(after, army.owner, player)) continue;
     const to = army.activity.waypoints[army.activity.waypoints.length - 1];
     if (!to || !threatens(to)) continue;
-    alerts.push({
-      kind: 'enemySighted',
-      day,
-      tone: 'bad',
-      text: `${armyTitle(after, army)} with ${whole(menOf(after, army))} men is marching on ${target(to)}`,
+    const men = menOf(after, army);
+    seen.push({
+      by: 'land',
+      owner: army.owner,
+      target: target(to),
+      men,
+      alone: `${armyTitle(after, army)} with ${whole(men)} men is marching on ${target(to)}`,
       focus: { at: army.activity.position, select: { kind: 'army', army: army.id } },
-      pause: { kind: 'sighted', once: warOnce(after, army.owner) },
     });
   }
-  return alerts;
+
+  // Fleets or armies of one power seen on one day on their way to one place are one
+  // invasion, told as one line with their men together.
+  const groups = new Map<string, Sighting[]>();
+  for (const sighting of seen) {
+    const key = `${sighting.by}|${sighting.owner}|${sighting.target}`;
+    groups.set(key, [...(groups.get(key) ?? []), sighting]);
+  }
+  return [...groups.values()].flatMap((group): Alert[] => {
+    const [first] = group;
+    if (!first) return [];
+    const men = whole(group.reduce((sum, { men }) => sum + men, 0));
+    const owner = factionName(after, first.owner);
+    return [
+      {
+        kind: 'enemySighted',
+        day,
+        tone: 'bad',
+        text:
+          group.length === 1
+            ? first.alone
+            : first.by === 'sea'
+              ? `${group.length} fleets of ${owner} with ${men} men are sailing for ${first.target}`
+              : `${group.length} armies of ${owner} with ${men} men are marching on ${first.target}`,
+        focus: first.focus,
+        pause: { kind: 'sighted', once: warOnce(after, first.owner) },
+      },
+    ];
+  });
+}
+
+/** A fleet or a marching army of an enemy seen on its way to the player's land. */
+interface Sighting {
+  readonly by: 'sea' | 'land';
+  readonly owner: FactionId;
+  /** The place it heads for, as the alert names it. */
+  readonly target: string;
+  readonly men: number;
+  /** The alert's text when it comes alone. */
+  readonly alone: string;
+  readonly focus: NonNullable<Alert['focus']>;
 }
 
 /**

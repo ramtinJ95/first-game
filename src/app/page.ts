@@ -11,7 +11,14 @@ import {
 } from '../sim/ids.ts';
 import { DaySchema } from '../sim/state/day.ts';
 import { MapPointSchema } from '../sim/state/map-point.ts';
-import { ALERT_KINDS, PAUSE_KINDS, type Alert, type Occupied, type WeakSiege } from './alerts.ts';
+import {
+  ALERT_KINDS,
+  PAUSE_KINDS,
+  WORLD_REACHES,
+  type Alert,
+  type Occupied,
+  type WeakSiege,
+} from './alerts.ts';
 
 /** The panels that open over the map's left side, one at a time. */
 export const PANELS = ['overview', 'chronicle', 'wars'] as const;
@@ -40,6 +47,7 @@ const AlertSchema = v.object({
   count: v.optional(v.number()),
   pause: v.optional(v.object({ kind: v.picklist(PAUSE_KINDS), once: v.optional(v.string()) })),
   paused: v.optional(v.literal(true)),
+  world: v.optional(v.picklist(WORLD_REACHES)),
 });
 
 const PageSchema = v.object({

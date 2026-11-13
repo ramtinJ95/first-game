@@ -639,6 +639,51 @@ describe('sightingsOfDay', () => {
     ]);
   });
 
+  it("tells of an enemy's fleets seen on one day sailing for one city as one line with all their men", () => {
+    const before = buildFixture();
+    atWar(before);
+    const roma = before.cities[f.roma]?.position;
+    const punic = before.armies[f.punicArmy];
+    const spears = before.formations[f.citizenSpears];
+    if (!roma || !punic || !spears) throw new Error('fixture changed');
+    const after = structuredClone(before);
+    after.day = (before.day + 1) as Day;
+    const men = [400, 302, 396, 382, 649];
+    men.forEach((n, i) => {
+      const army = `army-fleet-${i}` as ArmyId;
+      const formation = `formation-fleet-${i}` as FormationId;
+      const convoy = `convoy-${i}` as ConvoyId;
+      after.formations[formation] = { ...structuredClone(spears), id: formation, army, men: n };
+      after.armies[army] = {
+        ...structuredClone(punic),
+        id: army,
+        formations: [formation],
+        activity: { kind: 'embarked', convoy },
+      };
+      after.convoys[convoy] = {
+        id: convoy,
+        owner: f.carthage,
+        position: { x: roma.x + i, y: roma.y + 130 },
+        armies: [army],
+        waypoints: [roma],
+      };
+    });
+    const alerts = sightingsOfDay(
+      before,
+      after,
+      sightOf(before, world, f.rome),
+      sightOf(after, world, f.rome),
+      world,
+    );
+    expect(alerts.map((a) => [a.kind, a.text, a.focus?.select])).toEqual([
+      [
+        'enemySighted',
+        '5 fleets of Carthage with 2,129 men are sailing for Roma',
+        { kind: 'army', army: 'army-fleet-0' },
+      ],
+    ]);
+  });
+
   it('says nothing of an enemy heading elsewhere, or of a power at peace', () => {
     expect(sighted('march', 'carthago')).toEqual([]);
     expect(sighted('sail', 'carthago')).toEqual([]);

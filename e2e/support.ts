@@ -252,6 +252,19 @@ export function mediolanumFallsTomorrow(): GameState {
 }
 
 /**
+ * News of the world for Rome tomorrow, out of its sight: Egypt takes Carthago, the
+ * capital of Carthage, whose army is away at Hadrumetum, and Macedon takes Mediolanum, on
+ * Rome's border. Nobody is at war with Rome.
+ */
+export function worldNewsTomorrow(): GameState {
+  const state = startGame();
+  armyOf(state, carthage).activity = { kind: 'idle', position: cityPoint('hadrumetum') };
+  fallsTomorrow(state, 'carthago', 'egypt' as FactionId);
+  fallsTomorrow(state, 'mediolanum', 'macedon' as FactionId);
+  return state;
+}
+
+/**
  * Rome holds 31 provinces with Roma, Carthago, and Alexandria, and takes Mediolanum
  * tomorrow, which meets the victory rule.
  */
@@ -638,6 +651,34 @@ export function carthageSailsOnRoma(): GameState {
     current = next;
   }
   throw new Error("Carthage's fleet never came into Rome's sight");
+}
+
+/**
+ * Carthage at war with Rome sends five armies of 400, 302, 396, 382, and 649 men from
+ * Carthago to Roma, each in its own fleet, on the day before Rome first sees them.
+ */
+export function fiveFleetsOnRoma(): GameState {
+  world ??= buildWorld(map);
+  const state = startGame();
+  declareWar(state, rome, carthage);
+  const first = armyOf(state, carthage);
+  const orders: Order[] = [400, 302, 396, 382, 649].map((men, i) => {
+    const id = (i === 0 ? first.id : allocateId(state, 'army')) as ArmyId;
+    const army: Army =
+      i === 0 ? first : { ...first, id, name: nameNewArmy(state, carthage), formations: [] };
+    state.armies[id] = army;
+    withFormations(state, army, [['spearmen', men]]);
+    army.activity = { kind: 'idle', position: cityPoint('carthago') };
+    return { kind: 'embark', faction: carthage, army: id, to: 'roma' as CityId };
+  });
+  let current = playDays(state, 1, orders);
+  for (let day = 0; day < 60; day++) {
+    const next = playDays(current, 1);
+    const seen = sightOf(next, world, rome);
+    if (Object.values(next.convoys).some((convoy) => seen.convoys.has(convoy.id))) return current;
+    current = next;
+  }
+  throw new Error("Carthage's fleets never came into Rome's sight");
 }
 
 /**
