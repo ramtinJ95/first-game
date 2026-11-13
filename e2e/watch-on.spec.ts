@@ -9,6 +9,7 @@ import {
   pause,
   resume,
   romaFallsTomorrow,
+  rome,
   untilDrawn,
 } from './support.ts';
 
@@ -22,7 +23,7 @@ function playTo(state: GameState, target: number): GameState {
   return current;
 }
 
-test('a defeated player who watches on sees every army, and the top bar says the realm has fallen', async ({
+test('a defeated player who watches on sees every army, and the top bar and the overview say the realm has fallen', async ({
   page,
 }) => {
   const save = romaFallsTomorrow();
@@ -69,4 +70,12 @@ test('a defeated player who watches on sees every army, and the top bar says the
   await page.mouse.click(persian.at.x, persian.at.y);
   const panel = page.getByTestId('army-panel');
   await expect(panel.getByRole('heading')).toHaveText('Army of Persia');
+
+  await page.getByRole('button', { name: 'Overview' }).click();
+  const overview = page.getByTestId('overview');
+  await expect(overview.getByTestId('overview-fallen')).toHaveText(
+    `Your realm has fallen. Rome lost its last city on Year 1, day ${state.factions[rome]?.defeatedOn}, and nothing is left to command.`,
+  );
+  await expect(overview.getByTestId('overview-armies')).toHaveCount(0);
+  await expect(overview.getByTestId('overview-wars')).toHaveCount(0);
 });

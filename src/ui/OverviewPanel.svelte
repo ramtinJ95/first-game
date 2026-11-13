@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { whole } from '../app/names.ts';
+  import { dateText, factionName, whole } from '../app/names.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { Sight } from '../sim/sight.ts';
   import type { GameState } from '../sim/state/game-state.ts';
@@ -16,45 +16,53 @@
 <section class="panel overview" id="overview" data-testid="overview" aria-label="Overview">
   <h2>Overview</h2>
 
-  <h3>Cities</h3>
-  <ul class="pick-list" data-testid="overview-cities">
-    {#each overview.cities as row (row.city)}
-      <li>
-        <button type="button" class="pick" onclick={() => actions.show(row.pick, row.at)}>
-          <span class="swatch" style:background={colour}></span>
-          <span class="who"
-            >{row.name} <span class="count">{whole(row.population)} people</span></span
-          >
-          <span class="what">{row.status}</span>
-        </button>
-      </li>
-    {/each}
-  </ul>
+  {#if overview.kind === 'fallen'}
+    <p data-testid="overview-fallen">
+      Your realm has fallen. {factionName(game, game.player)} lost its last city on {dateText(
+        overview.on,
+      )}, and nothing is left to command.
+    </p>
+  {:else}
+    <h3>Cities</h3>
+    <ul class="pick-list" data-testid="overview-cities">
+      {#each overview.cities as row (row.city)}
+        <li>
+          <button type="button" class="pick" onclick={() => actions.show(row.pick, row.at)}>
+            <span class="swatch" style:background={colour}></span>
+            <span class="who"
+              >{row.name} <span class="count">{whole(row.population)} people</span></span
+            >
+            <span class="what">{row.status}</span>
+          </button>
+        </li>
+      {/each}
+    </ul>
 
-  <h3>Armies</h3>
-  {#if overview.armies.length === 0}
-    <p class="muted">You have no army. Raise troops in a city.</p>
+    <h3>Armies</h3>
+    {#if overview.armies.length === 0}
+      <p class="muted">You have no army. Raise troops in a city.</p>
+    {/if}
+    <ul class="pick-list" data-testid="overview-armies">
+      {#each overview.armies as row (row.army)}
+        <li>
+          <button type="button" class="pick" onclick={() => actions.show(row.pick, row.at)}>
+            <span class="swatch" style:background={colour}></span>
+            <span class="who">{row.activity}</span>
+            <span class="what">{whole(row.men)} men</span>
+          </button>
+        </li>
+      {/each}
+    </ul>
+
+    <h3>Wars</h3>
+    <ul class="wars" data-testid="overview-wars">
+      {#each overview.wars as war (war.against)}
+        <li class="bad">At war with {war.name} since day {war.since}</li>
+      {:else}
+        <li>At peace with everyone</li>
+      {/each}
+    </ul>
   {/if}
-  <ul class="pick-list" data-testid="overview-armies">
-    {#each overview.armies as row (row.army)}
-      <li>
-        <button type="button" class="pick" onclick={() => actions.show(row.pick, row.at)}>
-          <span class="swatch" style:background={colour}></span>
-          <span class="who">{row.activity}</span>
-          <span class="what">{whole(row.men)} men</span>
-        </button>
-      </li>
-    {/each}
-  </ul>
-
-  <h3>Wars</h3>
-  <ul class="wars" data-testid="overview-wars">
-    {#each overview.wars as war (war.against)}
-      <li class="bad">At war with {war.name} since day {war.since}</li>
-    {:else}
-      <li>At peace with everyone</li>
-    {/each}
-  </ul>
 </section>
 
 <style>

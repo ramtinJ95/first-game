@@ -1,3 +1,4 @@
+import { defeatFaction } from '../sim/defeat.ts';
 import { describe, expect, it } from 'vitest';
 import { changeCityOwner } from '../sim/cities.ts';
 import { buildFixture, FIXTURE as f, fixtureWorld } from '../sim/fixture.ts';
@@ -232,6 +233,13 @@ describe('armiesAt', () => {
   });
 });
 
+/** The overview of a realm that still stands. */
+function standing(...args: Parameters<typeof overviewOf>) {
+  const overview = overviewOf(...args);
+  if (overview.kind !== 'standing') throw new Error('the realm has fallen');
+  return overview;
+}
+
 describe('overviewOf', () => {
   it("lists the player's cities with their state, its armies, and its wars", () => {
     const state = buildFixture();
@@ -245,7 +253,7 @@ describe('overviewOf', () => {
       { troop: 'spearmen', readyOn: 9 as Day },
       { troop: 'archers', readyOn: 9 as Day },
     ];
-    const overview = overviewOf(state, sightOf(state, world, f.rome));
+    const overview = standing(state, sightOf(state, world, f.rome));
     expect(
       overview.cities.map(({ name, population, status }) => [name, population, status]),
     ).toEqual([
@@ -285,16 +293,25 @@ describe('overviewOf', () => {
     roman(state).activity = { kind: 'embarked', convoy };
 
     const sight = sightOf(state, world, f.rome);
-    const capuaRow = (s: typeof sight) =>
-      overviewOf(state, s).cities.find((c) => c.city === f.capua);
+    const capuaRow = (s: typeof sight) => standing(state, s).cities.find((c) => c.city === f.capua);
     expect(capuaRow(sight)?.status).toBe('Besieged by Carthage since day 3');
     expect(capuaRow({ ...sight, armies: new Set<ArmyId>() })?.status).toBe('Besieged since day 3');
-    expect(overviewOf(state, sight).armies[0]?.at).toEqual(sea);
+    expect(standing(state, sight).armies[0]?.at).toEqual(sea);
   });
 
   it('lists no war for a player at peace', () => {
     const state = buildFixture();
-    expect(overviewOf(state, sightOf(state, world, f.rome)).wars).toEqual([]);
+    expect(standing(state, sightOf(state, world, f.rome)).wars).toEqual([]);
+  });
+
+  it('lists nothing to do once the realm has fallen, and gives the day it fell', () => {
+    const state = buildFixture();
+    atWar(state, f.rome, f.carthage, 4 as Day);
+    defeatFaction(state, f.rome);
+    expect(overviewOf(state, sightOf(state, world, f.rome))).toEqual({
+      kind: 'fallen',
+      on: state.day,
+    });
   });
 });
 

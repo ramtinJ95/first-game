@@ -306,11 +306,15 @@ export interface WarRow {
 }
 
 /** The player's cities, armies, and wars, as the overview lists them. */
-export interface Overview {
-  readonly cities: readonly CityRow[];
-  readonly armies: readonly ArmyRow[];
-  readonly wars: readonly WarRow[];
-}
+/** The player's realm while it stands, or the day it fell, when nothing is left to list. */
+export type Overview =
+  | {
+      readonly kind: 'standing';
+      readonly cities: readonly CityRow[];
+      readonly armies: readonly ArmyRow[];
+      readonly wars: readonly WarRow[];
+    }
+  | { readonly kind: 'fallen'; readonly on: Day };
 
 function troopsText(recruits: DeepReadonly<City>['recruits']): string {
   const counts = new Map<string, number>();
@@ -356,6 +360,8 @@ export function warsOf(state: State, faction: FactionId): WarRow[] {
 }
 
 export function overviewOf(state: State, sight: Sight): Overview {
+  const fallenOn = state.factions[state.player]?.defeatedOn ?? null;
+  if (fallenOn !== null) return { kind: 'fallen', on: fallenOn };
   const cities = Object.values(state.cities)
     .filter((city) => city.owner === state.player)
     .sort((a, b) => b.population - a.population || a.name.localeCompare(b.name))
@@ -383,7 +389,7 @@ export function overviewOf(state: State, sight: Sight): Overview {
         },
       ];
     });
-  return { cities, armies, wars: warsOf(state, state.player) };
+  return { kind: 'standing', cities, armies, wars: warsOf(state, state.player) };
 }
 
 /** What the city adds to its owner's stores each day: the economy's own balance of a realm of this city alone. */

@@ -46,6 +46,24 @@ describe('the world built from the committed map', () => {
     }
   });
 
+  test('a search gives the same path after other searches, by land and by sea, as on a fresh mesh', () => {
+    const fresh = () => structuredClone(world.mesh);
+    const harbours = [...world.harbours.values()];
+    const queries = cities.slice(0, 12).flatMap((from, i) => {
+      const to = cities[(i * 13 + 29) % cities.length] as (typeof cities)[number];
+      const a = harbours[i % harbours.length] as MapPoint;
+      const b = harbours[(i * 5 + 3) % harbours.length] as MapPoint;
+      return [
+        { from: from.at, to: to.at, surface: 'land' as const },
+        { from: a, to: b, surface: 'sea' as const },
+      ];
+    });
+    const firsts = queries.map(({ from, to, surface }) => findPath(fresh(), from, to, surface));
+    const reused = queries.map(({ from, to, surface }) => findPath(world.mesh, from, to, surface));
+    expect(reused).toEqual(firsts);
+    expect(firsts.filter(Boolean).length).toBeGreaterThan(12);
+  });
+
   test('land paths between cities stay on land and never come out shorter than the straight line', () => {
     let checked = 0;
     for (let i = 0; i < cities.length && checked < 25; i += 7) {
