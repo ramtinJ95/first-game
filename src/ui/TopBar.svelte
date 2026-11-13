@@ -56,31 +56,44 @@
           key === 'gold' ? undefined : limits?.[key],
         )}
         <span class="store" class:falling={note?.bad} data-testid="store-{key}" title={note?.why}>
-          <span class="muted">{name}</span>
-          <strong data-testid="store-{key}-amount">{whole(stores[key])}</strong>
-          <span class="change" data-testid="store-{key}-change">{signed(balance[key])}/day</span>
-          {#if note}<span class="note" data-testid="store-{key}-note">{note.text}</span>{/if}
+          <span class="line">
+            <span class="muted">{name}</span>
+            {#if note}<span class="note" data-testid="store-{key}-note">{note.text}</span>{/if}
+          </span>
+          <span class="line">
+            <strong data-testid="store-{key}-amount">{whole(stores[key])}</strong>
+            <span class="change" data-testid="store-{key}-change">{signed(balance[key])}/day</span>
+          </span>
         </span>
       {/each}
     </span>
   {/if}
   <TimeControls {view} controls={actions} />
-  <button type="button" aria-expanded={overview} aria-controls="overview" onclick={toggleOverview}
-    >Overview</button
-  >
-  <FrameControls frame={view.current.frame} actions={frame} />
   {#if waiting}
     <span class="muted" data-testid="orders-waiting">{waiting}</span>
   {/if}
+  <span class="end">
+    <button type="button" aria-expanded={overview} aria-controls="overview" onclick={toggleOverview}
+      >Overview</button
+    >
+    <FrameControls frame={view.current.frame} actions={frame} />
+  </span>
 </header>
 
 <style>
   .bar {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 16px;
+    gap: 4px 14px;
     align-items: center;
-    padding: 6px 12px;
+    padding: 5px 12px;
+  }
+
+  /* The Game menu opens leftward from the bar's right edge, so it stays on the page. */
+  .end {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
   }
 
   .realm {
@@ -98,9 +111,20 @@
 
   .store {
     display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .line {
+    display: flex;
     gap: 5px;
     align-items: baseline;
-    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .line .muted {
+    font-size: 12px;
   }
 
   .change {

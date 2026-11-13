@@ -113,7 +113,7 @@
     inset: 0;
     display: grid;
     grid-template-areas:
-      'top side'
+      'top top'
       'main side'
       'alerts side';
     grid-template-rows: auto minmax(0, 1fr) auto;
@@ -131,8 +131,13 @@
     min-height: 0;
   }
 
+  /* The bar spans the page, so the buttons at its right end stand still as the numbers change. */
   .top {
     grid-area: top;
+  }
+
+  .top > :global(*) {
+    align-self: stretch;
   }
 
   .main {
@@ -167,10 +172,6 @@
       grid-template-rows: auto minmax(0, 1fr) auto auto;
       grid-template-columns: minmax(0, 1fr);
       gap: 6px;
-    }
-
-    .top > :global(*) {
-      align-self: stretch;
     }
 
     .alerts {

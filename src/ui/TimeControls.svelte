@@ -38,11 +38,13 @@
 <svelte:window {onkeydown} {onkeyup} />
 
 <div class="controls" data-testid="time-controls">
-  <span data-testid="time-controls-day" data-day={view.current.state.day}
-    >{dateText(view.current.state.day)}</span
-  >
-  <span data-testid="time-controls-speed" class:paused={view.current.paused}>
-    {view.current.paused ? 'Paused' : `Speed ${view.current.speed}`}
+  <span class="clock">
+    <span data-testid="time-controls-day" data-day={view.current.state.day}
+      >{dateText(view.current.state.day)}</span
+    >
+    <span data-testid="time-controls-speed" class:paused={view.current.paused}>
+      {view.current.paused ? 'Paused' : `Speed ${view.current.speed}`}
+    </span>
   </span>
   <button type="button" onclick={() => controls.togglePause()}>
     {view.current.paused ? 'Resume' : 'Pause'}
@@ -69,8 +71,14 @@
     font-weight: bold;
   }
 
+  .clock {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+  }
+
   [data-testid='time-controls-speed'] {
-    min-width: 4.5em;
+    font-size: 12px;
   }
 
   .paused {

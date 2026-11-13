@@ -366,26 +366,35 @@ describe('sackText', () => {
 describe('storeNote', () => {
   it('says how many days a falling store of gold or food lasts, and warns within two months', () => {
     expect(storeNote('gold', 1000, -5, undefined)).toMatchObject({
-      text: 'Runs out in 200 days',
+      text: '200 days left',
+      why: "Runs out in 200 days at today's balance. Formations desert once it runs out.",
       bad: false,
     });
-    expect(storeNote('food', 100, -5, 500)).toMatchObject({
-      text: 'Runs out in 20 days',
-      bad: true,
-    });
+    expect(storeNote('food', 100, -5, 500)).toMatchObject({ text: '20 days left', bad: true });
     expect(storeNote('gold', 0, -5, undefined)).toMatchObject({
-      text: 'Ran out: formations desert',
+      text: 'Ran out',
+      why: expect.stringMatching(/^Ran out: formations desert\./) as string,
       bad: true,
     });
   });
 
   it('says when food or manpower stops growing at its limit, and nothing below it', () => {
-    expect(storeNote('food', 500, 5, 500)).toMatchObject({ text: 'Granaries full', bad: false });
-    expect(storeNote('food', 95, 10, 100)).toMatchObject({ text: 'Granaries full tomorrow' });
-    expect(storeNote('manpower', 299, 4, 300)).toMatchObject({
-      text: 'At the call-up limit tomorrow',
+    expect(storeNote('food', 500, 5, 500)).toMatchObject({
+      text: 'Full',
+      why: expect.stringMatching(/^Granaries full\. /) as string,
+      bad: false,
     });
-    expect(storeNote('manpower', 300, 1, 300)).toMatchObject({ text: 'At the call-up limit' });
+    expect(storeNote('food', 95, 10, 100)).toMatchObject({
+      text: 'Full',
+      why: expect.stringMatching(/^Granaries full tomorrow\. /) as string,
+    });
+    expect(storeNote('manpower', 299, 4, 300)).toMatchObject({
+      text: 'At limit',
+      why: expect.stringMatching(/^At the call-up limit tomorrow\. /) as string,
+    });
+    expect(storeNote('manpower', 300, 1, 300)).toMatchObject({
+      why: expect.stringMatching(/^At the call-up limit\. /) as string,
+    });
     expect(storeNote('food', 400, 5, 500)).toBeUndefined();
     expect(storeNote('gold', 400, 5, undefined)).toBeUndefined();
   });

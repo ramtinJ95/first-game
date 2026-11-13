@@ -78,7 +78,7 @@ test.describe('the panels', () => {
     await expect(bar.getByTestId('store-gold-amount')).toHaveText('200');
     await expect(bar.getByTestId('store-gold-change')).toHaveText(/^−\d+\.\d\/day$/);
     await expect(bar.getByTestId('store-gold')).toHaveClass(/falling/);
-    await expect(bar.getByTestId('store-gold')).toContainText(/Runs out in \d+ days/);
+    await expect(bar.getByTestId('store-gold')).toContainText(/\d+ days left/);
   });
 
   test('a right click on land marches your selected army there with moveArmy, and Halt stops it', async ({

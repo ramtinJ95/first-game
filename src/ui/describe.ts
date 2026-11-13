@@ -463,8 +463,9 @@ export interface StoreNote {
 }
 
 /**
- * What the top bar says beside a store: that it ran out, how many days it lasts while it
- * falls, or that it stops growing at its limit (`limitsOf`), today or with tomorrow's gain.
+ * What the top bar says beside a store, in a word or two, and in full in `why`: that it
+ * ran out, how many days it lasts while it falls, or that it stops growing at its limit
+ * (`limitsOf`), today or with tomorrow's gain.
  */
 export function storeNote(
   store: keyof Stores,
@@ -474,16 +475,16 @@ export function storeNote(
 ): StoreNote | undefined {
   if (store !== 'manpower' && amount <= 0) {
     return {
-      text: 'Ran out: formations desert',
-      why: 'Each formation loses men every day while it lasts.',
+      text: 'Ran out',
+      why: 'Ran out: formations desert. Each formation loses men every day while it lasts.',
       bad: true,
     };
   }
   if (store !== 'manpower' && change < 0) {
     const days = Math.floor(amount / -change);
     return {
-      text: `Runs out in ${whole(days)} days`,
-      why: "At today's balance. Formations desert once it runs out.",
+      text: `${whole(days)} days left`,
+      why: `Runs out in ${whole(days)} days at today's balance. Formations desert once it runs out.`,
       bad: days <= WARN_DAYS,
     };
   }
@@ -493,13 +494,13 @@ export function storeNote(
   const when = amount >= limit ? '' : ' tomorrow';
   return store === 'food'
     ? {
-        text: `Granaries full${when}`,
-        why: `Granaries hold ${GRANARY_DAYS} days of what your people and men eat. More food spoils.`,
+        text: 'Full',
+        why: `Granaries full${when}. They hold ${GRANARY_DAYS} days of what your people and men eat. More food spoils.`,
         bad: false,
       }
     : {
-        text: `At the call-up limit${when}`,
-        why: `You can call up ${Math.round(MANPOWER_SHARE * 100)}% of your people, less the men under arms and in training. Grow your cities or let men go to call up more.`,
+        text: 'At limit',
+        why: `At the call-up limit${when}. You can call up ${Math.round(MANPOWER_SHARE * 100)}% of your people, less the men under arms and in training. Grow your cities or let men go to call up more.`,
         bad: false,
       };
 }
