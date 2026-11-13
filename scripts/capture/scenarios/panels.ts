@@ -119,7 +119,14 @@ export default defineScenario({
     const fallen = startGame();
     fallenTo(fallen, 'mediolanum');
     await load(page, fallen);
+    // Occupy would settle the fate, so the prompt is turned off and the save loaded again,
+    // which leaves the choice to the city panel.
+    await page
+      .getByTestId('fate-prompt')
+      .getByRole('checkbox', { name: 'Pause and ask when a city falls to you' })
+      .uncheck();
     await page.getByTestId('fate-occupy').click();
+    await load(page, fallen);
     await view.drag(view.city('mediolanum'), { x: 640, y: 360 });
     const milan = view.city('mediolanum');
     await page.mouse.click(milan.x, milan.y);
