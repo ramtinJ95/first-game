@@ -221,6 +221,59 @@ describe('buildScene', () => {
     expect(climbers.length).toBeGreaterThanOrEqual(ladders.length);
   });
 
+  test('an army at rest on a coast stands with every figure on land, and an army inland does not move', () => {
+    const state = buildFixture();
+    const army = state.armies[FIXTURE.romanArmy];
+    if (!army) throw new Error('fixture');
+    const at = { x: 2530, y: 2300 };
+    army.activity = { kind: 'idle', position: at };
+    const camera = { centre: at, scale: 4 };
+    // The sea lies west of a coast 20 px left of the army's place.
+    const coast = viewport.width / 2 - 20;
+    const land = (p: MapPoint) => p.x > coast;
+    const figures = (scene: ReturnType<typeof buildScene>) =>
+      scene.sprites.filter((s) => s.army === FIXTURE.romanArmy);
+    const ashore = figures(buildScene(input(state, state, { camera, land })));
+    expect(ashore.length).toBeGreaterThan(20);
+    expect(ashore.filter((s) => !land(s))).toEqual([]);
+    const inland = (p: MapPoint) => p.x > -1e6;
+    const still = figures(buildScene(input(state, state, { camera, land: inland })));
+    const free = figures(buildScene(input(state, state, { camera })));
+    expect(still.map((s) => [s.x, s.y])).toEqual(free.map((s) => [s.x, s.y]));
+  });
+
+  test('a battle fought at a coast draws both lines on land', () => {
+    const previous = buildFixture();
+    const battle = 'battle-1' as keyof GameState['battles'];
+    const at = { x: 2530, y: 2300 };
+    const roman = previous.armies[FIXTURE.romanArmy];
+    const punic = previous.armies[FIXTURE.punicArmy];
+    if (!roman || !punic) throw new Error('fixture');
+    roman.activity = { kind: 'inBattle', position: at, battle, march: [] };
+    punic.activity = { kind: 'inBattle', position: { x: at.x - 4, y: at.y }, battle, march: [] };
+    previous.battles[battle] = {
+      id: battle,
+      position: at,
+      attackers: [FIXTURE.romanArmy],
+      defenders: [FIXTURE.punicArmy],
+      startedOn: previous.day,
+      sides: {
+        attackers: { factions: [FIXTURE.rome], lost: 0 },
+        defenders: { factions: [FIXTURE.carthage], lost: 0 },
+      },
+    };
+    const current = structuredClone(previous);
+    current.day = (previous.day + 1) as GameState['day'];
+    const coast = viewport.width / 2 - 20;
+    const land = (p: MapPoint) => p.x > coast;
+    const scene = buildScene(input(previous, current, { camera: { centre: at, scale: 4 }, land }));
+    const fighters = scene.sprites.filter((s) => s.army !== undefined && s.alpha > 0);
+    expect(new Set(fighters.map((s) => s.army))).toEqual(
+      new Set([FIXTURE.romanArmy, FIXTURE.punicArmy]),
+    );
+    expect(fighters.filter((s) => !land(s))).toEqual([]);
+  });
+
   test('an army out of sight is neither drawn nor pickable', () => {
     const state = buildFixture();
     const hidden = sight(state, [FIXTURE.romanArmy]);

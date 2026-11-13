@@ -323,29 +323,38 @@ export function javelinArt(): PaintOp[] {
   ];
 }
 
-/** A scaling ladder, leaning right: its foot at the origin and its top `length` up the wall. */
+/**
+ * A scaling ladder, leaning right: its foot at the origin and its top `length` up the wall.
+ * Its rails and rungs are heavy, dark, and inked, with a lit edge, so it reads among the ranks.
+ */
 export function ladderArt(length = 70): PaintOp[] {
-  const lean = 0.28;
+  const lean = 0.12;
   const top = { x: length * lean, y: -length };
+  const half = 5.5;
   const ops: PaintOp[] = [];
-  for (const dx of [-5, 5]) {
+  for (const dx of [-half, half]) {
+    const foot = { x: dx, y: 0 };
+    const head = add(top, { x: dx, y: -4 });
+    ops.push({ d: capsule(foot, head, 2.6, 2.3), fill: LADDER_RAIL, stroke: 2 });
     ops.push({
-      d: capsule({ x: dx, y: 0 }, add(top, { x: dx, y: 0 }), 1.6, 1.4),
+      d: capsule(add(foot, { x: -0.9, y: -2 }), add(head, { x: -0.9, y: 2 }), 0.7, 0.6),
       fill: C.wood,
-      stroke: 1.4,
     });
   }
-  for (let i = 1; i < 9; i++) {
-    const t = i / 9;
+  for (let i = 1; i < 8; i++) {
+    const t = i / 8;
     const at = { x: top.x * t, y: top.y * t };
     ops.push({
-      d: polyline([add(at, { x: -5, y: 0 }), add(at, { x: 5, y: 0 })]),
-      stroke: 1.8,
-      strokeColour: C.woodShade,
+      d: capsule(add(at, { x: -half, y: 0 }), add(at, { x: half, y: 0 }), 1.4, 1.4),
+      fill: LADDER_RAIL,
+      stroke: 1.2,
     });
   }
   return ops;
 }
+
+/** A ladder's dark, tarred wood, which stands out against a pale wall and the ranks' bronze. */
+const LADDER_RAIL = '#4e321a';
 
 /** Three sharpened stakes of a siege line, with the bank of earth thrown up behind them. */
 export function stakesArt(): PaintOp[] {

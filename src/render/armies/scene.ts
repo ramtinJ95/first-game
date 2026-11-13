@@ -160,10 +160,18 @@ const frac = (x: number) => x - Math.floor(x);
 /** A storm's ladders and climbers are drawn over every rank of the siege. */
 const STORM_DEPTH = 1e6;
 /** How far `ladderArt` leans towards the wall for each pixel of its height, and its height in figure units of 100. */
-const LADDER_LEAN = 0.28;
+const LADDER_LEAN = 0.12;
 const LADDER_LENGTH = 0.7;
 /** A climber's height as a share of a man's, so the ladder shows round him. */
-const CLIMBER_SIZE = 0.55;
+const CLIMBER_SIZE = 0.6;
+const STORM_ARROWS = 14;
+/** How far the ring stands back from the wall on the day of a storm, in men's heights. */
+const STORM_STEP_BACK = 0.8;
+/** One man fights at the head of each ladder and one climbs below him, as shares of its length. */
+const CLIMBERS = [
+  { from: 0.82, span: 0.04, motion: 'fight' },
+  { from: 0.25, span: 0.3, motion: 'march' },
+] as const;
 const CITY_HALF_WIDTH: Record<CityRank, number> = {
   capital: 16,
   greatPowerCity: 10.5,
@@ -366,7 +374,8 @@ class Context {
 
   /**
    * Where a battle is drawn: at its place, or moved just clear of a city its lines
-   * would cover, so the city and its name stay in sight. Both sides use the same point.
+   * would cover, so the city and its name stay in sight, and then onto land where its
+   * lines would stand in the sea. Both sides use the same point.
    */
   battleAnchor(state: State, battle: DeepReadonly<Battle>): MapPoint {
     const key = `${battle.id}:${state.day}`;
@@ -405,6 +414,17 @@ class Context {
         Math.abs(moveX) <= Math.abs(moveY)
           ? { x: shift.x + moveX, y: shift.y }
           : { x: shift.x, y: shift.y + moveY };
+    }
+    const land = this.input.land;
+    if (land) {
+      const samples: MapPoint[] = [];
+      for (const u of [-1, -0.5, 0, 0.5, 1]) {
+        for (const v of [-1, 0, 1]) {
+          samples.push({ x: at.x + shift.x + u * half.x, y: at.y + shift.y + v * half.y });
+        }
+      }
+      const extra = landShift(land, samples, h);
+      shift = { x: shift.x + extra.x, y: shift.y + extra.y };
     }
     const scale = this.input.camera.scale;
     const anchor = {
@@ -1105,47 +1125,61 @@ class Context {
     }
   }
 
+  private storms = new Map<CityId, ArmyId | undefined>();
+
   /**
-   * A storm is the day's only cause of heavy losses among besiegers who stayed at the
-   * siege or took the city: the rules resolve it at once on the day it was ordered.
+   * The first besieger of a city stormed today, or undefined. A storm is the day's only
+   * cause of heavy losses among besiegers who stayed at the siege or took the city.
    */
-  storm(city: DeepReadonly<City>, at: MapPoint) {
-    const { previous, current, progress: p, sight } = this.input;
-    const siege = Object.values(previous.sieges).find((s) => s.city === city.id);
-    if (!siege) return;
+  stormedBy(id: CityId): ArmyId | undefined {
+    if (this.storms.has(id)) return this.storms.get(id);
+    const { previous, current, sight } = this.input;
+    const city = current.cities[id];
+    const siege = Object.values(previous.sieges).find((s) => s.city === id);
     let before = 0;
     let after = 0;
-    for (const id of siege.besiegers) {
-      const was = previous.armies[id];
-      const is = current.armies[id];
-      if (!was || !sight.armies.has(id)) continue;
+    let stayed = Boolean(city && siege);
+    for (const army of siege?.besiegers ?? []) {
+      const was = previous.armies[army];
+      const is = current.armies[army];
+      if (!was || !sight.armies.has(army)) continue;
       // A storm leaves its armies at the siege, or beside the city it took. An army that
       // left in the day, as to a relief battle, lost its men elsewhere.
-      const stayed =
+      stayed &&=
         is?.activity.kind === 'besieging' ||
-        (is?.activity.kind === 'idle' && city.owner === is.owner);
-      if (!stayed) return;
+        (is?.activity.kind === 'idle' && city?.owner === is.owner);
       before += formationsOf(previous, was).reduce((sum, f) => sum + f.men, 0);
       after += is ? formationsOf(current, is).reduce((sum, f) => sum + f.men, 0) : 0;
     }
-    if (before === 0 || after > before * 0.97) return;
+    const by = stayed && before > 0 && after <= before * 0.97 ? siege?.besiegers[0] : undefined;
+    this.storms.set(id, by);
+    return by;
+  }
+
+  storm(city: DeepReadonly<City>, at: MapPoint) {
+    const { current, progress: p } = this.input;
+    const first = this.stormedBy(city.id);
+    if (!first) return;
     const growth = this.input.growth;
     const half = CITY_HALF_WIDTH[city.rank] * growth;
     const fade = 1 - smooth((p - 0.85) / 0.15);
-    const owner = previous.armies[siege.besiegers[0] ?? ('' as ArmyId)]?.owner;
+    const owner = this.input.previous.armies[first]?.owner;
     const colour = owner ? colourIndex(current, owner) : 0;
-    const ladders = city.rank === 'capital' ? 3 : 2;
+    const ladders = 2;
     // The rules resolve a storm at once, so the ladders stand from the start of the day,
     // from the first rank of the ring to the top of the front wall. They and their
     // climbers are drawn over the ranks, and each ladder carries one man small enough that
     // its rungs show above and below him, so the storm reads at a glance.
-    const foot = at.y + ringRadius(city.rank, growth, this.h) * GROUND_Y;
-    const top = at.y - 4 * growth;
+    const foot =
+      at.y + (ringRadius(city.rank, growth, this.h) + STORM_STEP_BACK * this.h) * GROUND_Y;
+    // The heads rise above the wall, as a ladder set against it does.
+    const top = at.y - 4 * growth - 0.25 * this.h;
     const length = foot - top;
     for (let i = 0; i < ladders; i++) {
-      const x = at.x - half * 0.85 + (i + 0.5) * ((1.7 * half) / ladders);
-      const mirror = x > at.x;
-      const lean = (mirror ? -1 : 1) * LADDER_LEAN * length;
+      const x = at.x + (i === 0 ? -0.5 : 0.5) * half;
+      // Every ladder leans the same way, as a row set against one wall.
+      const mirror = false;
+      const lean = LADDER_LEAN * length;
       const base = x - lean;
       this.push({
         key: artKey('ladder'),
@@ -1157,19 +1191,49 @@ class Context {
         rotation: 0,
         depth: STORM_DEPTH + i * 2,
       });
-      const key = `${city.id}:storm:${i}`;
-      const climb = 0.2 + 0.45 * frac(this.input.motion * 0.3 + seeded(key));
-      const kind: FigureKind = seeded(key, 1) < 0.5 ? 'swordsmen' : 'spearmen';
-      const frame = frameOf('march', this.input.motion * RATE.march + seeded(key, 2));
+      for (const [k, climber] of CLIMBERS.entries()) {
+        const key = `${city.id}:storm:${i}:${k}`;
+        const climb = climber.from + climber.span * frac(this.input.motion * 0.3 + seeded(key));
+        const kind: FigureKind = seeded(key, 1) < 0.5 ? 'swordsmen' : 'spearmen';
+        const frame = frameOf(
+          climber.motion,
+          this.input.motion * RATE[climber.motion] + seeded(key, 2),
+        );
+        this.push({
+          key: `${figureKey(kind, climber.motion, frame)}@${colour}`,
+          x: base + climb * lean,
+          y: foot - climb * length,
+          size: this.h * CLIMBER_SIZE,
+          mirror,
+          alpha: fade,
+          rotation: 0,
+          depth: STORM_DEPTH + i * 4 + 1 + k,
+        });
+      }
+    }
+    // A volley flies over the walls from the ring, so a storm reads at a glance.
+    const reach = ringRadius(city.rank, growth, this.h) + (STORM_STEP_BACK + 1.6) * this.h;
+    const land = this.input.land ?? (() => true);
+    for (let i = 0; i < STORM_ARROWS; i++) {
+      const key = `${city.id}:volley:${i}`;
+      const a = Math.PI * (0.15 + 0.7 * seeded(key, 1));
+      const sx = at.x + Math.cos(a) * reach;
+      const sy = at.y + Math.sin(a) * reach * GROUND_Y - 0.75 * this.h;
+      if (!land({ x: sx, y: sy + 0.75 * this.h })) continue;
+      const ex = at.x + (seeded(key, 2) - 0.5) * 1.6 * half;
+      const ey = top + 0.15 * this.h;
+      const t = frac(this.input.motion * 0.9 + seeded(key, 3));
+      const lift = 0.5 * this.h + Math.abs(ex - sx) * 0.15;
+      const y = sy + (ey - sy) * t - lift * 4 * t * (1 - t);
       this.push({
-        key: `${figureKey(kind, 'march', frame)}@${colour}`,
-        x: base + climb * lean,
-        y: foot - climb * length,
-        size: this.h * CLIMBER_SIZE,
-        mirror,
-        alpha: fade,
-        rotation: 0,
-        depth: STORM_DEPTH + i * 2 + 1,
+        key: artKey('arrow'),
+        x: sx + (ex - sx) * t,
+        y,
+        size: this.h * 0.6,
+        mirror: false,
+        alpha: fade * Math.min(1, t * 6, (1 - t) * 8),
+        rotation: Math.atan2(ey - sy - lift * 4 * (1 - 2 * t), ex - sx),
+        depth: 1e7 + y,
       });
     }
   }
@@ -1366,7 +1430,7 @@ class LineLayout implements Layout {
   private readonly depth: number;
   /** The way the line faces, and how far its mark is shifted on screen, in px. */
   private readonly facing: MapPoint;
-  private readonly shift: number;
+  private shift: MapPoint;
 
   constructor(
     ctx: Context,
@@ -1380,7 +1444,7 @@ class LineLayout implements Layout {
     this.mode = mode;
     this.depth = depth;
     this.facing = mode.facing;
-    this.shift = 0;
+    this.shift = { x: 0, y: 0 };
     if (beside) {
       // An army at a city stands beside it, facing it, so the city and its name stay in
       // sight and the camp is pitched behind the army on the side with land. It takes the
@@ -1392,7 +1456,7 @@ class LineLayout implements Layout {
         land({ x: beside.x + side * (reach(side) + (depth + 3.3) * ctx.h), y: anchor.y });
       const sides = beside.nameSide > 0 ? [-1, 1] : [1, -1];
       const side = sides.find(hasLand) ?? (sides[0] as number);
-      this.shift = beside.x + side * (reach(side) + 1.45 * ctx.h) - anchor.x;
+      this.shift = { x: beside.x + side * (reach(side) + 1.45 * ctx.h) - anchor.x, y: 0 };
       this.facing = { x: -side, y: 0 };
     }
     this.blocks = new Map();
@@ -1400,6 +1464,19 @@ class LineLayout implements Layout {
       const id = blocks.find((b) => b.block === p.block)?.id ?? blocks[i]?.id;
       if (id) this.blocks.set(id, { block: p.block, at: p.at, troop: p.troop });
     });
+    // A battle's lines are kept on land by its anchor, which both sides share.
+    if (mode.kind === 'line' && ctx.input.land) {
+      const samples: MapPoint[] = [this.point(0.75, 0.15), this.point(0.75, -0.35)];
+      for (const { block, at } of this.blocks.values()) {
+        for (const along of [at.along, at.along - block.depth / 2, at.along - block.depth]) {
+          for (const across of [-0.5, 0, 0.5]) {
+            samples.push(this.point(along, at.across + across * block.width));
+          }
+        }
+      }
+      const extra = landShift(ctx.input.land, samples, ctx.h);
+      this.shift = { x: this.shift.x + extra.x, y: this.shift.y + extra.y };
+    }
   }
 
   private point(along: number, across: number): MapPoint {
@@ -1408,7 +1485,7 @@ class LineLayout implements Layout {
     const f = this.facing;
     const r = { x: -f.y, y: f.x };
     const mark = ctx.screen(mode.anchor);
-    const anchor = { x: mark.x + this.shift, y: mark.y };
+    const anchor = { x: mark.x + this.shift.x, y: mark.y + this.shift.y };
     const gap = mode.kind === 'battle' ? STANCE_LOOK[mode.stance].gap + 0.18 + LINE_GAP_KM : 0;
     const a = along - gap;
     const c = across + (mode.kind === 'battle' ? mode.across : 0);
@@ -1546,6 +1623,41 @@ class ColumnLayout implements Layout {
   }
 }
 
+/** Rings of candidate shifts tried, each `LAND_STEP` figure heights further out, in 16 directions. */
+const LAND_RINGS = 12;
+const LAND_STEP = 0.5;
+
+/**
+ * The smallest shift on screen, in px, that brings every sample point onto land, or the
+ * one that brings the most onto land when none brings them all. It is zero when every
+ * point already stands on land, so an army inland never moves.
+ */
+export function landShift(
+  land: (screen: MapPoint) => boolean,
+  samples: readonly MapPoint[],
+  h: number,
+): MapPoint {
+  const dry = (dx: number, dy: number) =>
+    samples.reduce((n, p) => n + (land({ x: p.x + dx, y: p.y + dy }) ? 1 : 0), 0);
+  let best = { x: 0, y: 0 };
+  let most = dry(0, 0);
+  if (most === samples.length) return best;
+  for (let ring = 1; ring <= LAND_RINGS; ring++) {
+    const r = ring * LAND_STEP * h;
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2;
+      const shift = { x: Math.cos(a) * r, y: Math.sin(a) * r * GROUND_Y };
+      const count = dry(shift.x, shift.y);
+      if (count === samples.length) return shift;
+      if (count > most) {
+        most = count;
+        best = shift;
+      }
+    }
+  }
+  return best;
+}
+
 /** How far from a besieged city's centre, in px, the first rank of the ring stands. */
 function ringRadius(rank: CityRank, growth: number, h: number): number {
   return CITY_HALF_WIDTH[rank] * growth + 4 + 0.45 * h;
@@ -1574,8 +1686,10 @@ class RingLayout implements Layout {
     this.total = Math.max(1, index);
   }
 
+  /** On the day of a storm the ring stands back from the wall, so the ladders show against it. */
   radius() {
-    return ringRadius(this.mode.city.rank, this.ctx.input.growth, this.ctx.h);
+    const back = this.ctx.stormedBy(this.mode.city.id) ? STORM_STEP_BACK * this.ctx.h : 0;
+    return ringRadius(this.mode.city.rank, this.ctx.input.growth, this.ctx.h) + back;
   }
 
   private landAngles: number[] | undefined;
