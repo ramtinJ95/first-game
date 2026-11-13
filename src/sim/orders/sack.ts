@@ -20,5 +20,6 @@ export function sack(state: GameState, order: SackOrder): string | undefined {
   city.population *= 1 - SACK.populationShare;
   city.unrestDays = SACK.unrestDays;
   city.fellOn = null;
+  city.sackedOn = state.day;
   return undefined;
 }

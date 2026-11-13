@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { changeCityOwner, UNREST_DAYS } from './cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from './fixture.ts';
 import { expectConsistent } from './references.ts';
-import { dailyBalances } from './systems/economy.ts';
+import { dailyBalances, OUTPUT_PER_PERSON } from './systems/economy.ts';
 import { tick } from './tick.ts';
 import type { GameState } from './state/game-state.ts';
 
@@ -32,8 +32,9 @@ test('a city that changes owner loses the old owner recruits and pays off as its
 
   const capua = state.cities[FIXTURE.capua]?.population ?? 0;
   const carthaginian = () => dailyBalances(state).get(FIXTURE.carthage)?.gold ?? 0;
-  const withoutCapua = (state.cities[FIXTURE.carthago]?.population ?? 0) * 0.00035 - 15;
-  expect(carthaginian()).toBeCloseTo(withoutCapua + capua * 0.00035 * 0.25, 9);
+  const withoutCapua =
+    (state.cities[FIXTURE.carthago]?.population ?? 0) * OUTPUT_PER_PERSON.gold - 15;
+  expect(carthaginian()).toBeCloseTo(withoutCapua + capua * OUTPUT_PER_PERSON.gold * 0.25, 9);
 
   state = play(state, UNREST_DAYS / 2);
   expect(state.cities[FIXTURE.capua]?.unrestDays).toBe(UNREST_DAYS / 2);
@@ -43,7 +44,7 @@ test('a city that changes owner loses the old owner recruits and pays off as its
 
   const carthago = state.cities[FIXTURE.carthago]?.population ?? 0;
   const now = state.cities[FIXTURE.capua]?.population ?? 0;
-  expect(carthaginian()).toBeCloseTo((carthago + now) * 0.00035 - 15, 9);
+  expect(carthaginian()).toBeCloseTo((carthago + now) * OUTPUT_PER_PERSON.gold - 15, 9);
   expect(
     tick(
       state,

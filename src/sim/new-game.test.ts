@@ -203,27 +203,27 @@ describe('the economy of the new game meets its tuning targets', () => {
     expectConsistent(state);
   });
 
-  test('a great power income keeps its starting army and about one more, and no more', () => {
+  test('a great power income keeps its starting army and one more, and not two more', () => {
     const state = start();
     for (const power of POWERS) {
       const upkeep = menOf(state, armyOf(state, power)) * UPKEEP_PER_MAN.gold;
       const income = (dailyBalances(state).get(power as FactionId)?.gold ?? 0) + upkeep;
-      expect(income / upkeep).toBeGreaterThan(1.8);
-      expect(income / upkeep).toBeLessThan(2.1);
+      expect(income / upkeep).toBeGreaterThan(2);
+      expect(income / upkeep).toBeLessThan(3);
     }
     expectConsistent(state);
   });
 
-  test('after a year without recruiting a great power can pay for two to three formations', () => {
+  test('after a year without recruiting a great power has the gold for three formations and the men for one or two', () => {
     let state = start();
     for (let day = 0; day < 365; day++) state = tick(state, [], world).state;
     for (const power of POWERS) {
       const stores = state.factions[power as FactionId]?.stores;
       if (!stores) throw new Error(`${power} is missing`);
       const { gold, men } = TROOPS.spearmen.recruit;
-      const affordable = Math.min(stores.gold / gold, stores.manpower / men);
-      expect(affordable).toBeGreaterThanOrEqual(2);
-      expect(affordable).toBeLessThan(3);
+      expect(stores.gold / gold).toBeGreaterThanOrEqual(3);
+      expect(stores.manpower / men).toBeGreaterThanOrEqual(1);
+      expect(stores.manpower / men).toBeLessThan(2);
     }
     const roma = state.cities['roma' as CityId]?.population ?? 0;
     expect(roma / 40_000).toBeCloseTo(1.02, 6);
@@ -243,6 +243,41 @@ describe('the economy of the new game meets its tuning targets', () => {
     }
     expect(UNREST_DAYS).toBeGreaterThanOrEqual(60);
     expect(UNREST_DAYS).toBeLessThanOrEqual(120);
+    expectConsistent(state);
+  });
+});
+
+describe('a power that raises every troop it can afford', () => {
+  test('waits on gold alone and on manpower alone, each at least a quarter as often as the other', () => {
+    const round: readonly Troop[] = [
+      'spearmen',
+      'archers',
+      'swordsmen',
+      'lightCavalry',
+      'spearmen',
+      'heavyCavalry',
+      'skirmishers',
+    ];
+    const rome = 'rome' as FactionId;
+    let state = newGame(map, { seed: 1, player: 'rome' });
+    let next = 0;
+    const waits = { gold: 0, manpower: 0 };
+    for (let day = 0; day < 2 * 365; day++) {
+      const stores = state.factions[rome]?.stores;
+      if (!stores) throw new Error('rome is missing');
+      const troop = round[next % round.length] as Troop;
+      const { gold, men } = TROOPS[troop].recruit;
+      const orders: Order[] = [];
+      if (stores.gold < gold && stores.manpower >= men) waits.gold++;
+      else if (stores.manpower < men && stores.gold >= gold) waits.manpower++;
+      else if (stores.gold >= gold) {
+        orders.push({ kind: 'recruit', faction: rome, city: 'roma' as CityId, troop });
+        next++;
+      }
+      state = tick(state, orders, world).state;
+    }
+    expect(waits.gold).toBeGreaterThanOrEqual(waits.manpower / 4);
+    expect(waits.manpower).toBeGreaterThanOrEqual(waits.gold / 4);
     expectConsistent(state);
   });
 });

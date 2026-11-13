@@ -11,7 +11,7 @@ export interface BattleSideOutcome {
 }
 
 /** How an army left the game. */
-export type ArmyLoss = 'battle' | 'surrender' | 'storm' | 'defeat';
+export type ArmyLoss = 'battle' | 'surrender' | 'storm' | 'sally' | 'defeat';
 
 /**
  * Something that happened during one day. A tick returns the day's events in the order

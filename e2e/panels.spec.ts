@@ -344,9 +344,7 @@ test.describe('the panels', () => {
       const gold = amount(await page.getByTestId('store-gold-amount').textContent());
       await panel.getByRole('button', { name: fate === 'sack' ? /^Sack for/ : /^Enslave/ }).click();
       await resume(page);
-      await expect(panel.getByTestId('city-unrest')).toHaveText(
-        fate === 'sack' ? /^Unrest · 1[78]\d days left$/ : /^Unrest · 3[56]\d days left$/,
-      );
+      await expect(panel.getByTestId('city-unrest')).toHaveText(/^Unrest · 3[56]\d days left$/);
       await expect(panel).not.toContainText('Fate of the city');
       const now = amount(await panel.getByTestId('city-population').textContent());
       expect(now).toBeLessThan(people * (fate === 'sack' ? 0.61 : 0.71));

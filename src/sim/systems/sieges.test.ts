@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { UNREST_DAYS } from '../cities.ts';
+import { earlyMusters, UNREST_DAYS } from '../cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { ArmyId, CityId, FactionId, FormationId } from '../ids.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
@@ -10,7 +10,14 @@ import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
 import { startMarch } from '../march.ts';
 import { tick } from '../tick.ts';
-import { CITY_DEFENCES, RECOVERY_DAYS } from './sieges.ts';
+import {
+  CITY_DEFENCES,
+  HUNGER_SHARE,
+  OCCUPATION_SHARE,
+  RECOVERY_DAYS,
+  SALLY_SHARE,
+  WALL_DEFENCE,
+} from './sieges.ts';
 
 const world = fixtureWorld();
 
@@ -18,8 +25,11 @@ const NEAR_CAPUA = { x: 2641.8, y: 2448.3 };
 /** Inland, between Capua and Roma, more than a siege distance from either. */
 const BETWEEN = { x: 2575, y: 2392 };
 const FAR_AWAY: ArmyActivity = { kind: 'idle', position: { x: 0, y: 0 } };
-/** A city that fell today has rebuilt one day's worth of its new garrison by nightfall. */
-const NEW_GARRISON = Math.ceil(CITY_DEFENCES.greatPowerCity.garrison / RECOVERY_DAYS);
+const FULL = CITY_DEFENCES.greatPowerCity;
+const HUNGER = Math.ceil(FULL.garrison * HUNGER_SHARE);
+/** The men the conquerors leave in Capua, which has rebuilt a day's worth more by nightfall. */
+const LEFT_BEHIND = Math.round(FULL.garrison * OCCUPATION_SHARE);
+const NEW_GARRISON = LEFT_BEHIND + Math.ceil(FULL.garrison / RECOVERY_DAYS);
 
 function atWar(seed = 1): GameState {
   const state = buildFixture(seed);
@@ -150,31 +160,31 @@ describe('a day of siege', () => {
     const state = besiegingCapua();
     cityOf(state, FIXTURE.capua).foodDays = 1;
     const first = tick(state, [], world).state;
-    expect(cityOf(first, FIXTURE.capua)).toMatchObject({ foodDays: 0, garrison: 1000 });
+    expect(cityOf(first, FIXTURE.capua)).toMatchObject({ foodDays: 0, garrison: FULL.garrison });
     const second = tick(first, [], world).state;
-    expect(cityOf(second, FIXTURE.capua).garrison).toBe(950);
+    expect(cityOf(second, FIXTURE.capua).garrison).toBe(FULL.garrison - HUNGER);
     const third = tick(second, [], world).state;
-    expect(cityOf(third, FIXTURE.capua).garrison).toBe(900);
+    expect(cityOf(third, FIXTURE.capua).garrison).toBe(FULL.garrison - 2 * HUNGER);
     expectConsistent(third);
   });
 
-  test('a city whose garrison starves falls to the besieger with unrest and without its recruits', () => {
+  test('a city whose garrison starves falls with unrest, and the besiegers leave men to hold it', () => {
     const state = besiegingCapua();
     const capua = cityOf(state, FIXTURE.capua);
     capua.foodDays = 0;
-    capua.garrison = 100;
-    capua.recruits = [{ troop: 'spearmen', readyOn: 50 as GameState['day'] }];
+    capua.garrison = HUNGER + 10;
     const first = tick(state, [], world).state;
-    expect(cityOf(first, FIXTURE.capua)).toMatchObject({ owner: FIXTURE.rome, garrison: 50 });
+    expect(cityOf(first, FIXTURE.capua)).toMatchObject({ owner: FIXTURE.rome, garrison: 10 });
+    const men = menOf(first, FIXTURE.punicArmy);
 
     const fallen = tick(first, [], world).state;
     expect(cityOf(fallen, FIXTURE.capua)).toMatchObject({
       owner: FIXTURE.carthage,
       garrison: NEW_GARRISON,
       unrestDays: UNREST_DAYS - 1,
-      recruits: [],
       fellOn: 2,
     });
+    expect(menOf(fallen, FIXTURE.punicArmy)).toBe(men - LEFT_BEHIND);
     expect(fallen.sieges).toEqual({});
     expect(armyOf(fallen, FIXTURE.punicArmy).activity).toEqual({
       kind: 'idle',
@@ -241,28 +251,166 @@ describe('a day of siege', () => {
   });
 });
 
+describe('a token siege', () => {
+  test('too few besiegers cut no food, and the garrison sallies until they are gone', () => {
+    const state = besiegingCapua();
+    armyOf(state, FIXTURE.punicArmy).activity = FAR_AWAY;
+    const token = addArmy(state, 'army-token', FIXTURE.carthage, 100, NEAR_CAPUA);
+    const first = tick(state, [], world).state;
+    expect(cityOf(first, FIXTURE.capua)).toMatchObject({
+      foodDays: FULL.foodDays,
+      garrison: FULL.garrison,
+    });
+    expect(menOf(first, token)).toBe(100 - Math.ceil(FULL.garrison * SALLY_SHARE));
+
+    const after = play(first, 2);
+    expect(after.armies[token]).toBeUndefined();
+    expect(after.sieges).toEqual({});
+    expect(cityOf(after, FIXTURE.capua)).toMatchObject({ owner: FIXTURE.rome, ...FULL });
+    expectConsistent(after);
+  });
+
+  test('besiegers as many as the garrison cut the food and suffer no sally', () => {
+    const state = besiegingCapua();
+    armyOf(state, FIXTURE.punicArmy).activity = FAR_AWAY;
+    const siege = addArmy(state, 'army-siege', FIXTURE.carthage, FULL.garrison, NEAR_CAPUA);
+    const after = play(state, 5);
+    expect(cityOf(after, FIXTURE.capua).foodDays).toBe(FULL.foodDays - 5);
+    expect(menOf(after, siege)).toBe(FULL.garrison);
+    expectConsistent(after);
+  });
+});
+
+describe('troops in training', () => {
+  test('a besieged city musters its recruits at once, and they sally against the besiegers', () => {
+    const state = besiegingCapua();
+    const due = 50 as GameState['day'];
+    cityOf(state, FIXTURE.capua).recruits = [{ troop: 'spearmen', readyOn: due }];
+    const besieged = tick(state, [], world).state;
+    expect(cityOf(besieged, FIXTURE.capua).recruits).toEqual([]);
+    expect(earlyMusters(state, besieged)).toEqual([
+      { city: FIXTURE.capua, owner: FIXTURE.rome, troops: ['spearmen'] },
+    ]);
+    const defenders = Object.values(besieged.armies).filter(
+      (army) => army.owner === FIXTURE.rome && army.id !== FIXTURE.romanArmy,
+    );
+    expect(defenders.map((army) => army.activity.kind)).toEqual(['idle']);
+    expect(menOf(besieged, defenders[0]?.id as ArmyId)).toBe(1000);
+
+    const sally = tick(besieged, [], world).state;
+    expect(Object.values(sally.battles)).toHaveLength(1);
+    expect(sally.sieges).toEqual({});
+    expectConsistent(sally);
+  });
+
+  for (const [how, set] of [
+    ['starves', (city: GameState['cities'][CityId]) => ((city.foodDays = 0), (city.garrison = 1))],
+    ['gives up', (city: GameState['cities'][CityId]) => (city.walls = 0)],
+  ] as const) {
+    test(`a city that ${how} on the day its recruits muster holds until they have fought`, () => {
+      for (let seed = 1; seed <= 10; seed++) {
+        const state = besiegingCapua(seed);
+        const capua = cityOf(state, FIXTURE.capua);
+        set(capua);
+        capua.recruits = [{ troop: 'spearmen', readyOn: 50 as GameState['day'] }];
+        const mustered = tick(state, [], world).state;
+        expect(cityOf(mustered, FIXTURE.capua).owner).toBe(FIXTURE.rome);
+        const fought = tick(mustered, [], world).state;
+        expect(Object.values(fought.battles)).toHaveLength(1);
+        expect(cityOf(fought, FIXTURE.capua).owner).toBe(FIXTURE.rome);
+        expectConsistent(fought);
+      }
+    });
+  }
+
+  test('a storm is refused while the mustered defenders stand at the city', () => {
+    const state = besiegingCapua();
+    cityOf(state, FIXTURE.capua).recruits = [
+      { troop: 'spearmen', readyOn: 50 as GameState['day'] },
+    ];
+    const besieged = tick(state, [], world).state;
+    const refused = executeOrder(
+      besieged,
+      { kind: 'storm', faction: FIXTURE.carthage, city: FIXTURE.capua },
+      world,
+    );
+    expect(refused?.reason).toBe('an army of rome defends capua in the field');
+    expectConsistent(besieged);
+  });
+
+  test('a recruit is refused while an enemy army stands at the walls, before its siege begins', () => {
+    const state = besiegingCapua();
+    const refused = tick(
+      state,
+      [{ kind: 'recruit', faction: FIXTURE.rome, city: FIXTURE.capua, troop: 'spearmen' }],
+      world,
+    );
+    expect(refused.rejected.map((r) => r.reason)).toEqual(['city capua is under siege']);
+    expect(Object.values(refused.state.sieges)).toHaveLength(1);
+    expectConsistent(refused.state);
+  });
+
+  test('a recruit is refused in a besieged city, so no training can be lost with it', () => {
+    const state = tick(besiegingCapua(), [], world).state;
+    const refused = tick(
+      state,
+      [{ kind: 'recruit', faction: FIXTURE.rome, city: FIXTURE.capua, troop: 'spearmen' }],
+      world,
+    );
+    expect(refused.rejected.map((r) => r.reason)).toEqual(['city capua is under siege']);
+    expectConsistent(refused.state);
+  });
+
+  test('recruits due on their day are not counted as mustered early', () => {
+    const state = buildFixture();
+    cityOf(state, FIXTURE.roma).recruits = [{ troop: 'spearmen', readyOn: state.day }];
+    const next = tick(state, [], world).state;
+    expect(cityOf(next, FIXTURE.roma).recruits).toEqual([]);
+    expect(earlyMusters(state, next)).toEqual([]);
+  });
+});
+
 describe('storming', () => {
   const storm: Order = { kind: 'storm', faction: FIXTURE.carthage, city: FIXTURE.capua };
+  /** Capua's full garrison raised by its full walls, which a storm must beat 1.5 times over. */
+  const DEFENCE = FULL.garrison * (1 + FULL.walls * WALL_DEFENCE);
 
-  test('a storm at three times the strength takes the city at a cost of a tenth to a sixth of the men', () => {
-    let state = tick(besiegingCapua(), [], world).state;
-    cityOf(state, FIXTURE.capua).garrison = 500;
-    cityOf(state, FIXTURE.capua).walls = 100;
-    const before = menOf(state, FIXTURE.punicArmy);
-    const { state: after, rejected } = tick(state, [storm], world);
-    state = after;
-    expect(rejected).toEqual([]);
-    const lost = before - menOf(state, FIXTURE.punicArmy);
-    expect(lost).toBeGreaterThanOrEqual(150);
-    expect(lost).toBeLessThanOrEqual(250);
-    expect(cityOf(state, FIXTURE.capua)).toMatchObject({
-      owner: FIXTURE.carthage,
-      garrison: NEW_GARRISON,
-      fellOn: 2,
-    });
-    expect(state.sieges).toEqual({});
-    expect(armyOf(state, FIXTURE.punicArmy).activity.kind).toBe('idle');
-    expectConsistent(state);
+  function stormWith(men: number, seed: number) {
+    let state = besiegingCapua(seed);
+    armyOf(state, FIXTURE.punicArmy).activity = FAR_AWAY;
+    const army = addArmy(state, 'army-storm', FIXTURE.carthage, men, NEAR_CAPUA);
+    state = tick(state, [], world).state;
+    cityOf(state, FIXTURE.capua).walls = FULL.walls;
+    const after = tick(state, [storm], world).state;
+    return { after, army, lost: men - (after.armies[army] ? menOf(after, army) : 0) };
+  }
+
+  test('a clearly stronger army takes intact walls and a full garrison at a fifth to a third of its men', () => {
+    const men = Math.round(2.1 * DEFENCE);
+    for (let seed = 1; seed <= 10; seed++) {
+      const { after, army, lost } = stormWith(men, seed);
+      expect(cityOf(after, FIXTURE.capua)).toMatchObject({
+        owner: FIXTURE.carthage,
+        garrison: NEW_GARRISON,
+        fellOn: 2,
+      });
+      expect(lost).toBeGreaterThanOrEqual(0.15 * men);
+      expect(lost).toBeLessThanOrEqual(0.35 * men);
+      expect(armyOf(after, army).activity.kind).toBe('idle');
+      expectConsistent(after);
+    }
+  });
+
+  test('an army that is not clearly stronger always fails against intact walls, and pays for it', () => {
+    const men = Math.round(1.2 * DEFENCE);
+    for (let seed = 1; seed <= 10; seed++) {
+      const { after, army, lost } = stormWith(men, seed);
+      expect(cityOf(after, FIXTURE.capua).owner).toBe(FIXTURE.rome);
+      expect(lost).toBeGreaterThan(0.25 * men);
+      expect(after.formations[`${army}-spearmen` as FormationId]?.morale).toBeCloseTo(0.7, 9);
+      expect(armyOf(after, army).activity.kind).toBe('besieging');
+      expectConsistent(after);
+    }
   });
 
   test('a storm that takes the city gives it to the faction that has besieged it longest', () => {
@@ -285,22 +433,6 @@ describe('storming', () => {
     expect(cityOf(next, FIXTURE.capua)).toMatchObject({ owner: numidia, fellOn: 2 });
     expect(armyOf(next, FIXTURE.punicArmy).activity.kind).toBe('idle');
     expectConsistent(next);
-  });
-
-  test('a storm against full walls fails, costs men and morale, and the siege goes on', () => {
-    let state = tick(besiegingCapua(), [], world).state;
-    const garrison = cityOf(state, FIXTURE.capua).garrison;
-    const before = menOf(state, FIXTURE.punicArmy);
-    const morale = state.formations[FIXTURE.citizenSpears]?.morale ?? 0;
-    state = tick(state, [storm], world).state;
-    const lost = before - menOf(state, FIXTURE.punicArmy);
-    expect(lost).toBeGreaterThan(0.25 * before);
-    expect(state.formations[FIXTURE.citizenSpears]?.morale).toBeCloseTo(morale - 0.3, 9);
-    expect(cityOf(state, FIXTURE.capua).owner).toBe(FIXTURE.rome);
-    expect(cityOf(state, FIXTURE.capua).garrison).toBeLessThan(garrison);
-    expect(cityOf(state, FIXTURE.capua).garrison).toBeGreaterThan(0.8 * garrison);
-    expect(armyOf(state, FIXTURE.punicArmy).activity.kind).toBe('besieging');
-    expectConsistent(state);
   });
 
   test('a storm is refused while the besieger owner is short of food, before any draw', () => {
@@ -382,7 +514,11 @@ describe('after a siege', () => {
     let state = besiegingCapua();
     cityOf(state, FIXTURE.capua).foodDays = 2;
     state = play(state, 4);
-    expect(cityOf(state, FIXTURE.capua)).toMatchObject({ walls: 188, garrison: 900, foodDays: 0 });
+    expect(cityOf(state, FIXTURE.capua)).toMatchObject({
+      walls: 188,
+      garrison: FULL.garrison - 2 * HUNGER,
+      foodDays: 0,
+    });
 
     state = tick(
       state,
@@ -392,7 +528,9 @@ describe('after a siege', () => {
     expect(state.sieges).toEqual({});
     const city = cityOf(state, FIXTURE.capua);
     expect(city.walls).toBeCloseTo(188 + full.walls / RECOVERY_DAYS, 9);
-    expect(city.garrison).toBe(900 + Math.ceil(full.garrison / RECOVERY_DAYS));
+    expect(city.garrison).toBe(
+      FULL.garrison - 2 * HUNGER + Math.ceil(full.garrison / RECOVERY_DAYS),
+    );
     expect(city.foodDays).toBeCloseTo(full.foodDays / RECOVERY_DAYS, 9);
 
     state = play(state, RECOVERY_DAYS);

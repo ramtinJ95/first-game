@@ -17,10 +17,11 @@ import {
 import {
   ATTACK_ODDS,
   DEFENDER_KM,
+  GARRISON_ODDS,
   MARCH_MORALE,
   RALLY_WAIT_DAYS,
 } from '../src/sim/ai/thresholds.ts';
-import { RALLY_DISTANCE } from '../src/sim/systems/economy.ts';
+import { menOf, RALLY_DISTANCE } from '../src/sim/systems/economy.ts';
 import { distance } from '../src/sim/world/find-path.ts';
 import { recordEvents } from '../src/sim/events.ts';
 import type { ArmyId, FactionId } from '../src/sim/ids.ts';
@@ -30,6 +31,15 @@ import type { GameState } from '../src/sim/state/game-state.ts';
 import { executeOrder, type Order } from '../src/sim/orders/orders.ts';
 import { SYSTEMS } from '../src/sim/systems.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
+import {
+  endYear,
+  fateChosen,
+  observeDay,
+  printConquest,
+  startLedger,
+  stormLoss,
+  type ConquestLedger,
+} from './sim-ai-conquest.ts';
 
 const { values } = parseArgs({
   options: {
@@ -78,6 +88,7 @@ interface Game {
   battleDays: number[];
   /** For each army that lost a battle at least 30 days before the end, whether it was alive 30 days later. */
   beatenAlive: boolean[];
+  ledger: ConquestLedger;
 }
 
 function citiesOf(state: GameState, faction: string): number {
@@ -120,6 +131,7 @@ function play(seed: number, passive: readonly FactionId[]): Game {
   const battleDays: number[] = [];
   const beatenAlive: boolean[] = [];
   const beaten = new Map<number, ArmyId[]>();
+  const ledger = startLedger(state);
 
   for (let day = 1; day <= YEARS * DAYS_PER_YEAR; day++) {
     const started = performance.now();
@@ -136,14 +148,19 @@ function play(seed: number, passive: readonly FactionId[]): Game {
     // resolves, before the sieges system can take the city anyway.
     const ticked = performance.now();
     const next = JSON.parse(JSON.stringify(state)) as GameState;
+    let ownersAfterOrders = new Map<string, string>();
     const events = recordEvents(next, () => {
       for (const order of today) {
+        const beforeStorm =
+          order.kind === 'storm' ? (JSON.parse(JSON.stringify(next)) as GameState) : undefined;
         const refused = executeOrder(next, order, world);
         if (refused) {
           const cause = `${order.kind}: ${refused.reason.replace(/[\w-]*\d[\w.,-]*/g, '#')}`;
           rejected.set(cause, (rejected.get(cause) ?? 0) + 1);
           continue;
         }
+        fateChosen(ledger, order);
+        if (beforeStorm && order.kind === 'storm') stormLoss(ledger, beforeStorm, next, order);
         const t = tally(order.faction);
         if (order.kind === 'declareWar') {
           if (t) t.wars++;
@@ -153,6 +170,9 @@ function play(seed: number, passive: readonly FactionId[]): Game {
           else t.stormsLost++;
         }
       }
+      ownersAfterOrders = new Map(
+        Object.values(next.cities).map((city) => [city.id as string, city.owner as string]),
+      );
       for (const system of SYSTEMS) system(next, world);
     });
     tickMs.push(performance.now() - ticked);
@@ -193,6 +213,7 @@ function play(seed: number, passive: readonly FactionId[]): Game {
     if (lostToday.length > 0) beaten.set(day, lostToday);
     for (const id of beaten.get(day - 30) ?? []) beatenAlive.push(Object.hasOwn(next.armies, id));
     beaten.delete(day - 30);
+    observeDay(ledger, state, ownersAfterOrders, next);
     state = next;
     for (const power of POWERS) {
       const faction = power as string as FactionId;
@@ -205,6 +226,7 @@ function play(seed: number, passive: readonly FactionId[]): Game {
       longestPeace = Math.max(longestPeace, days);
     }
     if (day % DAYS_PER_YEAR === 0) {
+      endYear(ledger, state);
       for (const [power, t] of powers) {
         t.cities.push(citiesOf(state, power));
         const stores = state.factions[power as string as FactionId]?.stores;
@@ -240,6 +262,7 @@ function play(seed: number, passive: readonly FactionId[]): Game {
     longestPeace,
     battleDays,
     beatenAlive,
+    ledger,
   };
 }
 
@@ -281,6 +304,12 @@ function stallCause(
       )
     ) {
       causes.push('waiting for recruits that muster within RALLY_WAIT_DAYS');
+    } else if (
+      open.every(
+        (city) => !takeable.has(city.id) || menOf(state, army) < GARRISON_ODDS * city.garrison,
+      )
+    ) {
+      causes.push('too few men alone to blockade the garrison of every city it reaches, gathering');
     } else if (
       open.every(
         (city) =>
@@ -423,6 +452,10 @@ function table(title: string, passive: readonly FactionId[]) {
       `- Seeds where a power declares war on Rome: ${games.filter((g) => g.warsOnRome > 0).length}/${SEEDS}.`,
     );
   }
+  printConquest(
+    games.map((g) => g.ledger),
+    passive,
+  );
   return games;
 }
 

@@ -1,4 +1,4 @@
-import { UNREST_DAYS } from '../cities.ts';
+import { SACK, UNREST_DAYS } from '../cities.ts';
 import type { DeepReadonly } from '../deep-readonly.ts';
 import { emit } from '../events.ts';
 import { allocateId, type FactionId } from '../ids.ts';
@@ -12,12 +12,21 @@ import { TROOPS } from '../troops.ts';
 
 /** What one person of a calm city adds to the owner's stores each day. */
 export const OUTPUT_PER_PERSON: Readonly<Stores> = {
-  gold: 0.00035,
-  food: 0.00035,
-  manpower: 0.00008,
+  gold: 0.00042,
+  food: 0.0006,
+  manpower: 0.0001,
 };
+/** The food one person of a city eats each day, in unrest or not. */
+export const FOOD_PER_PERSON = 0.0004;
 /** What one man under arms costs his owner each day. */
-export const UPKEEP_PER_MAN = { gold: 0.01, food: 0.01 } as const;
+export const UPKEEP_PER_MAN = { gold: 0.01, food: 0.006 } as const;
+/** A faction's granaries hold this many days of what its people and its men eat. More spoils. */
+export const GRANARY_DAYS = 90;
+/**
+ * A faction can call up at most this share of its people, counting the men already under
+ * arms and in training. The rest stay on the land.
+ */
+export const MANPOWER_SHARE = 0.04;
 /**
  * The share of its output that a city produces while more than UNREST_DAYS of unrest
  * are left. It rises evenly to 1 over the last UNREST_DAYS.
@@ -34,18 +43,60 @@ export const RALLY_DISTANCE = 10;
 
 /**
  * Musters the formations whose training ends today, adds each city's output to its
- * owner, takes each army's upkeep, and makes armies desert while their owner is in debt.
+ * owner less the food its people eat, takes each army's upkeep, and makes armies desert
+ * while their owner is in debt. Food and manpower grow only up to the faction's limits.
  */
 export function economy(state: GameState): void {
   muster(state);
+  const limits = limitsOf(state);
   for (const [id, balance] of dailyBalances(state)) {
     const stores = state.factions[id]?.stores;
-    if (!stores) continue;
+    const limit = limits.get(id);
+    if (!stores || !limit) continue;
     stores.gold += balance.gold;
-    stores.food += balance.food;
-    stores.manpower += balance.manpower;
+    stores.food = fill(stores.food, balance.food, limit.food);
+    stores.manpower = fill(stores.manpower, balance.manpower, limit.manpower);
   }
   desert(state);
+}
+
+/** A gain stops at the limit, and a store already above it keeps what it has. */
+function fill(store: number, change: number, limit: number): number {
+  if (change <= 0) return store + change;
+  return Math.max(store, Math.min(limit, store + change));
+}
+
+/**
+ * The most food and manpower each faction can hold: GRANARY_DAYS of what its people
+ * and its men eat, and MANPOWER_SHARE of its people less its men under arms and in
+ * training, so a large army leaves few men to call up.
+ */
+export function limitsOf(
+  state: DeepReadonly<GameState>,
+): Map<FactionId, { food: number; manpower: number }> {
+  const limits = new Map<FactionId, { food: number; manpower: number }>();
+  const of = (faction: FactionId) => {
+    let limit = limits.get(faction);
+    if (!limit) {
+      limit = { food: 0, manpower: 0 };
+      limits.set(faction, limit);
+    }
+    return limit;
+  };
+  for (const faction of Object.keys(state.factions) as FactionId[]) of(faction);
+  for (const city of Object.values(state.cities)) {
+    const limit = of(city.owner);
+    limit.food += GRANARY_DAYS * city.population * FOOD_PER_PERSON;
+    limit.manpower += MANPOWER_SHARE * city.population;
+    for (const recruit of city.recruits) limit.manpower -= TROOPS[recruit.troop].recruit.men;
+  }
+  for (const army of Object.values(state.armies)) {
+    const men = menOf(state, army);
+    const limit = of(army.owner);
+    limit.food += GRANARY_DAYS * men * UPKEEP_PER_MAN.food;
+    limit.manpower -= men;
+  }
+  return limits;
 }
 
 /** Each faction's income less its upkeep for one day, with the state as it stands. */
@@ -63,8 +114,8 @@ export function dailyBalances(state: DeepReadonly<GameState>): Map<FactionId, St
   for (const city of Object.values(state.cities)) {
     const balance = of(city.owner);
     const people = city.population * outputShare(city);
-    balance.gold += people * OUTPUT_PER_PERSON.gold;
-    balance.food += people * OUTPUT_PER_PERSON.food;
+    balance.gold += people * OUTPUT_PER_PERSON.gold * goldShare(state, city);
+    balance.food += people * OUTPUT_PER_PERSON.food - city.population * FOOD_PER_PERSON;
     balance.manpower += people * OUTPUT_PER_PERSON.manpower;
   }
   for (const army of Object.values(state.armies)) {
@@ -76,6 +127,11 @@ export function dailyBalances(state: DeepReadonly<GameState>): Map<FactionId, St
   return balances;
 }
 
+function goldShare(state: DeepReadonly<GameState>, city: DeepReadonly<City>): number {
+  const poor = city.sackedOn !== null && state.day - city.sackedOn < SACK.poorDays;
+  return poor ? SACK.poorOutput : 1;
+}
+
 function outputShare(city: DeepReadonly<City>): number {
   return 1 - (1 - UNREST_OUTPUT) * Math.min(1, city.unrestDays / UNREST_DAYS);
 }
@@ -85,22 +141,26 @@ export function menOf(state: DeepReadonly<GameState>, army: DeepReadonly<Army>):
 }
 
 function muster(state: GameState) {
-  for (const city of Object.values(state.cities)) {
-    const ready = city.recruits.filter(({ readyOn }) => readyOn <= state.day);
-    if (ready.length === 0) continue;
-    city.recruits = city.recruits.filter(({ readyOn }) => readyOn > state.day);
-    for (const { troop } of ready) {
-      const army = rallyArmy(state, city);
-      const id = allocateId(state, 'formation');
-      state.formations[id] = {
-        id,
-        army: army.id,
-        troop,
-        men: TROOPS[troop].recruit.men,
-        morale: 1,
-      };
-      army.formations.push(id);
-    }
+  for (const city of Object.values(state.cities)) musterReady(state, city, state.day);
+}
+
+/**
+ * Musters at once every recruit the city trains, at full strength, as the besieged
+ * city's defence. They join the idle army of its owner at the city, or a new one there.
+ */
+export function musterEarly(state: GameState, city: City): void {
+  musterReady(state, city, Number.POSITIVE_INFINITY);
+}
+
+function musterReady(state: GameState, city: City, until: number) {
+  const ready = city.recruits.filter(({ readyOn }) => readyOn <= until);
+  if (ready.length === 0) return;
+  city.recruits = city.recruits.filter(({ readyOn }) => readyOn > until);
+  for (const { troop } of ready) {
+    const army = rallyArmy(state, city);
+    const id = allocateId(state, 'formation');
+    state.formations[id] = { id, army: army.id, troop, men: TROOPS[troop].recruit.men, morale: 1 };
+    army.formations.push(id);
   }
 }
 

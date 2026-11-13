@@ -8,7 +8,16 @@ import { loadGame, saveGame } from '../save.ts';
 import type { GameState } from '../state/game-state.ts';
 import { tick } from '../tick.ts';
 import { TROOPS } from '../troops.ts';
-import { dailyBalances, menOf } from './economy.ts';
+import {
+  dailyBalances,
+  FOOD_PER_PERSON,
+  GRANARY_DAYS,
+  limitsOf,
+  MANPOWER_SHARE,
+  menOf,
+  OUTPUT_PER_PERSON,
+  UPKEEP_PER_MAN,
+} from './economy.ts';
 
 const world = fixtureWorld();
 
@@ -32,14 +41,17 @@ function play(state: GameState, days: number): GameState {
 describe('production and upkeep', () => {
   test('one day adds each city output to its owner and takes each army upkeep', () => {
     const next = tick(buildFixture(), [], world).state;
-    // Rome: 58,000 people make 20.3 gold, 20.3 food, 4.64 manpower; 1,500 men eat 15 of each.
-    expect(stores(next).gold).toBeCloseTo(5005.3, 9);
-    expect(stores(next).food).toBeCloseTo(1005.3, 9);
-    expect(stores(next).manpower).toBeCloseTo(2004.64, 9);
-    // Carthage: 50,000 people make 17.5 gold and food and 4 manpower; 1,500 men eat 15.
-    expect(stores(next, FIXTURE.carthage).gold).toBeCloseTo(3002.5, 9);
-    expect(stores(next, FIXTURE.carthage).food).toBeCloseTo(1002.5, 9);
-    expect(stores(next, FIXTURE.carthage).manpower).toBeCloseTo(1004, 9);
+    // Rome: 58,000 people make 24.36 gold and 34.8 food and eat 23.2 of it; 1,500 men cost
+    // 15 gold and eat 9 food. Its 2,000 manpower is already above its limit: 4% of its
+    // people less its 1,500 men under arms, 820.
+    expect(stores(next).gold).toBeCloseTo(5009.36, 9);
+    expect(stores(next).food).toBeCloseTo(1002.6, 9);
+    expect(stores(next).manpower).toBe(2000);
+    // Carthage: 50,000 people make 21 gold and 30 food and eat 20 food. Its 1,000
+    // manpower is above its limit of 2,000 less 1,500 men.
+    expect(stores(next, FIXTURE.carthage).gold).toBeCloseTo(3006, 9);
+    expect(stores(next, FIXTURE.carthage).food).toBeCloseTo(1001, 9);
+    expect(stores(next, FIXTURE.carthage).manpower).toBe(1000);
     expect(romanMen(next)).toBe(1500);
     expectConsistent(next);
   });
@@ -47,10 +59,77 @@ describe('production and upkeep', () => {
   test('dailyBalances gives the same change the day brings', () => {
     const state = buildFixture();
     const balance = dailyBalances(state).get(FIXTURE.rome);
-    expect(balance?.gold).toBeCloseTo(5.3, 9);
-    expect(balance?.food).toBeCloseTo(5.3, 9);
-    expect(balance?.manpower).toBeCloseTo(4.64, 9);
+    expect(balance?.gold).toBeCloseTo(9.36, 9);
+    expect(balance?.food).toBeCloseTo(2.6, 9);
+    expect(balance?.manpower).toBeCloseTo(5.8, 9);
     expectConsistent(state);
+  });
+});
+
+describe('food', () => {
+  test('every man under arms eats food each day, as well as costing gold', () => {
+    const state = buildFixture();
+    const before = dailyBalances(state).get(FIXTURE.rome);
+    const hastati = state.formations[FIXTURE.hastati];
+    if (!hastati || !before) throw new Error('the fixture lacks the hastati');
+    hastati.men += 1000;
+    const after = dailyBalances(state).get(FIXTURE.rome);
+    expect(after?.food).toBeCloseTo(before.food - 1000 * UPKEEP_PER_MAN.food, 9);
+    expect(after?.gold).toBeCloseTo(before.gold - 1000 * UPKEEP_PER_MAN.gold, 9);
+  });
+
+  test('a city eats by its people, and in unrest it eats as much while it grows less', () => {
+    const state = buildFixture();
+    const syracusae = state.cities[FIXTURE.syracusae];
+    if (!syracusae) throw new Error('the fixture lacks Syracusae');
+    const calm = dailyBalances(state).get(FIXTURE.syracusaeFaction)?.food ?? 0;
+    expect(calm).toBeCloseTo(syracusae.population * (OUTPUT_PER_PERSON.food - FOOD_PER_PERSON), 9);
+    syracusae.unrestDays = 200;
+    const restless = dailyBalances(state).get(FIXTURE.syracusaeFaction)?.food ?? 0;
+    expect(restless).toBeLessThan(0);
+    expect(restless).toBeCloseTo(
+      syracusae.population * (0.25 * OUTPUT_PER_PERSON.food - FOOD_PER_PERSON),
+      9,
+    );
+  });
+
+  test('a running deficit drains the granary day by day, so the shortage shows before it bites', () => {
+    const state = buildFixture();
+    const hastati = state.formations[FIXTURE.hastati];
+    if (!hastati) throw new Error('the fixture lacks the hastati');
+    hastati.men = 3000;
+    stores(state).food = 50;
+    const deficit = dailyBalances(state).get(FIXTURE.rome)?.food ?? 0;
+    expect(deficit).toBeLessThan(0);
+    const daysLeft = Math.floor(50 / -deficit);
+    const before = play(state, daysLeft);
+    expect(stores(before).food).toBeGreaterThanOrEqual(0);
+    expect(before.formations[FIXTURE.hastati]?.men).toBe(3000);
+    const after = play(before, 2);
+    expect(stores(after).food).toBeLessThan(0);
+    expect(after.formations[FIXTURE.hastati]?.men).toBeLessThan(3000);
+    expectConsistent(after);
+  });
+
+  test('food beyond the granaries spoils, and manpower stops at its share of the people less the men under arms', () => {
+    const state = buildFixture();
+    const limit = limitsOf(state).get(FIXTURE.carthage);
+    if (!limit) throw new Error('Carthage is missing');
+    expect(limit.manpower).toBeCloseTo(50_000 * MANPOWER_SHARE - 1500, 9);
+    expect(limit.food).toBeCloseTo(
+      GRANARY_DAYS * (50_000 * FOOD_PER_PERSON + 1500 * UPKEEP_PER_MAN.food),
+      9,
+    );
+    stores(state, FIXTURE.carthage).food = limit.food - 0.5;
+    stores(state, FIXTURE.carthage).manpower = limit.manpower - 1;
+    const next = play(state, 3);
+    const grown = limitsOf(next).get(FIXTURE.carthage);
+    // The limit grows with the people, a day behind the stores.
+    expect(stores(next, FIXTURE.carthage).food).toBeGreaterThan(limit.food);
+    expect(stores(next, FIXTURE.carthage).food).toBeLessThanOrEqual(grown?.food ?? 0);
+    expect(stores(next, FIXTURE.carthage).manpower).toBeGreaterThan(limit.manpower - 1);
+    expect(stores(next, FIXTURE.carthage).manpower).toBeLessThanOrEqual(grown?.manpower ?? 0);
+    expectConsistent(next);
   });
 });
 
@@ -59,12 +138,12 @@ describe('shortage', () => {
     const state = buildFixture();
     stores(state).gold = -10;
     const first = tick(state, [], world).state;
-    expect(stores(first).gold).toBeCloseTo(-4.7, 9);
+    expect(stores(first).gold).toBeCloseTo(-0.64, 9);
     expect(first.formations[FIXTURE.hastati]?.men).toBe(1188);
     expect(first.formations[FIXTURE.equites]?.men).toBe(297);
 
     const second = tick(first, [], world).state;
-    expect(stores(second).gold).toBeCloseTo(0.75, 1);
+    expect(stores(second).gold).toBeCloseTo(8.87, 2);
     expect(romanMen(second)).toBe(1485);
     expect(romanMen(play(second, 30))).toBe(1485);
     expectConsistent(second);
@@ -78,11 +157,17 @@ describe('shortage', () => {
     const roma = first.cities[FIXTURE.roma]?.population ?? 0;
     expect(roma).toBeLessThan(40_000);
 
-    const second = tick(first, [], world).state;
-    expect(stores(second).food).toBeCloseTo(0.75, 1);
-    expect(second.cities[FIXTURE.roma]?.population).toBeGreaterThan(roma);
-    expect(romanMen(second)).toBe(1485);
-    expectConsistent(second);
+    let fed = first;
+    for (let day = 0; day < 10 && stores(fed).food < 0; day++) fed = tick(fed, [], world).state;
+    expect(stores(fed).food).toBeGreaterThanOrEqual(0);
+    const men = romanMen(fed);
+    expect(men).toBeLessThan(1485);
+    const later = play(fed, 30);
+    expect(romanMen(later)).toBe(men);
+    expect(later.cities[FIXTURE.roma]?.population).toBeGreaterThan(
+      fed.cities[FIXTURE.roma]?.population ?? 0,
+    );
+    expectConsistent(later);
   });
 
   test('a small formation keeps deserting through a long debt but never empties', () => {
@@ -146,8 +231,9 @@ describe('recruitment', () => {
     );
     expect(ordered.rejected).toEqual([]);
     state = ordered.state;
-    expect(stores(state).gold).toBeCloseTo(5000 - gold + 5.3, 9);
-    expect(stores(state).manpower).toBeCloseTo(2000 - men + 4.64, 9);
+    expect(stores(state).gold).toBeCloseTo(5000 - gold + 9.36, 9);
+    // The 1,000 men in training count against the limit, which leaves no room to grow.
+    expect(stores(state).manpower).toBe(2000 - men);
     expect(state.cities[FIXTURE.roma]?.recruits).toEqual([
       { troop: 'spearmen', readyOn: 1 + days },
     ]);

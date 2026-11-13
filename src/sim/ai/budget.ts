@@ -3,6 +3,7 @@ import type { Order } from '../orders/orders.ts';
 import { UPKEEP_PER_MAN } from '../systems/economy.ts';
 import { TROOPS, type Troop } from '../troops.ts';
 import {
+  besieged,
   formationsOf,
   menInTraining,
   menUnderArms,
@@ -29,21 +30,21 @@ export function recruitment(
 ): Order[] {
   const record = state.factions[faction];
   if (!record || !muster || muster.owner !== faction || muster.unrestDays > 0) return [];
+  if (besieged(state, muster)) return [];
   const troop = mostNeeded(state, faction);
   const { men, gold } = TROOPS[troop].recruit;
   const { stores } = record;
   if (stores.manpower < men) return [];
-  const reserve = reserveOf(state, faction, men);
-  if (stores.gold - gold < reserve || stores.food < reserve) return [];
+  if (stores.gold - gold < reserveOf(state, faction, 'gold', men)) return [];
+  if (stores.food < reserveOf(state, faction, 'food', men)) return [];
 
   const balance = balanceOf(state, faction);
   if (!balance) return [];
-  const upkeepNow = menUnderArms(state, faction) * UPKEEP_PER_MAN.gold;
-  const upkeepAfter =
-    (menUnderArms(state, faction) + menInTraining(state, faction) + men) * UPKEEP_PER_MAN.gold;
+  const armed = menUnderArms(state, faction);
+  const after = armed + menInTraining(state, faction) + men;
   for (const store of ['gold', 'food'] as const) {
-    const income = balance[store] + upkeepNow;
-    if (income - upkeepAfter < MIN_BALANCE_SHARE * income) return [];
+    const income = balance[store] + armed * UPKEEP_PER_MAN[store];
+    if (income - after * UPKEEP_PER_MAN[store] < MIN_BALANCE_SHARE * income) return [];
   }
   return [{ kind: 'recruit', faction, city: muster.id, troop }];
 }

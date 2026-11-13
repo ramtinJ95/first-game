@@ -90,6 +90,7 @@ export function buildFixture(seed = 1): GameState {
         recruits: [],
         ...CITY_DEFENCES.capital,
         fellOn: null,
+        sackedOn: null,
       },
       [f.capua]: {
         id: f.capua,
@@ -103,6 +104,7 @@ export function buildFixture(seed = 1): GameState {
         recruits: [],
         ...CITY_DEFENCES.greatPowerCity,
         fellOn: null,
+        sackedOn: null,
       },
       [f.carthago]: {
         id: f.carthago,
@@ -116,6 +118,7 @@ export function buildFixture(seed = 1): GameState {
         recruits: [],
         ...CITY_DEFENCES.capital,
         fellOn: null,
+        sackedOn: null,
       },
       [f.syracusae]: {
         id: f.syracusae,
@@ -129,6 +132,7 @@ export function buildFixture(seed = 1): GameState {
         recruits: [],
         ...CITY_DEFENCES.minorCity,
         fellOn: null,
+        sackedOn: null,
       },
     },
     armies: {
