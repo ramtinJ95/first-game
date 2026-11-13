@@ -300,14 +300,19 @@ test.describe('orders across the sea', () => {
     await expect(menu.getByRole('menuitem', { name: /March/ })).toHaveCount(0);
   });
 
-  test('a right click on a city that neither a march nor a crossing reaches says why in words', async ({
-    page,
-  }) => {
-    await rightClick(page, camera(page).city('alexandria-arachosion'));
-    await expect(page.getByTestId('notice')).toHaveText(
-      /^Order refused\. The march to Alexandria Arachosion takes \d+ days, more than the 90 a march may take\. No way by sea from a port of yours lands within 90 days' march of it\.$/,
-    );
-    await expect(page.getByTestId('command-menu')).toHaveCount(0);
-    await expect(page.getByTestId('orders-waiting')).toHaveCount(0);
+  test.describe('at a wider view', () => {
+    // At 1280 px the army panel covers the far east of the widest zoom, where the city lies.
+    test.use({ viewport: { width: 1600, height: 900 } });
+
+    test('a right click on a city that neither a march nor a crossing reaches says why in words', async ({
+      page,
+    }) => {
+      await rightClick(page, camera(page).city('alexandria-arachosion'));
+      await expect(page.getByTestId('notice')).toHaveText(
+        /^Order refused\. The march to Alexandria Arachosion takes \d+ days, more than the 90 a march may take\. No way by sea from a port of yours lands within 90 days' march of it\.$/,
+      );
+      await expect(page.getByTestId('command-menu')).toHaveCount(0);
+      await expect(page.getByTestId('orders-waiting')).toHaveCount(0);
+    });
   });
 });
