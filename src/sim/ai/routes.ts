@@ -46,20 +46,25 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
 
   const harbour = (city: CityView) => world.harbours.get(city.id) as MapPoint;
 
-  /** The port where an army bound for the city lands: the city itself, or the port nearest it by land. */
+  /**
+   * The port where an army bound for the city lands: the city itself, or the port nearest
+   * it from which the march on to the city is one the rules allow.
+   */
   function landingFor(target: CityView): CityView | undefined {
     if (landings.has(target.id)) return landings.get(target.id);
     let best: CityView | undefined;
     if (world.harbours.has(target.id)) best = target;
     else {
-      for (const port of ports) {
-        if (
-          best &&
-          distance(port.position, target.position) >= distance(best.position, target.position)
-        )
-          continue;
-        if (byLand(world, harbour(port), target.position)) best = port;
-      }
+      const near = ports
+        .filter((port) => distance(harbour(port), target.position) <= MAX_MARCH_KM)
+        .sort(
+          (a, b) => distance(a.position, target.position) - distance(b.position, target.position),
+        );
+      best = near.find(
+        (port) =>
+          byLand(world, harbour(port), target.position) &&
+          roadKm(harbour(port), target.position) < Number.POSITIVE_INFINITY,
+      );
     }
     landings.set(target.id, best);
     return best;
@@ -128,14 +133,12 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
     if (!landing) return found;
     const landAt = harbour(landing);
     const ashore = distance(landAt, target.position);
-    // A route lands only where the march on to its target is one the rules allow.
-    const ashoreKm = () => (landing.id === target.id ? ashore : roadKm(landAt, target.position));
     const here = portAt(from);
     if (here && here.id !== landing.id && connected(world.mesh, harbour(here), landAt, 'sea')) {
       const voyage = distance(harbour(here), landAt) * SEA_KM_FACTOR;
       found.push({
         bound: voyage + ashore,
-        price: () => voyage + ashoreKm(),
+        price: () => voyage + ashore,
         step: { kind: 'embark', to: landing.id },
       });
       return found;
@@ -147,7 +150,7 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
       const voyage = distance(harbour(port), landAt) * SEA_KM_FACTOR;
       found.push({
         bound: distance(from, port.position) + voyage + ashore,
-        price: () => roadKm(from, port.position) + voyage + ashoreKm(),
+        price: () => roadKm(from, port.position) + voyage + ashore,
         step: { kind: 'march', to: port.position },
       });
     }
