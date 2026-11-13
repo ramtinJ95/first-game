@@ -767,3 +767,50 @@ export function idleBesideEnemyCity(id: string, km = 15): GameState {
   };
   return state;
 }
+
+/**
+ * Rome's strong army besieges Carthago in a war Rome declared 123 days ago, so Carthage
+ * takes peace as things stand and refuses to pay for it.
+ */
+export function siegeToEndInPeace(): GameState {
+  const state = siegeOfCarthago();
+  state.day = (state.day + 120) as Day;
+  return state;
+}
+
+/**
+ * Rome took Hadrumetum from Carthage in a war that has run 300 days, so Carthage offers
+ * to pay for peace with the next day.
+ */
+export function carthageOffersPeace(): GameState {
+  const state = startGame();
+  declareWar(state, carthage, rome);
+  changeCityOwner(state, 'hadrumetum' as CityId, rome);
+  state.day = (state.day + 300) as Day;
+  return state;
+}
+
+/**
+ * The tester's case in year 2: Carthage and Macedon declared war on Rome on day 400.
+ * Carthage took Capua and Macedon took Epidamnos, and Macedon besieges Salona, so Rome
+ * holds five cities on two fronts.
+ */
+export function romeOnTwoFronts(): GameState {
+  const state = startGame();
+  for (const id of ['mediolanum', 'salona', 'epidamnos'])
+    changeCityOwner(state, id as CityId, rome);
+  state.day = 400 as Day;
+  const macedon = 'macedon' as FactionId;
+  declareWar(state, carthage, rome);
+  declareWar(state, macedon, rome);
+  changeCityOwner(state, 'capua' as CityId, carthage);
+  changeCityOwner(state, 'epidamnos' as CityId, macedon);
+  const salona = cityPoint('salona');
+  armyOf(state, macedon).activity = {
+    kind: 'idle',
+    position: { x: salona.x + 6, y: salona.y + 4 },
+  };
+  armyOf(state, carthage).activity = { kind: 'idle', position: cityPoint('capua') };
+  state.day = 500 as Day;
+  return playDays(state, 1);
+}

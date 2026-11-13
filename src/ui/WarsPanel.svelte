@@ -1,6 +1,6 @@
 <script lang="ts">
   import { whole } from '../app/names.ts';
-  import { peaceAnswer, type PeaceAnswer } from '../sim/ai/peace.ts';
+  import { peaceAnswer, termsText, type PeaceAnswer } from '../sim/ai/peace.ts';
   import { GOLD_PER_POINT } from '../sim/peace/terms.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { CityId, FactionId } from '../sim/ids.ts';
@@ -165,8 +165,10 @@
       <ul class="choices">
         {#each war.choices as choice (choice.label)}
           <li data-testid="peace-choice">
-            <button type="button" class="pick" onclick={() => fill(choice.terms, war)}>
-              {choice.label}
+            <button type="button" onclick={() => fill(choice.terms, war)}>
+              {choice.label}{choice.terms.kind === 'payment'
+                ? `: ${termsText(game, choice.terms, game.player)}`
+                : ''}
             </button>
             <span class={choice.answer.accepts ? 'good' : 'bad'}>{choice.answer.verdict}</span>
           </li>
@@ -278,7 +280,12 @@
   .choices li {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
     margin-bottom: 4px;
+  }
+
+  .choices button {
+    text-align: left;
   }
 
   .points {
