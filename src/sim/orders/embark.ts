@@ -7,7 +7,7 @@ import type { City } from '../state/city.ts';
 import type { Day } from '../state/day.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
-import { distance, findPath } from '../world/find-path.ts';
+import { connected, distance, findPath, locate } from '../world/find-path.ts';
 import { nearestSea, type World } from '../world/world.ts';
 import { SIEGE_DISTANCE } from '../systems/sieges.ts';
 import { ownedArmy } from './owned-army.ts';
@@ -46,23 +46,29 @@ export interface Embarkation {
 }
 
 /**
- * Where the army at the point would sail from. A port of its owner, within AT_PORT_KM of the
- * city or its harbour, has ships ready. Any other shore within SHORE_KM of the sea, an enemy
- * or a neutral port included, takes GATHER_DAYS to gather them, so no army is ever shut in
- * where it stands.
+ * Where the army at the point would sail from for the sea point `toward`. A port of its
+ * owner, within AT_PORT_KM of the city or its harbour, on that sea, has ships ready. Any
+ * other shore within SHORE_KM of that sea, an enemy or a neutral port included, takes
+ * GATHER_DAYS to gather them, so no army is ever shut in where it stands. A shore of a sea
+ * that leads elsewhere does not count.
  */
 export function embarkationAt(
   state: DeepReadonly<GameState>,
   world: World,
   owner: FactionId,
   at: MapPoint,
+  toward: MapPoint,
 ): Embarkation | undefined {
+  const sea = locate(world.mesh, toward, 'sea');
+  if (sea < 0) return undefined;
+  const component = world.mesh.component[sea] as number;
   let port: DeepReadonly<City> | undefined;
   let portDistance = Number.POSITIVE_INFINITY;
   for (const id of Object.keys(state.cities).sort()) {
     const city = state.cities[id as CityId];
     const harbour = city && world.harbours.get(city.id);
     if (!city || !harbour || city.owner !== owner) continue;
+    if (!connected(world.mesh, harbour, toward, 'sea')) continue;
     const away = Math.min(distance(at, city.position), distance(at, harbour));
     if (away <= AT_PORT_KM && away < portDistance) {
       port = city;
@@ -71,7 +77,7 @@ export function embarkationAt(
   }
   const harbour = port && world.harbours.get(port.id);
   if (port && harbour) return { from: harbour, port, waitDays: 0 };
-  const shore = nearestSea(world.mesh, at);
+  const shore = nearestSea(world.mesh, at, component);
   if (!shore || distance(at, shore) > SHORE_KM) return undefined;
   return { from: shore, port: undefined, waitDays: GATHER_DAYS };
 }
@@ -97,12 +103,14 @@ export function embark(state: GameState, order: EmbarkOrder, world: World): stri
   if (typeof army === 'string') return army;
   const at = standing(army);
   if (typeof at === 'string') return at;
-  const start = embarkationAt(state, world, army.owner, at);
-  if (!start) return `army ${army.id} stands at no port of ${army.owner} and on no shore`;
   const destination = Object.hasOwn(state.cities, order.to) ? state.cities[order.to] : undefined;
   const landing = world.harbours.get(order.to);
   if (!destination) return `city ${order.to} does not exist`;
   if (!landing) return `${destination.name} is not a port`;
+  const start = embarkationAt(state, world, army.owner, at, landing);
+  if (!start) {
+    return `army ${army.id} stands at no port of ${army.owner} and on no shore of the sea to ${destination.name}`;
+  }
   if (destination.id === start.port?.id || distance(start.from, landing) < 1) {
     return `army ${army.id} already stands at ${destination.name}`;
   }

@@ -301,7 +301,7 @@ describe('a right click on a port from a port', () => {
     const lake: World = { ...world, harbours: new Map(world.harbours).set(f.syracusae, inland) };
     expect(plan(state, atCity(state, f.syracusae), f.romanArmy, lake)).toEqual({
       kind: 'refuse',
-      notice: 'Order refused. No way by sea or by land leads from Roma to Syracusae.',
+      notice: `Order refused. No land route reaches Syracusae. No way by sea lands within ${MAX_MARCH_DAYS} days' march of it.`,
     });
   });
 

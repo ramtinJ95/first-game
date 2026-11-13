@@ -285,7 +285,7 @@ describe('a crossing by convoy', () => {
     const punic = armyOf(state, FIXTURE.punicArmy);
     punic.activity = { kind: 'idle', position: { x: 2169.9, y: 2885.1 } };
     expect(executeOrder(state, embark(FIXTURE.syracusae), world)?.reason).toBe(
-      'army army-punic stands at no port of carthage and on no shore',
+      'army army-punic stands at no port of carthage and on no shore of the sea to Syracusae',
     );
     expect(state.convoys).toEqual({});
     expectConsistent(state);

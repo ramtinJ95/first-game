@@ -26,14 +26,22 @@ export function buildWorld(map: GameMap): World {
   return Object.freeze({ map, mesh, harbours });
 }
 
-/** The point of open sea nearest the point. For a point on land it lies on the coast. */
-export function nearestSea(mesh: NavMesh, from: MapPoint): MapPoint | undefined {
+/**
+ * The point of open sea nearest the point, on the sea of the given component when one is
+ * given. For a point on land it lies on the coast.
+ */
+export function nearestSea(
+  mesh: NavMesh,
+  from: MapPoint,
+  component?: number,
+): MapPoint | undefined {
   const { triangles, points } = mesh;
   const sea = surfaceCode('sea');
   let best: MapPoint | undefined;
   let bestDistance = Number.POSITIVE_INFINITY;
   for (let t = 0; t < triangles.length / 3; t += 1) {
     if (mesh.surface[t] !== sea) continue;
+    if (component !== undefined && mesh.component[t] !== component) continue;
     for (let k = 0; k < 3; k += 1) {
       const a = triangles[3 * t + k] as number;
       const b = triangles[3 * t + ((k + 1) % 3)] as number;
