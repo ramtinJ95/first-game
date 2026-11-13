@@ -330,7 +330,12 @@ class Context {
     }
   }
 
-  battleMode(state: State, battle: DeepReadonly<Battle>, army: DeepReadonly<Army>): Mode {
+  battleMode(
+    state: State,
+    battle: DeepReadonly<Battle>,
+    army: DeepReadonly<Army>,
+    anchor?: MapPoint,
+  ): Mode {
     const centroid = (ids: readonly ArmyId[]) => {
       let x = 0;
       let count = 0;
@@ -363,7 +368,7 @@ class Context {
     return {
       kind: 'battle',
       battle,
-      anchor: this.battleAnchor(state, battle),
+      anchor: anchor ?? this.battleAnchor(state, battle),
       facing: facingRight ? RIGHT : { x: -1, y: 0 },
       across: facingRight ? across : -across,
       stance: army.stance,
@@ -417,11 +422,24 @@ class Context {
     }
     const land = this.input.land;
     if (land) {
+      // Every figure of both lines, commanders included, at the anchor so far, so one
+      // shift moves the whole battle onto land.
+      const scale = this.input.camera.scale;
+      const near = {
+        x: battle.position.x + shift.x / scale,
+        y: battle.position.y + shift.y / scale,
+      };
       const samples: MapPoint[] = [];
-      for (const u of [-1, -0.5, 0, 0.5, 1]) {
-        for (const v of [-1, 0, 1]) {
-          samples.push({ x: at.x + shift.x + u * half.x, y: at.y + shift.y + v * half.y });
-        }
+      for (const id of [...battle.attackers, ...battle.defenders]) {
+        const army = state.armies[id];
+        if (!army) continue;
+        const layout = this.layout(
+          state,
+          army,
+          this.battleMode(state, battle, army, near),
+          'after',
+        );
+        if (layout instanceof LineLayout) samples.push(...layout.positions());
       }
       const extra = landShift(land, samples, h);
       shift = { x: shift.x + extra.x, y: shift.y + extra.y };
@@ -1466,16 +1484,26 @@ class LineLayout implements Layout {
     });
     // A battle's lines are kept on land by its anchor, which both sides share.
     if (mode.kind === 'line' && ctx.input.land) {
-      // Every figure's own place, its seeded step included, so none stands in the sea.
-      const samples: MapPoint[] = [this.point(0.75, 0.15), this.point(0.75, -0.35)];
-      for (const { block, at } of this.blocks.values()) {
-        for (const place of block.places) {
-          samples.push(this.point(at.along + place.along, at.across + place.across));
-        }
-      }
+      const samples = this.positions();
       const extra = landShift(ctx.input.land, samples, ctx.h);
       this.shift = { x: this.shift.x + extra.x, y: this.shift.y + extra.y };
     }
+  }
+
+  /** Where every figure of the army stands, its seeded step included, with its commanders. */
+  positions(): MapPoint[] {
+    const points: MapPoint[] = [];
+    for (const slot of [0, 1]) {
+      const at = this.locate('command', slot);
+      if (at) points.push(at);
+    }
+    for (const [id, { block }] of this.blocks) {
+      for (let slot = 0; slot < block.places.length; slot++) {
+        const at = this.locate(id, slot);
+        if (at) points.push(at);
+      }
+    }
+    return points;
   }
 
   private point(along: number, across: number): MapPoint {

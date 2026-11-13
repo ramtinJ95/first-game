@@ -276,6 +276,42 @@ describe('buildScene', () => {
     );
   });
 
+  test('a battle on the Dalmatian shore keeps every figure of both lines, commanders too, on the land of the map', () => {
+    const land = new Land(fixtureWorld().map);
+    const previous = buildFixture();
+    const battle = 'battle-1' as keyof GameState['battles'];
+    const at = { x: 2808, y: 2106 };
+    const roman = previous.armies[FIXTURE.romanArmy];
+    const punic = previous.armies[FIXTURE.punicArmy];
+    if (!roman || !punic) throw new Error('fixture');
+    roman.activity = { kind: 'inBattle', position: at, battle, march: [] };
+    punic.activity = { kind: 'inBattle', position: { x: at.x + 4, y: at.y }, battle, march: [] };
+    previous.battles[battle] = {
+      id: battle,
+      position: at,
+      attackers: [FIXTURE.romanArmy],
+      defenders: [FIXTURE.punicArmy],
+      startedOn: previous.day,
+      sides: {
+        attackers: { factions: [FIXTURE.rome], lost: 0 },
+        defenders: { factions: [FIXTURE.carthage], lost: 0 },
+      },
+    };
+    const current = structuredClone(previous);
+    current.day = (previous.day + 1) as GameState['day'];
+    for (const scale of [1, 4]) {
+      const camera = { centre: at, scale };
+      const onLand = (p: MapPoint) => {
+        const point = screenToMap(camera, viewport, p);
+        return land.open(point.x, point.y);
+      };
+      const scene = buildScene(input(previous, current, { camera, land: onLand }));
+      const fighters = scene.sprites.filter((s) => s.army !== undefined && s.alpha > 0);
+      expect(fighters.length).toBeGreaterThan(10);
+      expect(fighters.filter((s) => !onLand(s)).map((s) => s.key)).toEqual([]);
+    }
+  });
+
   test('a battle fought at a coast draws both lines on land', () => {
     const previous = buildFixture();
     const battle = 'battle-1' as keyof GameState['battles'];
