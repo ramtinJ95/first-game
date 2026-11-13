@@ -1,0 +1,82 @@
+[
+  {
+    "file": "colours-widest.png",
+    "title": "The widest zoom as Rome on day 1: Rome's red land in sight, the other four powers' land and the minors' land in the fog, and unowned land",
+    "kind": "screenshot"
+  },
+  {
+    "file": "colours-rome-wide.png",
+    "title": "As rome, 0.5 px per km on its capital: its own land in sight, the edge of sight, and the neighbours' and minors' land in the fog",
+    "kind": "screenshot"
+  },
+  {
+    "file": "colours-rome-middle.png",
+    "title": "As rome, the middle zoom on its capital: own land, a minor's land, and the fog",
+    "kind": "screenshot"
+  },
+  {
+    "file": "colours-carthage-wide.png",
+    "title": "As carthage, 0.5 px per km on its capital: its own land in sight, the edge of sight, and the neighbours' and minors' land in the fog",
+    "kind": "screenshot"
+  },
+  {
+    "file": "colours-carthage-middle.png",
+    "title": "As carthage, the middle zoom on its capital: own land, a minor's land, and the fog",
+    "kind": "screenshot"
+  },
+  {
+    "file": "colours-macedon-wide.png",
+    "title": "As macedon, 0.5 px per km on its capital: its own land in sight, the edge of sight, and the neighbours' and minors' land in the fog",
+    "kind": "screenshot"
+  },
+  {
+    "file": "colours-macedon-middle.png",
+    "title": "As macedon, the middle zoom on its capital: own land, a minor's land, and the fog",
+    "kind": "screenshot"
+  },
+  {
+    "file": "colours-egypt-wide.png",
+    "title": "As egypt, 0.5 px per km on its capital: its own land in sight, the edge of sight, and the neighbours' and minors' land in the fog",
+    "kind": "screenshot"
+  },
+  {
+    "file": "colours-egypt-middle.png",
+    "title": "As egypt, the middle zoom on its capital: own land, a minor's land, and the fog",
+    "kind": "screenshot"
+  },
+  {
+    "file": "colours-persia-wide.png",
+    "title": "As persia, 0.5 px per km on its capital: its own land in sight, the edge of sight, and the neighbours' and minors' land in the fog",
+    "kind": "screenshot"
+  },
+  {
+    "file": "colours-persia-middle.png",
+    "title": "As persia, the middle zoom on its capital: own land, a minor's land, and the fog",
+    "kind": "screenshot"
+  },
+  {
+    "file": "colours-defeated-widest.png",
+    "title": "After Rome's defeat, watching on at the widest zoom: the player sees nothing, yet every owner's colour stays clear of the fog",
+    "kind": "screenshot"
+  },
+  {
+    "file": "colours-defeated-middle.png",
+    "title": "After Rome's defeat, the middle zoom on Roma, now Carthage's",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Who owns what and what is hidden: each power's land in sight and in the fog beside unowned land, and the map after the player's defeat",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Who owns what and what is hidden: each power's land in sight and in the fog beside unowned land, and the map after the player's defeat (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Who owns what and what is hidden: each power's land in sight and in the fog beside unowned land, and the map after the player's defeat (Playwright trace)",
+    "kind": "trace"
+  }
+]
