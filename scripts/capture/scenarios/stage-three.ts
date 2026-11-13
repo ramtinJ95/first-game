@@ -10,6 +10,7 @@ import {
   playDays,
   rome,
   startGame,
+  untilDrawn,
   withFormations,
 } from '../../../e2e/support.ts';
 import { loadSave } from '../../../e2e/watch.ts';
@@ -186,9 +187,13 @@ export default defineScenario({
       await pause(page);
       await loadSave(page, view.state());
       if (view.at !== 'widest') await camera(page).jumpTo(view.at, view.scale);
-      await page.waitForTimeout(500);
-      await page.locator('canvas[data-terrain="ready"]').waitFor({ timeout: 90_000 });
-      await page.waitForTimeout(1500);
+      // The figures' sheet is painted once the zoom rests, and a frame in software takes
+      // seconds, so the shot waits for the terrain, a rest, and a frame drawn after it.
+      const ready = page.locator('canvas[data-terrain="ready"]');
+      await ready.waitFor({ timeout: 90_000 });
+      await page.waitForTimeout(3000);
+      await ready.waitFor({ timeout: 90_000 });
+      await untilDrawn(page);
       await shot(view.name, view.title);
     }
   },

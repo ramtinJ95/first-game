@@ -12,7 +12,7 @@ import { TROOPS, type Troop } from '../../sim/troops.ts';
 import { mapToScreen, type Camera, type Size } from '../camera.ts';
 import type { Box } from '../labels.ts';
 import { MOTIONS, MOUNTED, type FigureKind, type Motion } from '../figures/motions.ts';
-import { OWNED, SHARED, artKey, figureKey, groundSpan } from '../figures/sheet.ts';
+import { OWNED, SHARED, artKey, figureKey, groundSpan, type GroundArt } from '../figures/sheet.ts';
 import { factionColour, MINOR_COLOUR, POWER_COLOURS } from '../palette.ts';
 import { figuresFor } from './count.ts';
 import {
@@ -269,14 +269,20 @@ class Context {
   }
 
   /**
-   * Whether the ground a figure covers at a screen point is land: its feet, or a horse's
-   * hooves, at either side of it, so a figure on a coast never stands half in the sea.
+   * Whether the ground a picture covers at a screen point is land: a figure's feet or a
+   * horse's hooves, or a tent's base, at either side of it, so nothing on a coast stands
+   * half in the sea. `size` is the sprite's height, a man's height unless given.
    */
-  dry(x: number, y: number, kind: FigureKind | 'tent'): boolean {
+  dry(x: number, y: number, art: GroundArt, size = this.h): boolean {
     const land = this.input.land;
     if (!land) return true;
-    const half = (kind === 'tent' ? TENT_SPAN : groundSpan(kind)) * this.h;
+    const half = groundSpan(art) * size;
     return land({ x, y }) && land({ x: x - half, y }) && land({ x: x + half, y });
+  }
+
+  /** Whether a tent of either kind stands on land at a spot, since one of a camp's tents becomes the command tent. */
+  tentDry(p: MapPoint): boolean {
+    return this.dry(p.x, p.y, 'tent') && this.dry(p.x, p.y, 'commandTent');
   }
 
   /**
@@ -913,8 +919,8 @@ class Context {
     const dry = (side: 1 | -1) => {
       const spots = layout.campSpots(side);
       return {
-        tents: spots.tents.filter((p) => this.dry(p.x, p.y, 'tent')),
-        fires: spots.fires.filter((p) => this.dry(p.x, p.y, 'bearer')),
+        tents: spots.tents.filter((p) => this.tentDry(p)),
+        fires: spots.fires.filter((p) => this.dry(p.x, p.y, 'fire')),
         all: spots.tents.length,
       };
     };
@@ -943,9 +949,9 @@ class Context {
     army: ArmyId,
   ) {
     const field = layout.field();
-    const tents = field.tents.filter((p) => this.dry(p.x, p.y, 'tent'));
-    const fires = field.fires.filter((p) => this.dry(p.x, p.y, 'bearer'));
-    const stakes = field.stakes.filter((p) => this.dry(p.x, p.y, 'bearer'));
+    const tents = field.tents.filter((p) => this.tentDry(p));
+    const fires = field.fires.filter((p) => this.dry(p.x, p.y, 'fire'));
+    const stakes = field.stakes.filter((p) => this.dry(p.x, p.y, 'stakes', this.h * 0.75));
     tents.forEach((spot, i) => {
       const key = `${artKey(i === Math.floor(tents.length / 2) ? 'commandTent' : 'tent')}@${colour}`;
       this.push({
@@ -985,7 +991,7 @@ class Context {
     tents.forEach((tent, i) => {
       const x = tent.x + (seeded(army, 40 + i) < 0.5 ? -1 : 1) * 0.55 * this.h;
       const y = tent.y + 0.18 * this.h;
-      if (!this.dry(x, y, 'bearer')) return;
+      if (!this.dry(x, y, 'arms', this.h * 0.95)) return;
       this.push({
         key: `${artKey('arms')}@${colour}`,
         x,
@@ -1745,8 +1751,6 @@ const LAND_RINGS = 12;
 const LAND_STEP = 0.5;
 /** The standard bearer and the general, in the order of their slots. */
 const COMMAND_KINDS: readonly FigureKind[] = ['bearer', 'general'];
-/** How far a tent's foot reaches to either side, in men's heights. */
-const TENT_SPAN = 0.5;
 /** Rings of places tried for one figure the layout left off land, each `NUDGE_STEP` men's heights out. */
 const NUDGE_RINGS = 4;
 const NUDGE_STEP = 0.35;
@@ -1857,7 +1861,7 @@ class RingLayout implements Layout {
           x: c.x + Math.cos(a) * r,
           y: c.y + Math.sin(a) * r * GROUND_Y,
         }));
-        if (!points.every((p) => ctx.dry(p.x, p.y, 'tent'))) continue;
+        if (!points.every((p) => ctx.tentDry(p))) continue;
         dry.push(a);
         if (!points.some(covers)) clear.push(a);
       }

@@ -330,28 +330,52 @@ export function sheetRows(layout: SheetLayout): number[] {
   return [...new Set([...layout.cells.values()].map((cell) => cell.y))].sort((a, b) => a - b);
 }
 
-const spans = new Map<FigureKind, number>();
+/** Any picture that stands on the ground: a figure, or a tent, fire, stake, or stack of arms. */
+export type GroundArt = FigureKind | Owned | Shared;
+
+const spans = new Map<GroundArt, number>();
+
+function framesOf(art: GroundArt): PaintOp[][] {
+  if (art in KINDS) {
+    const kind = art as FigureKind;
+    return KIND_MOTIONS[kind]
+      .filter((motion) => motion !== 'fall')
+      .flatMap((motion) =>
+        Array.from(
+          { length: MOTIONS[motion].frames },
+          (_, frame) => posedFigure(kind, motion, frameTime(motion, frame)).ops,
+        ),
+      );
+  }
+  if (art in OWNED) {
+    const owned = art as Owned;
+    return Array.from({ length: OWNED[owned] }, (_, frame) =>
+      ownedOps(owned, frame / OWNED[owned]),
+    );
+  }
+  const shared = art as Shared;
+  return Array.from({ length: SHARED[shared] }, (_, frame) =>
+    sharedOps(shared, frame / SHARED[shared]),
+  );
+}
 
 /**
- * How far a figure's feet, hooves, or spear butt reach to either side of its origin, in
- * men's heights, over every frame it stands or walks: the ground it covers, which must
- * be land.
+ * How far a picture's feet, hooves, spear butt, or base reach to either side of its
+ * origin, in the heights of the sprite it is drawn at, over every frame it stands or
+ * walks: the ground it covers, which must be land.
  */
-export function groundSpan(kind: FigureKind): number {
-  const known = spans.get(kind);
+export function groundSpan(art: GroundArt): number {
+  const known = spans.get(art);
   if (known !== undefined) return known;
   let span = 0;
-  for (const motion of KIND_MOTIONS[kind]) {
-    if (motion === 'fall') continue;
-    for (let frame = 0; frame < MOTIONS[motion].frames; frame++) {
-      for (const op of posedFigure(kind, motion, frameTime(motion, frame)).ops) {
-        const box = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
-        pathBounds(op.d, box, 0);
-        if (box.maxY >= GROUND_CONTACT) span = Math.max(span, -box.minX, box.maxX);
-      }
+  for (const ops of framesOf(art)) {
+    for (const op of ops) {
+      const box = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+      pathBounds(op.d, box, 0);
+      if (box.maxY >= GROUND_CONTACT) span = Math.max(span, -box.minX, box.maxX);
     }
   }
-  spans.set(kind, span / 100);
+  spans.set(art, span / 100);
   return span / 100;
 }
 

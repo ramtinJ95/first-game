@@ -129,6 +129,18 @@ describe('placeLabels', () => {
     expect(placed && placed.right <= 300).toBe(true);
   });
 
+  it('takes no spot that lies wholly across a strait from its place', () => {
+    const land = (p: { y: number }) => p.y > 296 || p.y < 275;
+    const city = label('a', 300, 300, { clearance: { x: 5, y: 20 } });
+    const ownShore: Box[] = [
+      { left: 306, top: 285, right: 1000, bottom: 600 },
+      { left: 0, top: 285, right: 294, bottom: 600 },
+      { left: 0, top: 310, right: 1000, bottom: 600 },
+    ];
+    expect(placeLabels([city], ownShore, viewport).get('a')?.bottom).toBeLessThan(280);
+    expect(placeLabels([city], ownShore, viewport, land).has('a')).toBe(false);
+  });
+
   it('draws no name for an island whose every spot reaches another shore', () => {
     const land = (p: { x: number; y: number }) =>
       Math.hypot(p.x - 300, p.y - 300) < 8 || Math.abs(p.x - 300) > 40;

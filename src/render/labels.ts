@@ -66,9 +66,10 @@ function candidates({ anchor: { x, y }, width: w, height: h, clearance }: LabelR
 }
 
 /**
- * How a spot's name lies on the ground, read along its middle line outward from the
- * point nearest its place: whether it crosses open water onto another shore, and the
- * share of it over land.
+ * How a spot's name lies on the ground, read from its place to the nearest point of its
+ * middle line and then outward along that line both ways: whether it crosses open water
+ * onto another shore, so a name beyond a strait counts as well as one that reaches
+ * across it, and the share of the name over land.
  */
 function groundOf(
   box: Box,
@@ -76,30 +77,34 @@ function groundOf(
   land: (point: MapPoint) => boolean,
 ): { farShore: boolean; landShare: number } {
   const y = (box.top + box.bottom) / 2;
-  const start = Math.min(box.right, Math.max(box.left, anchor.x));
-  let dry = 0;
-  let count = 0;
-  let farShore = false;
-  for (const [end, way] of [
-    [box.right, 1],
-    [box.left, -1],
-  ] as const) {
-    let water = 0;
-    let crossed = false;
-    for (let x = start; way > 0 ? x <= end : x >= end; x += way * GROUND_STEP) {
-      if (way < 0 && x === start) continue;
-      count++;
-      if (land({ x, y })) {
+  const start = { x: Math.min(box.right, Math.max(box.left, anchor.x)), y };
+  const walk = (from: MapPoint, to: MapPoint, water: number) => {
+    const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / GROUND_STEP));
+    let run = water;
+    let crossed = run >= FAR_SHORE_PX;
+    let dry = 0;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      if (land({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t })) {
+        if (crossed) return { far: true, run, dry: dry + 1, count: i };
         dry++;
-        if (crossed) farShore = true;
-        water = 0;
+        run = 0;
       } else {
-        water += GROUND_STEP;
-        if (water >= FAR_SHORE_PX) crossed = true;
+        run += GROUND_STEP;
+        if (run >= FAR_SHORE_PX) crossed = true;
       }
     }
-  }
-  return { farShore, landShare: count > 0 ? dry / count : 0 };
+    return { far: false, run, dry, count: steps };
+  };
+  const approach = walk(anchor, start, 0);
+  if (approach.far) return { farShore: true, landShare: 0 };
+  const right = walk(start, { x: box.right, y }, approach.run);
+  const left = walk(start, { x: box.left, y }, approach.run);
+  const count = right.count + left.count;
+  return {
+    farShore: right.far || left.far,
+    landShare: count > 0 ? (right.dry + left.dry) / count : 0,
+  };
 }
 
 /**

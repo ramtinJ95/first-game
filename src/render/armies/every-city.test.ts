@@ -11,8 +11,7 @@ import { warKey } from '../../sim/state/war.ts';
 import { tick } from '../../sim/tick.ts';
 import type { Troop } from '../../sim/troops.ts';
 import { screenToMap, symbolGrowth } from '../camera.ts';
-import type { FigureKind } from '../figures/motions.ts';
-import { groundSpan } from '../figures/sheet.ts';
+import { groundSpan, type GroundArt } from '../figures/sheet.ts';
 import { Land } from '../terrain/marks.ts';
 import { buildScene, type Sprite } from './scene.ts';
 
@@ -87,13 +86,10 @@ function towardNeighbour(state: GameState, city: CityId, km: number): MapPoint {
   return { x: at.x + (near.x - at.x) * t, y: at.y + (near.y - at.y) * t };
 }
 
-const isFigure = (sprite: Sprite) => sprite.key.split('.').length === 3;
-
-/** The ground a sprite stands on: a figure's feet and hooves at either side, or a tent's or a fire's foot. */
+/** The ground a sprite stands on: a figure's feet and hooves, or a tent's, fire's, or stake's base, at either side. */
 function ground(sprite: Sprite): MapPoint[] {
-  const half = isFigure(sprite)
-    ? groundSpan(sprite.key.split('.')[0] as FigureKind) * sprite.size
-    : 0;
+  const art = sprite.key.split(/[.@]/)[0] as GroundArt;
+  const half = groundSpan(art) * sprite.size;
   return [-half, 0, half].map((dx) => ({ x: sprite.x + dx, y: sprite.y }));
 }
 
