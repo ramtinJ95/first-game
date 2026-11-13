@@ -138,7 +138,6 @@ export const LAYERS = [
   { name: 'paper', world: true },
   { name: 'sea', world: false },
   { name: 'terrain', world: true },
-  { name: 'borders', world: true },
   { name: 'riversAndCoast', world: true },
   { name: 'fog', world: false },
   { name: 'grain', world: false },
@@ -394,7 +393,7 @@ export async function createRenderer({
 
   const borderLines = borderRuns(sharedBorders(map));
   const borders = new Graphics();
-  layers.borders.addChild(borders);
+  terrain.borders.addChild(borders);
   // The map build clips rivers and the coastline to the extent, so they need no mask.
   // A stencil mask here cost over a third of each frame drawn without a graphics card.
   const inkLines = new Graphics();
@@ -550,6 +549,7 @@ export async function createRenderer({
       const runs = borderLines.filter((run) => run.weight === weight).map((run) => run.line);
       traceLines(borders, runs, scale, 0.5).stroke({ width: weight, color: BORDER, ...round });
     }
+    terrain.repaint();
     inkLines.clear();
     traceLines(
       inkLines,

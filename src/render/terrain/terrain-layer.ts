@@ -60,6 +60,12 @@ export interface Terrain {
    * shaded sides under every owner's colour. Call `repaint` after changing one.
    */
   readonly washes: Container;
+  /**
+   * The borders between provinces, painted into the terrain over the relief, trees, and
+   * fields. They change only with the zoom, and drawn each frame without a graphics card
+   * they cost about an eighth of the frame. Call `repaint` after stroking them again.
+   */
+  readonly borders: Container;
   repaint(): void;
   /** The lakes, which sit over the washes so no owner's colour tints them. */
   readonly lakes: Container;
@@ -102,6 +108,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
     }
   }
   const washes = new Container({ label: 'washes' });
+  const borders = new Container({ label: 'borders' });
   let repaint = true;
   const ground = new Container({ label: 'ground' });
   ground.addChild(
@@ -162,7 +169,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   // drawn into a texture a little larger than the screen and shown as one sprite. A pan
   // slides the sprite and draws again only after moving CACHE_MARGIN pixels.
   const art = new Container();
-  art.addChild(paper, ground, washes, ...layers.map((layer) => layer.container));
+  art.addChild(paper, ground, washes, ...layers.map((layer) => layer.container), borders);
   const root = new Container();
   root.addChild(art);
   let texture = RenderTexture.create({
@@ -212,6 +219,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
 
   return {
     washes,
+    borders,
     repaint() {
       repaint = true;
     },
