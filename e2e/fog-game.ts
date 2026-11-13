@@ -1,3 +1,5 @@
+import { STARTING_POPULATION } from '../src/sim/new-game.ts';
+import { removeRecord } from '../src/sim/records.ts';
 import type { FactionId } from '../src/sim/ids.ts';
 import { landPath } from '../src/sim/march.ts';
 import { sightOf } from '../src/sim/sight.ts';
@@ -34,8 +36,26 @@ export function march(state: GameState, army: Army, from: MapPoint, to: MapPoint
 }
 
 /** The new game as Rome, with the Punic army standing at `at`. */
-export function romeWithPunicArmyAt(at: MapPoint): GameState {
+/**
+ * The new game of seed 1 with its minor cities as plain as before they differed: no
+ * standing army and the plain population. Names are placed by population and keep clear
+ * of banners, and these tests click beside a name or away from every name.
+ */
+export function plainGame(): GameState {
   const state = startGame();
+  for (const army of Object.values(state.armies)) {
+    if (state.factions[army.owner]?.kind !== 'minor') continue;
+    for (const id of army.formations) removeRecord(state.formations, id);
+    removeRecord(state.armies, army.id);
+  }
+  for (const city of Object.values(state.cities)) {
+    if (city.rank === 'minorCity') city.population = STARTING_POPULATION.minorCity;
+  }
+  return state;
+}
+
+export function romeWithPunicArmyAt(at: MapPoint): GameState {
+  const state = plainGame();
   armyOf(state, carthage).activity = { kind: 'idle', position: at };
   return state;
 }

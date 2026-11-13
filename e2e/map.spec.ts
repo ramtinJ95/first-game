@@ -9,7 +9,8 @@ import { parseMap } from '../src/sim/map.ts';
 import { newGame, STARTING_POPULATION } from '../src/sim/new-game.ts';
 import { saveGame } from '../src/sim/save.ts';
 import type { MapPoint } from '../src/sim/state/map-point.ts';
-import { openGame } from './support.ts';
+import { plainGame } from './fog-game.ts';
+import { openGame, untilDrawn } from './support.ts';
 
 const map = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../data/map/map.json'), 'utf8')),
@@ -67,6 +68,13 @@ test.describe('the map', () => {
   });
 
   test('a click on the sea clears the selection', async ({ page }) => {
+    const state = plainGame();
+    await dropSave(page, saveGame(state));
+    await expect(page.getByTestId('time-controls-day')).toHaveAttribute(
+      'data-day',
+      String(state.day),
+    );
+    await untilDrawn(page);
     const roma = onScreen(page, cityPoint('roma'));
     await page.mouse.click(roma.x, roma.y);
     await expect(page.getByTestId('city-panel')).toBeVisible();
