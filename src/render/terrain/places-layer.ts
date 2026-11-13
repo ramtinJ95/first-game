@@ -1,6 +1,6 @@
 import { Container, Graphics, GraphicsContext, Text } from 'pixi.js';
 import type { GameMap } from '../../sim/map.ts';
-import { mapToScreen, type Camera, type Size } from '../camera.ts';
+import { mapToScreen, symbolGrowth, type Camera, type Size } from '../camera.ts';
 import { LABEL_PRIORITY, type Box, type LabelRequest } from '../labels.ts';
 import { INK, LABEL_HALO, PAPER } from '../palette.ts';
 import { DETAIL, detailAlpha } from './detail.ts';
@@ -56,16 +56,16 @@ function settlementSymbols(): Record<Rank, GraphicsContext> {
   house(town, 3.4, 3, 3.4, 2.4);
   town.moveTo(-6, 3.6).lineTo(6, 3.6).stroke({ color: INK, width: 1, cap: 'round' });
   const village = new GraphicsContext();
-  house(village, 0.6, -0.6, 2.6, 1.9);
-  house(village, -2.3, 2.2, 3, 2.2);
-  house(village, 2.6, 2.4, 2.6, 1.9);
-  village.moveTo(-4.6, 2.9).lineTo(4.6, 2.9).stroke({ color: INK, width: 0.8, cap: 'round' });
+  house(village, 0.75, -0.75, 3.25, 2.4);
+  house(village, -2.9, 2.75, 3.75, 2.75);
+  house(village, 3.25, 3, 3.25, 2.4);
+  village.moveTo(-5.75, 3.6).lineTo(5.75, 3.6).stroke({ color: INK, width: 0.9, cap: 'round' });
   return { town, village };
 }
 
 const HALF: Record<Rank, { x: number; y: number }> = {
   town: { x: 6.5, y: 5.5 },
-  village: { x: 5, y: 4.4 },
+  village: { x: 6.25, y: 5.5 },
 };
 
 interface Drawn {
@@ -165,7 +165,7 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
         villageNames: detailAlpha(DETAIL.villageNames, scale),
         peakNames: detailAlpha(DETAIL.peakNames, scale),
       };
-      const grow = Math.min(1.6, Math.max(1, 1 + 0.3 * Math.log2(scale)));
+      const grow = symbolGrowth(scale);
       const onScreen: { d: Drawn; at: { x: number; y: number }; box: Box }[] = [];
       for (const d of all) {
         d.symbolWanted = false;

@@ -40,6 +40,12 @@ export const TERRAIN_COLOURS = {
   track: mix(PAPER, SEPIA, 0.62),
 } as const;
 
+/**
+ * A mountain's lit side lets the wash under it show through, so it reads as the lit side
+ * of the owner's land and not as a white patch, while staying lighter than the land.
+ */
+const RELIEF_LIGHT = { color: TERRAIN_COLOURS.reliefLight, alpha: 0.55 } as const;
+
 const CROP_COLOURS: Record<Crop, number> = {
   grain: mix(PAPER, 0xd4a63c, 0.78),
   stubble: mix(PAPER, 0xa9824a, 0.62),
@@ -84,7 +90,7 @@ function mountain(g: GraphicsContext, m: Extract<Mark, { kind: 'mountain' }>, ti
         y,
       ]
     : [left, y, lx, ly, sx, sy, rx, ry, right, y];
-  g.poly(outline).fill(TERRAIN_COLOURS.reliefLight);
+  g.poly(outline).fill(RELIEF_LIGHT);
   const spurX = sx + w * (0.05 + 0.06 * random());
   const spurY = y - h * (0.3 + 0.15 * random());
   g.poly([sx, sy, rx, ry, right, y, spurX + w * 0.08, y, spurX, spurY]).fill(
@@ -331,7 +337,7 @@ export function drawPeaks(peaks: readonly Peak[], tier: Tier): GraphicsContext {
       foot - h * 0.6,
       x + w / 2,
       foot,
-    ]).fill(TERRAIN_COLOURS.reliefLight);
+    ]).fill(RELIEF_LIGHT);
     g.poly([
       x,
       sy,
