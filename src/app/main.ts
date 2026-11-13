@@ -188,8 +188,8 @@ function sightFor(state: DeepReadonly<GameState>): Sight {
   return sight;
 }
 
-function showNotice(text: string) {
-  notice = { id: (notice?.id ?? 0) + 1, text };
+function showNotice(text: string, tone: Notice['tone'] = 'bad') {
+  notice = { id: (notice?.id ?? 0) + 1, text, tone };
   clearTimeout(noticeTimer);
   noticeTimer = setTimeout(() => {
     notice = undefined;
@@ -279,10 +279,17 @@ function command({ point, city, screen }: Command) {
     const target: CommandTarget = clicked
       ? { kind: 'city', city: clicked }
       : { kind: 'point', point };
-    const plan = planCommand(state, world, army, target);
-    if (plan.kind === 'issue') clock.issue(plan.order);
-    if (plan.kind === 'menu') menu = { ...plan.menu, screen };
-    if (plan.notice) showNotice(plan.notice);
+    const plan = planCommand(state, world, army, target, clock.pending);
+    if (plan.kind === 'issue') {
+      clock.issue(plan.order);
+      showNotice(
+        plan.notice ? `${plan.info} ${plan.notice}` : plan.info,
+        plan.notice ? 'bad' : 'info',
+      );
+    } else {
+      if (plan.kind === 'menu') menu = { ...plan.menu, screen };
+      if (plan.notice) showNotice(plan.notice);
+    }
   }
   view.refresh();
 }

@@ -23,6 +23,8 @@ export interface CommandMenu extends OrderMenu {
 export interface Notice {
   readonly id: number;
   readonly text: string;
+  /** A warning or a refusal is `bad`. What an accepted order does is `info`. */
+  readonly tone: 'bad' | 'info';
 }
 
 /** The modal in front, with a fate's choices worked out for the day. */

@@ -5,7 +5,15 @@
 </script>
 
 {#if notice}
-  <p class="panel notice" role="status" data-testid="notice">{notice.text}</p>
+  <p
+    class="panel notice"
+    class:info={notice.tone === 'info'}
+    role="status"
+    data-testid="notice"
+    data-tone={notice.tone}
+  >
+    {notice.text}
+  </p>
 {/if}
 
 <style>
@@ -18,5 +26,9 @@
     color: var(--bad);
     transform: translateX(-50%);
     border-color: var(--bad);
+  }
+  .notice.info {
+    color: var(--ink);
+    border-color: var(--ink);
   }
 </style>
