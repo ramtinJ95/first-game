@@ -1,4 +1,5 @@
-import { chromium, type Browser, type Page } from '@playwright/test';
+import { chromium, type Browser } from '@playwright/test';
+import { clipFrame } from './clip.ts';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -22,7 +23,6 @@ const SCENARIOS_DIR = join(import.meta.dirname, 'scenarios');
 const DEFAULT_VIEWPORT = { width: 1280, height: 720 };
 const FRAME_INTERVAL_MS = 125;
 const CLIP_LIMIT_MS = 12_000;
-const CLIP_FRAME_MS = 5_000;
 const GIF_WIDTHS = [800, 640, 480] as const;
 const GIF_MAX_BYTES = 5 * 1024 * 1024;
 
@@ -76,29 +76,6 @@ function encodeClip(frames: GifFrame[]): Buffer {
     gif = encodeGif(frames, width);
   }
   return gif;
-}
-
-/**
- * One frame of the clip, or nothing. A screenshot asked for while a page is loading,
- * before its map has drawn, can wait out its whole timeout, and the page's own shots
- * queue behind it. So the clip waits for a drawn map and gives up on a frame that is
- * not ready in CLIP_FRAME_MS, which a clip can spare.
- */
-async function clipFrame(page: Page): Promise<Buffer | undefined> {
-  try {
-    await page.waitForFunction(
-      () =>
-        new Promise<boolean>((done) => {
-          if (!document.querySelector('canvas[data-renderer]')) done(false);
-          else requestAnimationFrame(() => done(true));
-        }),
-      undefined,
-      { timeout: CLIP_FRAME_MS },
-    );
-    return await page.screenshot({ timeout: CLIP_FRAME_MS });
-  } catch {
-    return undefined;
-  }
 }
 
 async function captureScenario(

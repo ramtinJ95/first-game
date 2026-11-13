@@ -46,6 +46,7 @@ import {
 } from './palette.ts';
 import { paperTexture, waterTexture } from './paper.ts';
 import { toPixels } from './lines.ts';
+import { FramePacer } from './frame-pacer.ts';
 import { cityAt, pickAt, provinceAt, type DrawnCity, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
 import { citySymbols } from './symbols.ts';
@@ -822,27 +823,8 @@ export async function createRenderer({
     swell.position.set(-tile + drift.x, -tile + drift.y);
   }
 
-  // A slow GPU takes longer to draw a frame than the page takes to ask for the next.
-  // Unpaced, the frames queue up, so a click or a screenshot waits behind seconds of
-  // them. A fence after each frame lets the next one start only once the GPU is done.
-  let fence: WebGLSync | null = null;
-  function fenceFrame() {
-    if (!('gl' in app.renderer) || !(app.renderer.gl instanceof WebGL2RenderingContext)) return;
-    const gl = app.renderer.gl;
-    fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-    gl.flush();
-  }
-  function gpuBusy(): boolean {
-    if (!fence || !('gl' in app.renderer)) return false;
-    const gl = app.renderer.gl as WebGL2RenderingContext;
-    // A lost context drops its fences, which then never signal, so a fence that cannot
-    // be read is let go rather than waited on.
-    const status: unknown = gl.isContextLost() ? null : gl.getSyncParameter(fence, gl.SYNC_STATUS);
-    if (status === gl.UNSIGNALED) return true;
-    if (status !== null) gl.deleteSync(fence);
-    fence = null;
-    return false;
-  }
+  const gl = 'gl' in app.renderer ? app.renderer.gl : undefined;
+  const pacer = new FramePacer(gl instanceof WebGL2RenderingContext ? gl : undefined);
 
   const pixel = new Uint8Array(4);
   function finish() {
@@ -986,7 +968,6 @@ export async function createRenderer({
 
   return {
     draw({ previous, current, progress, selection, planned, replaced, previousSight, sight }) {
-      if (gpuBusy()) return false;
       const now = performance.now();
       let dirty = cameraMoved;
       if (current !== shown) {
@@ -1117,7 +1098,7 @@ export async function createRenderer({
           dirty = true;
         }
       }
-      if (!dirty) return false;
+      if (!pacer.frame(dirty)) return false;
       life.update(camera, viewport(), now, sight);
       moveSwell(now);
       bannerLayer.visible = !scene || scene.height === 0;
@@ -1139,7 +1120,7 @@ export async function createRenderer({
       if (layers.fog.visible) fog.paint();
       app.render();
       if (waitForGpu) finish();
-      else fenceFrame();
+      else pacer.rendered();
       return true;
     },
     focus(point) {

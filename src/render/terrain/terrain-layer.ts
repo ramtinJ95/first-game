@@ -1,7 +1,7 @@
 import { Container, Graphics, RenderTexture, Sprite, type Renderer } from 'pixi.js';
 import type { GameMap } from '../../sim/map.ts';
 import { visibleRect, type Camera, type Size } from '../camera.ts';
-import { chunkKey, chunkRect, chunkRow, chunksNear, OVERHANG } from './chunks.ts';
+import { BuildQueue, chunkKey, chunkRect, chunkRow, chunksNear, OVERHANG } from './chunks.ts';
 import { DETAIL, detailAlpha, type Band } from './detail.ts';
 import { PAPER } from '../palette.ts';
 import { createLakes } from './lakes.ts';
@@ -190,15 +190,8 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
     }
   }
   type Pending = { layer: Layer; key: number; distance: number; needed: boolean };
-  let queue: Pending[] = [];
-  let building: ReturnType<typeof setTimeout> | undefined;
-
-  function buildSlice() {
-    building = undefined;
-    const started = performance.now();
-    while (queue.length > 0 && performance.now() - started < BUILD_SLICE_MS) {
-      const { layer, key, needed } = queue.shift() as Pending;
-      if (layer.chunks.has(key)) continue;
+  const queue = new BuildQueue<Pending>(
+    ({ layer, key, needed }) => {
       const graphics = layer.build(chunkRect(layer.size, key));
       graphics.alpha = 0;
       graphics.visible = needed;
@@ -208,13 +201,10 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       for (const other of layer.chunks.keys())
         if (other !== key && chunkRow(other) <= row) before++;
       layer.container.addChildAt(graphics, Math.min(before, layer.container.children.length));
-    }
-    if (queue.length > 0) scheduleBuild();
-  }
-
-  function scheduleBuild() {
-    building ??= setTimeout(buildSlice, 0);
-  }
+    },
+    ({ layer, key }) => layer.chunks.has(key),
+    BUILD_SLICE_MS,
+  );
 
   let lastCamera: Camera = { centre: { x: NaN, y: NaN }, scale: NaN };
   let stillSince = 0;
@@ -227,8 +217,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
     lakes: lakes.container,
     land,
     destroy() {
-      if (building !== undefined) clearTimeout(building);
-      queue = [];
+      queue.destroy();
     },
     restroke(scale) {
       lakes.restroke(scale);
@@ -291,9 +280,8 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
         }
       }
       missing.sort((a, b) => Number(b.needed) - Number(a.needed) || a.distance - b.distance);
-      queue = missing;
-      if (queue.length > 0) scheduleBuild();
-      if (queue.some((item) => item.needed)) fading = true;
+      queue.want(missing);
+      if (queue.waitingInView) fading = true;
       const x = viewport.width / 2 - camera.centre.x * camera.scale;
       const y = viewport.height / 2 - camera.centre.y * camera.scale;
       const width = Math.ceil(viewport.width) + 2 * CACHE_MARGIN;
