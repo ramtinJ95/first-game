@@ -575,6 +575,8 @@ export function stormText(state: State, siege: DeepReadonly<Siege>): string | un
  * says where the people missing from its population went.
  */
 export function leavingText(state: State, city: DeepReadonly<City>): string | undefined {
+  // Only the player's own cities: a foreign column may be out of the player's sight.
+  if (city.owner !== state.player) return undefined;
   const columns = Object.values(state.refugeeColumns).filter(
     (column) => column.from === city.id && column.owner === city.owner,
   );
@@ -621,7 +623,7 @@ export function stanceMatchText(stance: Stance): string {
 
 /** What a change of stance costs, by `REFORM_DAYS`. */
 export function reformCostText(): string {
-  return `A change of stance takes ${REFORM_DAYS} days to re-form. Until then every enemy stance beats it.`;
+  return `A change of stance takes ${REFORM_DAYS} days to re-form. Until then every enemy that is not re-forming too beats it, whatever its stance.`;
 }
 
 /** How long the army still re-forms after a change of stance, or nothing. */

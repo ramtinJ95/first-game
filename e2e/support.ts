@@ -671,22 +671,31 @@ export function framePace(page: Page): Promise<number> {
  */
 export async function resizeTo(page: Page, size: { width: number; height: number }) {
   await page.evaluate(() => {
-    const counted = window as unknown as { resizeScreens: number };
+    const counted = window as unknown as { resizeScreens: number; resizeCounting?: number };
     counted.resizeScreens = 0;
     const count = () => {
       counted.resizeScreens += 1;
-      requestAnimationFrame(count);
+      counted.resizeCounting = requestAnimationFrame(count);
     };
-    requestAnimationFrame(count);
+    counted.resizeCounting = requestAnimationFrame(count);
   });
-  await page.setViewportSize(size);
-  await page.waitForFunction(
-    ({ width, height }) =>
-      window.innerWidth === width &&
-      window.innerHeight === height &&
-      document.querySelector<HTMLCanvasElement>('canvas[data-renderer]')?.dataset['drawnSize'] ===
-        `${width}x${height}`,
-    size,
-  );
-  return page.evaluate(() => (window as unknown as { resizeScreens: number }).resizeScreens);
+  try {
+    await page.setViewportSize(size);
+    await page.waitForFunction(
+      ({ width, height }) =>
+        window.innerWidth === width &&
+        window.innerHeight === height &&
+        document.querySelector<HTMLCanvasElement>('canvas[data-renderer]')?.dataset['drawnSize'] ===
+          `${width}x${height}`,
+      size,
+    );
+    return await page.evaluate(
+      () => (window as unknown as { resizeScreens: number }).resizeScreens,
+    );
+  } finally {
+    await page.evaluate(() => {
+      const counted = window as unknown as { resizeCounting?: number };
+      if (counted.resizeCounting !== undefined) cancelAnimationFrame(counted.resizeCounting);
+    });
+  }
 }

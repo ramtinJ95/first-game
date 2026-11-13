@@ -539,6 +539,10 @@ describe('leavingText', () => {
     expect(leavingText(next, roma)).toBe('10,000 of its people are on the road to Capua');
     const capua = next.cities[f.capua];
     if (capua) expect(leavingText(next, capua)).toBeUndefined();
+    const foreign = structuredClone(next);
+    foreign.player = f.carthage;
+    const seen = foreign.cities[f.roma];
+    if (seen) expect(leavingText(foreign, seen)).toBeUndefined();
   });
 });
 
@@ -562,7 +566,7 @@ describe('the stance texts', () => {
       'Skirmish and withdraw: beats hold the line, beaten by an all-out assault.',
     ]);
     expect(reformCostText()).toBe(
-      `A change of stance takes ${REFORM_DAYS} days to re-form. Until then every enemy stance beats it.`,
+      `A change of stance takes ${REFORM_DAYS} days to re-form. Until then every enemy that is not re-forming too beats it, whatever its stance.`,
     );
   });
 
@@ -588,6 +592,9 @@ describe('the stance texts', () => {
     );
     expect(line('holdTheLine', 'skirmishAndWithdraw', { theirs: 1 })).toBe(
       'Their army re-forms, so your line beats it',
+    );
+    expect(line('holdTheLine', 'skirmishAndWithdraw', { mine: 1, theirs: 1 })).toBe(
+      'Neither stance beats the other',
     );
   });
 
