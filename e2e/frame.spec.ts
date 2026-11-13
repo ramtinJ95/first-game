@@ -279,6 +279,7 @@ test.describe('the frame round the game', () => {
 
     await page.goto('/');
     const start = page.getByTestId('start-screen');
+    await start.waitFor();
     await expect(start.getByTestId('continue-info')).toHaveText(`Rome, Year 1, day ${saved}`);
     await start.getByRole('button', { name: 'Continue' }).click();
     await expect(start).toHaveCount(0);
