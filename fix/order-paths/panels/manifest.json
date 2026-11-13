@@ -1,0 +1,72 @@
+[
+  {
+    "file": "top-bar.png",
+    "title": "The top bar: Rome's gold marked red because a large army's upkeep empties it within days",
+    "kind": "screenshot"
+  },
+  {
+    "file": "army-own.png",
+    "title": "Your army selected: formations, general, activity with days left, stance, halt, and its path on the map",
+    "kind": "screenshot"
+  },
+  {
+    "file": "army-foreign.png",
+    "title": "A foreign army: the same facts, no orders, and the declaration of war waiting for its confirmation",
+    "kind": "screenshot"
+  },
+  {
+    "file": "city-recruiting.png",
+    "title": "Roma raising skirmishers and heavy cavalry with days left, the troop buttons with their costs, and the evacuation",
+    "kind": "screenshot"
+  },
+  {
+    "file": "sea-crossing.png",
+    "title": "A right click on the port of Massalia, with the army at Roma, offers the crossing by sea",
+    "kind": "screenshot"
+  },
+  {
+    "file": "refused-order.png",
+    "title": "A march into the sea is refused, and the reason shows for a few seconds",
+    "kind": "screenshot"
+  },
+  {
+    "file": "city-fallen.png",
+    "title": "Mediolanum fell to Rome today: unrest, and the choice to sack or enslave while the army stands there",
+    "kind": "screenshot"
+  },
+  {
+    "file": "city-siege.png",
+    "title": "Mediolanum besieged by Rome: walls, garrison, and food worn down, and the walls can be stormed",
+    "kind": "screenshot"
+  },
+  {
+    "file": "battle.png",
+    "title": "The battle marker selected: both sides with their formations, men, morale, and the day count",
+    "kind": "screenshot"
+  },
+  {
+    "file": "battle-and-army.png",
+    "title": "Panel refresh with the top bar, the army panel, the battle panel, and the alerts open: 40 refreshes, median 0.30 ms, p95 0.50 ms, max 2.80 ms",
+    "kind": "screenshot"
+  },
+  {
+    "file": "alerts.png",
+    "title": "The alerts at the left edge: the battle began, and who held the field when it ended",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Each panel in use: the top bar, your army and a foreign one, a city raising troops, the sea crossing, a battle, a siege, a fallen city, a refused order, and the alerts",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Each panel in use: the top bar, your army and a foreign one, a city raising troops, the sea crossing, a battle, a siege, a fallen city, a refused order, and the alerts (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Each panel in use: the top bar, your army and a foreign one, a city raising troops, the sea crossing, a battle, a siege, a fallen city, a refused order, and the alerts (Playwright trace)",
+    "kind": "trace"
+  }
+]
