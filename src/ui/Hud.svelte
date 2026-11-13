@@ -163,7 +163,7 @@
   .alerts {
     grid-area: alerts;
     gap: 4px;
-    max-height: min(34vh, 13.5rem);
+    max-height: min(30vh, 11.5rem);
   }
 
   .latest {
@@ -204,7 +204,7 @@
     }
 
     .alerts {
-      max-height: 7rem;
+      max-height: 5.2rem;
     }
 
     .side {

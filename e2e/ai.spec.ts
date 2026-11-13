@@ -70,9 +70,13 @@ test('at the highest speed the page plays on until a foreign army has marched an
   const panel = page.getByTestId('city-panel');
   const owners: string[] = [];
   for (const province of map.provinces.filter((p) => p.owner === 'independent')) {
+    // The open sheet covers the bottom of this small page, so it is closed before each click.
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
     const at = view.city(province.id);
     await page.mouse.click(at.x, at.y);
     const name = panel.getByTestId('city-name');
+    await name.waitFor({ timeout: 1000 }).catch(() => undefined);
     if ((await name.count()) === 0 || (await name.textContent()) !== province.name) continue;
     owners.push((await panel.getByTestId('city-owner').textContent())?.trim() ?? '');
   }
