@@ -18,7 +18,15 @@ export default defineScenario({
     const state = refugeesToCapua();
     await loadSave(page, state);
     const column = Object.values(state.refugeeColumns)[0];
-    await camera(page).jumpTo(column?.position ?? cityPoint('roma'), 4);
+    const at = column?.position ?? cityPoint('roma');
+    const view = camera(page);
+    await view.jumpTo({ x: at.x + 60, y: at.y - 40 }, 0.6);
+    await page.waitForTimeout(800);
+    await shot(
+      'refugees-wide',
+      'At a zoom where an army is its flag, the column on the road to Capua is a small ox cart in its owner colour',
+    );
+    await view.jumpTo(at, 4);
     await resume(page);
     await page.waitForTimeout(1400);
     await pause(page);
