@@ -38,6 +38,7 @@ import {
   STANCE_BEATS,
   STANCE_EFFECTS,
   ENGAGEMENT_DISTANCE,
+  stanceBlows,
 } from '../sim/systems/battles.ts';
 import { SACK } from '../sim/cities.ts';
 import type { Siege } from '../sim/state/siege.ts';
@@ -232,7 +233,10 @@ export function stanceEffectText(stance: Stance): string {
     blows(dealt) === blows(taken)
       ? `Deals and takes ${blows(dealt)}`
       : `Deals ${blows(dealt)}, takes ${blows(taken)}`;
-  return morale === 1 ? both : `${both}, morale falls ${morale} times as fast`;
+  const mirror = stanceBlows(stance, stance);
+  const same =
+    mirror === dealt * taken ? '' : `, ${blows(mirror)} against an enemy that skirmishes too`;
+  return morale === 1 ? `${both}${same}` : `${both}${same}, morale falls ${morale} times as fast`;
 }
 
 /** The faction that held the province when the game began, as the map gives it. */

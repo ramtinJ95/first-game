@@ -255,7 +255,11 @@ export function movements(context: Context, muster: CityView | undefined): Order
   for (const mover of movers) {
     if (mover.men >= REMNANT_MEN || used.has(mover.army.id)) continue;
     used.add(mover.army.id);
-    if (muster && distance(mover.at, muster.position) > RALLY_DISTANCE) headFor(mover, muster);
+    if (!muster) continue;
+    if (distance(mover.at, muster.position) > RALLY_DISTANCE) headFor(mover, muster);
+    else if (mover.army.activity.kind === 'marching' && !marchingTo(mover.army, muster.position)) {
+      orders.push({ kind: 'halt', faction, army: mover.army.id });
+    }
   }
 
   for (const siege of sorted(state.sieges)) {

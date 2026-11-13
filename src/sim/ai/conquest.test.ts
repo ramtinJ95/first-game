@@ -484,6 +484,30 @@ describe('remnants and prey', () => {
     expectConsistent(next);
   });
 
+  test('a remnant at the muster city that marches away from it halts there', () => {
+    const { state, target } = war();
+    const [muster] = Object.values(state.cities)
+      .filter((city) => city.owner === rome)
+      .sort(
+        (a, b) => distance(a.position, target.position) - distance(b.position, target.position),
+      );
+    if (!muster) throw new Error('Rome holds no city');
+    const remnant = addArmy(state, rome, REMNANT_MEN - 1, muster.position);
+    const army = state.armies[remnant];
+    if (!army) throw new Error('no remnant');
+    army.activity = {
+      kind: 'marching',
+      position: { ...muster.position },
+      waypoints: [alongRoad(muster.position, target.position, 40)],
+    };
+    expect(decideOrders(state, world, rome)).toContainEqual({
+      kind: 'halt',
+      faction: rome,
+      army: remnant,
+    });
+    expectConsistent(state);
+  });
+
   test('a remnant near the capital gets one order, not one to guard the capital and one to the muster city', () => {
     const { state, target } = war();
     const roma = cityOf(state, rome);

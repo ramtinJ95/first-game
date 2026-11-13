@@ -54,11 +54,8 @@ const ROUND: readonly Troop[] = ['spearmen', 'archers', 'swordsmen', 'lightCaval
 function romanOrders(state: GameState, line: Line): Order[] {
   if (line === 'gives no orders') return [];
   const raises = line.includes('raises all it can');
-  const orders = decideOrders(state, world, rome).filter(
-    (order) =>
-      (line === 'conquers, AI mix' || (order.kind !== 'sack' && order.kind !== 'enslave')) &&
-      !(raises && order.kind === 'recruit'),
-  );
+  // The fates go first: an army the AI sends off by sea that day is no longer at the city.
+  const orders: Order[] = [];
   if (line.endsWith('sacks')) {
     for (const city of Object.values(state.cities)) {
       if (city.owner !== rome || city.fellOn === null || state.day - city.fellOn > FATE_DAYS)
@@ -72,6 +69,13 @@ function romanOrders(state: GameState, line: Line): Order[] {
       if (present) orders.push({ kind: 'sack', faction: rome, city: city.id });
     }
   }
+  orders.push(
+    ...decideOrders(state, world, rome).filter(
+      (order) =>
+        (line === 'conquers, AI mix' || (order.kind !== 'sack' && order.kind !== 'enslave')) &&
+        !(raises && order.kind === 'recruit'),
+    ),
+  );
   const enemies = enemiesOf(state, rome);
   const atWarWithMinor = [...enemies].some((id) => state.factions[id]?.kind === 'minor');
   const capital = homeCapital(state, world, rome);

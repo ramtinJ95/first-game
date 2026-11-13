@@ -140,11 +140,9 @@ export function alertsOfDay(
     if (alert) add(seenAs ? { ...alert, seenAs } : alert);
   }
 
-  for (const army of Object.values(after.armies)) {
-    if (army.owner !== player) continue;
-    const was = before.armies[army.id];
+  for (const [was, army] of armiesAcrossDay(before, after, player)) {
     const at = army.activity.kind === 'embarked' ? undefined : army.activity.position;
-    if (!was || !at) continue;
+    if (!at) continue;
     const select = { kind: 'army', army: army.id } as const;
     if (was.activity.kind === 'embarked') {
       add({
@@ -807,6 +805,26 @@ function positionOf(state: State, army: DeepReadonly<Army>): MapPoint | undefine
   return activity.kind === 'embarked'
     ? state.convoys[activity.convoy]?.position
     : activity.position;
+}
+
+/**
+ * Each army of the player on the day before with the army that holds its formations
+ * after, so an army that arrived and joined the army standing there is seen arriving.
+ */
+function armiesAcrossDay(
+  before: DeepReadonly<GameState>,
+  after: DeepReadonly<GameState>,
+  player: FactionId,
+): [DeepReadonly<Army>, DeepReadonly<Army>][] {
+  return Object.values(before.armies).flatMap((was) => {
+    if (was.owner !== player) return [];
+    const army =
+      after.armies[was.id] ??
+      was.formations
+        .map((id) => after.armies[after.formations[id]?.army ?? ('' as ArmyId)])
+        .find((joined) => joined !== undefined);
+    return army && army.owner === player ? [[was, army]] : [];
+  });
 }
 
 /**

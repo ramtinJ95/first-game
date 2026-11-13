@@ -293,6 +293,37 @@ describe('alertsOfDay', () => {
     expect(deserted[0]?.text).toMatch(/^\d+ men deserted First Legion at Roma$/);
   });
 
+  it('tells that an army arrived when it joins the army standing at the city', () => {
+    const state = buildFixture();
+    const roma = state.cities[f.roma];
+    const first = state.armies[f.romanArmy];
+    if (!roma || !first) throw new Error('fixture changed');
+    first.activity = { kind: 'idle', position: { ...roma.position } };
+    const id = 'army-roman-2' as ArmyId;
+    const formation = 'formation-roman-2' as FormationId;
+    state.formations[formation] = {
+      id: formation,
+      army: id,
+      troop: 'archers',
+      men: 300,
+      morale: 1,
+    };
+    state.armies[id] = {
+      id,
+      owner: f.rome,
+      formations: [formation],
+      stance: 'holdTheLine',
+      generalSkill: 0,
+      activity: { kind: 'idle', position: { x: roma.position.x + 40, y: roma.position.y } },
+    };
+    const move: Order = { kind: 'moveArmy', faction: f.rome, army: id, to: roma.position };
+    const { state: after, alerts } = play(state, [move], (s) => !s.armies[id]);
+    expect(after.armies[id]).toBeUndefined();
+    const arrivals = ofKind(alerts, 'armyArrived');
+    expect(arrivals).toHaveLength(1);
+    expect(arrivals[0]?.focus?.select).toEqual({ kind: 'army', army: f.romanArmy });
+  });
+
   it('tells of an arrival from a march shorter than a day, which is never seen marching', () => {
     const roman = buildFixture().armies[f.romanArmy];
     if (roman?.activity.kind !== 'idle') throw new Error('fixture changed');
