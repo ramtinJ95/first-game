@@ -35,10 +35,10 @@ import { BANNER, BATTLE_HIT_RADIUS, drawnArmies, type DrawnArmy } from './marker
 import {
   BORDER,
   factionColour,
+  washTint,
   INK,
   LABEL_HALO,
   MARGIN,
-  PAPER,
   provinceOwner,
   RIVER,
   SEA,
@@ -116,17 +116,15 @@ export interface Renderer {
 export const LAYERS = [
   { name: 'paper', world: true },
   { name: 'sea', world: false },
-  { name: 'land', world: true },
   { name: 'terrain', world: true },
-  { name: 'washes', world: true },
   { name: 'borders', world: true },
   { name: 'riversAndCoast', world: true },
   { name: 'fog', world: false },
   { name: 'grain', world: false },
   { name: 'settlements', world: false },
-  { name: 'labels', world: false },
   { name: 'markers', world: false },
   { name: 'selection', world: false },
+  { name: 'labels', world: false },
 ] as const;
 export type LayerName = (typeof LAYERS)[number]['name'];
 
@@ -139,11 +137,6 @@ const SERIF = [
   'Times New Roman',
   'serif',
 ];
-/**
- * A wash multiplies the drawing under it, so it tints the paper and leaves the ink of
- * the terrain as dark under every owner's colour as on unowned land.
- */
-const WASH_ALPHA = 0.42;
 const DRAG_THRESHOLD = 4;
 /**
  * Lines keep a fixed width on screen. Rebuilding their geometry costs a few
@@ -370,19 +363,14 @@ export async function createRenderer({
     swell.visible = false;
   }
 
-  const land = new Graphics();
-  for (const province of map.provinces) fillOutline(land, province.outline, PAPER);
-  layers.land.addChild(land);
-
   const terrain = createTerrain(map, layers.terrain, app.renderer);
 
   const washes = new Map<ProvinceId, Graphics>();
   for (const province of map.provinces) {
     const wash = fillOutline(new Graphics(), province.outline, 0xffffff);
-    wash.alpha = WASH_ALPHA;
     wash.blendMode = 'multiply';
     washes.set(province.id, wash);
-    layers.washes.addChild(wash);
+    terrain.washes.addChild(wash);
   }
 
   const borders = new Graphics();
@@ -535,8 +523,10 @@ export async function createRenderer({
   function recolour(state: DeepReadonly<GameState>) {
     for (const [province, wash] of washes) {
       const owner = provinceOwner(state, province);
-      const colour = owner ? factionColour(state, owner) : 0xffffff;
-      if (wash.tint !== colour) wash.tint = colour;
+      const colour = owner ? washTint(factionColour(state, owner)) : 0xffffff;
+      if (wash.tint === colour) continue;
+      wash.tint = colour;
+      terrain.repaint();
     }
   }
 
@@ -582,6 +572,40 @@ export async function createRenderer({
     });
   }
 
+  /**
+   * The banners of armies in sight that stand still today and the battle markers, which
+   * names keep clear of. A marching banner passes under the names instead, so they do
+   * not jump about as it goes by.
+   */
+  function standingMarkers(state: DeepReadonly<GameState>): Box[] {
+    const view = viewport();
+    const boxes: Box[] = [];
+    if (figureHeight(camera.scale) === 0) {
+      for (const army of Object.values(state.armies)) {
+        const { activity } = army;
+        if (!seenBy?.armies.has(army.id) || !('position' in activity)) continue;
+        if (activity.kind === 'marching' || activity.kind === 'retreating') continue;
+        const foot = mapToScreen(camera, view, activity.position);
+        boxes.push({
+          left: foot.x - 4,
+          top: foot.y - BANNER.pole - 3,
+          right: foot.x + BANNER.flagWidth + 3,
+          bottom: foot.y,
+        });
+      }
+    }
+    for (const battle of battlesShown()) {
+      const at = mapToScreen(camera, view, battle.position);
+      boxes.push({
+        left: at.x - BATTLE_HIT_RADIUS,
+        top: at.y - BATTLE_HIT_RADIUS,
+        right: at.x + BATTLE_HIT_RADIUS,
+        bottom: at.y + BATTLE_HIT_RADIUS,
+      });
+    }
+    return boxes;
+  }
+
   function layoutCities(state: DeepReadonly<GameState>) {
     const view = viewport();
     const requests: LabelRequest[] = [];
@@ -622,7 +646,7 @@ export async function createRenderer({
     const settled = places.layout(camera, view, symbolBoxes);
     const placed = placeLabels(
       [...requests, ...settled.requests],
-      [...symbolBoxes, ...settled.boxes],
+      [...symbolBoxes, ...settled.boxes, ...standingMarkers(state)],
       view,
     );
     places.placeLabels(placed);
@@ -934,6 +958,9 @@ export async function createRenderer({
       if (current !== shown) {
         recolour(current);
         syncSettlements(current);
+        // A defeated player watches on with no sight of their own. The fog then lifts
+        // rather than shade the whole map, so the owners' colours stay plain.
+        layers.fog.visible = fogShown && current.factions[current.player]?.defeatedOn == null;
         shown = current;
         dirty = true;
       }
@@ -958,7 +985,10 @@ export async function createRenderer({
         dirty = true;
       }
       cameraMoved = false;
-      if (fogShown && fog.update(sight.provinces, fogCircles(previousSight, sight, progress))) {
+      if (
+        layers.fog.visible &&
+        fog.update(sight.provinces, fogCircles(previousSight, sight, progress))
+      ) {
         dirty = true;
       }
       const next = drawnArmies(previous, current, progress).filter((army) =>
@@ -1023,6 +1053,7 @@ export async function createRenderer({
           now: now / 1000,
           growth: symbolGrowth(camera.scale),
           land: onLand,
+          names: new Map(drawnCities.flatMap(({ id, label }) => (label ? [[id, label]] : []))),
         });
         drawnFigures = armyLayer.draw(scene);
         canvas.dataset['figures'] = String(drawnFigures.filter((sprite) => sprite.army).length);
@@ -1067,7 +1098,7 @@ export async function createRenderer({
           armyRing.ellipse(cx, cy, rx, ry).stroke({ width: 1.6, color: INK });
         }
       }
-      if (fogShown) fog.paint();
+      if (layers.fog.visible) fog.paint();
       app.render();
       if (waitForGpu) finish();
       return true;

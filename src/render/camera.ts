@@ -102,12 +102,13 @@ export function wheelFactor(deltaY: number): number {
 }
 
 /**
- * City symbols grow from the base size at 0.6 px per km to at most this factor at
- * the closest zoom, so a close view shows a town and not a speck.
+ * City, town, and village symbols grow from the base size at 0.6 px per km to this
+ * factor at the closest zoom, so a close view shows a town beside men 54 px tall and
+ * not a speck. One factor for all keeps a city larger than a town and a town than a village.
  */
-const SYMBOL_GROWTH = { from: 0.6, perDoubling: 0.35, most: 1.8 } as const;
+const SYMBOL_GROWTH = { from: 0.6, perDoubling: 0.55, most: 2.5 } as const;
 
-/** How much a city symbol is enlarged at a zoom. */
+/** How much a city, town, or village symbol is enlarged at a zoom. */
 export function symbolGrowth(scale: number): number {
   const { from, perDoubling, most } = SYMBOL_GROWTH;
   return Math.min(most, Math.max(1, 1 + perDoubling * Math.log2(scale / from)));

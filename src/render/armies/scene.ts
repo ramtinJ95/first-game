@@ -10,6 +10,7 @@ import type { MapPoint } from '../../sim/state/map-point.ts';
 import { CITY_DEFENCES } from '../../sim/systems/sieges.ts';
 import { TROOPS, type Troop } from '../../sim/troops.ts';
 import { mapToScreen, type Camera, type Size } from '../camera.ts';
+import type { Box } from '../labels.ts';
 import { MOTIONS, MOUNTED, type FigureKind, type Motion } from '../figures/motions.ts';
 import { OWNED, SHARED, artKey, figureKey } from '../figures/sheet.ts';
 import { factionColour, MINOR_COLOUR, POWER_COLOURS } from '../palette.ts';
@@ -115,9 +116,18 @@ export interface SceneInput {
   readonly growth: number;
   /** Whether a screen point lies on land, so a camp is not pitched in the sea. */
   readonly land?: (screen: MapPoint) => boolean;
+  /** Where each city's name is drawn on screen, which an army at the city keeps clear of. */
+  readonly names?: ReadonlyMap<CityId, Box>;
 }
 
 type State = DeepReadonly<GameState>;
+/** A city an army stands at, on screen: its x and how far its symbol and name reach to each side. */
+interface Beside {
+  readonly x: number;
+  readonly clear: { readonly left: number; readonly right: number };
+  /** Which side of the city its name stands on, or 0 above or below it. */
+  readonly nameSide: number;
+}
 type Mode =
   | { kind: 'line'; anchor: MapPoint; facing: MapPoint; camp: boolean }
   | {
@@ -147,6 +157,13 @@ const smooth = (t: number) => {
 };
 const frac = (x: number) => x - Math.floor(x);
 
+/** A storm's ladders and climbers are drawn over every rank of the siege. */
+const STORM_DEPTH = 1e6;
+/** How far `ladderArt` leans towards the wall for each pixel of its height, and its height in figure units of 100. */
+const LADDER_LEAN = 0.28;
+const LADDER_LENGTH = 0.7;
+/** A climber's height as a share of a man's, so the ladder shows round him. */
+const CLIMBER_SIZE = 0.55;
 const CITY_HALF_WIDTH: Record<CityRank, number> = {
   capital: 16,
   greatPowerCity: 10.5,
@@ -763,12 +780,19 @@ class Context {
     return cities;
   }
 
-  besideCity(state: State, at: MapPoint): { x: number; half: number } | undefined {
+  besideCity(state: State, at: MapPoint): Beside | undefined {
     for (const city of this.citiesOf(state)) {
       if (Math.abs(city.position.x - at.x) > 12 || Math.abs(city.position.y - at.y) > 12) continue;
+      const x = this.screen(city.position).x;
+      const half = CITY_HALF_WIDTH[city.rank] * this.input.growth;
+      const name = this.input.names?.get(city.id);
       return {
-        x: this.screen(city.position).x,
-        half: CITY_HALF_WIDTH[city.rank] * this.input.growth,
+        x,
+        clear: {
+          right: Math.max(half, name ? name.right - x : 0),
+          left: Math.max(half, name ? x - name.left : 0),
+        },
+        nameSide: name ? Math.sign((name.left + name.right) / 2 - x) : 0,
       };
     }
     return undefined;
@@ -1107,43 +1131,46 @@ class Context {
     if (before === 0 || after > before * 0.97) return;
     const growth = this.input.growth;
     const half = CITY_HALF_WIDTH[city.rank] * growth;
-    const raised = smooth(p / 0.15);
     const fade = 1 - smooth((p - 0.85) / 0.15);
     const owner = previous.armies[siege.besiegers[0] ?? ('' as ArmyId)]?.owner;
     const colour = owner ? colourIndex(current, owner) : 0;
-    const ladders = city.rank === 'capital' ? 4 : city.rank === 'greatPowerCity' ? 3 : 2;
+    const ladders = city.rank === 'capital' ? 3 : 2;
+    // The rules resolve a storm at once, so the ladders stand from the start of the day,
+    // from the first rank of the ring to the top of the front wall. They and their
+    // climbers are drawn over the ranks, and each ladder carries one man small enough that
+    // its rungs show above and below him, so the storm reads at a glance.
+    const foot = at.y + ringRadius(city.rank, growth, this.h) * GROUND_Y;
+    const top = at.y - 4 * growth;
+    const length = foot - top;
     for (let i = 0; i < ladders; i++) {
-      const x = at.x - half * 0.8 + (i + 0.5) * ((1.6 * half) / ladders);
-      const foot = at.y + 9 * growth;
+      const x = at.x - half * 0.85 + (i + 0.5) * ((1.7 * half) / ladders);
       const mirror = x > at.x;
+      const lean = (mirror ? -1 : 1) * LADDER_LEAN * length;
+      const base = x - lean;
       this.push({
         key: artKey('ladder'),
-        x,
-        y: foot + (1 - raised) * 0.4 * this.h,
-        size: this.h * 0.9,
+        x: base,
+        y: foot,
+        size: length / LADDER_LENGTH,
         mirror,
-        alpha: raised * fade,
+        alpha: fade,
         rotation: 0,
-        depth: foot + 5,
+        depth: STORM_DEPTH + i * 2,
       });
-      for (let k = 0; k < 2; k++) {
-        const key = `${city.id}:storm:${i}:${k}`;
-        const climb = frac(this.input.motion * 0.35 + seeded(key) + k * 0.5);
-        const ladderTop = 0.9 * 0.7;
-        const y = foot - climb * ladderTop * this.h;
-        const kind: FigureKind = seeded(key, 1) < 0.5 ? 'swordsmen' : 'spearmen';
-        const frame = frameOf('march', this.input.motion * RATE.march + seeded(key, 2));
-        this.push({
-          key: `${figureKey(kind, 'march', frame)}@${colour}`,
-          x: x + (mirror ? -1 : 1) * climb * ladderTop * 0.28 * this.h,
-          y,
-          size: this.h * 0.8,
-          mirror,
-          alpha: raised * fade,
-          rotation: 0,
-          depth: foot + 6,
-        });
-      }
+      const key = `${city.id}:storm:${i}`;
+      const climb = 0.2 + 0.45 * frac(this.input.motion * 0.3 + seeded(key));
+      const kind: FigureKind = seeded(key, 1) < 0.5 ? 'swordsmen' : 'spearmen';
+      const frame = frameOf('march', this.input.motion * RATE.march + seeded(key, 2));
+      this.push({
+        key: `${figureKey(kind, 'march', frame)}@${colour}`,
+        x: base + climb * lean,
+        y: foot - climb * length,
+        size: this.h * CLIMBER_SIZE,
+        mirror,
+        alpha: fade,
+        rotation: 0,
+        depth: STORM_DEPTH + i * 2 + 1,
+      });
     }
   }
 
@@ -1347,7 +1374,7 @@ class LineLayout implements Layout {
     blocks: Blocks,
     placed: readonly Placed[],
     depth: number,
-    beside?: { x: number; half: number },
+    beside?: Beside,
   ) {
     this.ctx = ctx;
     this.mode = mode;
@@ -1355,16 +1382,17 @@ class LineLayout implements Layout {
     this.facing = mode.facing;
     this.shift = 0;
     if (beside) {
-      // An army at a city stands beside it, facing it, so the city stays in sight
-      // and the camp is pitched behind the army on the side with land.
+      // An army at a city stands beside it, facing it, so the city and its name stay in
+      // sight and the camp is pitched behind the army on the side with land. It takes the
+      // side away from the name when there is land there.
       const anchor = ctx.screen(mode.anchor);
       const land = ctx.input.land ?? (() => true);
-      const reach = beside.half + (depth + 3.3) * ctx.h;
-      const side =
-        land({ x: beside.x + reach, y: anchor.y }) || !land({ x: beside.x - reach, y: anchor.y })
-          ? 1
-          : -1;
-      this.shift = beside.x + side * (beside.half + 1.45 * ctx.h) - anchor.x;
+      const reach = (side: number) => (side > 0 ? beside.clear.right : beside.clear.left);
+      const hasLand = (side: number) =>
+        land({ x: beside.x + side * (reach(side) + (depth + 3.3) * ctx.h), y: anchor.y });
+      const sides = beside.nameSide > 0 ? [-1, 1] : [1, -1];
+      const side = sides.find(hasLand) ?? (sides[0] as number);
+      this.shift = beside.x + side * (reach(side) + 1.45 * ctx.h) - anchor.x;
       this.facing = { x: -side, y: 0 };
     }
     this.blocks = new Map();
@@ -1518,6 +1546,11 @@ class ColumnLayout implements Layout {
   }
 }
 
+/** How far from a besieged city's centre, in px, the first rank of the ring stands. */
+function ringRadius(rank: CityRank, growth: number, h: number): number {
+  return CITY_HALF_WIDTH[rank] * growth + 4 + 0.45 * h;
+}
+
 /** Besiegers in their share of a ring round the city, facing its walls. */
 class RingLayout implements Layout {
   private readonly ctx: Context;
@@ -1542,7 +1575,7 @@ class RingLayout implements Layout {
   }
 
   radius() {
-    return CITY_HALF_WIDTH[this.mode.city.rank] * this.ctx.input.growth + 4 + 0.45 * this.ctx.h;
+    return ringRadius(this.mode.city.rank, this.ctx.input.growth, this.ctx.h);
   }
 
   private landAngles: number[] | undefined;

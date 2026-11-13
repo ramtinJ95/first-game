@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../../sim/fixture.ts';
 import { enslave } from '../../sim/orders/enslave.ts';
+import { executeOrder } from '../../sim/orders/orders.ts';
+import { tick } from '../../sim/tick.ts';
 import { sack } from '../../sim/orders/sack.ts';
 import { population } from '../../sim/systems/population.ts';
 import type { ArmyId } from '../../sim/ids.ts';
@@ -8,6 +10,8 @@ import type { Sight } from '../../sim/sight.ts';
 import type { Formation } from '../../sim/state/formation.ts';
 import type { GameState } from '../../sim/state/game-state.ts';
 import type { MapPoint } from '../../sim/state/map-point.ts';
+import { mapToScreen } from '../camera.ts';
+import type { Box } from '../labels.ts';
 import { BURN_DAYS, buildScene, FIGURE_SCALE, type SceneInput } from './scene.ts';
 
 const viewport = { width: 1280, height: 720 };
@@ -147,6 +151,74 @@ describe('buildScene', () => {
     const still = (now: number) =>
       buildScene(input(state, state, { now })).sprites.map((s) => s.key);
     expect(still(1)).not.toEqual(still(2.3));
+  });
+
+  test('an army at rest at a city stands beside its symbol and its name, on either side of the name', () => {
+    const overlaps = (a: Box, b: Box) =>
+      a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    const state = buildFixture();
+    const roma = state.cities[FIXTURE.roma];
+    const army = state.armies[FIXTURE.romanArmy];
+    if (!roma || !army) throw new Error('fixture');
+    army.activity = { kind: 'idle', position: { ...roma.position } };
+    const camera = { centre: roma.position, scale: 4 };
+    const at = mapToScreen(camera, viewport, roma.position);
+    const symbol = { left: at.x - 30, top: at.y - 22, right: at.x + 30, bottom: at.y + 18 };
+    for (const name of [
+      { left: at.x + 33, top: at.y - 10, right: at.x + 113, bottom: at.y + 10 },
+      { left: at.x - 113, top: at.y - 10, right: at.x - 33, bottom: at.y + 10 },
+      { left: at.x - 40, top: at.y - 45, right: at.x + 40, bottom: at.y - 25 },
+    ]) {
+      const scene = buildScene(
+        input(state, state, { camera, names: new Map([[FIXTURE.roma, name]]) }),
+      );
+      const drawn = scene.armyBoxes.get(FIXTURE.romanArmy);
+      expect(drawn).toBeDefined();
+      expect(drawn && overlaps(drawn, name)).toBe(false);
+      expect(drawn && overlaps(drawn, symbol)).toBe(false);
+    }
+  });
+
+  test('on the day of a storm the ladders stand at the walls from its first moment, with a man on each, over every rank', () => {
+    const world = fixtureWorld();
+    let state = buildFixture();
+    executeOrder(
+      state,
+      { kind: 'declareWar', faction: FIXTURE.carthage, against: FIXTURE.rome },
+      world,
+    );
+    const capua = state.cities[FIXTURE.capua];
+    const punic = state.armies[FIXTURE.punicArmy];
+    const roman = state.armies[FIXTURE.romanArmy];
+    if (!capua || !punic || !roman) throw new Error('fixture');
+    punic.activity = {
+      kind: 'idle',
+      position: { x: capua.position.x - 5, y: capua.position.y + 3 },
+    };
+    roman.activity = { kind: 'idle', position: { x: 0, y: 0 } };
+    for (const id of punic.formations) {
+      const formation = state.formations[id];
+      if (formation) formation.men = 3000;
+    }
+    state = tick(state, [], world).state;
+    const stormed = tick(
+      state,
+      [{ kind: 'storm', faction: FIXTURE.carthage, city: FIXTURE.capua }],
+      world,
+    ).state;
+    const scene = buildScene(
+      input(state, stormed, { progress: 0, camera: { centre: capua.position, scale: 4 } }),
+    );
+    const ladders = scene.sprites.filter((s) => s.key.startsWith('ladder.') && s.alpha > 0);
+    expect(ladders.length).toBeGreaterThan(0);
+    const besiegers = scene.sprites.filter((s) => s.army === FIXTURE.punicArmy);
+    expect(besiegers.length).toBeGreaterThan(0);
+    const front = Math.max(...besiegers.map((s) => s.depth));
+    for (const ladder of ladders) expect(ladder.depth).toBeGreaterThan(front);
+    const climbers = scene.sprites.filter(
+      (s) => s.depth > front && !s.key.startsWith('ladder.') && s.alpha > 0,
+    );
+    expect(climbers.length).toBeGreaterThanOrEqual(ladders.length);
   });
 
   test('an army out of sight is neither drawn nor pickable', () => {

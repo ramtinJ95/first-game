@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { fixtureWorld } from '../sim/fixture.ts';
-import type { FactionId } from '../sim/ids.ts';
 import { newGame } from '../sim/new-game.ts';
 import { fitCamera, mapToScreen, symbolGrowth } from './camera.ts';
 import { LABEL_PRIORITY, placeLabels, type Box, type LabelRequest } from './labels.ts';
@@ -124,7 +123,7 @@ describe('placeLabels', () => {
 
   it("names every great power's capital at the widest zoom of the new game", () => {
     const { map } = fixtureWorld();
-    const state = newGame(map, { seed: 1, player: 'rome' as FactionId });
+    const state = newGame(map, { seed: 1, player: 'rome' });
     const view = { width: 1280, height: 720 };
     const camera = fitCamera(view, map);
     const grow = symbolGrowth(camera.scale);

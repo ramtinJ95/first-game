@@ -3,6 +3,7 @@ import type { GameMap } from '../../sim/map.ts';
 import { visibleRect, type Camera, type Size } from '../camera.ts';
 import { chunkKey, chunkRect, chunkRow, chunksNear, OVERHANG } from './chunks.ts';
 import { DETAIL, detailAlpha, type Band } from './detail.ts';
+import { PAPER } from '../palette.ts';
 import { createLakes } from './lakes.ts';
 import { drawDesert, drawMarks, drawPeaks, drawValleys, drawWoods } from './draw.ts';
 import {
@@ -51,6 +52,13 @@ interface Layer {
 }
 
 export interface Terrain {
+  /**
+   * The owners' washes, painted into the terrain over the paper and the ground and under
+   * the relief, trees, and fields, so the drawings keep their ink and their lit and
+   * shaded sides under every owner's colour. Call `repaint` after changing one.
+   */
+  readonly washes: Container;
+  repaint(): void;
   /** The lakes, which sit over the washes so no owner's colour tints them. */
   readonly lakes: Container;
   readonly land: Land;
@@ -77,6 +85,17 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
     for (const [outer] of province.outline) if (outer) landMask.poly(outer.flat()).fill(0xffffff);
   }
   valleys.mask = landMask;
+  const paper = new Graphics();
+  for (const province of map.provinces) {
+    for (const polygon of province.outline) {
+      const [outer, ...holes] = polygon;
+      if (!outer) continue;
+      paper.poly(outer.flat()).fill(PAPER);
+      for (const hole of holes) paper.poly(hole.flat()).cut();
+    }
+  }
+  const washes = new Container({ label: 'washes' });
+  let repaint = true;
   const ground = new Container({ label: 'ground' });
   ground.addChild(
     new Graphics(drawDesert(map.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline))),
@@ -136,7 +155,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   // drawn into a texture a little larger than the screen and shown as one sprite. A pan
   // slides the sprite and draws again only after moving CACHE_MARGIN pixels.
   const art = new Container();
-  art.addChild(ground, ...layers.map((layer) => layer.container));
+  art.addChild(paper, ground, washes, ...layers.map((layer) => layer.container));
   const root = new Container();
   root.addChild(art);
   const texture = RenderTexture.create({
@@ -168,6 +187,10 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   let stillSince = 0;
 
   return {
+    washes,
+    repaint() {
+      repaint = true;
+    },
     lakes: lakes.container,
     land,
     restroke(scale) {
@@ -253,6 +276,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
         texture.resize(width, height, renderer.resolution);
       }
       if (
+        repaint ||
         lakesStale ||
         changed ||
         resized ||
@@ -265,6 +289,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
         art.position.set(x + CACHE_MARGIN, y + CACHE_MARGIN);
         renderer.render({ container: root, target: texture, clear: true });
         drawn = { x, y, scale: camera.scale };
+        repaint = false;
         sprite.scale.set(1 / camera.scale);
         sprite.position.set((-CACHE_MARGIN - x) / camera.scale, (-CACHE_MARGIN - y) / camera.scale);
         lakes.render(x, y, camera.scale, {

@@ -56,6 +56,14 @@ export default defineScenario({
       await view.jumpTo(capital, 0.1);
     }
 
+    await page.goto('/');
+    await page.getByTestId('power-macedon').waitFor();
+    await page.waitForTimeout(800);
+    await shot(
+      'colours-start-screen',
+      "The start screen, which reads each power's colour from the same table as the map and the panels",
+    );
+
     await openGame(page);
     await loadSave(page, romaFallsTomorrow());
     await page.getByTestId('defeat').waitFor();
