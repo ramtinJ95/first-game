@@ -486,6 +486,11 @@ export function overviewOf(state: State, sight: Sight): Overview {
   return { kind: 'standing', cities, armies, columns, wars: warsOf(state, state.player) };
 }
 
+/** How long a city's unrest lasts from today, as the city panel and the fate prompt both say it. */
+export function unrestText(days: number): string {
+  return days > 0 ? `${days} days left` : 'Calm';
+}
+
 /** What the city adds to its owner's stores each day: the economy's own balance of a realm of this city alone. */
 export function cityBalance(state: State, city: DeepReadonly<City>): Stores {
   const alone = { ...state, cities: { [city.id]: city }, armies: {} };

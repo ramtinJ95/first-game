@@ -32,6 +32,20 @@ export function factionName(state: DeepReadonly<GameState>, faction: FactionId):
   return state.factions[faction]?.name ?? faction;
 }
 
+/**
+ * How the page calls an army: the player's by its name alone, a great power's by its
+ * owner and name, such as "Carthage's Host of Hanno", and a minor city's by its name,
+ * which names the city.
+ */
+export function armyTitle(
+  state: DeepReadonly<GameState>,
+  army: { readonly name: string; readonly owner: FactionId },
+): string {
+  const owner = state.factions[army.owner];
+  if (army.owner === state.player || owner?.kind === 'minor') return army.name;
+  return `${factionName(state, army.owner)}'s ${army.name}`;
+}
+
 /** The city closest to the point and how far it is, in km. */
 export function nearestCity(
   state: DeepReadonly<GameState>,

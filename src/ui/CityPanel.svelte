@@ -20,6 +20,7 @@
   import {
     armiesAt,
     cityBalance,
+    unrestText,
     cityFoodText,
     cssColour,
     ownerLine,
@@ -165,7 +166,7 @@
     <p class="bad" data-testid="city-sacked">{sacked}</p>
   {/if}
   <p data-testid="city-unrest" class:bad={city.unrestDays > 0}>
-    {city.unrestDays > 0 ? `Unrest · ${city.unrestDays} days left` : 'Calm'}
+    {city.unrestDays > 0 ? `Unrest · ${unrestText(city.unrestDays)}` : 'Calm'}
   </p>
   {#if siege}
     <p class="bad" data-testid="city-siege">

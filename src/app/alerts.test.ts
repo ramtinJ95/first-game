@@ -71,6 +71,7 @@ describe('alertsOfDay', () => {
         tone: 'neutral',
         text: 'Battle at Roma against Carthage',
         focus: { at: battle?.position, select: { kind: 'battle', battle: battle?.id } },
+        pause: { kind: 'battle' },
       },
     ]);
   });
@@ -99,7 +100,7 @@ describe('alertsOfDay', () => {
     );
     expect(ofKind(alerts, 'armyRetreated').map((a) => a.text)).toEqual([
       expect.stringMatching(
-        /^Your army broke at Roma, losing \d+ men to the pursuit, and falls back /,
+        /^First Legion broke at Roma, losing \d+ men to the pursuit, and falls back /,
       ),
     ]);
   });
@@ -113,7 +114,7 @@ describe('alertsOfDay', () => {
     expect(arrived.state.armies[f.romanArmy]?.activity.kind).toBe('idle');
     const alerts = ofKind(arrived.alerts, 'armyArrived');
     expect(alerts).toHaveLength(1);
-    expect(alerts[0]?.text).toMatch(/^Your army arrived near /);
+    expect(alerts[0]?.text).toMatch(/^First Legion arrived near /);
     expect(alerts[0]?.focus?.select).toEqual({ kind: 'army', army: f.romanArmy });
 
     const marching = tick(buildFixture(), [move], world).state;
@@ -134,7 +135,7 @@ describe('alertsOfDay', () => {
       ['battleBegan', 'Battle at Roma against Carthage'],
       [
         'armyDestroyed',
-        expect.stringMatching(/^An army of Carthage was destroyed in battle (at|near) Roma$/),
+        expect.stringMatching(/^Carthage's Host of Hanno was destroyed in battle (at|near) Roma$/),
       ],
       [
         'battleEnded',
@@ -149,7 +150,7 @@ describe('alertsOfDay', () => {
   it("tells of the player's own army destroyed in a battle of one day", () => {
     const { alerts } = play(facingOff(40, 1500), [], () => true);
     expect(ofKind(alerts, 'armyDestroyed').map((a) => [a.text, a.tone])).toEqual([
-      ['Your army was destroyed in battle at Roma', 'bad'],
+      ['First Legion was destroyed in battle at Roma', 'bad'],
     ]);
   });
 
@@ -266,7 +267,11 @@ describe('alertsOfDay', () => {
       return told.map((a) => [a.day, a.tone, a.text]);
     };
     expect(deserting({ x: 2164.9, y: 2895.1 })).toEqual([
-      [1, 'neutral', expect.stringMatching(/^\d+ men deserted an army of Carthage at Carthago$/)],
+      [
+        1,
+        'neutral',
+        expect.stringMatching(/^\d+ men deserted Carthage's Host of Hanno at Carthago$/),
+      ],
     ]);
     const roma = buildFixture().cities[f.roma]?.position;
     if (!roma) throw new Error('fixture changed');
@@ -285,7 +290,7 @@ describe('alertsOfDay', () => {
     expect(deserted.map((a) => [a.day, a.focus?.select])).toEqual([
       [1, { kind: 'army', army: f.romanArmy }],
     ]);
-    expect(deserted[0]?.text).toMatch(/^\d+ men deserted your army at Roma$/);
+    expect(deserted[0]?.text).toMatch(/^\d+ men deserted First Legion at Roma$/);
   });
 
   it('tells of an arrival from a march shorter than a day, which is never seen marching', () => {
@@ -440,7 +445,7 @@ describe('alertsOfDay', () => {
     roman.activity = { kind: 'idle', position: { ...syracusae.position } };
     const { alerts } = play(state, [], () => true);
     expect(ofKind(alerts, 'siegeBegan').map((a) => [a.text, a.focus?.select])).toEqual([
-      ['Your army besieges Syracusae', { kind: 'province', province: f.sicilia }],
+      ['First Legion besieges Syracusae', { kind: 'province', province: f.sicilia }],
     ]);
   });
 
@@ -624,11 +629,11 @@ describe('sightingsOfDay', () => {
 
   it('tells once of an enemy army or fleet that comes into sight on its way to the player, with its men and target', () => {
     expect(sighted('march', 'roma').map((a) => [a.kind, a.tone, a.text, a.day])).toEqual([
-      ['enemySighted', 'bad', 'An army of Carthage with 1,500 men is marching on Roma', 1],
+      ['enemySighted', 'bad', "Carthage's Host of Hanno with 1,500 men is marching on Roma", 1],
     ]);
     expect(sighted('sail', 'roma').map((a) => [a.text, a.focus?.select])).toEqual([
       [
-        'A fleet of Carthage with 1,500 men is sailing for Roma',
+        "A fleet of Carthage with Carthage's Host of Hanno, 1,500 men, is sailing for Roma",
         { kind: 'army', army: f.punicArmy },
       ],
     ]);

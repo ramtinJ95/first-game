@@ -192,6 +192,30 @@ describe('clock', () => {
     expect(clock.state.day).toBe(5);
   });
 
+  it('stops on the day whose news pauses it, though the frame owed more days', () => {
+    const time = fakeTime();
+    const played: number[] = [];
+    const clock = createClock({
+      world,
+      state: buildFixture(),
+      now: time.now,
+      maxTicksPerFrame: 4,
+      onDay: (_before, after) => {
+        played.push(after.day);
+        if (after.day === 3) clock.pause();
+      },
+    });
+    time.advance(10_000);
+    clock.frame();
+    expect(played).toEqual([2, 3]);
+    expect(clock.state.day).toBe(3);
+    expect(clock.paused).toBe(true);
+    expect(clock.progress).toBeLessThan(1);
+    time.advance(5_000);
+    clock.frame();
+    expect(clock.state.day).toBe(3);
+  });
+
   it('reports progress as the fraction of the way to the next tick', () => {
     const time = fakeTime();
     const clock = createClock({ world, state: buildFixture(), now: time.now });
