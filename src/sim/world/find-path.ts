@@ -53,6 +53,37 @@ export function connected(mesh: NavMesh, from: MapPoint, to: MapPoint, surface: 
   return a >= 0 && b >= 0 && mesh.component[a] === mesh.component[b];
 }
 
+interface Scratch {
+  readonly viaX: Float64Array;
+  readonly viaY: Float64Array;
+  readonly cost: Float64Array;
+  readonly parent: Int32Array;
+  readonly done: Uint8Array;
+}
+
+/**
+ * One set of working arrays per mesh, kept between searches. Allocating them anew for
+ * each search filled the heap with a megabyte a call, and the collector's pauses made
+ * the AI's slowest days.
+ */
+const scratches = new WeakMap<NavMesh, Scratch>();
+
+function scratchFor(mesh: NavMesh): Scratch {
+  let scratch = scratches.get(mesh);
+  if (!scratch) {
+    const n = mesh.halfedges.length;
+    scratch = {
+      viaX: new Float64Array(n),
+      viaY: new Float64Array(n),
+      cost: new Float64Array(n),
+      parent: new Int32Array(n),
+      done: new Uint8Array(n),
+    };
+    scratches.set(mesh, scratch);
+  }
+  return scratch;
+}
+
 /**
  * The waypoints of a short path from one point to another that stays on the surface,
  * ending with `to` and leaving out `from`. Undefined when either point is off the
@@ -72,8 +103,10 @@ export function findPath(
 
   const { triangles, halfedges, walls, points } = mesh;
   const code = surfaceCode(surface);
-  const viaX = new Float64Array(halfedges.length);
-  const viaY = new Float64Array(halfedges.length);
+  const scratch = scratchFor(mesh);
+  // An edge's crossing is written whenever its cost is, and read only after, so these
+  // two need no clearing between searches.
+  const { viaX, viaY } = scratch;
   /**
    * The point of edge `e` that makes the way from (px, py) through the edge to the goal
    * shortest. It stands in for where the path crosses the edge, so the search ranks a
@@ -118,9 +151,9 @@ export function findPath(
     return twin >= 0 && !walls[e] && mesh.surface[Math.floor(twin / 3)] === code;
   };
 
-  const cost = new Float64Array(halfedges.length).fill(Number.POSITIVE_INFINITY);
-  const parent = new Int32Array(halfedges.length).fill(-1);
-  const done = new Uint8Array(halfedges.length);
+  const cost = scratch.cost.fill(Number.POSITIVE_INFINITY);
+  const parent = scratch.parent.fill(-1);
+  const done = scratch.done.fill(0);
   const heap = new MinHeap();
   const FROM_START = -2;
 
