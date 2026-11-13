@@ -32,12 +32,11 @@ export function encodeGif(frames: GifFrame[], maxWidth: number): Buffer {
   const palette = quantize(Buffer.concat(samples.map((sample) => sample.bitmap.rgba)), 256);
 
   const gif = GIFEncoder();
-  for (const [i, { bitmap, delayMs }] of scaled.entries()) {
-    if (bitmap.width !== first.bitmap.width || bitmap.height !== first.bitmap.height) {
-      throw new Error(
-        `frame ${i} is ${bitmap.width}x${bitmap.height}, expected ${first.bitmap.width}x${first.bitmap.height}`,
-      );
-    }
+  for (const [i, frame] of scaled.entries()) {
+    // A scenario that resizes the window gives frames of another size, which keep their
+    // shape inside the first frame's.
+    const bitmap = fitInto(frame.bitmap, first.bitmap.width, first.bitmap.height);
+    const { delayMs } = frame;
     gif.writeFrame(applyPalette(bitmap.rgba, palette), bitmap.width, bitmap.height, {
       palette: i === 0 ? palette : undefined,
       delay: delayMs,
@@ -51,6 +50,28 @@ export function encodeGif(frames: GifFrame[], maxWidth: number): Buffer {
 interface TimedBitmap {
   bitmap: Bitmap;
   delayMs: number;
+}
+
+const LETTERBOX = [34, 30, 26, 255] as const;
+
+function fitInto(source: Bitmap, width: number, height: number): Bitmap {
+  if (source.width === width && source.height === height) return source;
+  const k = Math.min(width / source.width, height / source.height);
+  const w = Math.max(1, Math.round(source.width * k));
+  const h = Math.max(1, Math.round(source.height * k));
+  const left = Math.floor((width - w) / 2);
+  const top = Math.floor((height - h) / 2);
+  const rgba = Buffer.alloc(width * height * 4);
+  for (let i = 0; i < width * height; i++) rgba.set(LETTERBOX, i * 4);
+  for (let y = 0; y < h; y++) {
+    const sy = Math.min(source.height - 1, Math.floor(y / k));
+    for (let x = 0; x < w; x++) {
+      const sx = Math.min(source.width - 1, Math.floor(x / k));
+      const from = (sy * source.width + sx) * 4;
+      source.rgba.copy(rgba, ((top + y) * width + left + x) * 4, from, from + 4);
+    }
+  }
+  return { width, height, rgba };
 }
 
 function mergeRepeats(frames: TimedBitmap[]): TimedBitmap[] {

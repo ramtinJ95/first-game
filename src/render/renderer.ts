@@ -9,7 +9,7 @@ import {
   TilingSprite,
 } from 'pixi.js';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { ArmyId, BattleId, CityId, ProvinceId } from '../sim/ids.ts';
+import type { ArmyId, BattleId, CityId, ProvinceId, RefugeeColumnId } from '../sim/ids.ts';
 import type { GameMap, MapLine, MultiPolygon } from '../sim/map.ts';
 import type { City, CityRank } from '../sim/state/city.ts';
 import type { Sight } from '../sim/sight.ts';
@@ -29,13 +29,15 @@ import {
   type Size,
 } from './camera.ts';
 import type { DrawOptions } from './draw-options.ts';
+import { fitTexture } from './cached-texture.ts';
+import { drawColumnMark, drawnColumns, type DrawnColumn } from './columns.ts';
 import { createFog, fogCircles } from './fog.ts';
 import { LABEL_PRIORITY, placeLabels, type Box, type LabelRequest } from './labels.ts';
 import { BANNER, BATTLE_HIT_RADIUS, drawnArmies, type DrawnArmy } from './markers.ts';
 import {
   BORDER,
   factionColour,
-  washTint,
+  WASH_STRENGTH,
   INK,
   LABEL_HALO,
   MARGIN,
@@ -228,7 +230,10 @@ function sameSelection(a: Pick | undefined, b: Pick | undefined): boolean {
   return a === b;
 }
 
-function sameArmies(a: readonly DrawnArmy[], b: readonly DrawnArmy[]): boolean {
+function sameArmies(
+  a: readonly (DrawnArmy | DrawnColumn)[],
+  b: readonly (DrawnArmy | DrawnColumn)[],
+): boolean {
   return (
     a.length === b.length &&
     a.every((army, i) => {
@@ -345,7 +350,7 @@ export async function createRenderer({
   seaArt.addChild(new Graphics().poly(map.extent.flat()).fill(SEA), waterLines, seaMask);
   const seaRoot = new Container();
   seaRoot.addChild(seaArt);
-  const seaTexture = RenderTexture.create({
+  let seaTexture = RenderTexture.create({
     width: viewport().width + 2 * SEA_MARGIN,
     height: viewport().height + 2 * SEA_MARGIN,
     resolution: app.renderer.resolution,
@@ -369,7 +374,7 @@ export async function createRenderer({
   const washes = new Map<ProvinceId, Graphics>();
   for (const province of map.provinces) {
     const wash = fillOutline(new Graphics(), province.outline, 0xffffff);
-    wash.blendMode = 'multiply';
+    wash.alpha = 0;
     washes.set(province.id, wash);
     terrain.washes.addChild(wash);
   }
@@ -415,7 +420,9 @@ export async function createRenderer({
   // The figures stand over the city symbols and under the city names, so a name stays
   // readable when an army, a battle, or a siege stands at its city.
   layers.settlements.addChild(armyLayer.root);
-  layers.markers.addChild(routes, battleLayer, bannerLayer);
+  const columnLayer = new Container({ label: 'columns' });
+  const columnMarks = new Map<RefugeeColumnId, { graphics: Graphics; colour: number }>();
+  layers.markers.addChild(routes, battleLayer, columnLayer, bannerLayer);
 
   const highlight = new Graphics();
   const armyRing = new Graphics();
@@ -445,6 +452,7 @@ export async function createRenderer({
   }
   let highlighted: { selection: Pick | undefined; scale: number } | undefined;
   let armies: DrawnArmy[] = [];
+  let columns: DrawnColumn[] = [];
   let drawnCities: DrawnCity[] = [];
   /** Where each city's name stands relative to the city, which the army scene depends on. */
   let nameSides = '';
@@ -541,9 +549,11 @@ export async function createRenderer({
   function recolour(state: DeepReadonly<GameState>) {
     for (const [province, wash] of washes) {
       const owner = provinceOwner(state, province);
-      const colour = owner ? washTint(factionColour(state, owner)) : 0xffffff;
-      if (wash.tint === colour) continue;
+      const colour = owner ? factionColour(state, owner) : 0xffffff;
+      const alpha = owner ? WASH_STRENGTH : 0;
+      if (wash.tint === colour && wash.alpha === alpha) continue;
       wash.tint = colour;
+      wash.alpha = alpha;
       terrain.repaint();
     }
   }
@@ -737,6 +747,30 @@ export async function createRenderer({
     }
   }
 
+  /** A refugee column's mark, at the zooms where an army is its flag. */
+  function placeColumns(state: DeepReadonly<GameState>) {
+    reconcile(columnMarks, columns, (column) => column.id, {
+      create(column) {
+        const colour = factionColour(state, column.owner);
+        const graphics = drawColumnMark(new Graphics(), colour);
+        columnLayer.addChild(graphics);
+        return { graphics, colour };
+      },
+      update(mark, column) {
+        const colour = factionColour(state, column.owner);
+        if (mark.colour === colour) return;
+        drawColumnMark(mark.graphics, colour);
+        mark.colour = colour;
+      },
+      remove: ({ graphics }) => graphics.destroy(),
+    });
+    const view = viewport();
+    for (const column of columns) {
+      const at = mapToScreen(camera, view, column.position);
+      columnMarks.get(column.id)?.graphics.position.set(at.x, at.y);
+    }
+  }
+
   function placeBattles(selection: Pick | undefined) {
     reconcile(battleMarkers, seenBattles, (battle) => battle.id, {
       create() {
@@ -811,7 +845,10 @@ export async function createRenderer({
     }
     const size = { width: width + 2 * SEA_MARGIN, height: height + 2 * SEA_MARGIN };
     const resized = seaTexture.width !== size.width || seaTexture.height !== size.height;
-    if (resized) seaTexture.resize(size.width, size.height, app.renderer.resolution);
+    if (resized) {
+      seaTexture = fitTexture(seaTexture, size.width, size.height, app.renderer.resolution);
+      seaSprite.texture = seaTexture;
+    }
     if (
       resized ||
       !seaDrawn ||
@@ -1030,6 +1067,11 @@ export async function createRenderer({
         armies = next;
         dirty = true;
       }
+      const nextColumns = drawnColumns(previous, current, progress, sight);
+      if (!sameArmies(columns, nextColumns)) {
+        columns = nextColumns;
+        dirty = true;
+      }
       if (planned !== plannedShown) {
         plannedShown = planned;
         dirty = true;
@@ -1119,8 +1161,10 @@ export async function createRenderer({
       life.update(camera, viewport(), now, sight);
       moveSwell(now);
       bannerLayer.visible = !scene || scene.height === 0;
+      columnLayer.visible = bannerLayer.visible;
       drawRoutes(current, selection, planned, replaced);
       placeBanners(current, selection);
+      placeColumns(current);
       placeBattles(selection);
       if (scene && scene.height > 0 && selection?.kind === 'army') {
         const box = scene.armyBoxes.get(selection.army);

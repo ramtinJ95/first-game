@@ -1,5 +1,6 @@
 import { Container, Graphics, RenderTexture, Sprite, type Renderer } from 'pixi.js';
 import type { GameMap } from '../../sim/map.ts';
+import { fitTexture } from '../cached-texture.ts';
 import { visibleRect, type Camera, type Size } from '../camera.ts';
 import { BuildQueue, chunkKey, chunkRect, chunkRow, chunksNear, OVERHANG } from './chunks.ts';
 import { DETAIL, detailAlpha, type Band } from './detail.ts';
@@ -164,7 +165,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   art.addChild(paper, ground, washes, ...layers.map((layer) => layer.container));
   const root = new Container();
   root.addChild(art);
-  const texture = RenderTexture.create({
+  let texture = RenderTexture.create({
     width: 1,
     height: 1,
     resolution: renderer.resolution,
@@ -288,7 +289,8 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       const height = Math.ceil(viewport.height) + 2 * CACHE_MARGIN;
       const resized = texture.width !== width || texture.height !== height;
       if (resized) {
-        texture.resize(width, height, renderer.resolution);
+        texture = fitTexture(texture, width, height, renderer.resolution);
+        sprite.texture = texture;
       }
       if (
         repaint ||

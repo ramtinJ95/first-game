@@ -70,6 +70,20 @@ describe('encodeGif', () => {
     ]);
   });
 
+  it('fits a frame of another size, from a resized window, into the size of the first', () => {
+    const frames = [
+      { png: solidPng(1280, 720, [200, 40, 40]), delayMs: 100 },
+      { png: solidPng(1024, 768, [40, 200, 40]), delayMs: 100 },
+    ];
+
+    const gif = parseGif(encodeGif(frames, 800));
+
+    expect(gif.frames).toEqual([
+      { width: 800, height: 450, delayMs: 100 },
+      { width: 800, height: 450, delayMs: 100 },
+    ]);
+  });
+
   it('keeps frames that already fit at their own size', () => {
     const gif = parseGif(encodeGif([{ png: solidPng(320, 200, [10, 20, 30]), delayMs: 120 }], 800));
 
