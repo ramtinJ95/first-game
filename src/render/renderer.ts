@@ -1251,6 +1251,8 @@ export async function createRenderer({
         fenced = size;
       }
       canvas.dataset['drawnState'] = String(stateId(current));
+      // The zoom of the frame drawn, in px per km, so a test knows what the wheel reached.
+      canvas.dataset['zoom'] = camera.scale.toFixed(4);
       return true;
     },
     focus(point, covered = { left: 0, top: 0, right: 0, bottom: 0 }) {
