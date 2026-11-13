@@ -54,7 +54,13 @@ export default defineScenario({
     await page.mouse.click(city.x, city.y);
     await panel.getByRole('button', { name: 'Storm the walls' }).click();
     await panel.getByRole('button', { name: 'Confirm storm' }).click();
+    // A frame this close takes long enough in software that the day would be over by the
+    // time the clock pauses, so the day is entered at the widest zoom and shown close.
+    const here = { x: carthago.x + 14, y: carthago.y };
+    await view.jumpTo(here, 0.1);
     await intoNextDay(page, 0);
+    await view.jumpTo(here, 4);
+    await page.waitForTimeout(1500);
     await shot(
       'siege-storm',
       'The storm on the day it was ordered: ladders against the walls and men climbing them, as Carthago falls',

@@ -1,4 +1,3 @@
-import { SACK } from '../../sim/cities.ts';
 import type { DeepReadonly } from '../../sim/deep-readonly.ts';
 import type { ArmyId, BattleId, CityId, FactionId, FormationId } from '../../sim/ids.ts';
 import type { Sight } from '../../sim/sight.ts';
@@ -50,6 +49,8 @@ const GROUND_Y = 0.62;
 
 /** The share of an arrival day spent walking the road; the rest forms the army up. */
 const ARRIVE = 0.7;
+/** The days a sacked city burns and smokes after its sack, dying down over the last two. */
+export const BURN_DAYS = 6;
 /** Cycles per second of the motion clock, which runs with the game's days. */
 const RATE: Record<Motion, number> = { stand: 0.25, march: 1.5, fight: 0.95, run: 1.9, fall: 1 };
 const LINE_GAP_KM = 0;
@@ -436,7 +437,11 @@ class Context {
     const modeBefore = before ? this.mode(previous, before, current, true) : undefined;
     if (modeNow?.kind === 'sea' && (!modeBefore || modeBefore.kind === 'sea')) return;
     const probe = modeNow ?? modeBefore;
-    if (!probe || !this.inView(this.screen(this.anchorOf(probe)))) return;
+    if (
+      !probe ||
+      !this.inView(this.screen(this.anchorOf(probe)), this.reachOf(record, modeNow, modeBefore))
+    )
+      return;
 
     const colour = colourIndex(current, record.owner);
     const formationIds: FormationId[] = [...(before?.formations ?? [])];
@@ -635,6 +640,28 @@ class Context {
       modeBefore?.kind === 'battle' &&
       (modeNow?.kind === 'line' || (modeNow?.kind === 'march' && !modeNow.beaten));
     if (won) this.victory(modeBefore, colour, p);
+  }
+
+  /**
+   * How far in screen px any figure of the army may stand from its anchor on either day:
+   * a column as long as all its formations in column, plus the road walked today. Its
+   * figures stand within it of the anchor, so an army is skipped only when all are out of view.
+   */
+  reachOf(army: DeepReadonly<Army>, ...modes: (Mode | undefined)[]): number {
+    const { previous, current, camera } = this.input;
+    let length = 2;
+    for (const id of army.formations) {
+      const formation = current.formations[id] ?? previous.formations[id];
+      if (!formation) continue;
+      const column = block(formation.troop, figuresFor(formation.men), 'column', id);
+      const line = block(formation.troop, figuresFor(formation.men), 'line', id);
+      length += Math.max(column.depth, line.width) + 1;
+    }
+    let road = 0;
+    for (const mode of modes) {
+      if (mode?.kind === 'march') road = Math.max(road, trailLength(mode.trail) * camera.scale);
+    }
+    return length * this.h + road;
   }
 
   anchorOf(mode: Mode): MapPoint {
@@ -1004,15 +1031,13 @@ class Context {
           depth: at.y + 2,
         });
       }
-      // Only the day a sack is applied can be told from the state: later, its unrest
-      // looks the same as an enslaved city's months on. The state holds no sackedOn.
-      // The sack sets the unrest, and the same day's population system counts it down by one.
-      const sackedToday =
-        before &&
-        before.fellOn !== null &&
-        city.fellOn === null &&
-        city.unrestDays === SACK.unrestDays - 1;
-      if (seen && sackedToday) this.burn(city.id, at, growth, smooth(p * 3));
+      // Days since the sack applied: 0 through the day the order is played, then rising.
+      const sacked = city.sackedOn === null ? undefined : current.day - 1 - city.sackedOn + p;
+      if (seen && sacked !== undefined && sacked < BURN_DAYS) {
+        const kindle = smooth(sacked * 3);
+        const die = 1 - smooth((sacked - (BURN_DAYS - 2)) / 2);
+        this.burn(city.id, at, growth, Math.min(kindle, die));
+      }
       this.storm(city, at);
     }
   }

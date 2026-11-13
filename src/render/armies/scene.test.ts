@@ -5,9 +5,10 @@ import { sack } from '../../sim/orders/sack.ts';
 import { population } from '../../sim/systems/population.ts';
 import type { ArmyId } from '../../sim/ids.ts';
 import type { Sight } from '../../sim/sight.ts';
+import type { Formation } from '../../sim/state/formation.ts';
 import type { GameState } from '../../sim/state/game-state.ts';
 import type { MapPoint } from '../../sim/state/map-point.ts';
-import { buildScene, FIGURE_SCALE, type SceneInput } from './scene.ts';
+import { BURN_DAYS, buildScene, FIGURE_SCALE, type SceneInput } from './scene.ts';
 
 const viewport = { width: 1280, height: 720 };
 
@@ -199,6 +200,29 @@ describe('a fallen city', () => {
       blazes(after((s) => enslave(s, { kind: 'enslave', ...order }, fixtureWorld()))),
     ).toHaveLength(0);
   });
+
+  test('burns and smokes for the days after its sack, and is quiet once they pass', () => {
+    const later = (days: number) => {
+      const state = buildFixture();
+      const capua = state.cities[FIXTURE.capua];
+      if (!capua) throw new Error('fixture lacks Capua');
+      capua.sackedOn = state.day;
+      // Without armies, so the only smoke in view is the city's.
+      state.armies = {};
+      state.formations = {};
+      state.day = (state.day + 1 + days) as GameState['day'];
+      const scene = buildScene(
+        input(state, state, { camera: { centre: capua.position, scale: 4 } }),
+      );
+      return {
+        flames: scene.sprites.filter((s) => s.key.startsWith('blaze.') && s.alpha > 0).length,
+        smoke: scene.sprites.filter((s) => s.key.startsWith('smoke.') && s.alpha > 0).length,
+      };
+    };
+    expect(later(3).flames).toBeGreaterThan(0);
+    expect(later(3).smoke).toBeGreaterThan(0);
+    expect(later(BURN_DAYS)).toEqual({ flames: 0, smoke: 0 });
+  });
 });
 
 describe('an army arriving', () => {
@@ -359,5 +383,32 @@ describe('the day a battle ends', () => {
     const standards = scene.sprites.filter((s) => s.key.startsWith('standard.'));
     // The standard raised over the field is the winner's, in Rome's colour, not Carthage's.
     expect(standards.every((s) => s.key.endsWith('@0'))).toBe(true);
+  });
+});
+
+describe('culling', () => {
+  test('a long column whose head is out of view still draws its rear ranks in view', () => {
+    const [previous, current] = marching({ x: 3200, y: 2340.8 });
+    for (const state of [previous, current]) {
+      const army = state.armies[FIXTURE.romanArmy];
+      if (!army) throw new Error('fixture lacks the Roman army');
+      army.formations = [];
+      for (let i = 0; i < 8; i++) {
+        const id = `formation-long-${i}` as Formation['id'];
+        state.formations[id] = { id, army: army.id, troop: 'spearmen', men: 1500, morale: 1 };
+        army.formations.push(id);
+      }
+      Reflect.deleteProperty(state.formations, FIXTURE.hastati);
+      Reflect.deleteProperty(state.formations, FIXTURE.equites);
+    }
+    const head = current.armies[FIXTURE.romanArmy]?.activity;
+    if (!head || head.kind !== 'marching') throw new Error('not marching');
+    // The head stands 1,500 px east of the middle of the view, far beyond its edge.
+    const camera = { centre: { x: head.position.x - 1500 / 4, y: head.position.y }, scale: 4 };
+    const figures = figuresOf(
+      buildScene(input(previous, current, { progress: 1, camera })),
+      FIXTURE.romanArmy,
+    );
+    expect(figures.some((s) => s.x > 0 && s.x < viewport.width)).toBe(true);
   });
 });
