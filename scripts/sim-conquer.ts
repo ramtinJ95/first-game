@@ -53,10 +53,13 @@ const ROUND: readonly Troop[] = ['spearmen', 'archers', 'swordsmen', 'lightCaval
 
 function romanOrders(state: GameState, line: Line): Order[] {
   if (line === 'gives no orders') return [];
+  const raises = line.includes('raises all it can');
   const orders = decideOrders(state, world, rome).filter(
-    (order) => line === 'conquers, AI mix' || (order.kind !== 'sack' && order.kind !== 'enslave'),
+    (order) =>
+      (line === 'conquers, AI mix' || (order.kind !== 'sack' && order.kind !== 'enslave')) &&
+      !(raises && order.kind === 'recruit'),
   );
-  if (line === 'conquers, sacks') {
+  if (line.endsWith('sacks')) {
     for (const city of Object.values(state.cities)) {
       if (city.owner !== rome || city.fellOn === null || state.day - city.fellOn > FATE_DAYS)
         continue;
@@ -72,6 +75,14 @@ function romanOrders(state: GameState, line: Line): Order[] {
   const enemies = enemiesOf(state, rome);
   const atWarWithMinor = [...enemies].some((id) => state.factions[id]?.kind === 'minor');
   const capital = homeCapital(state, world, rome);
+  const stores = state.factions[rome]?.stores;
+  if (raises && capital && stores) {
+    const troop = ROUND[state.day % ROUND.length] as Troop;
+    const { gold, men } = TROOPS[troop].recruit;
+    if (stores.gold >= gold && stores.manpower >= men) {
+      orders.push({ kind: 'recruit', faction: rome, city: capital.id, troop });
+    }
+  }
   if (!atWarWithMinor && capital && !orders.some((order) => order.kind === 'declareWar')) {
     const [nearest] = Object.values(state.cities)
       .filter(
