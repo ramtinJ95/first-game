@@ -66,7 +66,7 @@
   <Formations {game} ids={army.formations} />
   {#if own}
     <h3>Stance</h3>
-    <StanceControls player={game.player} {army} {pending} {actions} />
+    <StanceControls {game} {army} {pending} {actions} />
     {#if army.activity.kind === 'marching'}
       <div class="row">
         <button type="button" onclick={() => actions.issue({ kind: 'halt', ...base })}>Halt</button>

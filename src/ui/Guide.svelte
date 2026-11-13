@@ -3,6 +3,8 @@
   import type { Frame } from '../app/view.svelte.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { GameState } from '../sim/state/game-state.ts';
+  import { STANCES } from '../sim/state/army.ts';
+  import { reformCostText, stanceMatchText } from './describe.ts';
   import type { FrameActions } from './frame-actions.ts';
 
   let {
@@ -66,9 +68,13 @@
         while paused wait for the next day.
       </dd>
       <dt>Stances</dt>
-      <dd>
-        An army's panel sets how it fights. Hold the line trades blows evenly, all-out assault deals
-        and takes more, and skirmish and withdraw deals and takes less and breaks off sooner.
+      <dd data-testid="guide-stances">
+        An army's panel sets how it fights, and each stance beats one other.
+        <ul>
+          {#each STANCES as stance (stance)}<li>{stanceMatchText(stance)}</li>{/each}
+        </ul>
+        {reformCostText()} In a battle the panel says whose stance beats whose, and marks the stance that
+        would beat the enemy's.
       </dd>
       <dt>Saving</dt>
       <dd>

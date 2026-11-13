@@ -10,12 +10,20 @@ import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { warKey } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
+import { STANCES, type Stance } from '../sim/state/army.ts';
+import { REFORM_DAYS } from '../sim/systems/battles.ts';
 import {
   armiesAt,
   cityFoodText,
   sackText,
   storeNote,
   activityText,
+  reformCostText,
+  reformingText,
+  stanceChoiceText,
+  stanceMatchText,
+  standingText,
+  leavingText,
   stormText,
   weakSiegeText,
   ordersWaitingText,
@@ -512,5 +520,97 @@ describe('activityText', () => {
     expect(retreatingTo({ x: carthago.x, y: carthago.y + 30 })).toBe(
       'Falling back into the field · 3 days left',
     );
+  });
+});
+
+describe('leavingText', () => {
+  it("says how many of a city's people are on the road and where, and that its population no longer counts them", () => {
+    const state = buildFixture();
+    const had = state.cities[f.roma]?.population ?? 0;
+    const next = tick(
+      state,
+      [{ kind: 'evacuate', faction: f.rome, city: f.roma, to: f.capua, share: 0.25 }],
+      world,
+    ).state;
+    const roma = next.cities[f.roma];
+    if (!roma) throw new Error('no Roma');
+    // The rule takes the people from the city at once; only a day's growth is added back.
+    expect(had - roma.population).toBeGreaterThan(had * 0.249);
+    expect(leavingText(next, roma)).toBe('10,000 of its people are on the road to Capua');
+    const capua = next.cities[f.capua];
+    if (capua) expect(leavingText(next, capua)).toBeUndefined();
+    const foreign = structuredClone(next);
+    foreign.player = f.carthage;
+    const seen = foreign.cities[f.roma];
+    if (seen) expect(leavingText(foreign, seen)).toBeUndefined();
+  });
+});
+
+describe('the stance texts', () => {
+  function armies(mine: Stance, theirs: Stance, changedOn?: { mine?: number; theirs?: number }) {
+    const state = buildFixture();
+    const roman = state.armies[f.romanArmy];
+    const punic = state.armies[f.punicArmy];
+    if (!roman || !punic) throw new Error('fixture changed');
+    roman.stance = mine;
+    punic.stance = theirs;
+    if (changedOn?.mine !== undefined) roman.stanceChangedOn = changedOn.mine as Day;
+    if (changedOn?.theirs !== undefined) punic.stanceChangedOn = changedOn.theirs as Day;
+    return { state, roman, punic };
+  }
+
+  it('says what each stance beats and what beats it, by STANCE_BEATS', () => {
+    expect(STANCES.map(stanceMatchText)).toEqual([
+      'Hold the line: beats an all-out assault, beaten by skirmish and withdraw.',
+      'All-out assault: beats skirmish and withdraw, beaten by hold the line.',
+      'Skirmish and withdraw: beats hold the line, beaten by an all-out assault.',
+    ]);
+    expect(reformCostText()).toBe(
+      `A change of stance takes ${REFORM_DAYS} days to re-form. Until then every enemy that is not re-forming too beats it, whatever its stance.`,
+    );
+  });
+
+  it('says how long an army still re-forms after a change, and nothing after', () => {
+    const { state, roman } = armies('holdTheLine', 'holdTheLine', { mine: 1 });
+    expect(reformingText(state, roman)).toBe(`Re-forming, ${REFORM_DAYS} days left`);
+    state.day = REFORM_DAYS as number as Day;
+    expect(reformingText(state, roman)).toBe('Re-forming, 1 day left');
+    state.day = (REFORM_DAYS + 1) as Day;
+    expect(reformingText(state, roman)).toBeUndefined();
+  });
+
+  it('says in one line whose stance beats whose, and that a re-forming army is beaten', () => {
+    const line = (mine: Stance, theirs: Stance, changedOn?: { mine?: number; theirs?: number }) => {
+      const { state, roman, punic } = armies(mine, theirs, changedOn);
+      return standingText(state, roman, punic);
+    };
+    expect(line('holdTheLine', 'skirmishAndWithdraw')).toBe('Their skirmishers beat your line');
+    expect(line('holdTheLine', 'allOutAssault')).toBe('Your line beats their assault');
+    expect(line('allOutAssault', 'allOutAssault')).toBe('Neither stance beats the other');
+    expect(line('holdTheLine', 'allOutAssault', { mine: 1 })).toBe(
+      'Your army re-forms, so their assault beats it',
+    );
+    expect(line('holdTheLine', 'skirmishAndWithdraw', { theirs: 1 })).toBe(
+      'Their army re-forms, so your line beats it',
+    );
+    expect(line('holdTheLine', 'skirmishAndWithdraw', { mine: 1, theirs: 1 })).toBe(
+      'Neither stance beats the other',
+    );
+  });
+
+  it("marks the stance that beats the enemy's, and gives the cost of every change", () => {
+    const { state, roman, punic } = armies('holdTheLine', 'skirmishAndWithdraw');
+    const choice = (stance: Stance) => stanceChoiceText(state, roman, stance, 'holdTheLine', punic);
+    expect(choice('holdTheLine')).toEqual({ answers: false, cost: undefined });
+    expect(choice('allOutAssault')).toEqual({
+      answers: true,
+      cost: `re-forms ${REFORM_DAYS} days`,
+    });
+    expect(choice('skirmishAndWithdraw')).toEqual({
+      answers: false,
+      cost: `re-forms ${REFORM_DAYS} days`,
+    });
+    roman.stanceChangedOn = state.day;
+    expect(choice('allOutAssault').cost).toBe(`re-forms ${REFORM_DAYS} days again`);
   });
 });

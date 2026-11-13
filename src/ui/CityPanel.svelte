@@ -21,6 +21,7 @@
     cssColour,
     ownerLine,
     rankText,
+    leavingText,
     sackText,
     signed,
     stormText,
@@ -66,6 +67,7 @@
   const weak = $derived(siege && weakSiegeText(game, sight, siege));
   const stormed = $derived(storming && siege ? stormText(game, siege) : undefined);
   const sacked = $derived(sackText(game, city));
+  const onTheRoad = $derived(leavingText(game, city));
   const canStorm = $derived(besiegers.some((army) => army.owner === game.player));
   const ordered = $derived(
     pending.filter(
@@ -160,6 +162,9 @@
       {/if}
     </tbody>
   </table>
+  {#if onTheRoad}
+    <p data-testid="city-leaving">{onTheRoad}</p>
+  {/if}
   {#if sacked}
     <p class="bad" data-testid="city-sacked">{sacked}</p>
   {/if}
