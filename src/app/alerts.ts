@@ -399,12 +399,14 @@ export function sightingsOfDay(
   const threatens = (to: MapPoint) =>
     ownCities.some((city) => distanceKm(city.position, to) <= THREAT_KM) ||
     own.some((province) => insideOutline(province.outline, to));
+  /** The place an enemy heads for, by name, and a key that tells two places apart. */
   const target = (to: MapPoint) => {
-    if (!sees.sees(to)) return 'your land';
     const city = [...ownCities].sort(
       (a, b) => distanceKm(a.position, to) - distanceKm(b.position, to),
     )[0];
-    return city && distanceKm(city.position, to) <= THREAT_KM ? city.name : 'your land';
+    return sees.sees(to) && city && distanceKm(city.position, to) <= THREAT_KM
+      ? { name: city.name, key: city.id as string }
+      : { name: 'your land', key: `${to.x},${to.y}` };
   };
   const seen: Sighting[] = [];
 
@@ -418,12 +420,13 @@ export function sightingsOfDay(
       return sum + (army ? menOf(after, army) : 0);
     }, 0);
     const first = convoy.armies[0];
+    const place = target(to);
     seen.push({
       by: 'sea',
       owner: convoy.owner,
-      target: target(to),
+      target: place,
       men,
-      alone: `A fleet of ${factionName(after, convoy.owner)} with ${namesOfArmies(after, convoy.armies)}, ${whole(men)} men, is sailing for ${target(to)}`,
+      alone: `A fleet of ${factionName(after, convoy.owner)} with ${namesOfArmies(after, convoy.armies)}, ${whole(men)} men, is sailing for ${place.name}`,
       focus: {
         at: convoy.position,
         ...(first && { select: { kind: 'army', army: first } as const }),
@@ -438,12 +441,13 @@ export function sightingsOfDay(
     const to = army.activity.waypoints[army.activity.waypoints.length - 1];
     if (!to || !threatens(to)) continue;
     const men = menOf(after, army);
+    const place = target(to);
     seen.push({
       by: 'land',
       owner: army.owner,
-      target: target(to),
+      target: place,
       men,
-      alone: `${armyTitle(after, army)} with ${whole(men)} men is marching on ${target(to)}`,
+      alone: `${armyTitle(after, army)} with ${whole(men)} men is marching on ${place.name}`,
       focus: { at: army.activity.position, select: { kind: 'army', army: army.id } },
     });
   }
@@ -452,7 +456,7 @@ export function sightingsOfDay(
   // invasion, told as one line with their men together.
   const groups = new Map<string, Sighting[]>();
   for (const sighting of seen) {
-    const key = `${sighting.by}|${sighting.owner}|${sighting.target}`;
+    const key = `${sighting.by}|${sighting.owner}|${sighting.target.key}`;
     groups.set(key, [...(groups.get(key) ?? []), sighting]);
   }
   return [...groups.values()].flatMap((group): Alert[] => {
@@ -469,8 +473,8 @@ export function sightingsOfDay(
           group.length === 1
             ? first.alone
             : first.by === 'sea'
-              ? `${group.length} fleets of ${owner} with ${men} men are sailing for ${first.target}`
-              : `${group.length} armies of ${owner} with ${men} men are marching on ${first.target}`,
+              ? `${group.length} fleets of ${owner} with ${men} men are sailing for ${first.target.name}`
+              : `${group.length} armies of ${owner} with ${men} men are marching on ${first.target.name}`,
         focus: first.focus,
         pause: { kind: 'sighted', once: warOnce(after, first.owner) },
       },
@@ -482,8 +486,8 @@ export function sightingsOfDay(
 interface Sighting {
   readonly by: 'sea' | 'land';
   readonly owner: FactionId;
-  /** The place it heads for, as the alert names it. */
-  readonly target: string;
+  /** The place it heads for: its name in the alert, and a key that tells two places apart. */
+  readonly target: { readonly name: string; readonly key: string };
   readonly men: number;
   /** The alert's text when it comes alone. */
   readonly alone: string;

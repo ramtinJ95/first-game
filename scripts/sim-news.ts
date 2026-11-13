@@ -70,7 +70,7 @@ function play(seed: number, active: boolean): Year[] {
       ...sightingsOfDay(state, next, saw, sees, world),
       ...weakNews.alerts,
     ]);
-    const news = worldNewsOfDay(state, next, events);
+    const news = worldNewsOfDay(state, next, events, world);
     counts.before += own.reduce((sum, alert) => sum + linesBefore(alert), 0);
     for (const alert of groupAlerts([...own, ...news])) {
       if (alert.world === 'chronicle') counts.chronicle++;

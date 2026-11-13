@@ -5,6 +5,7 @@ import type { FactionId } from '../sim/ids.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { warSides, type WarKey } from '../sim/state/war.ts';
+import type { World } from '../sim/world/world.ts';
 import type { Alert } from './alerts.ts';
 import { factionName, whole } from './names.ts';
 
@@ -29,6 +30,7 @@ export function worldNewsOfDay(
   before: State,
   after: State,
   events: readonly DeepReadonly<DayEvent>[],
+  world: World,
 ): Alert[] {
   const player = after.player;
   const day = before.day;
@@ -72,10 +74,20 @@ export function worldNewsOfDay(
       select: { kind: 'province', province: city.province },
     } as const;
     if (city.rank === 'capital') {
+      // The map names each great power's capital by the id its city keeps.
+      const home = world.map.provinces.find(
+        (province) => province.capital && (province.id as string) === city.id,
+      );
+      const first = home && home.owner !== 'independent' ? (home.owner as FactionId) : was.owner;
       add({
         kind: 'capitalFell',
         world: 'corner',
-        text: `${city.name}, the capital of ${factionName(after, was.owner)}, fell to ${factionName(after, city.owner)}`,
+        text:
+          first === city.owner
+            ? `${factionName(after, city.owner)} took back its capital ${city.name} from ${factionName(after, was.owner)}`
+            : first === was.owner
+              ? `${city.name}, the capital of ${factionName(after, first)}, fell to ${factionName(after, city.owner)}`
+              : `${city.name}, the capital of ${factionName(after, first)}, fell from ${factionName(after, was.owner)} to ${factionName(after, city.owner)}`,
         focus,
       });
     } else if (near(city.position)) {

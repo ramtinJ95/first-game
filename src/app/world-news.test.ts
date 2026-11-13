@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defeatFaction } from '../sim/defeat.ts';
-import { buildFixture, FIXTURE } from '../sim/fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import type { CityId, FactionId } from '../sim/ids.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
@@ -9,6 +9,7 @@ import { cornerAlerts, type Alert } from './alerts.ts';
 import { worldNewsOfDay } from './world-news.ts';
 
 const f = FIXTURE;
+const world = fixtureWorld();
 
 /** The world news of a day on which `change` happened to a copy of the fixture. */
 function newsOf(change: (state: GameState) => void, setup?: (state: GameState) => void) {
@@ -17,7 +18,11 @@ function newsOf(change: (state: GameState) => void, setup?: (state: GameState) =
   const after = structuredClone(before);
   after.day = (before.day + 1) as Day;
   change(after);
-  return worldNewsOfDay(before, after, []).map((alert) => [alert.kind, alert.world, alert.text]);
+  return worldNewsOfDay(before, after, [], world).map((alert) => [
+    alert.kind,
+    alert.world,
+    alert.text,
+  ]);
 }
 
 function owner(state: GameState, city: CityId, faction: FactionId) {
@@ -32,13 +37,16 @@ describe('worldNewsOfDay', () => {
     before.player = f.syracusaeFaction;
     const after = structuredClone(before);
     after.wars[warKey(f.rome, f.carthage)] = { since: after.day };
-    const war = worldNewsOfDay(before, after, [
-      { kind: 'warDeclared', by: f.carthage, against: f.rome },
-    ]);
+    const war = worldNewsOfDay(
+      before,
+      after,
+      [{ kind: 'warDeclared', by: f.carthage, against: f.rome }],
+      world,
+    );
     expect(war.map((a) => [a.kind, a.world, a.tone, a.text])).toEqual([
       ['powersAtWar', 'corner', 'neutral', 'Carthage declared war on Rome'],
     ]);
-    expect(worldNewsOfDay(after, before, []).map((a) => a.text)).toEqual([
+    expect(worldNewsOfDay(after, before, [], world).map((a) => a.text)).toEqual([
       'Carthage and Rome made peace',
     ]);
   });
@@ -48,7 +56,12 @@ describe('worldNewsOfDay', () => {
     const after = structuredClone(before);
     after.wars[warKey(f.rome, f.carthage)] = { since: after.day };
     expect(
-      worldNewsOfDay(before, after, [{ kind: 'warDeclared', by: f.carthage, against: f.rome }]),
+      worldNewsOfDay(
+        before,
+        after,
+        [{ kind: 'warDeclared', by: f.carthage, against: f.rome }],
+        world,
+      ),
     ).toEqual([]);
   });
 
@@ -57,6 +70,34 @@ describe('worldNewsOfDay', () => {
       'capitalFell',
       'corner',
       'Carthago, the capital of Carthage, fell to Syracusae',
+    ]);
+    const held = (state: GameState) => owner(state, f.carthago, f.syracusaeFaction);
+    expect(newsOf((state) => owner(state, f.carthago, f.carthage), held)).toContainEqual([
+      'capitalFell',
+      'corner',
+      'Carthage took back its capital Carthago from Syracusae',
+    ]);
+    const numidia = 'numidia' as FactionId;
+    const rising = (state: GameState) => {
+      const minor = state.factions[f.syracusaeFaction];
+      if (!minor) throw new Error('fixture changed');
+      state.factions[numidia] = { ...structuredClone(minor), id: numidia, name: 'Numidia' };
+    };
+    expect(
+      newsOf(
+        (state) => {
+          rising(state);
+          owner(state, f.carthago, numidia);
+        },
+        (state) => {
+          rising(state);
+          held(state);
+        },
+      ),
+    ).toContainEqual([
+      'capitalFell',
+      'corner',
+      'Carthago, the capital of Carthage, fell from Syracusae to Numidia',
     ]);
   });
 
@@ -75,11 +116,11 @@ describe('worldNewsOfDay', () => {
     const after = structuredClone(before);
     owner(after, f.carthago, f.rome);
     defeatFaction(after, f.carthage);
-    const news = worldNewsOfDay(before, after, []);
+    const news = worldNewsOfDay(before, after, [], world);
     expect(news.filter((a) => a.kind === 'powerFell').map((a) => a.text)).toEqual([
       'Carthage has fallen: it holds no city',
     ]);
-    expect(worldNewsOfDay(after, structuredClone(after), [])).toEqual([]);
+    expect(worldNewsOfDay(after, structuredClone(after), [], world)).toEqual([]);
   });
 
   it('tells when a new great power leads, by the rule the others join against it by', () => {

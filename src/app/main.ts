@@ -232,7 +232,7 @@ const clock = createClock({
         ...sightingsOfDay(before, after, saw, sees, world),
         ...weak.alerts,
         // The world's news reaches every power, whether it sees the place or not.
-        ...worldNewsOfDay(before, after, events),
+        ...worldNewsOfDay(before, after, events, world),
       ]),
       newsPauses ? pauses : NO_PAUSES,
       toldOnce,
