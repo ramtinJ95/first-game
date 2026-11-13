@@ -297,11 +297,19 @@ function fightOneDay(state: GameState, id: BattleId) {
     fighters.reduce((sum, { formation }) => sum + (losses.get(formation) ?? 0), 0) / men;
   const attackersLost = shareLost(attackers, attackerMen);
   const defendersLost = shareLost(defenders, defenderMen);
+  const edges = new Map<Army, number>();
+  for (const [fighters, enemies] of [
+    [attackers, defenders],
+    [defenders, attackers],
+  ] as const) {
+    for (const { army } of fighters) {
+      if (!edges.has(army)) edges.set(army, edgeOn(army, enemies));
+    }
+  }
   for (const [side, fighters, pressure] of [
     ['attackers', attackers, pressureOn(attackerMen, defenderMen, attackersLost, defendersLost)],
     ['defenders', defenders, pressureOn(defenderMen, attackerMen, defendersLost, attackersLost)],
   ] as const) {
-    const enemies = side === 'attackers' ? defenders : attackers;
     for (const { formation, army } of fighters) {
       const cap = Math.max(Math.round(formation.men * MAX_DAILY_LOSS), REMNANT_MEN);
       const lost = Math.min(formation.men, cap, Math.round(losses.get(formation) ?? 0));
@@ -309,7 +317,7 @@ function fightOneDay(state: GameState, id: BattleId) {
       const moraleLost =
         ((lost / formation.men) * MORALE_PER_LOSS + DAILY_STRAIN) *
         pressure *
-        edgeOn(army, enemies) *
+        (edges.get(army) ?? 1) *
         (STANCE_EFFECTS[army.stance].morale /
           (TROOPS[formation.troop].discipline * generalFactor(army)));
       formation.men -= lost;

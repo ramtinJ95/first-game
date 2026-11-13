@@ -272,7 +272,11 @@ export function movements(context: Context, muster: CityView | undefined): Order
     if (!city || !besiegers.some((army) => army.owner === faction)) continue;
     const men = besiegers.reduce((sum, army) => sum + menOfArmy(state, army), 0);
     if (men >= BLOCKADE_ODDS * city.garrison || !muster) continue;
-    if (reinforcedInTime(state, faction, city, men)) continue;
+    const reinforcements = reinforcementsInTime(state, faction, city, men);
+    if (reinforcements) {
+      for (const army of reinforcements) used.add(army.id);
+      continue;
+    }
     for (const army of besiegers) {
       const at = positionOf(army);
       if (army.owner !== faction || !at) continue;
@@ -445,27 +449,40 @@ export function movements(context: Context, muster: CityView | undefined): Order
 }
 
 /**
- * Whether the faction's armies marching to the city bring the siege up to the blockade
- * before the garrison's sallies have cut down half of the men there now.
+ * The faction's armies marching to the city, soonest first, that bring the siege up to
+ * the blockade before the garrison's sallies have cut down half of the men there now, or
+ * undefined when they do not.
  */
-function reinforcedInTime(state: State, faction: FactionId, city: CityView, men: number): boolean {
-  let coming = 0;
-  let days = 0;
+function reinforcementsInTime(
+  state: State,
+  faction: FactionId,
+  city: CityView,
+  men: number,
+): ArmyView[] | undefined {
+  const coming: { army: ArmyView; days: number; men: number }[] = [];
   for (const army of sorted(state.armies)) {
     const { activity } = army;
     if (army.owner !== faction || activity.kind !== 'marching') continue;
     if (!marchingTo(army, city.position)) continue;
-    coming += menOfArmy(state, army);
     let km = 0;
     let from = activity.position;
     for (const point of activity.waypoints) {
       km += distance(from, point);
       from = point;
     }
-    days = Math.max(days, km / MARCH_KM_PER_DAY);
+    coming.push({ army, days: Math.ceil(km / MARCH_KM_PER_DAY), men: menOfArmy(state, army) });
   }
+  coming.sort((a, b) => a.days - b.days || (a.army.id < b.army.id ? -1 : 1));
   const sally = Math.ceil(city.garrison * SALLY_SHARE);
-  return men + coming >= BLOCKADE_ODDS * city.garrison && days * sally <= men / 2;
+  const needed: ArmyView[] = [];
+  let arrived = 0;
+  for (const next of coming) {
+    if (next.days * sally > men / 2) return undefined;
+    needed.push(next.army);
+    arrived += next.men;
+    if (men - next.days * sally + arrived >= BLOCKADE_ODDS * city.garrison) return needed;
+  }
+  return undefined;
 }
 
 /** An army standing at a city of its owner, as a minor's defenders do, threatens no capital. */

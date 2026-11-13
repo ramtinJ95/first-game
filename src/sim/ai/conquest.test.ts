@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { fixtureWorld } from '../fixture.ts';
 import { allocateId, type ArmyId, type FactionId } from '../ids.ts';
 import { newGame } from '../new-game.ts';
-import { executeOrder } from '../orders/orders.ts';
+import { executeOrder, type Order } from '../orders/orders.ts';
 import { removeRecord } from '../records.ts';
 import { expectConsistent } from '../references.ts';
 import type { City } from '../state/city.ts';
@@ -80,20 +80,45 @@ describe('a siege the attack can hold', () => {
     expectConsistent(state);
   });
 
-  test('a siege too weak to blockade waits for an army that arrives before sallies wear it down', () => {
+  function waiting(extra?: { men: number; km: number }) {
     const { state, target } = war();
     const besiegers = addArmy(state, rome, 1000, target.position);
-    const behind = { x: target.position.x + 40, y: target.position.y };
-    const coming = addArmy(state, rome, 600, behind);
-    const next = tick(
-      state,
-      [{ kind: 'moveArmy', faction: rome, army: coming, to: target.position }],
-      world,
-    ).state;
-    expect(next.armies[besiegers]?.activity.kind).toBe('besieging');
-    expect(decideOrders(next, world, rome)).not.toContainEqual(
+    const coming = addArmy(state, rome, 600, { x: target.position.x + 40, y: target.position.y });
+    const orders: Order[] = [
+      { kind: 'moveArmy', faction: rome, army: coming, to: target.position },
+    ];
+    if (extra) {
+      const from = { x: target.position.x + extra.km, y: target.position.y };
+      expect(byLand(world, from, target.position)).toBe(true);
+      const late = addArmy(state, rome, extra.men, from);
+      orders.push({ kind: 'moveArmy', faction: rome, army: late, to: target.position });
+    }
+    return { state: tick(state, orders, world).state, target, besiegers, coming };
+  }
+
+  test('a siege too weak to blockade waits for an army that arrives before sallies wear it down, and the two blockade the city', () => {
+    let { state, target, besiegers, coming } = waiting();
+    expect(state.armies[besiegers]?.activity.kind).toBe('besieging');
+    for (let day = 0; day < 5; day++) {
+      const orders = decideOrders(state, world, rome);
+      expect(orders).not.toContainEqual(
+        expect.objectContaining({ kind: 'moveArmy', army: besiegers }),
+      );
+      expect(orders).not.toContainEqual(
+        expect.objectContaining({ kind: 'moveArmy', army: coming }),
+      );
+      state = tick(state, orders, world).state;
+    }
+    const siege = Object.values(state.sieges).find((s) => s.city === target.id);
+    expect(siege?.besiegers).toEqual(expect.arrayContaining([besiegers, coming]));
+    expectConsistent(state);
+  });
+
+  test('a far army on its way does not make a siege that is reinforced in time give up', () => {
+    const { state, besiegers } = waiting({ men: 100, km: 400 });
+    expect(decideOrders(state, world, rome)).not.toContainEqual(
       expect.objectContaining({ kind: 'moveArmy', army: besiegers }),
     );
-    expectConsistent(next);
+    expectConsistent(state);
   });
 });

@@ -8,7 +8,8 @@ import { parseMap, POWERS, type PowerId } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
 import type { Order } from '../src/sim/orders/orders.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
-import { BLOCKADE_ODDS, SALLY_SHARE } from '../src/sim/systems/sieges.ts';
+import { SYSTEMS, type System } from '../src/sim/systems.ts';
+import { sieges } from '../src/sim/systems/sieges.ts';
 import { tick } from '../src/sim/tick.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 
@@ -83,7 +84,7 @@ function play(seed: number): Seed {
   let restarts = 0;
   let repeatedMarches = 0;
   let sallyArmies = 0;
-  let sallyMen = 0;
+  const sallies = { men: 0 };
 
   for (let day = 1; day <= YEARS * YEAR; day++) {
     const orders: Order[] = decideAll(state, world, []);
@@ -95,7 +96,7 @@ function play(seed: number): Seed {
       lastMarch.set(key, day);
     }
     const before = state;
-    const { state: next, events } = tick(state, orders, world);
+    const { state: next, events } = tick(state, orders, world, systemsCounting(sallies));
 
     for (const event of events) {
       if (event.kind === 'armyDestroyed' && event.cause === 'sally') {
@@ -111,20 +112,6 @@ function play(seed: number): Seed {
       }
     }
     for (const siege of Object.values(before.sieges)) {
-      const city = before.cities[siege.city];
-      const men = (s: GameState, ids: readonly string[]) =>
-        ids.reduce(
-          (sum, id) =>
-            sum +
-            (s.armies[id as never]?.formations ?? []).reduce(
-              (m, f) => m + (s.formations[f]?.men ?? 0),
-              0,
-            ),
-          0,
-        );
-      if (city && men(before, siege.besiegers) < BLOCKADE_ODDS * city.garrison) {
-        sallyMen += Math.min(men(before, siege.besiegers), Math.ceil(city.garrison * SALLY_SHARE));
-      }
       if (next.sieges[siege.id]) continue;
       const leader = before.armies[siege.besiegers[0] ?? ('' as never)]?.owner;
       const ordered = orders.some(
@@ -214,10 +201,39 @@ function play(seed: number): Seed {
     restarts,
     repeatedMarches,
     sallyArmies,
-    sallyMen,
+    sallyMen: sallies.men,
     quiet,
     conquests,
   };
+}
+
+/**
+ * The day's systems, with the sieges system counting the men the garrisons' sallies cut
+ * down: what the armies in a siege that still stands lost while it ran, and every army
+ * it removed, which only a sally does.
+ */
+function systemsCounting(sallies: { men: number }): readonly System[] {
+  const counted: System = (state, world) => {
+    const menOf = (id: string) =>
+      (state.armies[id as never]?.formations ?? []).reduce(
+        (sum, f) => sum + (state.formations[f]?.men ?? 0),
+        0,
+      );
+    const before = new Map(
+      Object.values(state.armies)
+        .filter((army) => army.activity.kind === 'idle' || army.activity.kind === 'besieging')
+        .map((army) => [army.id as string, menOf(army.id)]),
+    );
+    sieges(state, world);
+    for (const [id, men] of before) {
+      const army = state.armies[id as never];
+      if (!army) sallies.men += men;
+      else if (army.activity.kind === 'besieging' && state.sieges[army.activity.siege]) {
+        sallies.men += men - menOf(id);
+      }
+    }
+  };
+  return SYSTEMS.map((system) => (system === sieges ? counted : system));
 }
 
 /** Whether the faction is at war and has an idle army that can fight and reaches an enemy city. */
