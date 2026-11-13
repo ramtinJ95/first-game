@@ -420,7 +420,7 @@ export interface StoreNote {
 
 /**
  * What the top bar says beside a store: that it ran out, how many days it lasts while it
- * falls, or that it stops growing at its limit (`limitsOf`).
+ * falls, or that it stops growing at its limit (`limitsOf`), today or with tomorrow's gain.
  */
 export function storeNote(
   store: keyof Stores,
@@ -446,14 +446,15 @@ export function storeNote(
   if (store === 'gold' || limit === undefined || change <= 0 || amount + change <= limit) {
     return undefined;
   }
+  const when = amount >= limit ? '' : ' tomorrow';
   return store === 'food'
     ? {
-        text: 'Granaries full',
+        text: `Granaries full${when}`,
         why: `Granaries hold ${GRANARY_DAYS} days of what your people and men eat. More food spoils.`,
         bad: false,
       }
     : {
-        text: 'At the call-up limit',
+        text: `At the call-up limit${when}`,
         why: `You can call up ${Math.round(MANPOWER_SHARE * 100)}% of your people, less the men under arms and in training. Grow your cities or let men go to call up more.`,
         bad: false,
       };

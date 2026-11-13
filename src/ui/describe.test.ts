@@ -349,7 +349,11 @@ describe('storeNote', () => {
   });
 
   it('says when food or manpower stops growing at its limit, and nothing below it', () => {
-    expect(storeNote('food', 498, 5, 500)).toMatchObject({ text: 'Granaries full', bad: false });
+    expect(storeNote('food', 500, 5, 500)).toMatchObject({ text: 'Granaries full', bad: false });
+    expect(storeNote('food', 95, 10, 100)).toMatchObject({ text: 'Granaries full tomorrow' });
+    expect(storeNote('manpower', 299, 4, 300)).toMatchObject({
+      text: 'At the call-up limit tomorrow',
+    });
     expect(storeNote('manpower', 300, 1, 300)).toMatchObject({ text: 'At the call-up limit' });
     expect(storeNote('food', 400, 5, 500)).toBeUndefined();
     expect(storeNote('gold', 400, 5, undefined)).toBeUndefined();
