@@ -290,17 +290,35 @@ class Context {
    * figure that the layout of its army could not keep on land, such as a man running from
    * a broken line toward the shore, or undefined when there is none, and it is not drawn.
    */
-  nudge(x: number, y: number, kind: FigureKind): MapPoint | undefined {
-    if (this.dry(x, y, kind)) return { x, y };
+  nudge(x: number, y: number, kind: FigureKind, besieged?: CityId): MapPoint | undefined {
+    const fits = (px: number, py: number) =>
+      this.dry(px, py, kind) && (!besieged || !this.covers(px, py, this.h, besieged));
+    if (fits(x, y)) return { x, y };
     for (let ring = 1; ring <= NUDGE_RINGS; ring++) {
       const r = ring * NUDGE_STEP * this.h;
       for (let k = 0; k < 12; k++) {
         const a = (k / 12) * Math.PI * 2;
         const at = { x: x + Math.cos(a) * r, y: y + Math.sin(a) * r * GROUND_Y };
-        if (this.dry(at.x, at.y, kind)) return at;
+        if (fits(at.x, at.y)) return at;
       }
     }
     return undefined;
+  }
+
+  /**
+   * Whether a picture of `size` standing at a screen point would cover a town or village
+   * symbol or name drawn near a besieged city, or that city's own name.
+   */
+  covers(x: number, y: number, size: number, city: CityId): boolean {
+    const name = this.input.names?.get(city);
+    const places = name ? [...(this.input.keepClear ?? []), name] : (this.input.keepClear ?? []);
+    return places.some(
+      (b) =>
+        x + 0.5 * size > b.left &&
+        x - 0.5 * size < b.right &&
+        y > b.top &&
+        y - 1.3 * size < b.bottom,
+    );
   }
 
   /** A km distance on the map in screen px. */
@@ -699,7 +717,8 @@ class Context {
         facing = Math.cos(angle) >= 0 ? at.facing : -at.facing;
       }
 
-      const ground = this.nudge(x, y, kind);
+      const besieged = modeNow?.kind === 'siege' ? modeNow.city.id : undefined;
+      const ground = this.nudge(x, y, kind, besieged);
       if (!ground) return;
       x = ground.x;
       y = ground.y;
@@ -949,9 +968,13 @@ class Context {
     army: ArmyId,
   ) {
     const field = layout.field();
-    const tents = field.tents.filter((p) => this.tentDry(p));
-    const fires = field.fires.filter((p) => this.dry(p.x, p.y, 'fire'));
-    const stakes = field.stakes.filter((p) => this.dry(p.x, p.y, 'stakes', this.h * 0.75));
+    const city = mode.city.id;
+    const clear = (p: MapPoint, size: number) => !this.covers(p.x, p.y, size, city);
+    const tents = field.tents.filter((p) => this.tentDry(p) && clear(p, this.h));
+    const fires = field.fires.filter((p) => this.dry(p.x, p.y, 'fire') && clear(p, this.h));
+    const stakes = field.stakes.filter(
+      (p) => this.dry(p.x, p.y, 'stakes', this.h * 0.75) && clear(p, this.h * 0.75),
+    );
     tents.forEach((spot, i) => {
       const key = `${artKey(i === Math.floor(tents.length / 2) ? 'commandTent' : 'tent')}@${colour}`;
       this.push({
@@ -970,6 +993,7 @@ class Context {
       tents.filter((_, i) => i % 2 === 1),
       colour,
       army,
+      city,
     );
     stakes.forEach((spot, i) => {
       this.push({
@@ -987,11 +1011,12 @@ class Context {
   }
 
   /** A stack of arms beside each tent, set off towards the army. */
-  arms(tents: readonly MapPoint[], colour: number, army: ArmyId) {
+  arms(tents: readonly MapPoint[], colour: number, army: ArmyId, besieged?: CityId) {
     tents.forEach((tent, i) => {
       const x = tent.x + (seeded(army, 40 + i) < 0.5 ? -1 : 1) * 0.55 * this.h;
       const y = tent.y + 0.18 * this.h;
       if (!this.dry(x, y, 'arms', this.h * 0.95)) return;
+      if (besieged && this.covers(x, y, this.h * 0.95, besieged)) return;
       this.push({
         key: `${artKey('arms')}@${colour}`,
         x,
