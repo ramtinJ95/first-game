@@ -17,6 +17,12 @@ import { tick } from '../src/sim/tick.ts';
 import { warKey } from '../src/sim/state/war.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 
+/** The value, or a thrown error naming what the test expected to exist. */
+function need<T>(value: T | undefined, what = 'a record'): T {
+  if (value === undefined) throw new Error(`expected ${what}`);
+  return value;
+}
+
 /**
  * Prints the building table, what each building pays back in a sample of cities, and
  * four Romes at peace for 5 and 10 years: one that does nothing, one that only recruits
@@ -81,7 +87,10 @@ function sampleCities(): { label: string; state: DeepReadonly<GameState>; city: 
     .filter((city) => start.factions[city.owner]?.kind === 'minor')
     .map((city) => ({
       city,
-      km: Math.hypot(city.position.x - capital!.position.x, city.position.y - capital!.position.y),
+      km: Math.hypot(
+        city.position.x - need(capital).position.x,
+        city.position.y - need(capital).position.y,
+      ),
     }))
     .sort((a, b) => a.km - b.km);
   const picks = [
@@ -145,7 +154,7 @@ table(
     });
     let first: BuildingKind | undefined;
     years.forEach((y, i) => {
-      const kind = BUILDING_KINDS[i]!;
+      const kind = need(BUILDING_KINDS[i]);
       if (y === undefined) return;
       suits.set(kind, Math.min(suits.get(kind) ?? Infinity, y));
       if (!first || y < (years[BUILDING_KINDS.indexOf(first)] ?? Infinity)) first = kind;
@@ -184,12 +193,12 @@ function ordersOf(state: DeepReadonly<GameState>, ruler: Ruler): Order[] {
 }
 
 function capitalOf(state: DeepReadonly<GameState>) {
-  return state.cities[capital!.id as CityId];
+  return state.cities[need(capital).id as CityId];
 }
 
 /** The ruler's state with gold it cannot run out of, to ask what it would buy. */
 function rich(state: DeepReadonly<GameState>): DeepReadonly<GameState> {
-  const faction = state.factions[rome]!;
+  const faction = need(state.factions[rome]);
   return {
     ...state,
     factions: {
@@ -214,12 +223,12 @@ for (const ruler of RULERS) {
       const wanted = ordersOf(rich(state), ruler);
       if (wanted.length > orders.length) short += 1;
     }
-    const gold = state.factions[rome]!.stores.gold;
+    const gold = need(state.factions[rome]).stores.gold;
     if (day <= 5 * 365 && gold >= (limitsOf(state).get(rome)?.gold ?? Infinity) - 1) atLimit += 1;
     state = tick(state as GameState, orders, world).state;
     if (day === 5 * 365 || day === 10 * 365) {
-      const stores = state.factions[rome]!.stores;
-      const balance = dailyBalances(state).get(rome)!;
+      const stores = need(state.factions[rome]).stores;
+      const balance = need(dailyBalances(state).get(rome));
       const built = Object.values(state.cities)
         .filter((city) => city.owner === rome)
         .reduce((n, city) => n + city.buildings.length, 0);

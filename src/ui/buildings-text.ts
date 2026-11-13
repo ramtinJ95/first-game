@@ -13,7 +13,7 @@ import type { Order } from '../sim/orders/orders.ts';
 import { recruit } from '../sim/orders/recruit.ts';
 import type { City } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { beleaguered } from '../sim/systems/sieges.ts';
+import { workPause } from '../sim/systems/construction.ts';
 import { signed } from './describe.ts';
 
 type State = DeepReadonly<GameState>;
@@ -144,8 +144,9 @@ function work(
 
 /** The construction system does no work in a city in unrest or with an enemy at its walls. */
 function pausedText(state: State, city: DeepReadonly<City>): string | undefined {
-  if (city.unrestDays > 0) return 'paused while the city is in unrest';
-  if (beleaguered(state, city)) return 'paused while an enemy stands at the walls';
+  const pause = workPause(state, city);
+  if (pause === 'unrest') return 'paused while the city is in unrest';
+  if (pause === 'siege') return 'paused while an enemy stands at the walls';
   return undefined;
 }
 

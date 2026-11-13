@@ -34,6 +34,9 @@ export function recruit(state: GameState, order: RecruitOrder): string | undefin
   }
   stores.gold -= gold;
   stores.manpower -= men;
-  city.recruits.push({ troop: order.troop, readyOn: (state.day + trainingDaysAt(city, days)) as Day });
+  city.recruits.push({
+    troop: order.troop,
+    readyOn: (state.day + trainingDaysAt(city, days)) as Day,
+  });
   return undefined;
 }
