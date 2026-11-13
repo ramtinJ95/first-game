@@ -32,7 +32,7 @@ function leagueWar(context: Context): Order[] {
  * A minor declares war only to join a war on its league partner. At war, it defends its city: it raises its cheapest troop
  * whenever its gold covers the cost, and its gold and food each cover MINOR_DEFICIT_DAYS
  * of the deficit the new upkeep would leave, keeps its armies at the city so that they fight anyone who besieges it,
- * once their morale is back to MARCH_MORALE, or at its partner's city while that is besieged and its own is not, and retreats from a battle it is losing.
+ * once their morale is back to MARCH_MORALE, or at its partner's city while that is besieged and its own is not. A march to anywhere else, or a siege of a city it does not hold, turns back to that post. It retreats from a battle it is losing.
  */
 export function minorOrders(context: Context): Order[] {
   const { state, router, faction, enemies } = context;
@@ -46,9 +46,17 @@ export function minorOrders(context: Context): Order[] {
   const post = ally && besieged(state, ally) && !besieged(state, home) ? ally : home;
 
   for (const army of sorted(state.armies)) {
-    if (army.owner !== faction || army.activity.kind !== 'idle') continue;
-    if (meanMorale(state, army) < MARCH_MORALE) continue;
-    const at = army.activity.position;
+    if (army.owner !== faction) continue;
+    const { activity } = army;
+    if (activity.kind === 'marching') {
+      // A march that no longer ends at the post, such as relief for a partner whose city
+      // has fallen, turns back before it walks into a siege it cannot hold.
+      const end = activity.waypoints[activity.waypoints.length - 1];
+      if (!end || distance(end, post.position) <= RALLY_DISTANCE) continue;
+    } else if (activity.kind === 'idle') {
+      if (meanMorale(state, army) < MARCH_MORALE) continue;
+    } else if (activity.kind !== 'besieging') continue;
+    const at = activity.position;
     if (distance(at, post.position) > RALLY_DISTANCE && router.marches(at, post.position)) {
       orders.push({ kind: 'moveArmy', faction, army: army.id, to: post.position });
     }

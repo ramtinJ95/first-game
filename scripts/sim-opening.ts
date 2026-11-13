@@ -10,7 +10,7 @@ import { newGame } from '../src/sim/new-game.ts';
 import type { Order } from '../src/sim/orders/orders.ts';
 import type { City } from '../src/sim/state/city.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
-import { CITY_DEFENCES, RECOVERY_DAYS } from '../src/sim/systems/sieges.ts';
+import { fullDefences, RECOVERY_DAYS } from '../src/sim/systems/sieges.ts';
 import { tick } from '../src/sim/tick.ts';
 import { distance } from '../src/sim/world/find-path.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
@@ -127,7 +127,7 @@ for (const opener of OPENERS) {
             : orders.some((o) => o.kind === 'storm')
               ? 'storm'
               : (state.cities[city.id]?.walls ?? 0) >
-                  CITY_DEFENCES[city.rank].walls / RECOVERY_DAYS + 1e-9
+                  fullDefences(city).walls / RECOVERY_DAYS + 1e-9
                 ? 'siege'
                 : 'surrender';
         fell = { day: before.day, how, men: startMen - menUnderArms(state, power) };

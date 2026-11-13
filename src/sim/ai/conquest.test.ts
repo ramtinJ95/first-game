@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { fixtureWorld } from '../fixture.ts';
 import { allocateId, type ArmyId, type CityId, type FactionId } from '../ids.ts';
 import { changeCityOwner } from '../cities.ts';
+import { landPath } from '../march.ts';
 import { newGame } from '../new-game.ts';
 import { SIEGE_DISTANCE } from '../systems/sieges.ts';
 import { LEADER_SHARE } from './thresholds.ts';
@@ -115,6 +116,39 @@ describe('a league of minor cities', () => {
       expect.objectContaining({ kind: 'moveArmy', army: relief, to: besieged.position }),
     );
     expectConsistent(next);
+  });
+});
+
+describe('a relief march for a partner that has fallen', () => {
+  test('a leagued minor marching to relieve its partner turns home once the partner city has fallen', () => {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    const first = Object.values(state.factions)
+      .sort((a, b) => (a.id < b.id ? -1 : 1))
+      .find(
+        (f) =>
+          f.league != null &&
+          byLand(world, cityOf(state, f.id).position, cityOf(state, f.league).position),
+      );
+    const partner = first?.league ?? undefined;
+    if (!first || !partner) throw new Error('the new game has no league by land');
+    const fallen = cityOf(state, first.id);
+    const home = cityOf(state, partner);
+    expect(
+      executeOrder(state, { kind: 'declareWar', faction: rome, against: partner }, world),
+    ).toBeUndefined();
+    const relief = addArmy(state, partner, 500, home.position);
+    const army = state.armies[relief];
+    if (!army) throw new Error('no relief army');
+    const path = landPath(world, home.position, fallen.position);
+    if (typeof path === 'string') throw new Error(path);
+    const ahead = path.findIndex((point) => distance(point, home.position) > 20);
+    const along = path[ahead];
+    if (!along) throw new Error('the march is too short');
+    army.activity = { kind: 'marching', position: { ...along }, waypoints: path.slice(ahead + 1) };
+    changeCityOwner(state, fallen.id, rome);
+    expect(decideOrders(state, world, partner)).toContainEqual(
+      expect.objectContaining({ kind: 'moveArmy', army: relief, to: home.position }),
+    );
   });
 });
 

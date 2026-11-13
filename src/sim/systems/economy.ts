@@ -147,10 +147,21 @@ function adminShares(state: DeepReadonly<GameState>): Map<FactionId, number> {
     cities.set(city.owner, (cities.get(city.owner) ?? 0) + 1);
   }
   const shares = new Map<FactionId, number>();
-  for (const [faction, count] of cities) {
-    shares.set(faction, Math.min(1, ADMIN_CITIES / count) ** ADMIN_EXPONENT);
-  }
+  for (const [faction, count] of cities) shares.set(faction, adminShare(count));
   return shares;
+}
+
+/** The share of its gold and manpower each city yields in a realm of this many cities. */
+function adminShare(cities: number): number {
+  return Math.min(1, ADMIN_CITIES / cities) ** ADMIN_EXPONENT;
+}
+
+/**
+ * The share of its gold and manpower each city of the faction yields for the size of its
+ * realm, for a panel that shows one city's output.
+ */
+export function adminShareOf(state: DeepReadonly<GameState>, faction: FactionId): number {
+  return adminShare(Object.values(state.cities).filter((city) => city.owner === faction).length);
 }
 
 function goldShare(state: DeepReadonly<GameState>, city: DeepReadonly<City>): number {
