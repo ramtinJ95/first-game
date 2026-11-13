@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { playTrial, type ArmySpec, type Matchup } from '../battle-trial.ts';
 import { buildFixture, FIXTURE } from '../fixture.ts';
-import type { ArmyId, FactionId, FormationId, SiegeId } from '../ids.ts';
+import type { ArmyId, CityId, FactionId, FormationId, SiegeId } from '../ids.ts';
 import { executeOrder } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
 import { saveGame } from '../save.ts';
@@ -9,7 +9,10 @@ import type { ArmyActivity, Stance } from '../state/army.ts';
 import type { GameState } from '../state/game-state.ts';
 import { tick } from '../tick.ts';
 import { fixtureWorld } from '../fixture.ts';
-import { ENGAGEMENT_DISTANCE, MORALE_RECOVERY } from './battles.ts';
+import { marchDays } from '../march.ts';
+import { newGame } from '../new-game.ts';
+import { removeRecord } from '../records.ts';
+import { ENGAGEMENT_DISTANCE, MAX_RETREAT_DAYS, MORALE_RECOVERY } from './battles.ts';
 
 const ROMA = { x: 2511.3, y: 2335.8 };
 const CAPUA = { x: 2638.8, y: 2448.3 };
@@ -694,4 +697,67 @@ describe('determinism', () => {
   test('another seed gives another battle', () => {
     expect(campaign(12)).not.toBe(campaign(11));
   });
+});
+
+describe('a retreat overseas', () => {
+  /**
+   * The power's starting army, cut to a few men, fights the enemy's starting army at the
+   * enemy's city across the sea, on the new game, and is beaten.
+   */
+  function beatenAt(power: string, enemy: string, at: string): GameState {
+    let state = newGame(world.map, { seed: 1, player: 'rome' });
+    const ours = power as FactionId;
+    const theirs = enemy as FactionId;
+    expect(
+      executeOrder(state, { kind: 'declareWar', faction: ours, against: theirs }, world),
+    ).toBeUndefined();
+    const where = state.cities[at as CityId]?.position;
+    if (!where) throw new Error(`no city ${at}`);
+    const [loser, ...others] = Object.values(state.armies).filter((a) => a.owner === ours);
+    const winner = Object.values(state.armies).find((a) => a.owner === theirs);
+    if (!loser || !winner) throw new Error('no armies');
+    for (const other of others) other.activity = FAR_AWAY;
+    for (const id of loser.formations.slice(1)) removeRecord(state.formations, id);
+    loser.formations = loser.formations.slice(0, 1);
+    const formation = state.formations[loser.formations[0] as FormationId];
+    if (formation) formation.men = 500;
+    loser.activity = { kind: 'idle', position: { x: where.x - 4, y: where.y } };
+    winner.activity = { kind: 'idle', position: { x: where.x - 2, y: where.y } };
+    for (let day = 0; day < 60 && army(state, loser.id).activity.kind !== 'retreating'; day += 1) {
+      const result = tick(state, [], world);
+      state = result.state;
+      if (!state.armies[loser.id])
+        throw new Error(
+          `${power} lost its army at ${at}: ${JSON.stringify(result.events.filter((e) => e.kind !== 'battleBegan'))}`,
+        );
+    }
+    return state;
+  }
+
+  function retreatOf(state: GameState, power: string) {
+    const beaten = Object.values(state.armies).find(
+      (a) => a.owner === power && a.activity.kind === 'retreating',
+    );
+    const activity = beaten?.activity;
+    if (activity?.kind !== 'retreating') throw new Error(`no army of ${power} retreats`);
+    return {
+      days: marchDays(activity.position, activity.waypoints),
+      to: activity.waypoints.at(-1),
+    };
+  }
+
+  test.each([
+    ['rome', 'carthage', 'hadrumetum', 'capua'],
+    ['carthage', 'rome', 'roma', 'carthago'],
+  ])(
+    '%s, beaten by %s at %s, falls back within the bound and not round the sea to %s',
+    (power, enemy, at, home) => {
+      const state = beatenAt(power, enemy, at);
+      const { days, to } = retreatOf(state, power);
+      expect(days).toBeLessThanOrEqual(MAX_RETREAT_DAYS);
+      const city = state.cities[home as CityId]?.position;
+      expect(to && city && Math.hypot(to.x - city.x, to.y - city.y)).toBeGreaterThan(500);
+      expectConsistent(state);
+    },
+  );
 });

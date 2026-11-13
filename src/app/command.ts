@@ -1,6 +1,12 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { ArmyId, CityId } from '../sim/ids.ts';
-import { CONVOY_KM_PER_DAY, MARCH_KM_PER_DAY } from '../sim/march.ts';
+import {
+  CONVOY_KM_PER_DAY,
+  MARCH_KM_PER_DAY,
+  marchDays,
+  marchPath,
+  MAX_MARCH_DAYS,
+} from '../sim/march.ts';
 import { AT_PORT_KM, type EmbarkOrder } from '../sim/orders/embark.ts';
 import type { MoveArmyOrder } from '../sim/orders/move-army.ts';
 import { executeOrder, type Order } from '../sim/orders/orders.ts';
@@ -9,12 +15,21 @@ import type { City } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { areAtWar } from '../sim/wars.ts';
-import { distance } from '../sim/world/find-path.ts';
+import { distance, findPath, surfaceAt } from '../sim/world/find-path.ts';
 import type { World } from '../sim/world/world.ts';
 import { movedArmy } from './clock.ts';
-import { factionName, refusalText } from './names.ts';
+import { factionName, placeName, refusalText } from './names.ts';
 
 type State = DeepReadonly<GameState>;
+
+/**
+ * A way that takes more than this many times the days of the quickest way is not offered,
+ * so a march this much longer than the way by sea asks which way to go. Between cities within the AI's war reach, a march that no
+ * crossing beats by this much takes at most 65 days, and one that a crossing does beat is
+ * most often a walk of 100 days or more round a sea. It is also the weight the AI gives a
+ * km at sea against a km of road.
+ */
+export const FAR_LONGER = 1.5;
 
 /** What a right click points at: a city drawn on the map, or a point of the map. */
 export type CommandTarget =
@@ -116,11 +131,124 @@ function daysText(days: number): string {
   return `${days} ${days === 1 ? 'day' : 'days'}`;
 }
 
+/** The way by sea from the army to the place: the order that starts it, and its legs in days. */
+interface SeaWay {
+  readonly order: EmbarkOrder | MoveArmyOrder;
+  readonly port: DeepReadonly<City>;
+  readonly landing: DeepReadonly<City>;
+  readonly walk: number;
+  readonly sail: number;
+  readonly ashore: number;
+}
+
+function wayDays(way: SeaWay): number {
+  return way.walk + way.sail + way.ashore;
+}
+
+/**
+ * The quickest way by sea for the army to the place: a march of at most MAX_MARCH_DAYS to
+ * a port of its owner, or none when it stands at one, a crossing to a port, and a march
+ * of at most MAX_MARCH_DAYS from that port's harbour, or none when the place is that port.
+ */
+function seaWay(
+  state: State,
+  world: World,
+  army: DeepReadonly<Army>,
+  to: MapPoint,
+  city: DeepReadonly<City> | undefined,
+): SeaWay | undefined {
+  const { activity } = army;
+  if (activity.kind !== 'idle' && activity.kind !== 'marching' && activity.kind !== 'besieging') {
+    return undefined;
+  }
+  const at = activity.position;
+  const reach = MAX_MARCH_DAYS * MARCH_KM_PER_DAY;
+  const harbour = (port: DeepReadonly<City>) => world.harbours.get(port.id) as MapPoint;
+  const ports = Object.values(state.cities)
+    .filter((port) => world.harbours.has(port.id))
+    .sort((a, b) => (a.id < b.id ? -1 : 1));
+  const here = portOf(state, world, army);
+  const starts = here
+    ? [here]
+    : ports.filter((port) => port.owner === army.owner && distance(at, port.position) <= reach);
+  const landings =
+    city && world.harbours.has(city.id)
+      ? [city]
+      : ports.filter((port) => distance(harbour(port), to) <= reach);
+
+  const marched = new Map<string, number | undefined>();
+  const march = (from: MapPoint, end: MapPoint) => {
+    const key = `${from.x},${from.y};${end.x},${end.y}`;
+    if (!marched.has(key)) {
+      const path = marchPath(world, from, end);
+      marched.set(key, typeof path === 'string' ? undefined : marchDays(from, path));
+    }
+    return marched.get(key);
+  };
+  const pairs = starts
+    .flatMap((port) =>
+      landings.filter((landing) => landing.id !== port.id).map((landing) => ({ port, landing })),
+    )
+    .map((pair) => ({
+      ...pair,
+      bound:
+        (pair.port === here ? 0 : distance(at, pair.port.position) / MARCH_KM_PER_DAY) +
+        distance(harbour(pair.port), harbour(pair.landing)) / CONVOY_KM_PER_DAY +
+        distance(harbour(pair.landing), to) / MARCH_KM_PER_DAY,
+    }))
+    .sort((a, b) => a.bound - b.bound);
+
+  let best: SeaWay | undefined;
+  for (const { port, landing, bound } of pairs) {
+    if (best && bound >= wayDays(best)) break;
+    const walk = port === here ? 0 : march(at, port.position);
+    if (walk === undefined) continue;
+    const ashore = city && landing.id === city.id ? 0 : march(harbour(landing), to);
+    if (ashore === undefined) continue;
+    const path = findPath(world.mesh, harbour(port), harbour(landing), 'sea');
+    if (!path) continue;
+    const sail = travelDays(harbour(port), path, CONVOY_KM_PER_DAY);
+    const order: EmbarkOrder | MoveArmyOrder =
+      port === here
+        ? { kind: 'embark', faction: army.owner, army: army.id, to: landing.id }
+        : {
+            kind: 'moveArmy',
+            faction: army.owner,
+            army: army.id,
+            to: { x: port.position.x, y: port.position.y },
+          };
+    const way = { order, port, landing, walk, sail, ashore };
+    if (!best || wayDays(way) < wayDays(best)) best = way;
+  }
+  return best;
+}
+
+/** The menu line of a way by sea, which names each leg and its days. */
+function seaOption(way: SeaWay): MenuOption {
+  const legs = [
+    ...(way.walk > 0 ? [daysText(way.walk)] : []),
+    `${way.walk > 0 ? 'then ' : ''}${daysText(way.sail)}${way.walk > 0 ? ' by sea' : ''}`,
+    ...(way.ashore > 0 ? [`then ${daysText(way.ashore)} by land`] : []),
+  ];
+  return {
+    group: 'sea',
+    label:
+      way.order.kind === 'embark'
+        ? `Sail from ${way.port.name} to ${way.landing.name}`
+        : `March to ${way.port.name} to sail for ${way.landing.name}`,
+    detail: legs.join(', '),
+    order: way.order,
+  };
+}
+
 /**
  * What a right click on the target does with the player's army, decided before any
- * order waits. The army marches to the city or the point. From one of its ports, a
- * click on another port offers the ways there that the rules allow. What the rules
- * would refuse is refused at once, in words, and never queued.
+ * order waits. The army marches to the city or the point. The ways there are that march,
+ * if the rules allow it, and the quickest way by sea, and a way that takes more than
+ * FAR_LONGER times the quickest is dropped. When the march is dropped, or the click is
+ * from one of the army's ports on another port and the way by sea stays, a menu offers
+ * the ways left with their days. What the rules would refuse is refused at once, in
+ * words, and never queued.
  */
 export function planCommand(
   state: State,
@@ -140,32 +268,52 @@ export function planCommand(
     city && city.owner !== army.owner && !areAtWar(state, army.owner, city.owner)
       ? `At peace with ${factionName(state, city.owner)}. Declare war to besiege it.`
       : undefined;
+  const found = route(state, world, march);
+  // The rules name a destination by its coordinates. A city the player clicked reads better by name.
+  const refusal = (reason: string) =>
+    refusalText(state, city ? reason.replace(`${to.x}, ${to.y}`, city.id) : reason);
+  const { activity } = army;
+  if (activity.kind !== 'idle' && activity.kind !== 'marching' && activity.kind !== 'besieging') {
+    return { kind: 'refuse', notice: refusal(typeof found === 'string' ? found : '') };
+  }
+  if (typeof found === 'string' && surfaceAt(world.mesh, to) !== 'land') {
+    return { kind: 'refuse', notice: refusal(found) };
+  }
 
   const port = city && world.harbours.has(city.id) ? portOf(state, world, army) : undefined;
-  if (city && port && port.id !== city.id) {
-    const sail: EmbarkOrder = { kind: 'embark', faction: army.owner, army: army.id, to: city.id };
-    const ways = [
-      { group: 'sea', label: `Sail from ${port.name} to ${city.name}`, order: sail },
-      { group: 'land', label: `March to ${city.name}`, order: march },
-    ] as const;
-    const options = ways.flatMap((way) => {
-      const found = route(state, world, way.order);
-      return typeof found === 'string' ? [] : [{ ...way, detail: daysText(found.days) }];
-    });
-    if (options.length === 0) {
+  const portToPort = !!port && port.id !== city?.id;
+  // No way by sea is quicker than a march in a straight line, so only a longer march can be far longer.
+  const straight = Math.max(1, Math.ceil(distance(activity.position, to) / MARCH_KM_PER_DAY));
+  const mayBeFar = typeof found === 'string' || found.days > FAR_LONGER * straight;
+  const sea = portToPort || mayBeFar ? seaWay(state, world, army, to, city) : undefined;
+  const ways: { option: MenuOption; days: number }[] = [];
+  if (sea && typeof route(state, world, sea.order) !== 'string') {
+    ways.push({ option: seaOption(sea), days: wayDays(sea) });
+  }
+  if (typeof found !== 'string') {
+    const label = `March to ${city?.name ?? 'that point'}`;
+    const option = { group: 'land', label, detail: daysText(found.days), order: march } as const;
+    ways.push({ option, days: found.days });
+  }
+  const quickest = Math.min(...ways.map((way) => way.days));
+  const sensible = ways.filter((way) => way.days <= FAR_LONGER * quickest);
+  const bySea = sensible.some((way) => way.option.group === 'sea');
+  const byLand = sensible.some((way) => way.option.group === 'land');
+  if (bySea && (portToPort || !byLand)) {
+    const title = `Orders for ${city?.name ?? `the field ${placeName(state, to)}`}`;
+    return { kind: 'menu', menu: { title, options: sensible.map((way) => way.option) }, notice };
+  }
+  if (typeof found === 'string') {
+    if (port && city && portToPort) {
       return {
         kind: 'refuse',
         notice: `Order refused. No way by sea or by land leads from ${port.name} to ${city.name}.`,
       };
     }
-    return { kind: 'menu', menu: { title: `Orders for ${city.name}`, options }, notice };
-  }
-
-  const found = route(state, world, march);
-  if (typeof found === 'string') {
-    // The rules name a destination by its coordinates. A city the player clicked reads better by name.
-    const reason = city ? found.replace(`${to.x}, ${to.y}`, city.id) : found;
-    return { kind: 'refuse', notice: refusalText(state, reason) };
+    return {
+      kind: 'refuse',
+      notice: `${refusal(found)} No way by sea from a port of yours lands within ${MAX_MARCH_DAYS} days' march of it.`,
+    };
   }
   return { kind: 'issue', order: march, notice };
 }

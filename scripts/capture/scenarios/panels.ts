@@ -97,12 +97,12 @@ export default defineScenario({
     );
 
     await page.mouse.click(banner.x, banner.y);
-    const salona = view.city('salona');
-    await page.mouse.click(salona.x, salona.y, { button: 'right' });
+    const massalia = view.city('massalia');
+    await page.mouse.click(massalia.x, massalia.y, { button: 'right' });
     await page.getByTestId('command-menu').waitFor();
     await shot(
       'sea-crossing',
-      'A right click on the port of Salona, with the army at Roma, offers the crossing by sea',
+      'A right click on the port of Massalia, with the army at Roma, offers the crossing by sea',
     );
     await page.keyboard.press('Escape');
 

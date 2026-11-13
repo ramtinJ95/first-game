@@ -3,7 +3,7 @@ import type { Order } from '../orders/orders.ts';
 import { SIEGE_DISTANCE } from '../systems/sieges.ts';
 import { distance } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
-import { fates, movements, retreats, storms, type Context } from './armies.ts';
+import { endOverlongMarches, fates, movements, retreats, storms, type Context } from './armies.ts';
 import { recruitment } from './budget.ts';
 import { minorOrders } from './minor.ts';
 import { createRouter } from './routes.ts';
@@ -37,6 +37,7 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
   if (record.kind === 'minor') return minorOrders(context);
   const muster = musterCity(context);
   return [
+    ...endOverlongMarches(context),
     ...retreats(context),
     ...fates(context),
     ...storms(context),

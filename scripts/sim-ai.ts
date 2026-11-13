@@ -31,6 +31,9 @@ import type { GameState } from '../src/sim/state/game-state.ts';
 import { executeOrder, type Order } from '../src/sim/orders/orders.ts';
 import { SYSTEMS } from '../src/sim/systems.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
+import { MARCH_KM_PER_DAY, MAX_MARCH_DAYS } from '../src/sim/march.ts';
+import type { MapPoint } from '../src/sim/state/map-point.ts';
+import { MAX_RETREAT_DAYS } from '../src/sim/systems/battles.ts';
 import {
   endYear,
   fateChosen,
@@ -91,6 +94,21 @@ interface Game {
   /** For each beaten army, where it went (a city, the field, or nowhere) and whether it lived 30 days: alive, or how it was lost. */
   refugeFates: { went: string; fate: string }[];
   ledger: ConquestLedger;
+  /** The days of each march an order set out on, and of each retreat, on the day it began. */
+  marchDays: number[];
+  retreatDays: number[];
+  /** The most days any army still had to march on any day. */
+  longestUnderWay: number;
+}
+
+function daysAlong(position: MapPoint, waypoints: readonly MapPoint[]): number {
+  let km = 0;
+  let at = position;
+  for (const point of waypoints) {
+    km += distance(at, point);
+    at = point;
+  }
+  return Math.ceil(km / MARCH_KM_PER_DAY);
 }
 
 function citiesOf(state: GameState, faction: string): number {
@@ -137,6 +155,9 @@ function play(seed: number, passive: readonly FactionId[]): Game {
   const sheltered = new Map<number, { army: ArmyId; went: string }[]>();
   const lostTo = new Map<ArmyId, string>();
   const ledger = startLedger(state);
+  const marchDays: number[] = [];
+  const retreatDays: number[] = [];
+  let longestUnderWay = 0;
 
   for (let day = 1; day <= YEARS * DAYS_PER_YEAR; day++) {
     const started = performance.now();
@@ -165,6 +186,8 @@ function play(seed: number, passive: readonly FactionId[]): Game {
           continue;
         }
         fateChosen(ledger, order);
+        const set = order.kind === 'moveArmy' ? next.armies[order.army]?.activity : undefined;
+        if (set?.kind === 'marching') marchDays.push(daysAlong(set.position, set.waypoints));
         if (beforeStorm && order.kind === 'storm') stormLoss(ledger, beforeStorm, next, order);
         const t = tally(order.faction);
         if (order.kind === 'declareWar') {
@@ -208,6 +231,10 @@ function play(seed: number, passive: readonly FactionId[]): Game {
         }
       } else if (event.kind === 'armyRetreated') {
         lostToday.push(event.army);
+        const walk = next.armies[event.army]?.activity;
+        const left = walk?.kind === 'retreating' ? daysAlong(walk.position, walk.waypoints) : 0;
+        // A retreat by order begins before movement, which walks its first day.
+        retreatDays.push(left + (event.ordered ? 1 : 0));
         const refuge = Object.values(next.cities).some(
           (city) =>
             city.owner === event.owner &&
@@ -240,6 +267,11 @@ function play(seed: number, passive: readonly FactionId[]): Game {
     for (const id of beaten.get(day - 30) ?? []) beatenAlive.push(Object.hasOwn(next.armies, id));
     beaten.delete(day - 30);
     observeDay(ledger, state, ownersAfterOrders, next);
+    for (const army of Object.values(next.armies)) {
+      const { activity } = army;
+      if (activity.kind !== 'marching' || passive.includes(army.owner)) continue;
+      longestUnderWay = Math.max(longestUnderWay, daysAlong(activity.position, activity.waypoints));
+    }
     state = next;
     for (const power of POWERS) {
       const faction = power as string as FactionId;
@@ -290,6 +322,9 @@ function play(seed: number, passive: readonly FactionId[]): Game {
     beatenAlive,
     refugeFates,
     ledger,
+    marchDays,
+    retreatDays,
+    longestUnderWay,
   };
 }
 
@@ -473,6 +508,14 @@ function table(title: string, passive: readonly FactionId[]) {
   const beaten = games.flatMap((g) => g.beatenAlive);
   console.log(
     `- Armies that lost a battle and were still alive 30 days later: ${fmt(beaten.filter(Boolean).length)} of ${fmt(beaten.length)} (${fmt((100 * beaten.filter(Boolean).length) / Math.max(1, beaten.length), 1)}%).`,
+  );
+  const marches = games.flatMap((g) => g.marchDays);
+  const retreated = games.flatMap((g) => g.retreatDays);
+  console.log(
+    `- Marches ordered: ${fmt(marches.length)}. Longest ${fmt(Math.max(0, ...marches))} days. Longer than ${MAX_MARCH_DAYS} days: ${fmt(marches.filter((d) => d > MAX_MARCH_DAYS).length)}. Longest march any army still had ahead on any day: ${fmt(Math.max(...games.map((g) => g.longestUnderWay)))} days.`,
+  );
+  console.log(
+    `- Retreats: ${fmt(retreated.length)}. Longest ${fmt(Math.max(0, ...retreated))} days. Longer than ${MAX_RETREAT_DAYS} days: ${fmt(retreated.filter((d) => d > MAX_RETREAT_DAYS).length)}.`,
   );
   const fates = games.flatMap((g) => g.refugeFates);
   console.log(

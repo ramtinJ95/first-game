@@ -204,28 +204,28 @@ test.describe('orders by right click', () => {
     );
   });
 
-  test('from Roma a right click on Salona offers the sea and the land, each with its days', async ({
+  test('from Roma a right click on Massalia offers the sea and the land, each with its days', async ({
     page,
   }) => {
     const view = camera(page);
     await selectRomanArmy(page, view);
     await pause(page);
-    await rightClick(page, view.city('salona'));
-    const menu = page.getByRole('menu', { name: 'Orders for Salona' });
+    await rightClick(page, view.city('massalia'));
+    const menu = page.getByRole('menu', { name: 'Orders for Massalia' });
     await expect(menu.getByRole('group', { name: 'By sea' }).getByRole('menuitem')).toHaveText([
-      /^Sail from Roma to Salona\s*\d+ days?$/,
+      /^Sail from Roma to Massalia\s*\d+ days?$/,
     ]);
     await expect(menu.getByRole('group', { name: 'By land' }).getByRole('menuitem')).toHaveText([
-      /^March to Salona\s*\d+ days?$/,
+      /^March to Massalia\s*\d+ days?$/,
     ]);
 
     await page.keyboard.press('ArrowDown');
-    await expect(menu.getByRole('menuitem', { name: /^March to Salona/ })).toBeFocused();
+    await expect(menu.getByRole('menuitem', { name: /^March to Massalia/ })).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(menu).toHaveCount(0);
     await resume(page);
     await expect(page.getByTestId('army-activity')).toHaveText(
-      /^Marching to Salona · \d+ days? left$/,
+      /^Marching to Massalia · \d+ days? left$/,
     );
   });
 
@@ -246,5 +246,67 @@ test.describe('orders by right click', () => {
     await expect(page.getByRole('menu', { name: 'Orders for Caralis' })).toBeInViewport({
       ratio: 1,
     });
+  });
+});
+
+test.describe('orders across the sea', () => {
+  const errors: string[] = [];
+
+  test.beforeEach(async ({ page }) => {
+    errors.length = 0;
+    page.on('console', (message) => {
+      if (message.type() === 'error') errors.push(message.text());
+    });
+    page.on('pageerror', (error) => errors.push(error.message));
+    await openGame(page, { power: 'carthage' });
+    const view = camera(page);
+    const flag = view.banner(cityPoint('carthago'));
+    await page.mouse.click(flag.x, flag.y);
+    await expect(page.getByTestId('army-activity')).toHaveText('Idle at Carthago');
+    await pause(page);
+  });
+
+  test.afterEach(() => {
+    expect(errors).toEqual([]);
+  });
+
+  test('as Carthage a right click on Capua, across the sea and no port, offers the crossing to the port nearest it and no march round the sea', async ({
+    page,
+  }) => {
+    await rightClick(page, camera(page).city('capua'));
+    const menu = page.getByRole('menu', { name: 'Orders for Capua' });
+    await expect(menu.getByRole('group', { name: 'By sea' }).getByRole('menuitem')).toHaveText([
+      /^Sail from Carthago to Roma\s*\d+ days, then \d+ days? by land$/,
+    ]);
+    await expect(menu.getByRole('group', { name: 'By land' })).toHaveCount(0);
+    await page.keyboard.press('Enter');
+    await expect(menu).toHaveCount(0);
+    await resume(page);
+    await expect(page.getByTestId('army-activity')).toHaveText(
+      /^At sea (to|toward) Roma · \d+ days? left$/,
+    );
+  });
+
+  test('as Carthage a right click on Roma, a port, offers only the crossing and not the march round the sea', async ({
+    page,
+  }) => {
+    await rightClick(page, camera(page).city('roma'));
+    const menu = page.getByRole('menu', { name: 'Orders for Roma' });
+    await expect(menu.getByRole('menuitem')).toHaveText([
+      /^Sail from Carthago to Roma\s*\d+ days$/,
+      'Cancel',
+    ]);
+    await expect(menu.getByRole('menuitem', { name: /March/ })).toHaveCount(0);
+  });
+
+  test('a right click on a city that neither a march nor a crossing reaches says why in words', async ({
+    page,
+  }) => {
+    await rightClick(page, camera(page).city('alexandria-arachosion'));
+    await expect(page.getByTestId('notice')).toHaveText(
+      /^Order refused\. The march to Alexandria Arachosion takes \d+ days, more than the 90 a march may take\. No way by sea from a port of yours lands within 90 days' march of it\.$/,
+    );
+    await expect(page.getByTestId('command-menu')).toHaveCount(0);
+    await expect(page.getByTestId('orders-waiting')).toHaveCount(0);
   });
 });

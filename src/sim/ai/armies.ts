@@ -4,6 +4,7 @@ import type { Order } from '../orders/orders.ts';
 import type { MapPoint } from '../state/map-point.ts';
 import { RALLY_DISTANCE } from '../systems/economy.ts';
 import { BLOCKADE_ODDS, defendersAt, SIEGE_DISTANCE } from '../systems/sieges.ts';
+import { marchDays, MAX_MARCH_DAYS } from '../march.ts';
 import { distance } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import type { Router, Step } from './routes.ts';
@@ -49,6 +50,17 @@ export interface Context {
   faction: FactionId;
   enemies: ReadonlySet<FactionId>;
   router: Router;
+}
+
+/**
+ * Halts every army of the faction on a march longer than MAX_MARCH_DAYS, which only a save
+ * from before the limit holds. A later order of the same day may send it on a march the
+ * rules allow, and otherwise it stands where it is.
+ */
+export function endOverlongMarches({ state, faction }: Context): Order[] {
+  return sorted(state.armies)
+    .filter((army) => army.owner === faction && overlong(army))
+    .map((army) => ({ kind: 'halt', faction, army: army.id }));
 }
 
 /** Retreats every army of the faction whose side in its battle has fallen below RETREAT_ODDS of the enemy. */
@@ -188,6 +200,23 @@ export function movements(context: Context, muster: CityView | undefined): Order
       orders.push({ kind: 'moveArmy', faction, army: mover.army.id, to: step.to });
     }
   };
+  /** Sends the mover on its way to the city by road or sea, and says whether a way exists. */
+  const headFor = (mover: Mover, city: CityView): boolean => {
+    const heading = destinationOf(mover.army);
+    // An army marching to a port of its own to sail for the city is on the first leg of its
+    // way. The road from that port is the same every day, so this costs no new search.
+    const onFirstLeg =
+      !!heading &&
+      !!context.router.portAt(heading) &&
+      context.router.routeTo(heading, city)?.step.kind === 'embark';
+    if (marchingTo(mover.army, city.position) || onFirstLeg) {
+      used.add(mover.army.id);
+      return true;
+    }
+    const route = context.router.routeTo(mover.at, city);
+    if (route) send(mover, route.step);
+    return route !== undefined;
+  };
 
   const capital = homeCapital(state, world, faction);
   const raiders = hostile.filter((army) => !atOwnCity(state, army));
@@ -204,11 +233,10 @@ export function movements(context: Context, muster: CityView | undefined): Order
       .sort((a, b) => strengthOf(state, a) - strengthOf(state, b));
     if (atCapital) used.add(atCapital.id);
     else {
-      const guard = nearest(
-        movers.filter((m) => byLand(world, m.at, capital.position)),
-        capital.position,
-      );
-      if (guard) send(guard, { kind: 'march', to: capital.position });
+      const guards = movers
+        .filter((m) => context.router.reaches(m.at, capital))
+        .sort((a, b) => distance(a.at, capital.position) - distance(b.at, capital.position));
+      guards.some((guard) => headFor(guard, capital));
     }
   }
 
@@ -229,6 +257,8 @@ export function movements(context: Context, muster: CityView | undefined): Order
     let gathered = 0;
     for (const mover of near) {
       if (gathered >= needed) break;
+      const onTheWay = marchingTo(mover.army, city.position);
+      if (!onTheWay && !context.router.marches(mover.at, city.position)) continue;
       relief.push(mover);
       gathered += mover.strength;
     }
@@ -244,9 +274,11 @@ export function movements(context: Context, muster: CityView | undefined): Order
     if (men >= BLOCKADE_ODDS * city.garrison || !muster) continue;
     for (const army of besiegers) {
       const at = positionOf(army);
-      if (army.owner !== faction || !at || !byLand(world, at, muster.position)) continue;
+      if (army.owner !== faction || !at) continue;
+      const step = context.router.routeTo(at, muster)?.step;
+      if (step?.kind !== 'march') continue;
       used.add(army.id);
-      orders.push({ kind: 'moveArmy', faction, army: army.id, to: muster.position });
+      orders.push({ kind: 'moveArmy', faction, army: army.id, to: step.to });
     }
   }
 
@@ -374,7 +406,9 @@ export function movements(context: Context, muster: CityView | undefined): Order
       else {
         const to = meeting ?? (group.members[0] as Mover).at;
         if (distance(mover.at, to) <= RALLY_DISTANCE) used.add(mover.army.id);
-        else if (byLand(world, mover.at, to)) send(mover, { kind: 'march', to });
+        else if (muster) {
+          if (!headFor(mover, muster)) used.add(mover.army.id);
+        } else if (context.router.marches(mover.at, to)) send(mover, { kind: 'march', to });
         else used.add(mover.army.id);
       }
     }
@@ -385,13 +419,8 @@ export function movements(context: Context, muster: CityView | undefined): Order
   }
 
   for (const mover of rest) {
-    if (
-      targets.length > 0 &&
-      muster &&
-      distance(mover.at, muster.position) > RALLY_DISTANCE &&
-      byLand(world, mover.at, muster.position)
-    ) {
-      send(mover, { kind: 'march', to: muster.position });
+    if (targets.length > 0 && muster && distance(mover.at, muster.position) > RALLY_DISTANCE) {
+      headFor(mover, muster);
     }
   }
   return orders;
@@ -409,24 +438,24 @@ function atOwnCity(state: State, army: ArmyView): boolean {
   );
 }
 
+/** Where the army marches, unless the march is longer than a march may be, as in an old save. */
 function destinationOf(army: ArmyView): MapPoint | undefined {
   const { activity } = army;
-  return activity.kind === 'marching'
-    ? activity.waypoints[activity.waypoints.length - 1]
-    : undefined;
+  if (activity.kind !== 'marching' || overlong(army)) return undefined;
+  return activity.waypoints[activity.waypoints.length - 1];
+}
+
+function overlong(army: ArmyView): boolean {
+  const { activity } = army;
+  return (
+    activity.kind === 'marching' &&
+    marchDays(activity.position, activity.waypoints) > MAX_MARCH_DAYS
+  );
 }
 
 function marchingTo(army: ArmyView, point: MapPoint): boolean {
   const last = destinationOf(army);
   return !!last && distance(last, point) <= SAME_POINT_KM;
-}
-
-function nearest(movers: readonly Mover[], point: MapPoint): Mover | undefined {
-  let best: Mover | undefined;
-  for (const mover of movers) {
-    if (!best || distance(mover.at, point) < distance(best.at, point)) best = mover;
-  }
-  return best;
 }
 
 /** Whether recruits muster within RALLY_WAIT_DAYS at a city of the faction where the army stands. */

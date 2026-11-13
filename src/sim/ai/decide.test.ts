@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { CityId, FactionId, FormationId } from '../ids.ts';
+import { changeCityOwner } from '../cities.ts';
+import { landPath, marchDays, marchPath, MAX_MARCH_DAYS, startMarch } from '../march.ts';
+import { newGame } from '../new-game.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
 import type { Day } from '../state/day.ts';
@@ -10,6 +13,7 @@ import { dailyBalances, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import { removeRecord } from '../records.ts';
 import { tick } from '../tick.ts';
 import { decideAll, decideOrders } from './decide.ts';
+import { createRouter } from './routes.ts';
 import { MARCH_MORALE, MINOR_DEFICIT_DAYS } from './thresholds.ts';
 
 const world = fixtureWorld();
@@ -311,14 +315,92 @@ describe('a great power', () => {
     });
 
     test('leaves for its muster city a siege whose garrison outnumbers its besiegers, before the sallies wear them down', () => {
-      // Carthage's army besieges Capua, so Rome musters at Roma.
-      const state = besieging(f.carthago, 1200);
+      const start = buildFixture();
+      changeCityOwner(start, f.capua, f.carthage);
+      setMen(start, f.hastati, 1200);
+      declare(start, f.rome, f.carthage);
+      place(start, f.romanArmy, { x: CAPUA.x - 3, y: CAPUA.y });
+      const state = tick(start, [], world).state;
+      expect(army(state, f.romanArmy).activity.kind).toBe('besieging');
+      city(state, f.capua).garrison = 5000;
       expect(decide(state, f.rome)).toContainEqual({
         kind: 'moveArmy',
         faction: f.rome,
         army: f.romanArmy,
         to: ROMA,
       });
+    });
+
+    test('turns back to guard its capital an army marching to a port that is not on the way', () => {
+      const state = newGame(world.map, { seed: 1, player: 'carthage' });
+      const romans = Object.values(state.armies).find((a) => a.owner === f.rome);
+      const punic = Object.values(state.armies).find((a) => a.owner === f.carthage);
+      if (!romans || !punic) throw new Error('no armies');
+      declare(state, f.carthage, f.rome);
+      const roma = city(state, f.roma).position;
+      const from = { x: roma.x + 35, y: roma.y };
+      expect(
+        startMarch(world, romans, from, city(state, 'ariminum' as CityId).position),
+      ).toBeUndefined();
+      punic.activity = { kind: 'idle', position: { x: roma.x - 10, y: roma.y } };
+      expect(decideOrders(state, world, f.rome)).toContainEqual({
+        kind: 'moveArmy',
+        faction: f.rome,
+        army: romans.id,
+        to: roma,
+      });
+    });
+
+    test('never sails for a landing whose march on to the target is longer than MAX_MARCH_DAYS', () => {
+      const state = newGame(world.map, { seed: 1, player: 'carthage' });
+      const router = createRouter(state, world, f.rome);
+      const target = city(state, 'alexandria-arachosion' as CityId);
+      const step = router.routeTo(city(state, f.roma).position, target)?.step;
+      if (step?.kind !== 'embark') return expect(step).toBeUndefined();
+      const harbour = world.harbours.get(step.to);
+      expect(harbour && marchPath(world, harbour, target.position)).toBeInstanceOf(Array);
+    });
+
+    test('takes an army off a march longer than MAX_MARCH_DAYS that a save from before the limit holds', () => {
+      const state = buildFixture();
+      const path = landPath(world, ROMA, city(state, f.carthago).position);
+      if (typeof path === 'string') throw new Error(path);
+      expect(marchDays(ROMA, path)).toBeGreaterThan(MAX_MARCH_DAYS);
+      army(state, f.romanArmy).activity = { kind: 'marching', position: ROMA, waypoints: path };
+      const orders = decideOrders(state, world, f.rome);
+      expect(orders).toContainEqual({ kind: 'halt', faction: f.rome, army: f.romanArmy });
+      const after = tick(state, orders, world);
+      expect(after.rejected).toEqual([]);
+      const activity = army(after.state, f.romanArmy).activity;
+      if (activity.kind === 'marching') {
+        expect(marchDays(activity.position, activity.waypoints)).toBeLessThanOrEqual(
+          MAX_MARCH_DAYS,
+        );
+      }
+      expectConsistent(after.state);
+    });
+
+    test('takes a minor at peace off a march longer than MAX_MARCH_DAYS', () => {
+      const state = buildFixture();
+      const syracusae = city(state, f.syracusae).owner;
+      army(state, f.punicArmy).owner = syracusae;
+      const path = landPath(world, ROMA, city(state, f.carthago).position);
+      if (typeof path === 'string') throw new Error(path);
+      army(state, f.punicArmy).activity = { kind: 'marching', position: ROMA, waypoints: path };
+      expect(decideOrders(state, world, syracusae)).toEqual([
+        { kind: 'halt', faction: syracusae, army: f.punicArmy },
+      ]);
+    });
+
+    test('never sets out on a march longer than MAX_MARCH_DAYS, such as round the sea from a failed siege overseas', () => {
+      // Carthage's army besieges Capua, so Rome musters at Roma, 287 days from Carthago by land.
+      const state = besieging(f.carthago, 1200);
+      for (const order of decide(state, f.rome)) {
+        if (order.kind !== 'moveArmy') continue;
+        const from = army(state, order.army).activity;
+        const at = from.kind === 'embarked' ? undefined : from.position;
+        expect(at && marchPath(world, at, order.to)).toBeInstanceOf(Array);
+      }
     });
 
     test('storms a city when the storm is near certain and cheap, and besieges a strong one', () => {
