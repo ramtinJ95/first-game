@@ -699,3 +699,53 @@ export async function resizeTo(page: Page, size: { width: number; height: number
     });
   }
 }
+
+/**
+ * Rome at war with Carthage lands its army at Carthago's harbour against Carthage's army
+ * made three times as large, loses, and falls back into the field near Hadrumetum, where
+ * it stands idle with no port of Rome on that shore.
+ */
+export function beatenNearHadrumetum(): GameState {
+  world ??= buildWorld(map);
+  let state = startGame();
+  declareWar(state, rome, carthage);
+  const romans = armyOf(state, rome);
+  romans.activity = {
+    kind: 'idle',
+    position: { ...(world.harbours.get('carthago' as never) as MapPoint) },
+  };
+  for (const army of Object.values(state.armies).filter((a) => a.owner === carthage)) {
+    for (const id of army.formations) {
+      const formation = state.formations[id];
+      if (formation) formation.men *= 3;
+    }
+  }
+  for (let i = 0; i < 90 && state.armies[romans.id]?.activity.kind !== 'retreating'; i++) {
+    state = tick(state, [], world).state;
+  }
+  for (let i = 0; i < 90 && state.armies[romans.id]?.activity.kind !== 'idle'; i++) {
+    state = tick(state, [], world).state;
+  }
+  return structuredClone(state) as GameState;
+}
+
+/**
+ * Rome at war with the city's owner, with Rome's army idle on land `km` west of it, too far
+ * to besiege it, and no army of the owner anywhere, so a march there besieges it at once.
+ */
+export function idleBesideEnemyCity(id: string, km = 15): GameState {
+  const state = startGame();
+  const city = state.cities[id as never];
+  if (!city) throw new Error(`no city ${id}`);
+  declareWar(state, rome, city.owner);
+  for (const army of Object.values(state.armies)) {
+    if (army.owner !== city.owner) continue;
+    for (const formation of army.formations) removeRecord(state.formations, formation);
+    removeRecord(state.armies, army.id);
+  }
+  armyOf(state, rome).activity = {
+    kind: 'idle',
+    position: { x: city.position.x - km, y: city.position.y },
+  };
+  return state;
+}

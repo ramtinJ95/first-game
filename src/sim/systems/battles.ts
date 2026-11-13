@@ -168,18 +168,37 @@ function landPosition(state: GameState, army: Army): MapPoint | undefined {
   return formationsOf(state, army).some(isFighting) ? activity.position : undefined;
 }
 
+/**
+ * Each free army joins a battle it is in reach of, again and again until none joins, so an
+ * army that comes up to an enemy who has just joined a battle is drawn in after it.
+ */
 function joinBattles(state: GameState) {
-  for (const army of sortedValues(state.armies)) {
-    const position = landPosition(state, army);
-    if (!position) continue;
-    for (const battle of sortedValues(state.battles)) {
-      if (join(state, army, position, battle)) break;
+  let joined = true;
+  while (joined) {
+    joined = false;
+    for (const army of sortedValues(state.armies)) {
+      const position = landPosition(state, army);
+      if (!position) continue;
+      for (const battle of sortedValues(state.battles)) {
+        if (join(state, army, position, battle)) {
+          joined = true;
+          break;
+        }
+      }
     }
   }
 }
 
+/**
+ * An army joins a battle that one of the armies in it stands within ENGAGEMENT_DISTANCE
+ * of, so an enemy that one battle has already taken cannot walk past it.
+ */
 function join(state: GameState, army: Army, position: MapPoint, battle: Battle): boolean {
-  if (distance(position, battle.position) > ENGAGEMENT_DISTANCE) return false;
+  const inReach = [...battle.attackers, ...battle.defenders].some((id) => {
+    const other = state.armies[id]?.activity;
+    return other?.kind === 'inBattle' && distance(position, other.position) <= ENGAGEMENT_DISTANCE;
+  });
+  if (!inReach && distance(position, battle.position) > ENGAGEMENT_DISTANCE) return false;
   const side = sideToJoin(state, army, battle.attackers, battle.defenders);
   if (!side) return false;
   battle[side].push(army.id);
@@ -263,8 +282,14 @@ function startBattles(state: GameState) {
       enterBattle(state, army, position, id);
       taken.add(army.id);
     }
-    for (const { army, position } of free) {
-      if (!taken.has(army.id) && join(state, army, position, battle)) taken.add(army.id);
+    let joined = true;
+    while (joined) {
+      joined = false;
+      for (const { army, position } of free) {
+        if (taken.has(army.id) || !join(state, army, position, battle)) continue;
+        taken.add(army.id);
+        joined = true;
+      }
     }
     emit(state, {
       kind: 'battleBegan',

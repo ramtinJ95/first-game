@@ -55,7 +55,15 @@
   </div>
   <p data-testid="army-activity">{activityText(game, army)}</p>
   {#if blocked}
-    <p class="bad" data-testid="army-siege-block">{blocked}</p>
+    <p class="bad" data-testid="army-siege-block">{blocked.text}</p>
+    {#if blocked.besiege}
+      {@const besiege = blocked.besiege}
+      <div class="row">
+        <button type="button" data-testid="army-besiege" onclick={() => actions.issue(besiege)}>
+          Besiege
+        </button>
+      </div>
+    {/if}
   {/if}
   {#if weak}
     <p class="bad" data-testid="army-weak-siege">{weak}</p>
@@ -74,7 +82,7 @@
     {/if}
     {#if army.activity.kind !== 'inBattle' && army.activity.kind !== 'embarked'}
       <p class="muted hint">
-        Right-click the land to march there, or a port to sail from your port.
+        Right-click the land to march there, or a port to sail there from a port or the shore.
       </p>
     {/if}
   {:else}

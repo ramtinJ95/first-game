@@ -130,9 +130,33 @@ describe('rankText', () => {
 });
 
 describe('whyNotBesieging', () => {
+  it('says an idle army beside an enemy city stands too far to besiege it, and offers the march that besieges it in one click', () => {
+    const state = buildFixture();
+    const city = state.cities[f.syracusae];
+    if (!city) throw new Error('fixture changed');
+    state.wars[warKey(f.rome, f.syracusaeFaction)] = { since: state.day };
+    roman(state).activity = {
+      kind: 'idle',
+      position: { x: city.position.x - 15, y: city.position.y },
+    };
+    expect(besiegesNextDay(state)).toBe(false);
+    const note = whyNotBesieging(state, roman(state), []);
+    expect(note?.text).toBe(
+      'Stands 15 km from Syracusae, too far to besiege it. An army besieges a city it stands within 10 km of.',
+    );
+    if (!note?.besiege) throw new Error('no Besiege order offered');
+    let next = tick(state, [note.besiege], world).state as GameState;
+    for (let day = 0; day < 3 && next.armies[f.romanArmy]?.activity.kind === 'marching'; day++) {
+      next = tick(next, [], world).state as GameState;
+    }
+    next = tick(next, [], world).state as GameState;
+    expect(next.armies[f.romanArmy]?.activity.kind).toBe('besieging');
+    expect(whyNotBesieging(state, roman(state), [note.besiege])).toBeUndefined();
+  });
+
   it('says the army is at peace with the city, and the rules leave the city alone', () => {
     const state = atSyracusae();
-    expect(whyNotBesieging(state, roman(state), [])).toBe(
+    expect(whyNotBesieging(state, roman(state), [])?.text).toBe(
       'At peace with Syracusae. Declare war to besiege it.',
     );
     expect(besiegesNextDay(state)).toBe(false);
@@ -144,7 +168,7 @@ describe('whyNotBesieging', () => {
     if (!stores) throw new Error('fixture changed');
     stores.food = -10;
     const declare: Order = { kind: 'declareWar', faction: f.rome, against: f.syracusaeFaction };
-    expect(whyNotBesieging(state, roman(state), [declare])).toBe(
+    expect(whyNotBesieging(state, roman(state), [declare])?.text).toBe(
       'Short of food, so this army cannot besiege Syracusae.',
     );
     expect(tick(state, [declare], world).state.armies[f.romanArmy]?.activity.kind).toBe('idle');
@@ -153,7 +177,7 @@ describe('whyNotBesieging', () => {
   it('says a declared war begins the siege with the next day, as the rules do', () => {
     const state = atSyracusae();
     const declare: Order = { kind: 'declareWar', faction: f.rome, against: f.syracusaeFaction };
-    expect(whyNotBesieging(state, roman(state), [declare])).toBe(
+    expect(whyNotBesieging(state, roman(state), [declare])?.text).toBe(
       'War on Syracusae begins with the next day, and the siege with it.',
     );
     expect(tick(state, [declare], world).state.armies[f.romanArmy]?.activity.kind).toBe(
@@ -167,12 +191,12 @@ describe('whyNotBesieging', () => {
     const stores = state.factions[f.rome]?.stores;
     if (!stores) throw new Error('fixture changed');
     stores.gold = -1;
-    expect(whyNotBesieging(state, roman(state), [])).toBe(
+    expect(whyNotBesieging(state, roman(state), [])?.text).toBe(
       'Short of gold, so this army cannot besiege Syracusae.',
     );
     expect(besiegesNextDay(state)).toBe(false);
     stores.food = -1;
-    expect(whyNotBesieging(state, roman(state), [])).toBe(
+    expect(whyNotBesieging(state, roman(state), [])?.text).toBe(
       'Short of gold and food, so this army cannot besiege Syracusae.',
     );
   });
@@ -184,7 +208,7 @@ describe('whyNotBesieging', () => {
       const formation = state.formations[id];
       if (formation) formation.morale = 0;
     }
-    expect(whyNotBesieging(state, roman(state), [])).toBe(
+    expect(whyNotBesieging(state, roman(state), [])?.text).toBe(
       'Every formation is broken. The siege of Syracusae waits for morale.',
     );
   });
