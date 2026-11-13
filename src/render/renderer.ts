@@ -37,7 +37,7 @@ import { BANNER, BATTLE_HIT_RADIUS, drawnArmies, type DrawnArmy } from './marker
 import {
   BORDER,
   factionColour,
-  washTint,
+  WASH_STRENGTH,
   INK,
   LABEL_HALO,
   MARGIN,
@@ -374,7 +374,7 @@ export async function createRenderer({
   const washes = new Map<ProvinceId, Graphics>();
   for (const province of map.provinces) {
     const wash = fillOutline(new Graphics(), province.outline, 0xffffff);
-    wash.blendMode = 'multiply';
+    wash.alpha = 0;
     washes.set(province.id, wash);
     terrain.washes.addChild(wash);
   }
@@ -549,9 +549,11 @@ export async function createRenderer({
   function recolour(state: DeepReadonly<GameState>) {
     for (const [province, wash] of washes) {
       const owner = provinceOwner(state, province);
-      const colour = owner ? washTint(factionColour(state, owner)) : 0xffffff;
-      if (wash.tint === colour) continue;
+      const colour = owner ? factionColour(state, owner) : 0xffffff;
+      const alpha = owner ? WASH_STRENGTH : 0;
+      if (wash.tint === colour && wash.alpha === alpha) continue;
       wash.tint = colour;
+      wash.alpha = alpha;
       terrain.repaint();
     }
   }
