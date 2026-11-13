@@ -436,7 +436,7 @@ function hamlet(g: GraphicsContext, m: Extract<Mark, { kind: 'hamlet' }>) {
     return {
       x: m.x + Math.cos(angle) * distance * 1.2,
       y: m.y + Math.sin(angle) * distance * 0.8,
-      w: 0.9 + 0.4 * random(),
+      w: 1.15 + 0.45 * random(),
       dome: m.roofs === 'flat' && n === 0 && random() < 0.6,
     };
   }).sort((a, b) => a.y - b.y);

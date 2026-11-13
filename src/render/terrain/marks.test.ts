@@ -79,7 +79,7 @@ describe('placing the terrain', () => {
       stipple: (x, y) => land.desert.inside(x, y),
       crack: (x, y) => land.salt.inside(x, y) && land.panDepth(x, y) > 0,
       tumulus: (x, y) => land.cover(x, y) === 'dry',
-      hamlet: (x, y) => land.cover(x, y) !== 'green' && !land.mountains.inside(x, y),
+      hamlet: (x, y) => land.cover(x, y) !== 'green' && !land.desert.inside(x, y),
       qanat: (x, y) => land.cover(x, y) === 'arid' && !land.mountains.inside(x, y),
     };
     for (const tier of ['wide', 'middle', 'close'] as const) {
@@ -253,7 +253,7 @@ describe('the dry lands', () => {
       );
       expect(foot, `the mother well at ${mx},${my} lies at a range's foot`).toBe(true);
       const [ex, ey] = points[points.length - 1] as readonly [number, number];
-      const end = hamlets.some((h) => Math.hypot(h.x - ex, h.y - ey) < 3);
+      const end = hamlets.some((h) => Math.hypot(h.x - ex, h.y - ey) < 4);
       expect(end, `the qanat ending at ${ex},${ey} reaches a hamlet`).toBe(true);
     }
     const gaul = chunks(GAUL, 'close').flatMap((rect) => placeFields(land, rect));

@@ -132,7 +132,7 @@ const CLEARING: Record<PlaceRank, number> = {
   city: 5.5,
   town: 2.8,
   village: 1.8,
-  hamlet: 1.5,
+  hamlet: 2.4,
 };
 /** The ring of fields around each place, in km from its centre. */
 const FIELD_RING: Record<PlaceRank, readonly [number, number]> = {
@@ -140,7 +140,7 @@ const FIELD_RING: Record<PlaceRank, readonly [number, number]> = {
   city: [5, 18],
   town: [2.6, 11],
   village: [1.7, 7],
-  hamlet: [1.4, 4.2],
+  hamlet: [2.3, 5.2],
 };
 /** The side of a field in km, from its smallest to its largest. */
 const FIELD_SIZE: Record<PlaceRank, readonly [number, number]> = {
@@ -845,6 +845,7 @@ function folds(
         return undefined;
       }
       if (!folded(land, x, y, tier) || nearPeak(x, y)) return undefined;
+      if (tier === 'close' && land.hamletsNear(x, y, length * 0.6).length > 0) return undefined;
       if (land.rivers.distance(x, y) < mountain * 0.9) return undefined;
       return spacing * (1.15 - 0.3 * land.height(x, y));
     },
@@ -1093,7 +1094,7 @@ function fields(land: Land, rect: Rect): Mark[] {
         if (distance < inner || distance > edge) continue;
         const thin = oasis ? 0.2 : desert ? 0.55 : 0.12;
         if (random() < thin + 0.5 * ((distance - inner) / (edge - inner)) ** 2) continue;
-        if (!onOpenLand(land, x, y)) continue;
+        if (place.rank === 'hamlet' ? !land.open(x, y) : !onOpenLand(land, x, y)) continue;
         const near = land
           .placesNear(x, y, 6)
           .some(
@@ -1266,9 +1267,10 @@ function inFields(land: Land, x: number, y: number, share = 0.85, hamlets = true
 }
 
 /**
- * The hamlets of a tile: spots on open dry land outside the fields of every place, by a
- * river or at the foot of a range. One on arid land with no river at hand gets a qanat
- * from the nearest foot of a range, if one lies within its reach.
+ * The hamlets of a tile: spots on dry land outside the woods and the fields of every
+ * place, by a river or near the edge of a range, in the valleys between a dry range's
+ * folds too, which keep clear of them. One on arid land below a range with no river at
+ * hand gets a qanat from the nearest foot of the range, if one lies within its reach.
  */
 function placeHamlets(land: Land, rect: Rect): Hamlet[] {
   return scatter(
@@ -1278,7 +1280,9 @@ function placeHamlets(land: Land, rect: Rect): Hamlet[] {
     (x, y) => {
       if (land.cover(x, y) === 'green' || land.desert.inside(x, y)) return undefined;
       if (valueNoise(x, y, 90, 872) < 0.28) return undefined;
-      if (!openGround(land, x, y) || land.panDepth(x, y, PAN_RIM) > 0) return undefined;
+      if (!land.open(x, y) || land.woodDepth(x, y, 1.2) > 0 || land.valleyAt(x, y))
+        return undefined;
+      if (land.cultivated.inside(x, y) || land.panDepth(x, y, PAN_RIM) > 0) return undefined;
       if (land.cleared(x, y, 'close', false) || inFields(land, x, y, 1.2, false)) return undefined;
       const watered =
         land.riverAt(x, y, HAMLET.riverKm) !== undefined ||
