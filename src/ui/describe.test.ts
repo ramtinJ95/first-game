@@ -385,11 +385,11 @@ describe('storeNote', () => {
       bad: false,
     });
     expect(storeNote('food', 95, 10, 100)).toMatchObject({
-      text: 'Full',
+      text: 'Full tomorrow',
       why: expect.stringMatching(/^Granaries full tomorrow\. /) as string,
     });
     expect(storeNote('manpower', 299, 4, 300)).toMatchObject({
-      text: 'At limit',
+      text: 'At limit tomorrow',
       why: expect.stringMatching(/^At the call-up limit tomorrow\. /) as string,
     });
     expect(storeNote('manpower', 300, 1, 300)).toMatchObject({

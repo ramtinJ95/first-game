@@ -494,12 +494,12 @@ export function storeNote(
   const when = amount >= limit ? '' : ' tomorrow';
   return store === 'food'
     ? {
-        text: 'Full',
+        text: `Full${when}`,
         why: `Granaries full${when}. They hold ${GRANARY_DAYS} days of what your people and men eat. More food spoils.`,
         bad: false,
       }
     : {
-        text: 'At limit',
+        text: `At limit${when}`,
         why: `At the call-up limit${when}. You can call up ${Math.round(MANPOWER_SHARE * 100)}% of your people, less the men under arms and in training. Grow your cities or let men go to call up more.`,
         bad: false,
       };
