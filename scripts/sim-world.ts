@@ -67,6 +67,8 @@ interface Seed {
   stanceChanges: number[];
   /** For each war a great power declared, the days until it first fought, besieged, or marched on the enemy, or undefined if it never did within a year. */
   firstActs: (number | undefined)[];
+  /** Wars declared less than a year before the end that had seen no act yet. */
+  pendingActs: number;
   quiet: { power: PowerId; days: number; from: number };
   /** The same, counting only days on which its idle armies together could take an enemy city they have a route to. */
   quietStrong: { power: PowerId; days: number; from: number };
@@ -276,6 +278,7 @@ function play(seed: number): Seed {
     sallyArmies,
     sallyMen: sallies.men,
     firstActs,
+    pendingActs: declared.length,
     stanceChanges: [...stanceChanges.values()],
     quiet,
     quietStrong,
@@ -418,8 +421,9 @@ console.log(
 );
 const acts = games.flatMap((g) => g.firstActs);
 const acted = acts.filter((d): d is number => d !== undefined);
+const pending = games.reduce((sum, g) => sum + g.pendingActs, 0);
 console.log(
-  `- Wars declared by a great power: ${acts.length}. Days until it first fought, besieged, or marched on the enemy: median ${median(acted)}, 90th percentile ${[...acted].sort((a, b) => a - b)[Math.floor(acted.length * 0.9)] ?? 0}. Never within a year, or before the war ended: ${acts.length - acted.length}.`,
+  `- Wars declared by a great power: ${acts.length + pending}, of which ${pending} were declared less than a year before the end and had seen no act yet, and are left out of what follows. Of the other ${acts.length}: days until it first fought, besieged, or marched on the enemy: median ${median(acted)}, 90th percentile ${[...acted].sort((a, b) => a - b)[Math.floor(acted.length * 0.9)] ?? 0}. Never within a year, or before the war ended: ${acts.length - acted.length}.`,
 );
 const changes = games.flatMap((g) => g.stanceChanges);
 console.log(

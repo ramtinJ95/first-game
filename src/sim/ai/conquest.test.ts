@@ -421,6 +421,27 @@ describe('the leader', () => {
   });
 });
 
+/** The point `km` along the land path from one point to another. */
+function alongRoad(from: MapPoint, to: MapPoint, km: number): MapPoint {
+  const path = landPath(world, from, to);
+  if (typeof path === 'string') throw new Error(path);
+  let walked = 0;
+  let at = from;
+  for (const point of path) {
+    const leg = distance(at, point);
+    if (walked + leg >= km) {
+      const t = (km - walked) / leg;
+      return {
+        x: Math.round((at.x + t * (point.x - at.x)) * 10) / 10,
+        y: Math.round((at.y + t * (point.y - at.y)) * 10) / 10,
+      };
+    }
+    walked += leg;
+    at = point;
+  }
+  throw new Error(`the road is shorter than ${km} km`);
+}
+
 describe('remnants and prey', () => {
   test('a remnant is not sent at a city, even when it would make a stronger army enough', () => {
     const { state, target } = war();
@@ -440,31 +461,43 @@ describe('remnants and prey', () => {
     const { state, target } = war();
     const roma = cityOf(state, rome);
     const hunter = addArmy(state, rome, 1500, roma.position);
-    const path = landPath(world, roma.position, target.position);
-    if (typeof path === 'string') throw new Error(path);
-    let field: MapPoint | undefined;
-    let walked = 0;
-    let from = roma.position;
-    for (const point of path) {
-      const leg = distance(from, point);
-      if (walked + leg >= 120) {
-        const t = (120 - walked) / leg;
-        field = {
-          x: Math.round((from.x + t * (point.x - from.x)) * 10) / 10,
-          y: Math.round((from.y + t * (point.y - from.y)) * 10) / 10,
-        };
-        break;
-      }
-      walked += leg;
-      from = point;
-    }
-    if (!field || distance(field, target.position) < 60)
-      throw new Error('the target is too near Roma');
+    const field = alongRoad(roma.position, target.position, 120);
+    if (distance(field, target.position) < 60) throw new Error('the target is too near Roma');
     const prey = addArmy(state, target.owner, 300, field);
     expect(decideOrders(state, world, rome)).toContainEqual(
       expect.objectContaining({ kind: 'moveArmy', army: hunter, to: field }),
     );
-    expect(state.armies[prey]).toBeDefined();
+    let next = state;
+    let met = false;
+    for (let day = 0; day < 10 && !met; day++) {
+      const result = tick(next, decideOrders(next, world, rome), world);
+      next = result.state;
+      met = result.events.some(
+        (event) =>
+          event.kind === 'battleBegan' &&
+          [...event.attackers, ...event.defenders].includes(rome) &&
+          [...event.attackers, ...event.defenders].includes(target.owner),
+      );
+    }
+    expect(met).toBe(true);
+    expect(next.armies[prey]?.activity.kind ?? 'destroyed').not.toBe('idle');
+    expectConsistent(next);
+  });
+
+  test('a remnant near the capital gets one order, not one to guard the capital and one to the muster city', () => {
+    const { state, target } = war();
+    const roma = cityOf(state, rome);
+    const remnant = addArmy(
+      state,
+      rome,
+      REMNANT_MEN - 1,
+      alongRoad(roma.position, target.position, 30),
+    );
+    addArmy(state, target.owner, 2000, alongRoad(roma.position, target.position, 80));
+    const orders = decideOrders(state, world, rome);
+    expect(
+      orders.filter((order) => 'army' in order && order.army === remnant).length,
+    ).toBeLessThanOrEqual(1);
     expectConsistent(state);
   });
 });

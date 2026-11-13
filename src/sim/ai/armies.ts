@@ -230,12 +230,6 @@ export function movements(context: Context, muster: CityView | undefined): Order
     return true;
   };
 
-  for (const mover of movers) {
-    if (mover.men >= REMNANT_MEN) continue;
-    used.add(mover.army.id);
-    if (muster && distance(mover.at, muster.position) > RALLY_DISTANCE) headFor(mover, muster);
-  }
-
   const capital = homeCapital(state, world, faction);
   const raiders = hostile.filter((army) => !atOwnCity(state, army));
   if (capital && strengthNear(state, raiders, capital.position, CAPITAL_GUARD_KM) > 0) {
@@ -256,6 +250,12 @@ export function movements(context: Context, muster: CityView | undefined): Order
         .sort((a, b) => distance(a.at, capital.position) - distance(b.at, capital.position));
       guards.some((guard) => headFor(guard, capital));
     }
+  }
+
+  for (const mover of movers) {
+    if (mover.men >= REMNANT_MEN || used.has(mover.army.id)) continue;
+    used.add(mover.army.id);
+    if (muster && distance(mover.at, muster.position) > RALLY_DISTANCE) headFor(mover, muster);
   }
 
   for (const siege of sorted(state.sieges)) {
@@ -286,10 +286,21 @@ export function movements(context: Context, muster: CityView | undefined): Order
 
   // An enemy army that stands idle in the field, away from its own cities, is prey for an
   // idle army near it that outweighs it and every enemy army beside it ATTACK_ODDS times.
+  // An army already marching on prey keeps after it.
   const prey = hostile.filter((army) => army.activity.kind === 'idle' && !atOwnCity(state, army));
   const taken = new Set<ArmyId>();
+  const onTheHunt = (m: Mover) => {
+    const heading = destinationOf(m.army);
+    return (
+      !!heading &&
+      prey.some((army) => {
+        const at = positionOf(army);
+        return !!at && distance(at, heading) <= ENGAGEMENT_DISTANCE;
+      })
+    );
+  };
   const hunters = movers
-    .filter((m) => !used.has(m.army.id) && m.army.activity.kind === 'idle')
+    .filter((m) => !used.has(m.army.id) && (m.army.activity.kind === 'idle' || onTheHunt(m)))
     .filter((m) => meanMorale(state, m.army) >= MARCH_MORALE)
     .sort((a, b) => b.strength - a.strength || (a.army.id < b.army.id ? -1 : 1));
   for (const hunter of hunters) {
