@@ -1,8 +1,8 @@
-import { mount } from 'svelte';
+import { flushSync, mount } from 'svelte';
 import mapUrl from '../../data/map/map.json?url';
 import { parseDrawOptions } from '../render/draw-options.ts';
 import type { Pick } from '../render/pick.ts';
-import { createRenderer, type Command } from '../render/renderer.ts';
+import { createRenderer, type Command, type Insets } from '../render/renderer.ts';
 import { decideAll } from '../sim/ai/decide.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import { FATE_DAYS } from '../sim/cities.ts';
@@ -397,8 +397,33 @@ function enter(state: GameState, { pause, focus }: { pause: boolean; focus: bool
   resumeOnClose = modals.length > 0 && !pause && !clock.paused;
   if (pause || modals.length > 0) clock.pause();
   const home = focus ? homeOf(state) : undefined;
-  if (home) renderer.focus(home);
   view.refresh();
+  if (home) focusClear(home);
+}
+
+/** The screen px that the open panels cover along each edge of the map. */
+function covered(): Insets {
+  flushSync();
+  const box = (selector: string) => {
+    const element = document.querySelector(selector);
+    return element && element.childElementCount > 0 ? element.getBoundingClientRect() : undefined;
+  };
+  const bar = box('[data-testid="top-bar"]');
+  const overview = box('[data-testid="overview"]');
+  const side = box('aside[aria-label="Selection"]');
+  // Below 720 px the side column is a sheet along the bottom.
+  const narrow = window.innerWidth < 720;
+  return {
+    top: bar?.bottom ?? 0,
+    left: overview && !narrow ? overview.right : 0,
+    right: side && !narrow ? window.innerWidth - side.left : 0,
+    bottom: side && narrow ? window.innerHeight - side.top : 0,
+  };
+}
+
+/** Centres the map on the point in the part the panels leave clear, once they show what was chosen. */
+function focusClear(point: MapPoint) {
+  renderer.focus(point, covered());
 }
 
 /** The fates a loaded game still waits on, which no day's change would announce. */
@@ -562,15 +587,15 @@ const actions: Actions = {
     if (!seesPick(sightFor(clock.state), pick)) return;
     selection = pick;
     menu = undefined;
-    renderer.focus(at);
     view.refresh();
+    focusClear(at);
   },
   openAlert(alert) {
     if (!alert.focus) return;
-    renderer.focus(alert.focus.at);
     const { select } = alert.focus;
     if (select && seesPick(sightFor(clock.state), select)) selection = select;
     view.refresh();
+    focusClear(alert.focus.at);
   },
   closeMenu() {
     menu = undefined;
