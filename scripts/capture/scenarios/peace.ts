@@ -89,7 +89,7 @@ export default defineScenario({
     await untilDrawn(page);
     await shot(
       'peace-day-after',
-      'The day after the peace: the siege camp round Carthago is gone and the Roman army gathers ships on the shore to sail home',
+      'Just after the peace: the siege camp round Carthago is gone and the Roman army gathers ships on the shore to sail home',
     );
   },
 });
