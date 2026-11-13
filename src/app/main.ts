@@ -26,7 +26,7 @@ import { planCommand, plannedRoutes, type CommandTarget } from './command.ts';
 import { fateChoices, type FateChoice } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
 import { refusalText } from './names.ts';
-import { alertsInSight, seesPick } from './sighted.ts';
+import { alertsInSight, seesPick, sightOfAll } from './sighted.ts';
 import { enqueue, keepOpen, type Modal } from './modals.ts';
 import {
   browserStorage,
@@ -151,11 +151,17 @@ function save(slot: Slot, state: DeepReadonly<GameState>): boolean {
 }
 
 const sights = new WeakMap<DeepReadonly<GameState>, Sight>();
-/** What the player sees on a day. A state never changes once a tick returns it. */
+/**
+ * What the player sees on a day, or the whole map once they have lost. A state never
+ * changes once a tick returns it.
+ */
 function sightFor(state: DeepReadonly<GameState>): Sight {
   let sight = sights.get(state);
   if (!sight) {
-    sight = sightOf(state, world, state.player);
+    sight =
+      state.factions[state.player]?.defeatedOn === null
+        ? sightOf(state, world, state.player)
+        : sightOfAll(state);
     sights.set(state, sight);
   }
   return sight;

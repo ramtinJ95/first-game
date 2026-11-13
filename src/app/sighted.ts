@@ -1,5 +1,8 @@
 import type { Pick } from '../render/pick.ts';
+import type { DeepReadonly } from '../sim/deep-readonly.ts';
+import type { ArmyId, BattleId, ConvoyId, ProvinceId, RefugeeColumnId } from '../sim/ids.ts';
 import type { Sight } from '../sim/sight.ts';
+import type { GameState } from '../sim/state/game-state.ts';
 import type { Alert } from './alerts.ts';
 
 /** Whether the player sees what a pick points at. Provinces and their cities are always known. */
@@ -22,4 +25,21 @@ export function alertsInSight(alerts: readonly Alert[], before: Sight, after: Si
     if (focus.select) return seesPick(after, focus.select) || seesPick(before, focus.select);
     return after.sees(focus.at) || before.sees(focus.at);
   });
+}
+
+/**
+ * What a defeated player sees while they watch on: the whole map, every army, convoy,
+ * column, and battle, as the game shows it with the fog off.
+ */
+export function sightOfAll(state: DeepReadonly<GameState>): Sight {
+  return {
+    faction: state.player,
+    provinces: new Set(Object.keys(state.provinces) as ProvinceId[]),
+    circles: [],
+    armies: new Set(Object.keys(state.armies) as ArmyId[]),
+    convoys: new Set(Object.keys(state.convoys) as ConvoyId[]),
+    refugeeColumns: new Set(Object.keys(state.refugeeColumns) as RefugeeColumnId[]),
+    battles: new Set(Object.keys(state.battles) as BattleId[]),
+    sees: () => true,
+  };
 }

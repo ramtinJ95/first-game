@@ -30,6 +30,7 @@
   ];
 
   const game = $derived(view.current.state);
+  const fallen = $derived((game.factions[game.player]?.defeatedOn ?? null) !== null);
   const stores = $derived(game.factions[game.player]?.stores);
   const balance = $derived(dailyBalances(game).get(game.player));
   const limits = $derived(limitsOf(game).get(game.player));
@@ -43,7 +44,9 @@
     <span class="swatch" style:background={cssColour(game, game.player)}></span>
     <strong>{factionName(game, game.player)}</strong>
   </span>
-  {#if stores && balance}
+  {#if fallen}
+    <span class="fallen" data-testid="realm-fallen">Your realm has fallen</span>
+  {:else if stores && balance}
     <span class="stores">
       {#each STORES as { key, name } (key)}
         {@const note = storeNote(
@@ -107,6 +110,11 @@
 
   .note {
     font-size: 12px;
+    font-style: italic;
+    color: var(--muted);
+  }
+
+  .fallen {
     font-style: italic;
     color: var(--muted);
   }

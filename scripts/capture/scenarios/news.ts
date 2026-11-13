@@ -6,6 +6,7 @@ import {
   openGame,
   pause,
   resume,
+  romaFallsTomorrow,
   romaMustersUnderSiege,
   sackedMediolanum,
   sixSpearmenMusterTomorrow,
@@ -35,7 +36,7 @@ async function openMediolanum(page: Page) {
 export default defineScenario({
   name: 'news',
   title:
-    'What the page tells of stores, cities, and sieges: grouped alerts, an early muster, a sacked city, stores at their limits, and a siege too weak to starve its city',
+    'What the page tells of stores, cities, and sieges: grouped alerts, an early muster, a sacked city, stores at their limits, a siege too weak to starve its city, and a defeated player watching on',
   async run({ page, shot }) {
     await openGame(page);
     const alerts = page.getByTestId('alerts');
@@ -86,5 +87,17 @@ export default defineScenario({
       .click();
     await page.getByTestId('army-weak-siege').waitFor();
     await shot('weak-siege-army', 'The besieging army panel says the same in plain words');
+
+    await load(page, romaFallsTomorrow());
+    await resume(page);
+    const defeat = page.getByTestId('defeat');
+    await defeat.waitFor();
+    await defeat.getByRole('button', { name: 'Watch on' }).click();
+    await defeat.waitFor({ state: 'detached' });
+    await pause(page);
+    await shot(
+      'watching-on',
+      'Rome has fallen and the player watches on: the top bar says the realm has fallen, no store alerts, and every army on the map shows',
+    );
   },
 });

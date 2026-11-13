@@ -177,7 +177,7 @@ export function alertsOfDay(
 
   const had = before.factions[player]?.stores;
   const has = after.factions[player]?.stores;
-  if (had && has) {
+  if (had && has && after.factions[player]?.defeatedOn === null) {
     for (const store of Object.keys(STORE_NAMES) as (keyof Stores)[]) {
       if (had[store] > 0 && has[store] <= 0) {
         add({

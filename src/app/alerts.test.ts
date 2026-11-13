@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { changeCityOwner, FATE_DAYS } from '../sim/cities.ts';
+import { defeatFaction } from '../sim/defeat.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
@@ -424,6 +425,13 @@ describe('alertsOfDay', () => {
       ['storeRanOut', 'Manpower ran out: no troops can be raised', undefined],
     ]);
     expect(alertsOfDay(after, after, [])).toEqual([]);
+  });
+
+  it('raises no store alert on the day the player is defeated', () => {
+    const before = buildFixture();
+    const after = buildFixture();
+    defeatFaction(after, f.rome);
+    expect(ofKind(alertsOfDay(before, after, []), 'storeRanOut')).toEqual([]);
   });
 
   it('tells once that a captured city is occupied when its days to choose a fate pass, and not after a sack', () => {
