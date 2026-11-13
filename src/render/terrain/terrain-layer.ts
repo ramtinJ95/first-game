@@ -107,16 +107,13 @@ export interface Terrain {
 export function createTerrain(map: GameMap, parent: Container, renderer: Renderer): Terrain {
   const land = new Land(map);
 
-  // The watered strips follow rivers and fan out to the coast, so they are clipped to
-  // the land. The mask costs only when the cached texture is drawn again.
-  const valleys = new Graphics(drawValleys(land.valleys, land.deltas));
+  // The ground's colour is a raster of 16 km cells drawn larger with smoothing, and the
+  // watered strips follow rivers and fan out to the coast, so both are clipped to the
+  // land, by one mask. The mask costs only when the cached texture is drawn again.
   const landMask = new Graphics();
   for (const province of map.provinces) {
     for (const [outer] of province.outline) if (outer) landMask.poly(outer.flat()).fill(0xffffff);
   }
-  valleys.mask = landMask;
-  // The ground's colour is a raster of 16 km cells, drawn larger with smoothing, so it is
-  // clipped to the land like the valleys.
   const tint = groundTint(land, map.width, map.height);
   const tintSprite = new Sprite(
     new Texture({
@@ -129,8 +126,14 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
     }),
   );
   tintSprite.scale.set(TINT_CELL);
-  const tintMask = new Graphics(landMask.context);
-  tintSprite.mask = tintMask;
+  const clipped = new Container();
+  clipped.addChild(
+    tintSprite,
+    new Graphics(drawDesert(map.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline))),
+    new Graphics(drawPans(land.pans)),
+    new Graphics(drawValleys(land.valleys, land.deltas)),
+  );
+  clipped.mask = landMask;
   const paper = new Graphics();
   for (const province of map.provinces) {
     for (const polygon of province.outline) {
@@ -144,15 +147,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   const borders = new Container({ label: 'borders' });
   let repaint = true;
   const ground = new Container({ label: 'ground' });
-  ground.addChild(
-    tintSprite,
-    tintMask,
-    new Graphics(drawDesert(map.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline))),
-    new Graphics(drawPans(land.pans)),
-    valleys,
-    landMask,
-    new Graphics(drawWoods(land.woods)),
-  );
+  ground.addChild(clipped, landMask, new Graphics(drawWoods(land.woods)));
 
   const tier = (name: Tier, band: Band): Layer => ({
     name,
