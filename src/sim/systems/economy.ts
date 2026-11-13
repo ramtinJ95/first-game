@@ -1,3 +1,4 @@
+import { extraFoodOf, goldShareOf, levyShareOf } from '../buildings/buildings.ts';
 import { SACK, UNREST_DAYS } from '../cities.ts';
 import type { DeepReadonly } from '../deep-readonly.ts';
 import { emit } from '../events.ts';
@@ -98,7 +99,7 @@ export function limitsOf(state: DeepReadonly<GameState>): Map<FactionId, Stores>
     const limit = of(city.owner);
     limit.gold += TREASURY_DAYS * city.population * OUTPUT_PER_PERSON.gold;
     limit.food += GRANARY_DAYS * city.population * FOOD_PER_PERSON;
-    limit.manpower += MANPOWER_SHARE * city.population;
+    limit.manpower += MANPOWER_SHARE * city.population * levyShareOf(city);
     for (const recruit of city.recruits) limit.manpower -= TROOPS[recruit.troop].recruit.men;
   }
   for (const army of Object.values(state.armies)) {
@@ -127,9 +128,10 @@ export function dailyBalances(state: DeepReadonly<GameState>): Map<FactionId, St
     const balance = of(city.owner);
     const people = city.population * outputShare(city);
     const admin = governed.get(city.owner) ?? 1;
+    const grown = people * OUTPUT_PER_PERSON.food + extraFoodOf(city) * outputShare(city);
     balance.gold += people * OUTPUT_PER_PERSON.gold * goldShare(state, city) * admin;
-    balance.food += people * OUTPUT_PER_PERSON.food - city.population * FOOD_PER_PERSON;
-    balance.manpower += people * OUTPUT_PER_PERSON.manpower * admin;
+    balance.food += grown - city.population * FOOD_PER_PERSON;
+    balance.manpower += people * OUTPUT_PER_PERSON.manpower * levyShareOf(city) * admin;
   }
   for (const army of Object.values(state.armies)) {
     const balance = of(army.owner);
@@ -166,7 +168,7 @@ export function adminShareOf(state: DeepReadonly<GameState>, faction: FactionId)
 
 function goldShare(state: DeepReadonly<GameState>, city: DeepReadonly<City>): number {
   const poor = city.sackedOn !== null && state.day - city.sackedOn < SACK.poorDays;
-  return poor ? SACK.poorOutput : 1;
+  return (poor ? SACK.poorOutput : 1) * goldShareOf(city);
 }
 
 function outputShare(city: DeepReadonly<City>): number {

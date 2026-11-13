@@ -1,3 +1,4 @@
+import { unrestPaceOf } from '../buildings/buildings.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
 import { removeRecord } from '../records.ts';
@@ -12,12 +13,14 @@ export const ARRIVAL_DISTANCE = 1;
 const DAILY_GROWTH = (1 + YEARLY_GROWTH) ** (1 / 365);
 const DAILY_DECLINE = (1 - YEARLY_DECLINE) ** (1 / 365);
 
-/** Grows or starves each city, lets unrest fade by a day, and settles arrived refugees. */
+/** Grows or starves each city, lets unrest fade by a day or, near a temple, by more, and settles arrived refugees. */
 export function population(state: GameState): void {
   for (const city of Object.values(state.cities)) {
     const food = state.factions[city.owner]?.stores.food ?? 0;
     city.population *= food < 0 ? DAILY_DECLINE : DAILY_GROWTH;
-    if (city.unrestDays > 0) city.unrestDays -= 1;
+    if (city.unrestDays > 0) {
+      city.unrestDays = Math.max(0, city.unrestDays - unrestPaceOf(state, city));
+    }
   }
   for (const column of Object.values(state.refugeeColumns)) {
     const city = state.cities[column.to];

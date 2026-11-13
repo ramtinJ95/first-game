@@ -1,3 +1,4 @@
+import { build, cancelBuilding } from '../buildings/build.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { World } from '../world/world.ts';
 import { declareWar } from './declare-war.ts';
@@ -28,6 +29,8 @@ const ORDER_HANDLERS = {
   storm,
   sack,
   enslave,
+  build,
+  cancelBuilding,
 };
 
 type Handlers = typeof ORDER_HANDLERS;

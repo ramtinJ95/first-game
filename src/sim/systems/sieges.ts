@@ -1,4 +1,5 @@
 import { leaveSiege, removeArmy } from '../armies.ts';
+import { defenceSharesOf } from '../buildings/buildings.ts';
 import { changeCityOwner } from '../cities.ts';
 import type { ArmyLoss } from '../events.ts';
 import type { FactionId, SiegeId } from '../ids.ts';
@@ -28,14 +29,18 @@ export const CITY_DEFENCES: Readonly<
   minorCity: { walls: 100, garrison: 1200, foodDays: 40 },
 };
 
-/** A city's full walls, garrison, and food: its rank's, with walls and food scaled by how well it is fortified. */
+/**
+ * A city's full walls, garrison, and food: its rank's, with walls and food scaled by how
+ * well it is fortified, and walls and garrison raised by its towers.
+ */
 export function fullDefences(
-  city: DeepReadonly<Pick<City, 'rank' | 'fortified'>>,
+  city: DeepReadonly<Pick<City, 'rank' | 'fortified'> & Partial<Pick<City, 'buildings'>>>,
 ): Pick<City, 'walls' | 'garrison' | 'foodDays'> {
   const full = CITY_DEFENCES[city.rank];
+  const towers = defenceSharesOf(city);
   return {
-    walls: full.walls * city.fortified,
-    garrison: full.garrison,
+    walls: full.walls * city.fortified * towers.walls,
+    garrison: Math.round(full.garrison * towers.garrison),
     foodDays: full.foodDays * city.fortified,
   };
 }

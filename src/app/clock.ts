@@ -32,6 +32,8 @@ const SLOTS: {
   storm: undefined,
   sack: undefined,
   enslave: undefined,
+  build: undefined,
+  cancelBuilding: undefined,
 };
 
 /** The army whose movement the order changes, or nothing for an order of another slot. */

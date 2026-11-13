@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { BUILDING_KINDS } from '../buildings/buildings.ts';
 import { MAX_UNREST_DAYS } from '../cities.ts';
 import { CityIdSchema, FactionIdSchema, ProvinceIdSchema } from '../ids.ts';
 import { TroopSchema } from '../troops.ts';
@@ -12,6 +13,13 @@ export type Recruit = v.InferOutput<typeof RecruitSchema>;
 /** A city's rank sets its starting population and its full defences. */
 export const CITY_RANKS = ['capital', 'greatPowerCity', 'minorCity'] as const;
 export type CityRank = (typeof CITY_RANKS)[number];
+
+/** The building a city is at work on, and the days of work left, which pause while it is besieged or in unrest. */
+export const ConstructionSchema = v.object({
+  building: v.picklist(BUILDING_KINDS),
+  daysLeft: v.pipe(v.number(), v.integer(), v.minValue(1)),
+});
+export type Construction = v.InferOutput<typeof ConstructionSchema>;
 
 export const CitySchema = v.object({
   id: CityIdSchema,
@@ -38,6 +46,9 @@ export const CitySchema = v.object({
   fellOn: v.nullable(DaySchema),
   /** The day the city was last sacked, or null if it never was. Its gold stays low for `SACK.poorDays` after. */
   sackedOn: v.nullable(DaySchema),
+  /** The buildings the city stands with, in the order they were finished. Saves from before buildings have none. */
+  buildings: v.optional(v.array(v.picklist(BUILDING_KINDS)), []),
+  construction: v.optional(v.nullable(ConstructionSchema), null),
 });
 
 export type City = v.InferOutput<typeof CitySchema>;
