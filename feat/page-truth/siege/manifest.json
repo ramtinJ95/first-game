@@ -1,0 +1,37 @@
+[
+  {
+    "file": "siege-camp.png",
+    "title": "The Roman camp in a ring round Carthago on its landward side: tents, fires, the stakes and ditch facing the walls, and the worn walls",
+    "kind": "screenshot"
+  },
+  {
+    "file": "siege-storm.png",
+    "title": "The storm on the day it was ordered: ladders against the walls and men climbing them, as Carthago falls",
+    "kind": "screenshot"
+  },
+  {
+    "file": "siege-fallen.png",
+    "title": "Carthago fell to the storm: Rome's flag goes up over the city and the army stands beside it",
+    "kind": "screenshot"
+  },
+  {
+    "file": "siege-sacked.png",
+    "title": "The day after the sack was ordered, when the rules apply it: Carthago burns and smokes",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The siege of Carthago: the camp round the city, a storm with ladders at the walls, the fall, and the sack",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The siege of Carthago: the camp round the city, a storm with ladders at the walls, the fall, and the sack (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The siege of Carthago: the camp round the city, a storm with ladders at the walls, the fall, and the sack (Playwright trace)",
+    "kind": "trace"
+  }
+]

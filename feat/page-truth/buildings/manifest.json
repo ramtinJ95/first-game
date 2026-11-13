@@ -1,0 +1,57 @@
+[
+  {
+    "file": "nothing-built-1280.png",
+    "title": "Roma has built nothing: each building gives its gold, its days, and what it adds here by the rules, at 1280 by 720",
+    "kind": "screenshot"
+  },
+  {
+    "file": "nothing-built-390.png",
+    "title": "Roma has built nothing: each building gives its gold, its days, and what it adds here by the rules, at 390 px wide, where the side column is a sheet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "forum-under-way-1280.png",
+    "title": "A Forum under way in Roma with its days left and what a cancel gives back, and the rest wait their turn, at 1280 by 720",
+    "kind": "screenshot"
+  },
+  {
+    "file": "forum-under-way-390.png",
+    "title": "A Forum under way in Roma with its days left and what a cancel gives back, and the rest wait their turn, at 390 px wide, where the side column is a sheet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "several-built-1280.png",
+    "title": "Roma with a Forum, Canals, and a Temple standing, each with what it adds, and Barracks under way, at 1280 by 720",
+    "kind": "screenshot"
+  },
+  {
+    "file": "several-built-390.png",
+    "title": "Roma with a Forum, Canals, and a Temple standing, each with what it adds, and Barracks under way, at 390 px wide, where the side column is a sheet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "fate-prompt-1280.png",
+    "title": "Mediolanum falls with Canals and Towers: occupying and enslaving keep them, a sack destroys them",
+    "kind": "screenshot"
+  },
+  {
+    "file": "fate-prompt-390.png",
+    "title": "The same fate prompt at 390 px wide",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A city's buildings: what each costs and does, the one under way with its days and its cancel, those that stand, and what each fate does to them",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A city's buildings: what each costs and does, the one under way with its days and its cancel, those that stand, and what each fate does to them (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A city's buildings: what each costs and does, the one under way with its days and its cancel, those that stand, and what each fate does to them (Playwright trace)",
+    "kind": "trace"
+  }
+]
