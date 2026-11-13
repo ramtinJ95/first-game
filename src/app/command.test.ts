@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { changeCityOwner } from '../sim/cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
-import type { ArmyId, CityId, FactionId } from '../sim/ids.ts';
+import type { ArmyId, CityId, FactionId, SiegeId } from '../sim/ids.ts';
 import { newGame } from '../sim/new-game.ts';
 import { MAX_MARCH_DAYS } from '../sim/march.ts';
 import { GATHER_DAYS } from '../sim/orders/embark.ts';
@@ -476,6 +476,46 @@ describe('what an order says at once', () => {
     });
     expect(planned.notice).toMatch(
       /^Capua holds a garrison of [\d,]+, more than the 200 men who would besiege it\./,
+    );
+  });
+
+  it('a march that joins a siege another faction already holds with enough men gives no warning', () => {
+    const state = buildFixture();
+    state.wars[warKey(f.rome, f.syracusaeFaction)] = { since: state.day };
+    state.wars[warKey(f.carthage, f.syracusaeFaction)] = { since: state.day };
+    const syracusae = cityOf(state, f.syracusae);
+    const [first] = armyOf(state).formations;
+    const formation = first && state.formations[first];
+    if (!formation) throw new Error('fixture changed');
+    for (const id of armyOf(state).formations.slice(1)) removeRecord(state.formations, id);
+    armyOf(state).formations = [formation.id];
+    formation.men = 100;
+    armyOf(state).activity = {
+      kind: 'idle',
+      position: { x: syracusae.position.x - 15, y: syracusae.position.y },
+    };
+    const punic = armyOf(state, f.punicArmy);
+    for (const id of punic.formations) {
+      const own = state.formations[id];
+      if (own) own.men = syracusae.garrison * 2;
+    }
+    const siege = 'siege-1' as SiegeId;
+    state.nextSerial = 2;
+    state.sieges[siege] = {
+      id: siege,
+      city: f.syracusae,
+      besiegers: [punic.id],
+      startedOn: state.day,
+    };
+    punic.activity = { kind: 'besieging', position: { ...syracusae.position }, siege };
+    expectConsistent(state);
+    const joining = plan(state, atCity(state, f.syracusae));
+    expect(joining.kind).toBe('issue');
+    expect(joining.notice).toBeUndefined();
+    removeRecord(state.sieges, siege);
+    punic.activity = { kind: 'idle', position: { x: 0, y: 0 } };
+    expect(plan(state, atCity(state, f.syracusae)).notice).toMatch(
+      /^Syracusae holds a garrison of [\d,]+, more than the 100 men who would besiege it\./,
     );
   });
 

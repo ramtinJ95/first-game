@@ -292,7 +292,7 @@ function seaOption(state: State, way: SeaWay): MenuOption {
  * words, and never queued.
  */
 /**
- * Why a siege of the city by the army, with its owner's armies that besiege it already,
+ * Why a siege of the city by the army, with every army that besieges it already, whoever owns it,
  * would not cut the city's food: fewer men than BLOCKADE_ODDS times the garrison, the
  * test the weak-siege news uses. It names the garrison, the men, and the men still needed.
  */
@@ -304,7 +304,7 @@ function weakSiegeWarning(
   const siege = Object.values(state.sieges).find((s) => s.city === city.id);
   const others = (siege?.besiegers ?? []).flatMap((id) => {
     const other = state.armies[id];
-    return other && other.id !== army.id && other.owner === army.owner ? [other] : [];
+    return other && other.id !== army.id ? [other] : [];
   });
   const men = [army, ...others].reduce((sum, one) => sum + menOf(state, one), 0);
   const needed = Math.ceil(BLOCKADE_ODDS * city.garrison) - men;
