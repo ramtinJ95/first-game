@@ -5,7 +5,7 @@ import { LABEL_PRIORITY, type Box, type LabelRequest } from '../labels.ts';
 import { INK, LABEL_HALO, PAPER } from '../palette.ts';
 import { DETAIL, detailAlpha } from './detail.ts';
 import { mix } from './draw.ts';
-import { approach, claimSymbols } from './places.ts';
+import { approach, claimSymbols, peakName } from './places.ts';
 
 type Rank = 'town' | 'village';
 
@@ -110,14 +110,21 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
       name: s.name,
       symbol: undefined,
     })),
-    ...map.peaks.map((p, i) => ({
-      id: `peak-${i}`,
-      kind: 'peak' as const,
-      x: p.at[0],
-      y: p.at[1],
-      name: p.name,
-      symbol: undefined,
-    })),
+    ...map.peaks.flatMap((p, i) => {
+      const name = peakName(p.name);
+      return name
+        ? [
+            {
+              id: `peak-${i}`,
+              kind: 'peak' as const,
+              x: p.at[0],
+              y: p.at[1],
+              name,
+              symbol: undefined,
+            },
+          ]
+        : [];
+    }),
   ].map((d) => ({
     ...d,
     symbol: d.kind === 'peak' ? undefined : new Graphics(symbols[d.kind]),

@@ -3,6 +3,7 @@ import { buildFixture, FIXTURE, fixtureWorld } from '../../sim/fixture.ts';
 import { enslave } from '../../sim/orders/enslave.ts';
 import { executeOrder } from '../../sim/orders/orders.ts';
 import { tick } from '../../sim/tick.ts';
+import { fullDefences } from '../../sim/systems/sieges.ts';
 import { sack } from '../../sim/orders/sack.ts';
 import { population } from '../../sim/systems/population.ts';
 import type { ArmyId } from '../../sim/ids.ts';
@@ -415,6 +416,22 @@ describe('buildScene', () => {
     expect(late.filter((s) => troopOf(s.key) === 'lightCavalry')).toHaveLength(6);
     const next = buildScene(input(current, current)).sprites;
     expect(next.filter((s) => troopOf(s.key) === 'lightCavalry')).toEqual([]);
+  });
+});
+
+describe('walls', () => {
+  test('a city at its own full walls shows no breach, however poorly it is fortified, and worn walls show one', () => {
+    const state = buildFixture();
+    const city = state.cities[FIXTURE.capua];
+    if (!city) throw new Error('fixture');
+    city.fortified = 0.5;
+    city.walls = fullDefences(city).walls;
+    const at = { camera: { centre: city.position, scale: 4 } };
+    const breached = (s: typeof state) =>
+      buildScene(input(s, s, at)).breaches.some((b) => b.city === FIXTURE.capua);
+    expect(breached(state)).toBe(false);
+    city.walls = fullDefences(city).walls * 0.5;
+    expect(breached(state)).toBe(true);
   });
 });
 

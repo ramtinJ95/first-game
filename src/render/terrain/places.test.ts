@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fixtureWorld } from '../../sim/fixture.ts';
-import { claimSymbols } from './places.ts';
+import { claimSymbols, PEAK_NAMES, peakName } from './places.ts';
 
 const box = (x: number, y: number, half = 5) => ({
   left: x - half,
@@ -56,5 +56,28 @@ describe('the names the map draws', () => {
     ];
     expect(names.length).toBeGreaterThan(500);
     expect(names.filter((name) => /[()[\]*?]/.test(name))).toEqual([]);
+  });
+});
+
+describe('peakName', () => {
+  it('names a peak only by its classical name, and every name in the table marks a peak of the map', () => {
+    const { map } = fixtureWorld();
+    const named = map.peaks.flatMap((peak) => {
+      const name = peakName(peak.name);
+      return name ? [name] : [];
+    });
+    expect(named.sort()).toEqual([
+      'Aetna',
+      'Argaeus',
+      'Hermon',
+      'Ida',
+      'Olympus',
+      'Olympus',
+      'Olympus',
+      'Vesuvius',
+    ]);
+    const modern = new Set(map.peaks.map((peak) => peak.name));
+    expect(Object.keys(PEAK_NAMES).filter((name) => !modern.has(name))).toEqual([]);
+    expect(peakName('Mont Blanc')).toBeUndefined();
   });
 });
