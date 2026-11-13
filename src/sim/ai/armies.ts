@@ -191,8 +191,13 @@ export function movements(context: Context, muster: CityView | undefined): Order
   /** Sends the mover on its way to the city by road or sea, and says whether a way exists. */
   const headFor = (mover: Mover, city: CityView): boolean => {
     const heading = destinationOf(mover.army);
-    // An army on its way to a port of its own is on the first leg of a crossing.
-    if (heading && (marchingTo(mover.army, city.position) || context.router.portAt(heading))) {
+    // An army marching to a port of its own to sail for the city is on the first leg of its
+    // way. The road from that port is the same every day, so this costs no new search.
+    const onFirstLeg =
+      !!heading &&
+      !!context.router.portAt(heading) &&
+      context.router.routeTo(heading, city)?.step.kind === 'embark';
+    if (marchingTo(mover.army, city.position) || onFirstLeg) {
       used.add(mover.army.id);
       return true;
     }

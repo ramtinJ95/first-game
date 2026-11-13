@@ -2,7 +2,8 @@ import { describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { CityId, FactionId, FormationId } from '../ids.ts';
 import { changeCityOwner } from '../cities.ts';
-import { marchPath } from '../march.ts';
+import { marchPath, startMarch } from '../march.ts';
+import { newGame } from '../new-game.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
 import type { Day } from '../state/day.ts';
@@ -12,6 +13,7 @@ import { dailyBalances, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import { removeRecord } from '../records.ts';
 import { tick } from '../tick.ts';
 import { decideAll, decideOrders } from './decide.ts';
+import { createRouter } from './routes.ts';
 import { MARCH_MORALE, MINOR_DEFICIT_DAYS } from './thresholds.ts';
 
 const world = fixtureWorld();
@@ -327,6 +329,36 @@ describe('a great power', () => {
         army: f.romanArmy,
         to: ROMA,
       });
+    });
+
+    test('turns back to guard its capital an army marching to a port that is not on the way', () => {
+      const state = newGame(world.map, { seed: 1, player: 'carthage' });
+      const romans = Object.values(state.armies).find((a) => a.owner === f.rome);
+      const punic = Object.values(state.armies).find((a) => a.owner === f.carthage);
+      if (!romans || !punic) throw new Error('no armies');
+      declare(state, f.carthage, f.rome);
+      const roma = city(state, f.roma).position;
+      const from = { x: roma.x + 35, y: roma.y };
+      expect(
+        startMarch(world, romans, from, city(state, 'ariminum' as CityId).position),
+      ).toBeUndefined();
+      punic.activity = { kind: 'idle', position: { x: roma.x - 10, y: roma.y } };
+      expect(decideOrders(state, world, f.rome)).toContainEqual({
+        kind: 'moveArmy',
+        faction: f.rome,
+        army: romans.id,
+        to: roma,
+      });
+    });
+
+    test('never sails for a landing whose march on to the target is longer than MAX_MARCH_DAYS', () => {
+      const state = newGame(world.map, { seed: 1, player: 'carthage' });
+      const router = createRouter(state, world, f.rome);
+      const target = city(state, 'alexandria-arachosion' as CityId);
+      const step = router.routeTo(city(state, f.roma).position, target)?.step;
+      if (step?.kind !== 'embark') return expect(step).toBeUndefined();
+      const harbour = world.harbours.get(step.to);
+      expect(harbour && marchPath(world, harbour, target.position)).toBeInstanceOf(Array);
     });
 
     test('never sets out on a march longer than MAX_MARCH_DAYS, such as round the sea from a failed siege overseas', () => {
