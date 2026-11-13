@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { fixtureWorld } from '../sim/fixture.ts';
+import type { FactionId } from '../sim/ids.ts';
+import { newGame } from '../sim/new-game.ts';
+import { fitCamera, mapToScreen, symbolGrowth } from './camera.ts';
 import { LABEL_PRIORITY, placeLabels, type Box, type LabelRequest } from './labels.ts';
+import { citySymbols } from './symbols.ts';
 
 const viewport = { width: 1000, height: 600 };
 
@@ -83,5 +88,83 @@ describe('placeLabels', () => {
     expect(a && overlap(a, marker)).toBe(false);
     const edge = placed.get('edge');
     expect(edge && edge.right <= 1000 && edge.bottom <= 600).toBe(true);
+  });
+
+  it("names a capital whose four sides each hold another city's symbol", () => {
+    const symbol = (x: number, y: number): Box => ({
+      left: x - 7,
+      top: y - 7,
+      right: x + 7,
+      bottom: y + 7,
+    });
+    const neighbours = [symbol(340, 305), symbol(240, 295), symbol(300, 285), symbol(300, 315)];
+    const capital = label('capital', 300, 300, { priority: LABEL_PRIORITY.capital });
+    const placed = placeLabels([capital], [symbol(300, 300), ...neighbours], viewport).get(
+      'capital',
+    );
+    expect(placed).toBeDefined();
+    for (const marker of neighbours) expect(placed && overlap(placed, marker)).toBe(false);
+  });
+
+  it('names a capital boxed in on every side, over a lesser symbol but never over another name', () => {
+    const everywhere: Box = { left: 0, top: 0, right: 1000, bottom: 600 };
+    const placed = placeLabels(
+      [
+        label('capital', 300, 300, { priority: LABEL_PRIORITY.capital }),
+        label('other', 300, 300, { priority: LABEL_PRIORITY.capital, population: 90_000 }),
+        label('city', 300, 300),
+      ],
+      [everywhere],
+      viewport,
+    );
+    expect([...placed.keys()].sort()).toEqual(['capital', 'other']);
+    const [a, b] = [placed.get('capital'), placed.get('other')];
+    expect(a && b && overlap(a, b)).toBe(false);
+  });
+
+  it("names every great power's capital at the widest zoom of the new game", () => {
+    const { map } = fixtureWorld();
+    const state = newGame(map, { seed: 1, player: 'rome' as FactionId });
+    const view = { width: 1280, height: 720 };
+    const camera = fitCamera(view, map);
+    const grow = symbolGrowth(camera.scale);
+    const extents = Object.fromEntries(
+      Object.entries(citySymbols()).map(([rank, { bounds }]) => [
+        rank,
+        {
+          x: Math.max(-bounds.minX, bounds.maxX) * grow,
+          y: Math.max(-bounds.minY, bounds.maxY) * grow,
+        },
+      ]),
+    );
+    const requests: LabelRequest[] = [];
+    const symbols: Box[] = [];
+    for (const city of Object.values(state.cities)) {
+      const at = mapToScreen(camera, view, city.position);
+      const clearance = extents[city.rank] ?? { x: 7, y: 7 };
+      const capital = city.rank === 'capital';
+      symbols.push({
+        left: at.x - clearance.x,
+        top: at.y - clearance.y,
+        right: at.x + clearance.x,
+        bottom: at.y + clearance.y,
+      });
+      requests.push({
+        id: city.id,
+        anchor: at,
+        clearance,
+        // The widths of the page's serif names: 14 px capitals spaced out, 12 px italics.
+        width: city.name.length * (capital ? 11.5 : 6.2),
+        height: capital ? 20 : 17,
+        priority: capital ? LABEL_PRIORITY.capital : LABEL_PRIORITY.city,
+        population: city.population,
+      });
+    }
+    const placed = placeLabels(requests, symbols, view);
+    const capitals = Object.values(state.cities)
+      .filter((city) => city.rank === 'capital')
+      .map((city) => city.id as string);
+    expect(capitals.sort()).toEqual(['alexandria', 'carthago', 'pella', 'persepolis', 'roma']);
+    expect(capitals.filter((id) => !placed.has(id))).toEqual([]);
   });
 });
