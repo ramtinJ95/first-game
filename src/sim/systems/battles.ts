@@ -107,7 +107,11 @@ export function reforming(state: { day: number }, army: Pick<Army, 'stanceChange
 }
 
 /** What one army multiplies its blows on another by, for their stances and their re-forming. */
-function edgeBetween(state: GameState, mine: Army, theirs: Army): number {
+export function edgeBetween(
+  state: { readonly day: number },
+  mine: Pick<Army, 'stance' | 'stanceChangedOn'>,
+  theirs: Pick<Army, 'stance' | 'stanceChangedOn'>,
+): number {
   const a = reforming(state, mine);
   const b = reforming(state, theirs);
   if (a && b) return 1;

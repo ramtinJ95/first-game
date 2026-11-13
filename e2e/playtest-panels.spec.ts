@@ -149,20 +149,21 @@ test.describe('the panels after the playtest', () => {
 
     const stances = battle.getByRole('group', { name: 'Stance' });
     await expect(stances).toHaveCount(1);
+    // Each other stance says on its button what a change to it costs.
     await expect(stances.getByRole('button')).toHaveText([
       'Hold the line',
-      'All-out assault',
-      'Skirmish and withdraw',
+      /^All-out assault.*re-forms 3 days$/,
+      /^Skirmish and withdraw.*re-forms 3 days$/,
     ]);
     await expect(
       stances.getByRole('button', { name: 'Hold the line' }),
-    ).toHaveAccessibleDescription('Deals and takes normal blows');
+    ).toHaveAccessibleDescription(/Deals and takes normal blows$/);
     await expect(
       stances.getByRole('button', { name: 'All-out assault' }),
-    ).toHaveAccessibleDescription('Deals and takes 25% more');
+    ).toHaveAccessibleDescription(/Deals and takes 25% more$/);
     await expect(
       stances.getByRole('button', { name: 'Skirmish and withdraw' }),
-    ).toHaveAccessibleDescription('Deals and takes 25% less');
+    ).toHaveAccessibleDescription(/Deals and takes 25% less$/);
     await expect(stances).toContainText('Deals and takes 25% more');
 
     const army = page.getByTestId('army-panel');

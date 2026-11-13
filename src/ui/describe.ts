@@ -3,6 +3,7 @@ import {
   factionName,
   nearestCity,
   placeName,
+  STANCE_NAMES,
   TROOP_NAMES,
   whole,
 } from '../app/names.ts';
@@ -28,7 +29,13 @@ import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { warSides } from '../sim/state/war.ts';
-import { STANCE_EFFECTS } from '../sim/systems/battles.ts';
+import {
+  edgeBetween,
+  REFORM_DAYS,
+  reforming,
+  STANCE_BEATS,
+  STANCE_EFFECTS,
+} from '../sim/systems/battles.ts';
 import { SACK } from '../sim/cities.ts';
 import type { Siege } from '../sim/state/siege.ts';
 import type { Stores } from '../sim/state/faction.ts';
@@ -578,4 +585,108 @@ export function leavingText(state: State, city: DeepReadonly<City>): string | un
       return `${whole(column.people)} of its people are on the road to ${to}`;
     })
     .join('. ');
+}
+
+/** A stance as the object of a sentence, such as "beats an all-out assault". */
+const STANCE_OBJECTS: Record<Stance, string> = {
+  holdTheLine: 'hold the line',
+  allOutAssault: 'an all-out assault',
+  skirmishAndWithdraw: 'skirmish and withdraw',
+};
+
+/** A side's stance as a noun with its verb, for the line on where the player stands. */
+const STANCE_NOUNS: Record<Stance, { readonly noun: string; readonly beats: string }> = {
+  holdTheLine: { noun: 'line', beats: 'beats' },
+  allOutAssault: { noun: 'assault', beats: 'beats' },
+  skirmishAndWithdraw: { noun: 'skirmishers', beats: 'beat' },
+};
+
+function beatenBy(stance: Stance): Stance {
+  return (
+    (Object.keys(STANCE_BEATS) as Stance[]).find((other) => STANCE_BEATS[other] === stance) ??
+    stance
+  );
+}
+
+/** What the stance beats and what beats it, by `STANCE_BEATS`, after its name. */
+export function stanceMatchShort(stance: Stance): string {
+  return `Beats ${STANCE_OBJECTS[STANCE_BEATS[stance]]}, beaten by ${STANCE_OBJECTS[beatenBy(stance)]}.`;
+}
+
+/** The stance's name and what it beats and what beats it, as the guide lists them. */
+export function stanceMatchText(stance: Stance): string {
+  const short = stanceMatchShort(stance);
+  return `${STANCE_NAMES[stance]}: ${short.charAt(0).toLowerCase()}${short.slice(1)}`;
+}
+
+/** What a change of stance costs, by `REFORM_DAYS`. */
+export function reformCostText(): string {
+  return `A change of stance takes ${REFORM_DAYS} days to re-form. Until then every enemy stance beats it.`;
+}
+
+/** How long the army still re-forms after a change of stance, or nothing. */
+export function reformingText(state: State, army: DeepReadonly<Army>): string | undefined {
+  if (!reforming(state, army) || army.stanceChangedOn === undefined) return undefined;
+  const left = REFORM_DAYS - (state.day - army.stanceChangedOn);
+  return `Re-forming, ${left} ${left === 1 ? 'day' : 'days'} left`;
+}
+
+/** The enemy army in the army's battle that the player faces: the strongest on the other side. */
+export function enemyInBattle(
+  state: State,
+  army: DeepReadonly<Army>,
+): DeepReadonly<Army> | undefined {
+  if (army.activity.kind !== 'inBattle') return undefined;
+  const battle = state.battles[army.activity.battle];
+  if (!battle) return undefined;
+  const theirs = battle.attackers.includes(army.id) ? battle.defenders : battle.attackers;
+  return theirs
+    .flatMap((id) => state.armies[id] ?? [])
+    .sort((a, b) => menOf(state, b) - menOf(state, a) || (a.id < b.id ? -1 : 1))[0];
+}
+
+/**
+ * Where the player's army stands against the enemy it fights, in one plain line, by the
+ * same edge the battle deals its blows with (`edgeBetween`).
+ */
+export function standingText(
+  state: State,
+  army: DeepReadonly<Army>,
+  enemy: DeepReadonly<Army>,
+): string {
+  const edge = edgeBetween(state, army, enemy);
+  const mine = STANCE_NOUNS[army.stance];
+  const theirs = STANCE_NOUNS[enemy.stance];
+  const ours = reforming(state, army);
+  const their = reforming(state, enemy);
+  if (edge > 1) {
+    return their
+      ? `Their army re-forms, so your ${mine.noun} ${mine.beats} it`
+      : `Your ${mine.noun} ${mine.beats} their ${theirs.noun}`;
+  }
+  if (edge < 1) {
+    return ours
+      ? `Your army re-forms, so their ${theirs.noun} ${theirs.beats} it`
+      : `Their ${theirs.noun} ${theirs.beats} your ${mine.noun}`;
+  }
+  return 'Neither stance beats the other';
+}
+
+/**
+ * What the stance's button says beside its name: that it answers the enemy's stance, and
+ * what changing to it costs. The stance the army holds costs nothing.
+ */
+export function stanceChoiceText(
+  state: State,
+  army: DeepReadonly<Army>,
+  stance: Stance,
+  held: Stance,
+  enemy: DeepReadonly<Army> | undefined,
+): { readonly answers: boolean; readonly cost: string | undefined } {
+  const answers = enemy !== undefined && STANCE_BEATS[stance] === enemy.stance;
+  if (stance === held) return { answers, cost: undefined };
+  const cost = reforming(state, army)
+    ? `re-forms ${REFORM_DAYS} days again`
+    : `re-forms ${REFORM_DAYS} days`;
+  return { answers, cost };
 }

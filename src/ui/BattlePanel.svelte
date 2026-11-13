@@ -6,7 +6,7 @@
   import type { GameState } from '../sim/state/game-state.ts';
   import { menOf } from '../sim/systems/economy.ts';
   import type { Actions } from './actions.ts';
-  import { cssColour } from './describe.ts';
+  import { cssColour, reformingText } from './describe.ts';
   import Formations from './Formations.svelte';
   import StanceControls from './StanceControls.svelte';
 
@@ -54,14 +54,14 @@
         >
           <span class="swatch" style:background={cssColour(game, army.owner)}></span>
           <span class="who"
-            >{factionName(game, army.owner)} · {STANCE_NAMES[army.stance]} · {whole(
-              menOf(game, army),
-            )} men</span
+            >{factionName(game, army.owner)} · {STANCE_NAMES[army.stance]}{reformingText(game, army)
+              ? ` · ${reformingText(game, army)?.toLowerCase()}`
+              : ''} · {whole(menOf(game, army))} men</span
           >
         </button>
         <Formations {game} ids={army.formations} />
         {#if army.owner === game.player}
-          <StanceControls player={game.player} {army} {pending} {actions} />
+          <StanceControls {game} {army} {pending} {actions} />
         {/if}
       </div>
     {/each}
