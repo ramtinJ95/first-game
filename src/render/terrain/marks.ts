@@ -80,9 +80,19 @@ const TRACK_REACH = 34;
 export const VALLEY = { desertReach: 30, width: 13 } as const;
 /**
  * A delta fans out from a river's end 25 to 220 km from the coast, over about 70
- * degrees. A river that ends in a lake, as the Jordan in the Dead Sea, has none.
+ * degrees. A river that ends in a lake, as the Jordan in the Dead Sea, has none. Its
+ * sides swell and waver (`deltaSide`), drawn in steps of `step` km.
  */
-const DELTA = { inland: 25, reach: 220, spread: 0.62, lake: 10 } as const;
+const DELTA = {
+  inland: 25,
+  reach: 220,
+  spread: 0.62,
+  lake: 10,
+  bulge: 0.08,
+  waver: 7,
+  waverCell: 28,
+  step: 4,
+} as const;
 const WOOD_SPACING = { edge: 62, middle: 30 } as const;
 /** A wood's pale rim reaches this far beyond its lobes. */
 export const WOOD_RIM = 1.18;
@@ -114,6 +124,38 @@ function gridKey(x: number, y: number): number {
 
 function inRect(rect: Rect, x: number, y: number): boolean {
   return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom;
+}
+
+/**
+ * A delta fan's side from the river's end to a coast point, without its two ends: it
+ * swells out from the fan by DELTA.bulge of its length and wavers by up to DELTA.waver
+ * km, so the fan's sides are a silted plain's edge and not two ruled lines.
+ */
+function deltaSide(
+  [ax, ay]: readonly [number, number],
+  [bx, by]: readonly [number, number],
+  toward: number,
+): [number, number][] {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const length = Math.hypot(dx, dy);
+  let nx = -dy / length;
+  let ny = dx / length;
+  if (nx * Math.cos(toward) + ny * Math.sin(toward) > 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  const steps = Math.ceil(length / DELTA.step);
+  const side: [number, number][] = [];
+  for (let k = 1; k < steps; k++) {
+    const t = k / steps;
+    const x = ax + dx * t;
+    const y = ay + dy * t;
+    const waver = DELTA.waver * (2 * valueNoise(x, y, DELTA.waverCell, 71) - 1);
+    const out = Math.sin(Math.PI * t) * (DELTA.bulge * length + waver);
+    side.push([x + nx * out, y + ny * out]);
+  }
+  return side;
 }
 
 /**
@@ -369,7 +411,14 @@ export class Land {
         .filter((p) => Math.abs(p.off) < DELTA.spread && p.d < nearest * 1.5)
         .sort((a, b) => a.off - b.off);
       if (fan.length < 3) continue;
-      deltas.push([[end[0], end[1]], ...fan.map((p): [number, number] => [p.x, p.y])]);
+      const first = fan[0] as { x: number; y: number };
+      const last = fan[fan.length - 1] as { x: number; y: number };
+      deltas.push([
+        [end[0], end[1]],
+        ...deltaSide(end, [first.x, first.y], toward),
+        ...fan.map((p): [number, number] => [p.x, p.y]),
+        ...deltaSide(end, [last.x, last.y], toward).reverse(),
+      ]);
     }
     return deltas;
   }
