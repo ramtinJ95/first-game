@@ -48,14 +48,21 @@ function candidates({ anchor: { x, y }, width: w, height: h, clearance }: LabelR
     box(x - dx - w, y - h / 2),
     box(x - w / 2, y - dy - h),
     box(x - w / 2, y + dy),
+    box(x + dx, y - dy - h),
+    box(x - dx - w, y - dy - h),
+    box(x + dx, y + dy),
+    box(x - dx - w, y + dy),
   ];
 }
 
 /**
- * Places labels in priority order. Each label takes the first of four spots (right,
- * left, above, below its city's symbol) that stays on screen and clears every label
- * already placed and every symbol. A label with no free spot is hidden, so zooming
- * out hides the smaller cities first and names never pile up.
+ * Places labels in priority order. Each label takes the first of eight spots (right,
+ * left, above, below its city's symbol, then the four corners) that stays on screen and
+ * clears every label already placed and every marker: the symbols, and the banners and
+ * battle markers that stand on the map. A label with no free spot is hidden, so zooming
+ * out hides the smaller cities first and names never pile up. A great power's capital is
+ * always named: with no free spot, its name takes the first spot on screen that clears
+ * the names already placed, over a lesser symbol or a banner.
  */
 export function placeLabels(
   requests: readonly LabelRequest[],
@@ -65,15 +72,18 @@ export function placeLabels(
   const placed = new Map<string, Box>();
   const taken: Box[] = [];
   for (const request of [...requests].sort(compare)) {
-    const spot = candidates(request).find(
-      (box) =>
-        box.left >= 0 &&
-        box.top >= 0 &&
-        box.right <= viewport.width &&
-        box.bottom <= viewport.height &&
-        !markers.some((marker) => overlaps(box, marker)) &&
-        !taken.some((other) => overlaps(box, other)),
-    );
+    const spots = candidates(request);
+    const onScreen = (box: Box) =>
+      box.left >= 0 && box.top >= 0 && box.right <= viewport.width && box.bottom <= viewport.height;
+    const clearOfNames = (box: Box) => !taken.some((other) => overlaps(box, other));
+    const spot =
+      spots.find(
+        (box) =>
+          onScreen(box) && clearOfNames(box) && !markers.some((marker) => overlaps(box, marker)),
+      ) ??
+      (request.priority === LABEL_PRIORITY.capital
+        ? spots.find((box) => onScreen(box) && clearOfNames(box))
+        : undefined);
     if (!spot) continue;
     placed.set(request.id, spot);
     taken.push({
