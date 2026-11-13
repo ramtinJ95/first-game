@@ -773,7 +773,18 @@ function ground(land: Land, rect: Rect): Mark[] {
           : roll < 0.92
             ? 'scrub'
             : 'rock';
-    marks.push({ kind, x, y, size: 0.8 + random() * 0.6, seed });
+    const size = 0.8 + random() * 0.6;
+    // The drawing reaches its size to each side and above its foot, so all of it keeps
+    // to land, as on a coast.
+    const footprint: [number, number][] = [
+      [x - size, y],
+      [x + size, y],
+      [x, y - size],
+      [x - size * 0.7, y - size * 0.7],
+      [x + size * 0.7, y - size * 0.7],
+    ];
+    if (footprint.some(([fx, fy]) => !land.open(fx, fy))) continue;
+    marks.push({ kind, x, y, size, seed });
   }
   for (const { x, y, seed } of scatter(
     rect,
