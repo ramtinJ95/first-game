@@ -13,6 +13,7 @@
   import FatePrompt from './FatePrompt.svelte';
   import type { FrameActions } from './frame-actions.ts';
   import Guide from './Guide.svelte';
+  import LeaveConfirm from './LeaveConfirm.svelte';
   import NoticeToast from './NoticeToast.svelte';
   import OverviewPanel from './OverviewPanel.svelte';
   import StartScreen from './StartScreen.svelte';
@@ -97,7 +98,9 @@
     <CommandMenu menu={view.current.menu} {actions} />
   {/if}
 
-  {#if modal?.kind === 'guide'}
+  {#if modal?.kind === 'leave'}
+    <LeaveConfirm frame={view.current.frame} actions={frame} />
+  {:else if modal?.kind === 'guide'}
     <Guide {game} frame={view.current.frame} actions={frame} />
   {:else if modal?.kind === 'fate'}
     <FatePrompt {game} fate={modal} pauseOnFate={view.current.frame.pauseOnFate} actions={frame} />

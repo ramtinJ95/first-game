@@ -3,14 +3,23 @@ import type { TurningPoint } from './turning-points.ts';
 
 /**
  * What covers the game, one at a time. The start screen and the loss replace whatever
- * waits; a win, a fate, and the guide wait their turn in this order.
+ * waits; a win, a fate, and the guide wait their turn in this order. The question
+ * whether to leave for the start screen goes in front of them all.
  */
 export type Modal =
   | { readonly kind: 'start' }
+  | { readonly kind: 'leave' }
   | Extract<TurningPoint, { kind: 'lost' | 'won' | 'fate' }>
   | { readonly kind: 'guide' };
 
-const RANK: Record<Modal['kind'], number> = { start: 0, lost: 1, won: 2, fate: 3, guide: 4 };
+const RANK: Record<Modal['kind'], number> = {
+  start: 0,
+  leave: 0,
+  lost: 1,
+  won: 2,
+  fate: 3,
+  guide: 4,
+};
 
 export function enqueue(queue: readonly Modal[], modal: Modal): Modal[] {
   if (modal.kind === 'start' || modal.kind === 'lost') return [modal];

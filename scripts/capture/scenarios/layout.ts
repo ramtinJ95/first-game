@@ -26,7 +26,7 @@ function storesRunOut(): GameState {
 export default defineScenario({
   name: 'layout',
   title:
-    'The top bar on one row at 1024 px with stores run out, and the Game menu inside the page at 1280 px',
+    'The top bar on one row at 1024 px with stores run out, the Game menu inside the page at 1280 px, and the question before leaving for the start screen',
   viewport: { width: 1280, height: 720 },
   async run({ page, shot }) {
     await openGame(page);
@@ -42,6 +42,15 @@ export default defineScenario({
     await shot(
       'top-bar-1024',
       'The top bar at 1024 px on one row with gold and food run out: "Ran out" on each, and why on hover',
+    );
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole('button', { name: 'Game', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Start screen' }).click();
+    await page.getByTestId('leave-confirm').waitFor();
+    await shot(
+      'leave-confirm',
+      'Start screen in the Game menu asks first, with the game paused: save and leave, leave without saving, or stay',
     );
   },
 });

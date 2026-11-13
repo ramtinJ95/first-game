@@ -1,6 +1,15 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { GameState } from '../src/sim/state/game-state.ts';
-import { dropSave, openGame, pause, rome, startGame, untilDrawn } from './support.ts';
+import {
+  dropSave,
+  openGame,
+  pause,
+  resume,
+  rome,
+  startGame,
+  untilDay,
+  untilDrawn,
+} from './support.ts';
 
 interface Box {
   name: string;
@@ -56,6 +65,12 @@ async function barItems(page: Page): Promise<Box[]> {
     await box('Overview', bar.getByRole('button', { name: 'Overview' })),
     await box('Game', bar.getByRole('button', { name: 'Game', exact: true })),
   ];
+}
+
+async function startScreenItem(page: Page) {
+  await page.getByRole('button', { name: 'Game', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Start screen' }).click();
+  return page.getByTestId('leave-confirm');
 }
 
 test.describe('the Game menu at 1280 px', () => {
@@ -116,5 +131,54 @@ test.describe('the frame readout', () => {
     expect(overlaps(meter, bar), 'the readout covers the top bar').toBe(false);
     expect(meter.x + meter.width).toBeLessThanOrEqual(1280);
     expect(meter.y + meter.height).toBeLessThanOrEqual(720);
+  });
+});
+
+test.describe('leaving for the start screen', () => {
+  test('asks first, pauses while it asks, and Stay runs the game on', async ({ page }) => {
+    await openGame(page);
+    await expect(page.getByTestId('time-controls-speed')).not.toHaveText('Paused');
+    const confirm = await startScreenItem(page);
+    await expect(confirm).toBeVisible();
+    await expect(page.getByTestId('start-screen')).toHaveCount(0);
+    await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
+    const asked = Number(await page.getByTestId('time-controls-day').getAttribute('data-day'));
+
+    await confirm.getByRole('button', { name: 'Stay' }).click();
+    await expect(confirm).toHaveCount(0);
+    await expect(page.getByTestId('time-controls-speed')).not.toHaveText('Paused');
+    await untilDay(page, asked + 1);
+  });
+
+  test('Stay keeps a paused game paused', async ({ page }) => {
+    await openGame(page);
+    await pause(page);
+    const confirm = await startScreenItem(page);
+    await confirm.getByRole('button', { name: 'Stay' }).click();
+    await expect(confirm).toHaveCount(0);
+    await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
+  });
+
+  test('Save and leave writes your save, and Continue loads it', async ({ page }) => {
+    await openGame(page);
+    await untilDay(page, 3);
+    const confirm = await startScreenItem(page);
+    const saved = Number(await page.getByTestId('time-controls-day').getAttribute('data-day'));
+    await confirm.getByRole('button', { name: 'Save and leave' }).click();
+    const start = page.getByTestId('start-screen');
+    await expect(start.getByTestId('continue-info')).toHaveText(`Rome, Year 1, day ${saved}`);
+    await start.getByRole('button', { name: 'Continue' }).click();
+    await expect(start).toHaveCount(0);
+    await expect(page.getByTestId('time-controls-day')).toHaveAttribute('data-day', String(saved));
+  });
+
+  test('Leave without saving writes nothing', async ({ page }) => {
+    await openGame(page);
+    await resume(page);
+    const confirm = await startScreenItem(page);
+    await confirm.getByRole('button', { name: 'Leave without saving' }).click();
+    const start = page.getByTestId('start-screen');
+    await expect(start).toBeVisible();
+    await expect(start.getByRole('button', { name: 'Continue' })).toHaveCount(0);
   });
 });

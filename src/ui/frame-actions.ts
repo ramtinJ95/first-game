@@ -11,6 +11,13 @@ export interface FrameActions {
   /** Loads the save written last, which `latestSaved` names. */
   continueGame(): void;
   showStart(): void;
+  /**
+   * Asks, with the game paused, whether to save before the start screen. A player who
+   * has lost has nothing to keep and goes straight there.
+   */
+  askToLeave(): void;
+  /** Answers the question: leaves for the start screen, after writing your save when `save`. */
+  leave(save: boolean): void;
   openGuide(): void;
   /** Closes the modal in front. A game that a modal stopped runs again after the last one. */
   closeModal(): void;

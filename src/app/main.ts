@@ -455,6 +455,24 @@ const frame: FrameActions = {
     menu = undefined;
     view.refresh();
   },
+  askToLeave() {
+    if (clock.state.factions[clock.state.player]?.defeatedOn !== null) {
+      frame.showStart();
+      return;
+    }
+    if (!clock.paused) resumeOnClose = true;
+    clock.pause();
+    modals = [{ kind: 'leave' }, ...modals];
+    menu = undefined;
+    view.refresh();
+  },
+  leave(keep) {
+    if (keep && !save('manual', clock.state)) {
+      view.refresh();
+      return;
+    }
+    frame.showStart();
+  },
   openGuide() {
     if (modals[0]?.kind === 'guide') return;
     modals = [{ kind: 'guide' }, ...modals];
@@ -505,9 +523,11 @@ const frame: FrameActions = {
   },
 };
 
-/** A fate to choose, a loss, or a win holds the game until the player answers it. */
+/** A fate to choose, a loss, a win, or the question to leave holds the game until the player answers it. */
 function held(): boolean {
-  return modals.some(({ kind }) => kind === 'fate' || kind === 'lost' || kind === 'won');
+  return modals.some(
+    ({ kind }) => kind === 'leave' || kind === 'fate' || kind === 'lost' || kind === 'won',
+  );
 }
 
 const actions: Actions = {
