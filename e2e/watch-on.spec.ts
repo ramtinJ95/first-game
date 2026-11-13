@@ -9,6 +9,7 @@ import {
   pause,
   resume,
   romaFallsTomorrow,
+  untilDrawn,
 } from './support.ts';
 
 /** Banners closer than this on screen could take each other's click. */
@@ -40,6 +41,7 @@ test('a defeated player who watches on sees every army, and the top bar says the
   await defeat.getByRole('button', { name: 'Watch on' }).click();
   await expect(defeat).toHaveCount(0);
   await pause(page);
+  await untilDrawn(page);
   const shown = await day(page);
   const before = playTo(save, shown - 1);
   const state = playTo(before, shown);

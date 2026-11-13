@@ -11,6 +11,7 @@ import {
   sackedMediolanum,
   sixSpearmenMusterTomorrow,
   storesAtTheirLimits,
+  untilDrawn,
   weakSiegeOfMediolanum,
 } from './support.ts';
 
@@ -21,6 +22,7 @@ async function load(page: Page, state: GameState) {
     'data-day',
     String(state.day),
   );
+  await untilDrawn(page);
 }
 
 /** Rome's army stands on the city's symbol, so the click goes to its province 40 km south. */
