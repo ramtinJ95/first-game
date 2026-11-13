@@ -1,0 +1,72 @@
+[
+ {
+  "file": "01-opening-italy.png",
+  "title": "Best: the opening map of Italy, day 1, with relief, woods, towns and sight",
+  "kind": "screenshot"
+ },
+ {
+  "file": "02-siege-camp.png",
+  "title": "Best: Roman siege camp at Mediolanum, day 53: tents, stakes, ditch, fires",
+  "kind": "screenshot"
+ },
+ {
+  "file": "03-convoy.png",
+  "title": "Best: Roman convoy closing on Massalia, day 421",
+  "kind": "screenshot"
+ },
+ {
+  "file": "04-battle-figures.png",
+  "title": "Battle near Roma, day 66: lines and wings drawn; Carthage's left wing stands on the sea; labels 'Terracina(?)' and 'Al(l)ifae'",
+  "kind": "screenshot"
+ },
+ {
+  "file": "05-battle-panel.png",
+  "title": "Battle panel with stances and retreat, day 66 (fault 19 fixed); load recentred the camera on Carthago",
+  "kind": "screenshot"
+ },
+ {
+  "file": "06-defeat.png",
+  "title": "Idle Rome falls to Carthage, day 1237: defeat screen; top bar wraps to two rows",
+  "kind": "screenshot"
+ },
+ {
+  "file": "07-resize-misregistered.png",
+  "title": "Worst: after resizing to 1600 px the sea and terrain layer is offset from the coastlines and labels",
+  "kind": "screenshot"
+ },
+ {
+  "file": "08-resize-fresh.png",
+  "title": "The same 1600 px view after a reload, drawn correctly",
+  "kind": "screenshot"
+ },
+ {
+  "file": "09-retreat-227-days.png",
+  "title": "Worst: beaten armies from Africa 'Retreating to Capua \u00b7 227 days left' near Cyrene; banner covers ALEXANDRIA",
+  "kind": "screenshot"
+ },
+ {
+  "file": "10-march-281-days.png",
+  "title": "Worst: right-click on Capua from Carthago gives a silent 281-day overland march",
+  "kind": "screenshot"
+ },
+ {
+  "file": "11-widest-labels.png",
+  "title": "Widest zoom, day 1: CARTHAGO label missing, Macedon's grey-blue wash reads as fog",
+  "kind": "screenshot"
+ },
+ {
+  "file": "12-menu-clipped.png",
+  "title": "Game menu over the fate prompt is clipped off the left edge",
+  "kind": "screenshot"
+ },
+ {
+  "file": "13-world-year-28.png",
+  "title": "Year 28: Carthage owns every city; purple over desert reads as Rome's red",
+  "kind": "screenshot"
+ },
+ {
+  "file": "14-phone-390.png",
+  "title": "390 px: city panel as a bottom sheet, clock and stores visible (fault 25 fixed); resize misregistration visible",
+  "kind": "screenshot"
+ }
+]
