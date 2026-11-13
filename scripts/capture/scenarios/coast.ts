@@ -78,6 +78,8 @@ export default defineScenario({
       ['heavyCavalry', 400],
       ['swordsmen', 1100],
     ]).activity = { kind: 'idle', position: { x: roma.x - 8, y: roma.y + 8 } };
+    // A jump zooms about a point on screen, so the view widens over Arausa first.
+    await view.jumpTo({ x: ARAUSA.x + 55, y: ARAUSA.y + 10 }, 0.1);
     await view.jumpTo(roma, 0.1);
     await loadSave(page, playDays(atRoma, 2));
     await view.jumpTo({ x: roma.x + 40, y: roma.y + 12 }, 4);
