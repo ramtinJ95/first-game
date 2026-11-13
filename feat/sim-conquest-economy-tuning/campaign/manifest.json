@@ -15,6 +15,16 @@
     "kind": "screenshot"
   },
   {
+    "file": "campaign-alerts.png",
+    "title": "The alerts tell that the army arrived at Mediolanum and besieges it, and that the skirmishers mustered in Roma",
+    "kind": "screenshot"
+  },
+  {
+    "file": "campaign-alert-opened.png",
+    "title": "A click on the alert centres the map on Mediolanum and selects the besieging army",
+    "kind": "screenshot"
+  },
+  {
     "file": "clip.gif",
     "title": "A short campaign through the page: select Rome's army, march it to Mediolanum, declare war on Mediolanum, raise skirmishers in Roma, run the days until the army arrives and besieges the city, and open the alert",
     "kind": "clip"
