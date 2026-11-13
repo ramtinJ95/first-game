@@ -24,6 +24,7 @@ import {
 import { menOf, RALLY_DISTANCE } from '../src/sim/systems/economy.ts';
 import { distance } from '../src/sim/world/find-path.ts';
 import { recordEvents } from '../src/sim/events.ts';
+import { createStandoffCounter, standoffLines, type Standoffs } from './standoffs.ts';
 import type { ArmyId, FactionId } from '../src/sim/ids.ts';
 import { parseMap, POWERS, type PowerId } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
@@ -99,6 +100,7 @@ interface Game {
   retreatDays: number[];
   /** The most days any army still had to march on any day. */
   longestUnderWay: number;
+  standoffs: Standoffs;
 }
 
 function daysAlong(position: MapPoint, waypoints: readonly MapPoint[]): number {
@@ -158,6 +160,7 @@ function play(seed: number, passive: readonly FactionId[]): Game {
   const marchDays: number[] = [];
   const retreatDays: number[] = [];
   let longestUnderWay = 0;
+  const standoffs = createStandoffCounter(world);
 
   for (let day = 1; day <= YEARS * DAYS_PER_YEAR; day++) {
     const started = performance.now();
@@ -272,6 +275,7 @@ function play(seed: number, passive: readonly FactionId[]): Game {
       if (activity.kind !== 'marching' || passive.includes(army.owner)) continue;
       longestUnderWay = Math.max(longestUnderWay, daysAlong(activity.position, activity.waypoints));
     }
+    standoffs.observe(next);
     state = next;
     for (const power of POWERS) {
       const faction = power as string as FactionId;
@@ -325,6 +329,7 @@ function play(seed: number, passive: readonly FactionId[]): Game {
     marchDays,
     retreatDays,
     longestUnderWay,
+    standoffs: standoffs.result(),
   };
 }
 
@@ -492,6 +497,7 @@ function table(title: string, passive: readonly FactionId[]) {
     `- Seeds where a power holds more than half the ${CITY_COUNT} cities: ${dominant}/${SEEDS}.`,
   );
   console.log(`- Seeds with at least four great powers alive after two years: ${alive}/${SEEDS}.`);
+  for (const line of standoffLines(games.map((g) => g.standoffs))) console.log(line);
   const peaces = games.map((g) => g.longestPeace);
   console.log(
     `- Longest stretch a great power the AI runs stayed at peace with everyone: mean over seeds ${fmt(mean(peaces))} days, longest ${fmt(Math.max(...peaces))} days.`,

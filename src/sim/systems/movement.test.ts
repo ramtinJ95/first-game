@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { LandOracle } from '../../../scripts/movement/land-oracle.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
-import type { ArmyId, BattleId, CityId } from '../ids.ts';
+import type { ArmyId, BattleId, CityId, SiegeId } from '../ids.ts';
+import { GATHER_DAYS } from '../orders/embark.ts';
 import {
   CONVOY_KM_PER_DAY,
   landPath,
@@ -223,15 +224,16 @@ describe('a crossing by convoy', () => {
     to,
   });
 
-  test('Carthago to Syracusae: the army boards, the convoy sails over water, and it lands idle', () => {
+  test('Carthago to Syracusae: the army boards, the convoy sails over water, and it lands idle at a harbour beside the city', () => {
     let state = buildFixture();
     expect(executeOrder(state, embark(FIXTURE.syracusae), world)).toBeUndefined();
     const [convoy] = Object.values(state.convoys);
     if (!convoy) throw new Error('no convoy set sail');
-    expect(armyOf(state, FIXTURE.punicArmy).activity).toEqual({
+    expect(armyOf(state, FIXTURE.punicArmy).activity).toMatchObject({
       kind: 'embarked',
       convoy: convoy.id,
     });
+    expect(convoy.departsOn).toBeUndefined();
     expect(convoy.armies).toEqual([FIXTURE.punicArmy]);
     const landing = world.harbours.get(FIXTURE.syracusae);
     expect(convoy.waypoints.at(-1)).toEqual(landing);
@@ -254,7 +256,7 @@ describe('a crossing by convoy', () => {
     expectConsistent(state);
   });
 
-  test('an army that lands at a friendly harbour far from its city can sail again from there', () => {
+  test('an army that lands at a harbour far from its city marches into the city and can sail again from there', () => {
     let state = buildFixture();
     const roma = state.cities[FIXTURE.roma];
     if (!roma) throw new Error('the fixture lacks Roma');
@@ -262,16 +264,20 @@ describe('a crossing by convoy', () => {
     const harbour = world.harbours.get(FIXTURE.roma) as MapPoint;
     expect(distance(harbour, ROMA)).toBeGreaterThan(20);
     expect(executeOrder(state, embark(FIXTURE.roma), world)).toBeUndefined();
-    for (let day = 0; day < 200 && Object.keys(state.convoys).length > 0; day += 1) {
+    for (
+      let day = 0;
+      day < 200 && armyOf(state, FIXTURE.punicArmy).activity.kind !== 'idle';
+      day += 1
+    ) {
       state = tick(state, [], world).state;
     }
-    expect(armyOf(state, FIXTURE.punicArmy).activity).toEqual({ kind: 'idle', position: harbour });
+    expect(armyOf(state, FIXTURE.punicArmy).activity).toEqual({ kind: 'idle', position: ROMA });
     expect(executeOrder(state, embark(FIXTURE.carthago), world)).toBeUndefined();
     expect(armyOf(state, FIXTURE.punicArmy).activity.kind).toBe('embarked');
     expectConsistent(state);
   });
 
-  test('is rejected away from a port of the faction, and to a city that is not a port', () => {
+  test('is rejected away from a port of the faction and from the shore, and to a city that is not a port', () => {
     const state = buildFixture();
     expect(executeOrder(state, embark('capua' as CityId), world)?.reason).toBe(
       'Capua is not a port',
@@ -279,9 +285,141 @@ describe('a crossing by convoy', () => {
     const punic = armyOf(state, FIXTURE.punicArmy);
     punic.activity = { kind: 'idle', position: { x: 2169.9, y: 2885.1 } };
     expect(executeOrder(state, embark(FIXTURE.syracusae), world)?.reason).toBe(
-      'army army-punic does not stand at a port of carthage',
+      'army army-punic stands at no port of carthage and on no shore',
     );
     expect(state.convoys).toEqual({});
+    expectConsistent(state);
+  });
+
+  test('an army on a shore that is no port of its own gathers ships for GATHER_DAYS, then sails home and marches into its city', () => {
+    let state = buildFixture();
+    const shore = { x: 2225, y: 2960 };
+    armyOf(state, FIXTURE.romanArmy).activity = { kind: 'idle', position: shore };
+    const order: Order = {
+      kind: 'embark',
+      faction: FIXTURE.rome,
+      army: FIXTURE.romanArmy,
+      to: FIXTURE.roma,
+    };
+    expect(executeOrder(state, order, world)).toBeUndefined();
+    const [convoy] = Object.values(state.convoys);
+    expect(convoy?.departsOn).toBe(state.day + GATHER_DAYS);
+    const waiting = convoy?.position;
+    for (let day = 0; day < GATHER_DAYS; day += 1) {
+      state = tick(state, [], world).state;
+      expect(Object.values(state.convoys)[0]?.position).toEqual(waiting);
+    }
+    state = tick(state, [], world).state;
+    expect(Object.values(state.convoys)[0]?.position).not.toEqual(waiting);
+    for (
+      let day = 0;
+      day < 200 && armyOf(state, FIXTURE.romanArmy).activity.kind !== 'idle';
+      day += 1
+    ) {
+      state = tick(state, [], world).state;
+    }
+    expect(armyOf(state, FIXTURE.romanArmy).activity).toEqual({ kind: 'idle', position: ROMA });
+    expectConsistent(state);
+  });
+
+  test('a besieging army sails from the port it besieges and leaves the siege', () => {
+    const state = buildFixture();
+    executeOrder(
+      state,
+      { kind: 'declareWar', faction: FIXTURE.rome, against: FIXTURE.carthage },
+      world,
+    );
+    const carthago = state.cities[FIXTURE.carthago];
+    if (!carthago) throw new Error('the fixture lacks Carthago');
+    armyOf(state, FIXTURE.punicArmy).activity = { kind: 'idle', position: { x: 0, y: 0 } };
+    const siege = 'siege-1' as SiegeId;
+    state.nextSerial = 2;
+    state.sieges[siege] = {
+      id: siege,
+      city: FIXTURE.carthago,
+      besiegers: [FIXTURE.romanArmy],
+      startedOn: state.day,
+    };
+    armyOf(state, FIXTURE.romanArmy).activity = {
+      kind: 'besieging',
+      position: world.harbours.get(FIXTURE.carthago) as MapPoint,
+      siege,
+    };
+    expect(
+      executeOrder(
+        state,
+        { kind: 'embark', faction: FIXTURE.rome, army: FIXTURE.romanArmy, to: FIXTURE.roma },
+        world,
+      ),
+    ).toBeUndefined();
+    expect(armyOf(state, FIXTURE.romanArmy).activity.kind).toBe('embarked');
+    expect(state.sieges[siege]?.besiegers).toEqual([]);
+    expect(carthago.owner).toBe(FIXTURE.carthage);
+  });
+
+  test('Carthage sails to Roma and then marches on to Capua: the army marches on from its landing every day of the land leg', () => {
+    let state = buildFixture();
+    const order: Order = {
+      kind: 'embark',
+      faction: FIXTURE.carthage,
+      army: FIXTURE.punicArmy,
+      to: FIXTURE.roma,
+      then: CAPUA,
+    };
+    expect(executeOrder(state, order, world)).toBeUndefined();
+    for (
+      let day = 0;
+      day < 200 && armyOf(state, FIXTURE.punicArmy).activity.kind === 'embarked';
+      day += 1
+    ) {
+      state = tick(state, [], world).state;
+    }
+    const landed = armyOf(state, FIXTURE.punicArmy).activity;
+    expect(landed).toMatchObject({ kind: 'marching', position: world.harbours.get(FIXTURE.roma) });
+    while (armyOf(state, FIXTURE.punicArmy).activity.kind === 'marching') {
+      const activity = armyOf(state, FIXTURE.punicArmy).activity;
+      expect(activity.kind === 'marching' && activity.waypoints.at(-1)).toEqual(CAPUA);
+      state = tick(state, [], world).state;
+    }
+    expect(armyOf(state, FIXTURE.punicArmy).activity).toEqual({ kind: 'idle', position: CAPUA });
+    expectConsistent(state);
+  });
+
+  test('a landing whose march on the rules refuse is refused before the army boards', () => {
+    const state = buildFixture();
+    const order: Order = {
+      kind: 'embark',
+      faction: FIXTURE.carthage,
+      army: FIXTURE.punicArmy,
+      to: FIXTURE.roma,
+      then: TYRRHENIAN_SEA,
+    };
+    expect(executeOrder(state, order, world)?.reason).toMatch(/in the sea/);
+    expect(state.convoys).toEqual({});
+  });
+
+  test('an army that lands at an enemy port whose harbour lies 23 km out marches in and besieges the city', () => {
+    let state = buildFixture();
+    expect(
+      executeOrder(
+        state,
+        { kind: 'declareWar', faction: FIXTURE.carthage, against: FIXTURE.rome },
+        world,
+      ),
+    ).toBeUndefined();
+    armyOf(state, FIXTURE.romanArmy).activity = { kind: 'idle', position: CAPUA };
+    expect(distance(world.harbours.get(FIXTURE.roma) as MapPoint, ROMA)).toBeGreaterThan(20);
+    expect(executeOrder(state, embark(FIXTURE.roma), world)).toBeUndefined();
+    for (
+      let day = 0;
+      day < 200 && armyOf(state, FIXTURE.punicArmy).activity.kind !== 'besieging';
+      day += 1
+    ) {
+      state = tick(state, [], world).state;
+    }
+    const { activity } = armyOf(state, FIXTURE.punicArmy);
+    expect(activity.kind).toBe('besieging');
+    expect(activity.kind === 'besieging' && state.sieges[activity.siege]?.city).toBe(FIXTURE.roma);
     expectConsistent(state);
   });
 

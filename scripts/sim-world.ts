@@ -12,6 +12,7 @@ import { SYSTEMS, type System } from '../src/sim/systems.ts';
 import { sieges } from '../src/sim/systems/sieges.ts';
 import { tick } from '../src/sim/tick.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
+import { createStandoffCounter, standoffLines, type Standoffs } from './standoffs.ts';
 
 /**
  * Plays the new game with every faction under the AI for many years and prints what
@@ -64,6 +65,7 @@ interface Seed {
   stanceChanges: number[];
   quiet: { power: PowerId; days: number; from: number };
   conquests: Partial<Record<PowerId, Conquest>>;
+  standoffs: Standoffs;
 }
 
 function play(seed: number): Seed {
@@ -88,6 +90,7 @@ function play(seed: number): Seed {
   let sallyArmies = 0;
   const sallies = { men: 0 };
   const stanceChanges = new Map<string, number>();
+  const standoffs = createStandoffCounter(world);
 
   for (let day = 1; day <= YEARS * YEAR; day++) {
     const orders: Order[] = decideAll(state, world, []);
@@ -200,6 +203,7 @@ function play(seed: number): Seed {
       quietRun.set(power, now);
       if (now.days > quiet.days) quiet = { power, ...now };
     }
+    standoffs.observe(next);
     state = next;
   }
 
@@ -222,6 +226,7 @@ function play(seed: number): Seed {
     stanceChanges: [...stanceChanges.values()],
     quiet,
     conquests,
+    standoffs: standoffs.result(),
   };
 }
 
@@ -324,6 +329,7 @@ console.log(
   `- Seeds each power is the largest: ${leadCount.map(([p, n]) => `${p} ${n}`).join(', ')}. ${mark(most <= SEEDS * 0.4)} (none more than ${Math.floor(SEEDS * 0.4)}).`,
 );
 const sum = (pick: (g: Seed) => number) => games.reduce((s, g) => s + pick(g), 0);
+for (const line of standoffLines(games.map((g) => g.standoffs))) console.log(line);
 console.log(
   `- Sieges begun: ${sum((g) => g.sieges)}. Begun again by the same power within ${RESTART_DAYS} days of ordering its besiegers away from the city: ${sum((g) => g.restarts)}.`,
 );
