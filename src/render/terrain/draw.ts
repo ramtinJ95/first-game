@@ -1,8 +1,17 @@
 import { GraphicsContext } from 'pixi.js';
 import type { MultiPolygon, Peak } from '../../sim/map.ts';
 import { INK, PAPER } from '../palette.ts';
-import { VALLEY, WOOD_RIM, type Crop, type Mark, type Tier, type Wood } from './marks.ts';
-import { stream } from './random.ts';
+import {
+  PAN_RIM,
+  VALLEY,
+  WOOD_RIM,
+  type Crop,
+  type Land,
+  type Mark,
+  type Tier,
+  type Wood,
+} from './marks.ts';
+import { stream, valueNoise } from './random.ts';
 
 export function mix(from: number, to: number, t: number): number {
   const channel = (shift: number) => {
@@ -38,7 +47,58 @@ export const TERRAIN_COLOURS = {
   treeInk: mix(INK, 0x2f3a1e, 0.4),
   furrow: mix(PAPER, SEPIA, 0.42),
   track: mix(PAPER, SEPIA, 0.62),
+  foldLight: mix(PAPER, 0xfff1d2, 0.5),
+  foldShade: mix(PAPER, 0x8f5d2e, 0.42),
+  foldDeep: mix(PAPER, 0x7a4a26, 0.58),
+  foldInk: mix(INK, 0x7a4a26, 0.35),
+  dryGround: 0xdcc38c,
+  aridGround: 0xd2ad7a,
+  saltEdge: mix(0xf3d597, 0xf2efe4, 0.45),
+  saltRim: mix(0xf3d597, 0xf2efe4, 0.75),
+  salt: 0xf2efe4,
+  saltCrack: mix(0xf2efe4, 0x6b5a45, 0.62),
 } as const;
+
+/** The ground tint's raster cell, in km. */
+export const TINT_CELL = 16;
+
+export interface GroundTint {
+  readonly width: number;
+  readonly height: number;
+  /** Opaque RGBA, row by row from the north-west corner, one pixel per `TINT_CELL` km. */
+  readonly pixels: Uint8Array;
+}
+
+/**
+ * The colour of the bare ground under the washes: the paper on green land, warming to
+ * straw on dry land and to buff on arid land, mottled so it reads as soil and not as a
+ * flat fill. Each pixel is opaque, so drawn over the paper it is the paper where the land
+ * is green, and the pixels blend smoothly into each other when drawn larger.
+ */
+export function groundTint(land: Land, width: number, height: number): GroundTint {
+  const columns = Math.ceil(width / TINT_CELL);
+  const rows = Math.ceil(height / TINT_CELL);
+  const pixels = new Uint8Array(columns * rows * 4);
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < columns; i++) {
+      const x = (i + 0.5) * TINT_CELL;
+      const y = (j + 0.5) * TINT_CELL;
+      const { dry, arid } = land.dryness(x, y);
+      let colour = PAPER;
+      if (dry > 0) {
+        const mottle = 0.7 + 0.35 * valueNoise(x, y, 70, 611) + 0.25 * valueNoise(x, y, 36, 612);
+        colour = mix(PAPER, TERRAIN_COLOURS.dryGround, Math.min(1, dry * mottle * 0.85));
+        colour = mix(colour, TERRAIN_COLOURS.aridGround, Math.min(1, arid * dry * mottle * 0.8));
+      }
+      const k = (j * columns + i) * 4;
+      pixels[k] = (colour >> 16) & 0xff;
+      pixels[k + 1] = (colour >> 8) & 0xff;
+      pixels[k + 2] = colour & 0xff;
+      pixels[k + 3] = 0xff;
+    }
+  }
+  return { width: columns, height: rows, pixels };
+}
 
 /**
  * A mountain's lit side lets the wash under it show through, so it reads as the lit side
@@ -116,6 +176,74 @@ function mountain(g: GraphicsContext, m: Extract<Mark, { kind: 'mountain' }>, ti
       .lineTo(spurX, spurY)
       .stroke({ width: ink * 0.6, color: TERRAIN_COLOURS.reliefInk, alpha: 0.75, cap: 'round' });
   }
+}
+
+/** The way the light comes from, toward the north-west, as on every drawing of relief. */
+const LIGHT = { x: -0.6, y: -0.8 } as const;
+
+/**
+ * A fold seen from above, as the long ridges of the Zagros show from the air: a long oval
+ * along its range, its flank toward the light pale and the other shaded, with the edges
+ * of its bent strata as rings inside it and short ticks where they dip on the shaded side.
+ */
+function fold(g: GraphicsContext, m: Extract<Mark, { kind: 'fold' }>, tier: Tier) {
+  const { x, y, length: l, width: w, angle, high } = m;
+  const random = stream(m.seed);
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  const nx = -dy;
+  const ny = dx;
+  const shaded = nx * LIGHT.x + ny * LIGHT.y < 0 ? 1 : -1;
+  const bow = (random() - 0.5) * w * 0.8;
+  const taper = 0.25 + 0.5 * random();
+  const steps = 18;
+  /** The oval's half width a share `s` of the way along it, rounder at one end than the other. */
+  const half = (s: number) => {
+    const t = Math.abs(2 * s - 1);
+    const p = 2 + (s < 0.5 ? taper : 1 - taper) * 1.5;
+    return (
+      (w / 2) * Math.max(0, 1 - t ** p) ** (1 / p) * (1 + 0.06 * Math.sin(s * 13 + m.seed * 40))
+    );
+  };
+  const at = (s: number, side: number, share: number): [number, number] => {
+    const u = l * share * (s - 0.5);
+    const v = bow * Math.sin(Math.PI * s) + side * half(s) * share;
+    return [x + dx * u + nx * v, y + dy * u + ny * v];
+  };
+  /** The oval at a share of its size, round from one end along `side` and back. */
+  const ring = (share: number): number[] => {
+    const points: number[] = [];
+    for (let n = 0; n <= steps; n++) points.push(...at(n / steps, 1, share));
+    for (let n = steps - 1; n > 0; n--) points.push(...at(n / steps, -1, share));
+    return points;
+  };
+  const ink = INK_KM[tier] * (0.6 + 0.45 * high);
+  g.poly(ring(1)).fill({ color: TERRAIN_COLOURS.foldLight, alpha: 0.45 });
+  const edge: number[] = [];
+  for (let n = 0; n <= steps; n++) edge.push(...at(n / steps, shaded, 1));
+  const flank = [...edge];
+  for (let n = steps; n >= 0; n--) flank.push(...at(n / steps, shaded, 0.08));
+  g.poly(flank).fill({
+    color: high > 0.6 ? TERRAIN_COLOURS.foldDeep : TERRAIN_COLOURS.foldShade,
+    alpha: 0.85,
+  });
+  g.poly(ring(0.55)).stroke({
+    width: ink * 0.35,
+    color: TERRAIN_COLOURS.foldInk,
+    alpha: 0.4,
+    join: 'round',
+  });
+  const hatches = tier === 'close' ? 13 : 8;
+  for (let n = 0; n < hatches; n++) {
+    const s = 0.08 + (0.84 * (n + 0.5)) / hatches;
+    const [ax, ay] = at(s, shaded, 0.15);
+    const [bx, by] = at(s, shaded, 0.96 - 0.15 * random());
+    g.moveTo(ax, ay).lineTo(bx, by);
+  }
+  g.stroke({ width: ink * 0.4, color: TERRAIN_COLOURS.foldInk, alpha: 0.6, cap: 'round' });
+  g.moveTo(edge[0] as number, edge[1] as number);
+  for (let n = 2; n < edge.length; n += 2) g.lineTo(edge[n] as number, edge[n + 1] as number);
+  g.stroke({ width: ink * 0.75, color: TERRAIN_COLOURS.foldInk, alpha: 0.85, cap: 'round' });
 }
 
 function hill(g: GraphicsContext, m: Extract<Mark, { kind: 'hill' }>, tier: Tier) {
@@ -290,20 +418,138 @@ const ROCK = mix(PAPER, SEPIA, 0.32);
 const ROCK_SHADE = mix(PAPER, SEPIA, 0.55);
 const STREAM = 0x557d8c;
 
-type GroundMark = Extract<Mark, { kind: 'tuft' | 'scrub' | 'rock' | 'stream' }>;
+const MUD_WALL = mix(PAPER, 0xb3895a, 0.5);
+const MUD_ROOF = mix(PAPER, 0xf3e2bd, 0.6);
+const MUD_SHADE = mix(PAPER, 0x7a5532, 0.55);
+
+/**
+ * A hamlet's houses, smaller and fewer than a village's symbol, drawn in km so they grow
+ * with the map. On arid land they are boxes of mud brick with flat roofs, one of them
+ * domed; elsewhere they have pitched roofs.
+ */
+function hamlet(g: GraphicsContext, m: Extract<Mark, { kind: 'hamlet' }>) {
+  const random = stream(m.seed);
+  const count = m.roofs === 'flat' ? 3 + Math.floor(random() * 3) : 2 + Math.floor(random() * 2);
+  const houses = Array.from({ length: count }, (_, n) => {
+    const angle = (n / count) * Math.PI * 2 + random() * 0.8;
+    const distance = n === 0 ? 0 : 0.8 + 0.45 * random();
+    return {
+      x: m.x + Math.cos(angle) * distance * 1.2,
+      y: m.y + Math.sin(angle) * distance * 0.8,
+      w: 0.9 + 0.4 * random(),
+      dome: m.roofs === 'flat' && n === 0 && random() < 0.6,
+    };
+  }).sort((a, b) => a.y - b.y);
+  const line = { width: 0.1, color: INK, alpha: 0.85, join: 'round' } as const;
+  for (const h of houses) {
+    const { x, y, w } = h;
+    const left = x - w / 2;
+    const right = x + w / 2;
+    if (m.roofs === 'flat') {
+      const wall = w * 0.5;
+      const top = y - wall;
+      const back = w * 0.3;
+      const lean = w * 0.18;
+      g.poly([right, y, right + lean, y - back, right + lean, top - back, right, top]).fill(
+        MUD_SHADE,
+      );
+      g.rect(left, top, w, wall).fill(MUD_WALL);
+      g.poly([left, top, right, top, right + lean, top - back, left + lean, top - back]).fill(
+        MUD_ROOF,
+      );
+      g.rect(x - w * 0.08, y - wall * 0.55, w * 0.16, wall * 0.55).fill(INK);
+      g.poly([
+        left,
+        y,
+        left,
+        top,
+        left + lean,
+        top - back,
+        right + lean,
+        top - back,
+        right + lean,
+        y - back,
+        right,
+        y,
+      ]).stroke(line);
+      g.moveTo(left, top).lineTo(right, top).lineTo(right, y).stroke(line);
+      if (h.dome) {
+        const r = w * 0.24;
+        const cx = x + lean * 0.5;
+        const cy = top - back * 0.5;
+        g.moveTo(cx - r, cy)
+          .arc(cx, cy, r, Math.PI, 0)
+          .closePath()
+          .fill(MUD_ROOF)
+          .stroke(line);
+      }
+    } else {
+      const wall = w * 0.55;
+      const top = y - wall;
+      const peak = top - w * 0.5;
+      g.rect(left, top, w, wall).fill(PAPER);
+      g.rect(x + w * 0.15, top, w * 0.35, wall).fill(MUD_SHADE);
+      g.rect(left, top, w, wall).stroke(line);
+      g.poly([left - 0.08, top, x, peak, x, top]).fill(mix(PAPER, 0xa2482a, 0.7));
+      g.poly([x, peak, right + 0.08, top, x, top]).fill(mix(INK, 0x8a3b22, 0.4));
+      g.poly([left - 0.08, top, x, peak, right + 0.08, top]).stroke(line);
+    }
+  }
+}
+
+/** The ring of spoil round each shaft of a qanat, with the shaft dark in the middle. */
+function qanat(g: GraphicsContext, m: Extract<Mark, { kind: 'qanat' }>) {
+  for (const [x, y] of m.points) g.circle(x, y, 0.42);
+  g.fill(MOUND);
+  for (const [x, y] of m.points) g.circle(x, y, 0.42);
+  g.stroke({ width: 0.12, color: MOUND_SHADE, alpha: 1 });
+  for (const [x, y] of m.points) g.circle(x, y, 0.14);
+  g.fill(INK);
+}
+
+const STRAW = mix(PAPER, 0xa8893f, 0.62);
+const MOUND_LIT = mix(PAPER, 0xfff3d6, 0.35);
+const MOUND = mix(PAPER, 0x9c7a46, 0.38);
+const MOUND_SHADE = mix(PAPER, 0x6e4f2a, 0.5);
+
+const GROUND_KINDS = ['tuft', 'scrub', 'rock', 'stream', 'tumulus', 'crack'] as const;
+type GroundMark = Extract<Mark, { kind: (typeof GROUND_KINDS)[number] }>;
+
+function isGround(m: Mark): m is GroundMark {
+  return (GROUND_KINDS as readonly string[]).includes(m.kind);
+}
 
 /**
  * The open ground's marks, drawn in one pass by colour: every tuft's blades in one
  * stroke, every bush's crowns, shades, and outlines in one fill or stroke each, and so on.
  * There are thousands of them in a close view, and a drawing call apiece made each redraw
  * of the terrain texture cost three times as much. They seldom overlap, so the order
- * among them does not show.
+ * among them does not show. Their lines are as wide at the middle zoom as close up.
  */
-function ground(g: GraphicsContext, marks: readonly GroundMark[]) {
+function ground(g: GraphicsContext, marks: readonly GroundMark[], tier: Tier) {
+  const k = INK_KM[tier] / INK_KM.close;
   const tufts = marks.filter((m) => m.kind === 'tuft');
   const bushes = marks.filter((m) => m.kind === 'scrub');
   const rocks = marks.filter((m) => m.kind === 'rock');
   const streams = marks.filter((m) => m.kind === 'stream');
+  const mounds = marks.filter((m) => m.kind === 'tumulus');
+  const cracks = marks.filter((m) => m.kind === 'crack');
+
+  for (const m of cracks) {
+    const random = stream(m.seed);
+    const sides = 5 + Math.floor(random() * 3);
+    const turn = random() * Math.PI * 2;
+    const points: number[] = [];
+    for (let n = 0; n < sides; n++) {
+      const a = turn + ((n + (random() - 0.5) * 0.5) / sides) * Math.PI * 2;
+      const r = m.size * (0.8 + 0.35 * random());
+      points.push(m.x + Math.cos(a) * r, m.y + Math.sin(a) * r);
+    }
+    g.poly(points);
+  }
+  if (cracks.length) {
+    g.stroke({ width: 0.15 * k, color: TERRAIN_COLOURS.saltCrack, alpha: 0.85, join: 'round' });
+  }
 
   for (const m of streams) {
     const [first, ...rest] = m.points;
@@ -314,18 +560,58 @@ function ground(g: GraphicsContext, marks: readonly GroundMark[]) {
   if (streams.length)
     g.stroke({ width: 0.2, color: STREAM, alpha: 0.85, cap: 'round', join: 'round' });
 
-  for (const m of tufts) {
-    const random = stream(m.seed);
-    const blades = 4 + Math.floor(random() * 3);
-    for (let n = 0; n < blades; n++) {
-      const a = -Math.PI / 2 + (n / (blades - 1) - 0.5) * 1.5 + (random() - 0.5) * 0.2;
-      const length = m.size * (0.55 + 0.45 * random());
-      g.moveTo(m.x, m.y).lineTo(m.x + Math.cos(a) * length, m.y + Math.sin(a) * length);
+  for (const tone of ['green', 'straw'] as const) {
+    const toned = tufts.filter((m) => m.tone === tone);
+    for (const m of toned) {
+      const random = stream(m.seed);
+      const blades = 4 + Math.floor(random() * 3);
+      for (let n = 0; n < blades; n++) {
+        const a = -Math.PI / 2 + (n / (blades - 1) - 0.5) * 1.5 + (random() - 0.5) * 0.2;
+        const length = m.size * (0.55 + 0.45 * random());
+        g.moveTo(m.x, m.y).lineTo(m.x + Math.cos(a) * length, m.y + Math.sin(a) * length);
+      }
+    }
+    if (toned.length) {
+      g.stroke({ width: 0.16 * k, color: tone === 'green' ? GRASS : STRAW, cap: 'round' });
     }
   }
-  if (tufts.length) g.stroke({ width: 0.16, color: GRASS, cap: 'round' });
   for (const m of tufts) g.moveTo(m.x - m.size * 0.35, m.y).lineTo(m.x + m.size * 0.35, m.y);
-  if (tufts.length) g.stroke({ width: 0.12, color: GROUND_INK, alpha: 0.6, cap: 'round' });
+  if (tufts.length) g.stroke({ width: 0.12 * k, color: GROUND_INK, alpha: 0.6, cap: 'round' });
+
+  const domes = mounds.map((m) => {
+    const w = m.size;
+    const h = w * 0.34;
+    const { x, y } = m;
+    return {
+      dome: [
+        x - w / 2,
+        y,
+        x - w * 0.32,
+        y - h * 0.8,
+        x,
+        y - h,
+        x + w * 0.32,
+        y - h * 0.8,
+        x + w / 2,
+        y,
+      ],
+      shade: [x, y - h, x + w * 0.32, y - h * 0.8, x + w / 2, y, x + w * 0.05, y],
+      lit: [x - w * 0.32, y - h * 0.8, x, y - h, x - w * 0.05, y - h * 0.55],
+    };
+  });
+  for (const d of domes) g.poly(d.dome);
+  if (domes.length) g.fill(MOUND);
+  for (const d of domes) g.poly(d.shade);
+  if (domes.length) g.fill(MOUND_SHADE);
+  for (const d of domes) g.poly(d.lit);
+  if (domes.length) g.fill(MOUND_LIT);
+  for (const d of domes) {
+    g.moveTo(d.dome[0] as number, d.dome[1] as number);
+    for (let n = 2; n < d.dome.length; n += 2) {
+      g.lineTo(d.dome[n] as number, d.dome[n + 1] as number);
+    }
+  }
+  if (domes.length) g.stroke({ width: 0.13 * k, color: INK, alpha: 0.8, join: 'round' });
 
   const crowns = bushes.flatMap((m) => {
     const random = stream(m.seed);
@@ -340,7 +626,7 @@ function ground(g: GraphicsContext, marks: readonly GroundMark[]) {
   for (const c of crowns) g.circle(c.x + c.r * 0.3, c.y + c.r * 0.25, c.r * 0.7);
   if (crowns.length) g.fill(SCRUB_SHADE);
   for (const c of crowns) g.circle(c.x, c.y, c.r);
-  if (crowns.length) g.stroke({ width: 0.12, color: INK, alpha: 0.75 });
+  if (crowns.length) g.stroke({ width: 0.12 * k, color: INK, alpha: 0.75 });
 
   const shapes = rocks.map((m) => {
     const random = stream(m.seed);
@@ -372,22 +658,22 @@ function ground(g: GraphicsContext, marks: readonly GroundMark[]) {
   for (const r of shapes) g.poly(r.lit);
   if (shapes.length) g.fill(ROCK_LIT);
   for (const r of shapes) g.poly(r.outline);
-  if (shapes.length) g.stroke({ width: 0.13, color: INK, join: 'round' });
+  if (shapes.length) g.stroke({ width: 0.13 * k, color: INK, join: 'round' });
 }
 
 /** Draws marks of one tier into a new context, in the order given. */
 export function drawMarks(marks: readonly Mark[], tier: Tier): GraphicsContext {
   const g = new GraphicsContext();
   // The ground lies flat, under the relief and the trees of its tier.
-  const groundMarks = marks.filter(
-    (m): m is GroundMark =>
-      m.kind === 'tuft' || m.kind === 'scrub' || m.kind === 'rock' || m.kind === 'stream',
-  );
-  if (groundMarks.length) ground(g, groundMarks);
+  const groundMarks = marks.filter(isGround);
+  if (groundMarks.length) ground(g, groundMarks, tier);
   for (const m of marks) {
     switch (m.kind) {
       case 'mountain':
         mountain(g, m, tier);
+        break;
+      case 'fold':
+        fold(g, m, tier);
         break;
       case 'hill':
         hill(g, m, tier);
@@ -410,10 +696,18 @@ export function drawMarks(marks: readonly Mark[], tier: Tier): GraphicsContext {
       case 'track':
         track(g, m);
         break;
+      case 'hamlet':
+        hamlet(g, m);
+        break;
+      case 'qanat':
+        qanat(g, m);
+        break;
       case 'tuft':
       case 'scrub':
       case 'rock':
       case 'stream':
+      case 'tumulus':
+      case 'crack':
         break;
     }
   }
@@ -518,6 +812,21 @@ export function drawWoods(woods: readonly Wood[]): GraphicsContext {
   ];
   for (const { r, color } of steps) {
     for (const wood of woods) for (const l of wood.lobes) lobe(g, l.x, l.y, l.r * r);
+    g.fill(color);
+  }
+  return g;
+}
+
+/** The white crust of the salt pans, paling from the desert at their rim to salt within. */
+export function drawPans(pans: readonly Wood[]): GraphicsContext {
+  const g = new GraphicsContext();
+  const steps = [
+    { r: PAN_RIM * 0.97, color: TERRAIN_COLOURS.saltEdge },
+    { r: 1.02, color: TERRAIN_COLOURS.saltRim },
+    { r: 0.96, color: TERRAIN_COLOURS.salt },
+  ];
+  for (const { r, color } of steps) {
+    for (const pan of pans) for (const l of pan.lobes) lobe(g, l.x, l.y, l.r * r);
     g.fill(color);
   }
   return g;

@@ -4,7 +4,7 @@ import { hash01, stream, valueNoise } from './random.ts';
 import { scatter, type Rect } from './scatter.ts';
 
 export type TreeShape = 'broadleaf' | 'conifer' | 'cypress';
-export type PlaceRank = 'capital' | 'city' | 'town' | 'village';
+export type PlaceRank = 'capital' | 'city' | 'town' | 'village' | 'hamlet';
 export type Crop = 'grain' | 'stubble' | 'green' | 'fallow';
 
 /** One drawing on the land, in map km. A mountain or hill stands on its foot at `x`, `y`. */
@@ -19,14 +19,41 @@ export type Mark =
       high: number;
       seed: number;
     }
+  | {
+      /** A long bare ridge of a dry range seen from above, centred on `x`, `y` and running along `angle`. */
+      kind: 'fold';
+      x: number;
+      y: number;
+      length: number;
+      width: number;
+      angle: number;
+      high: number;
+      seed: number;
+    }
   | { kind: 'hill'; x: number; y: number; width: number; height: number; seed: number }
   | { kind: 'tree'; x: number; y: number; size: number; shape: TreeShape; seed: number }
   | { kind: 'dune'; x: number; y: number; length: number; angle: number; seed: number }
   | { kind: 'stipple'; x: number; y: number; spread: number; seed: number }
+  /** One polygon of the cracked crust of a salt pan. */
+  | { kind: 'crack'; x: number; y: number; size: number; seed: number }
   | { kind: 'field'; x: number; y: number; width: number; depth: number; angle: number; crop: Crop }
   | { kind: 'orchard'; x: number; y: number; width: number; depth: number; angle: number }
   | { kind: 'track'; points: readonly (readonly [number, number])[] }
-  | { kind: 'tuft'; x: number; y: number; size: number; seed: number }
+  /** An unnamed hamlet's houses, centred on `x`, `y`. */
+  | { kind: 'hamlet'; x: number; y: number; roofs: Hamlet['roofs']; seed: number }
+  /** The mounds round the shafts of a qanat, one at each point. */
+  | { kind: 'qanat'; points: readonly (readonly [number, number])[] }
+  | {
+      kind: 'tuft';
+      x: number;
+      y: number;
+      size: number;
+      seed: number;
+      /** Green grass on the land of the forest biomes, straw-coloured on the dry land. */
+      tone: 'green' | 'straw';
+    }
+  /** A burial mound. */
+  | { kind: 'tumulus'; x: number; y: number; size: number; seed: number }
   | { kind: 'scrub'; x: number; y: number; size: number; seed: number }
   | { kind: 'rock'; x: number; y: number; size: number; seed: number }
   | { kind: 'stream'; points: readonly (readonly [number, number])[] };
@@ -45,24 +72,75 @@ export interface Place {
   readonly id: string;
 }
 
+/** An unnamed hamlet of the dry land, drawn with the fields, and the qanat that waters it. */
+export interface Hamlet extends Place {
+  readonly rank: 'hamlet';
+  /** Flat roofs of mud brick on arid land, pitched roofs elsewhere. */
+  readonly roofs: 'flat' | 'pitched';
+  /** The qanat's shafts from the mother well at the range's foot down to the hamlet. */
+  readonly qanat: readonly (readonly [number, number])[] | undefined;
+  readonly seed: number;
+}
+
 export type Tier = 'wide' | 'middle' | 'close';
 
 /** Spacing of each kind of drawing in km, and the side of a chunk, per tier. */
 export const TIERS = {
-  wide: { chunk: 2048, mountain: 34, ridge: 0, hill: 70, tree: 8.5, dune: 30, stipple: 16 },
+  wide: {
+    chunk: 2048,
+    mountain: 34,
+    ridge: 0,
+    fold: 0,
+    hill: 70,
+    tree: 8.5,
+    dune: 30,
+    stipple: 16,
+  },
   texture: { chunk: 256 },
-  middle: { chunk: 256, mountain: 9, ridge: 24, hill: 22, tree: 4.6, dune: 13, stipple: 7 },
-  close: { chunk: 64, mountain: 4.6, ridge: 13, hill: 9, tree: 1.7, dune: 5.5, stipple: 2.8 },
+  middle: {
+    chunk: 256,
+    mountain: 9,
+    ridge: 24,
+    fold: 26,
+    hill: 22,
+    tree: 4.6,
+    dune: 13,
+    stipple: 7,
+  },
+  close: {
+    chunk: 64,
+    mountain: 4.6,
+    ridge: 13,
+    fold: 12,
+    hill: 9,
+    tree: 1.7,
+    dune: 5.5,
+    stipple: 2.8,
+  },
 } as const;
+/** A named peak raises the land this much or more where a dry range still stands as peaks. */
+const FOLD_PEAK_LIFT = 0.8;
+/** A fold's spacing and width, each as a share of its length. */
+const FOLD = { spacing: 0.6, width: 0.26 } as const;
 
-/** A great power's capital, a city, a town, and a village keep this much land clear, in km. */
-const CLEARING: Record<PlaceRank, number> = { capital: 7, city: 5.5, town: 2.8, village: 1.8 };
+/**
+ * A great power's capital, a city, a town, a village, and a hamlet keep this much land
+ * clear, in km.
+ */
+const CLEARING: Record<PlaceRank, number> = {
+  capital: 7,
+  city: 5.5,
+  town: 2.8,
+  village: 1.8,
+  hamlet: 1.5,
+};
 /** The ring of fields around each place, in km from its centre. */
 const FIELD_RING: Record<PlaceRank, readonly [number, number]> = {
   capital: [6.5, 24],
   city: [5, 18],
   town: [2.6, 11],
   village: [1.7, 7],
+  hamlet: [1.4, 4.2],
 };
 /** The side of a field in km, from its smallest to its largest. */
 const FIELD_SIZE: Record<PlaceRank, readonly [number, number]> = {
@@ -70,7 +148,21 @@ const FIELD_SIZE: Record<PlaceRank, readonly [number, number]> = {
   city: [1.4, 2.8],
   town: [1.1, 2.1],
   village: [0.9, 1.6],
+  hamlet: [0.8, 1.3],
 };
+/**
+ * The dry land's unnamed hamlets, where people lived by water: by a river, or at the
+ * foot of a range, which on arid land a qanat brings down to them, its shafts
+ * `qanat.shaft` km apart from a mother well up to `qanat.reach` km away. They are sought
+ * on tiles of `tile` km, `spacing` km apart.
+ */
+const HAMLET = {
+  tile: 64,
+  spacing: 17,
+  riverKm: 4.5,
+  footKm: 16,
+  qanat: { reach: 22, shortest: 5, shaft: 1.15, step: 1.2, directions: 16 },
+} as const;
 const TRACK_REACH = 34;
 /**
  * A river counts as a desert valley where desert lies within `desertReach` km of it,
@@ -101,8 +193,40 @@ const PEAK_REACH = 45;
 /** How far from the coast the coast index measures, so a wood can keep off the sea. */
 const COAST_REACH = 56;
 
+/**
+ * What grows on open land. The map's forests are the temperate forest biomes, so land
+ * outside every forest area is dry: steppe and Mediterranean grass and scrub. Dry land
+ * within `desertKm` of a desert, or more than `forestKm` from every forest and `coastKm`
+ * from the sea, is arid semi-desert, as the Persian plateau, Mesopotamia, and the edge of
+ * the Sahara are. Each limit blends over `blendKm`.
+ */
+export type Cover = 'green' | 'dry' | 'arid';
+export const ARID = { desertKm: 250, forestKm: 500, coastKm: 40, blendKm: 80 } as const;
+/** Dry land reaches its full colour this far from the nearest forest. */
+const DRY_BLEND_KM = 60;
+const COVER_CELL = 4;
+const COVERS: readonly (Cover | undefined)[] = [undefined, 'green', 'dry', 'arid'];
+
+function smoothstep(from: number, to: number, value: number): number {
+  const t = Math.max(0, Math.min(1, (value - from) / (to - from)));
+  return t * t * (3 - 2 * t);
+}
+
 /** Names of the deserts that are seas of dunes rather than stone and gravel. */
 const SAND_SEA = /erg|sand sea|nafud|rub' al khali|karakum|kyzyl|registan|calanshio|libyan/i;
+/** Names of the deserts that are salt flats: a kavir is a salt desert in Persian. */
+const SALT_FLAT = /kavir/i;
+/** The salt pans' spacing in km, and the depth into the salt desert where they are densest. */
+const PAN = { spacing: 34, depthFull: 60 } as const;
+/** A pan's pale rim reaches this far beyond its lobes. */
+export const PAN_RIM = 1.15;
+/**
+ * The mountain index measures depth this far into a range, so the way a range runs can
+ * be read deep inside a wide range such as the Zagros. `strike` reads the depth on a
+ * lattice of `step` km, `reach` steps to each side of a spot.
+ */
+const STRIKE_REACH = 160;
+const STRIKE = { step: 45, reach: 2 } as const;
 const MEDITERRANEAN = /mediterranean|appenine|crimean|caspian|euxine|anatolian deciduous/i;
 const CONIFER = /conifer|montane|caledon|alps|pyrenees|carpathian|rodope|dinaric/i;
 
@@ -186,11 +310,23 @@ export class Land {
   /** Fans of watered land where a desert river ends short of the sea, as the Nile's delta. */
   readonly deltas: readonly [number, number][][];
   readonly cultivated: AreaIndex;
-  readonly #valleyGrid = new Map<number, (readonly [number, number, number, number])[]>();
+  /** The salt deserts, and the pans of white crust that lie in them. */
+  readonly salt: AreaIndex;
+  readonly pans: readonly Wood[];
+  readonly #valleyGrid: SegmentGrid = new Map();
+  readonly #riverGrid: SegmentGrid = new Map();
   readonly #placeGrid = new Map<number, Place[]>();
   readonly #woodGrid = new Map<number, Wood['lobes'][number][]>();
+  readonly #panGrid = new Map<number, Wood['lobes'][number][]>();
+  readonly #coverColumns: number;
+  /** Each cell's cover once asked: 0 not yet, then 1, 2, 3 for the entries of `COVERS`. */
+  readonly #covers: Uint8Array;
+  /** The hamlets of each tile once asked. */
+  readonly #hamlets = new Map<number, readonly Hamlet[]>();
 
   constructor(map: GameMap) {
+    this.#coverColumns = Math.ceil(map.width / COVER_CELL);
+    this.#covers = new Uint8Array(this.#coverColumns * Math.ceil(map.height / COVER_CELL));
     this.land = new AreaIndex(
       map.provinces.map((p) => p.outline),
       0,
@@ -205,13 +341,19 @@ export class Land {
       { seams: false },
     );
     this.lakes = new AreaIndex(kindOutlines(map, 'lake'));
-    this.mountains = new AreaIndex(kindOutlines(map, 'mountains'), DEPTH_FULL.mountains);
+    this.mountains = new AreaIndex(kindOutlines(map, 'mountains'), STRIKE_REACH);
     this.hills = new AreaIndex(kindOutlines(map, 'hills'));
-    this.desert = new AreaIndex(kindOutlines(map, 'desert'), VALLEY.desertReach);
+    this.desert = new AreaIndex(kindOutlines(map, 'desert'), ARID.desertKm);
     this.sand = new AreaIndex(
       map.terrain.filter((a) => a.kind === 'desert' && SAND_SEA.test(a.name)).map((a) => a.outline),
     );
-    this.forest = new AreaIndex(kindOutlines(map, 'forest'), DEPTH_FULL.forest);
+    this.salt = new AreaIndex(
+      map.terrain
+        .filter((a) => a.kind === 'desert' && SALT_FLAT.test(a.name))
+        .map((a) => a.outline),
+      PAN.depthFull,
+    );
+    this.forest = new AreaIndex(kindOutlines(map, 'forest'), ARID.forestKm);
     this.rivers = new AreaIndex(
       map.rivers.map(({ line }) => [[[...line, ...line.slice(1, -1).reverse()]]]),
       16,
@@ -237,31 +379,16 @@ export class Land {
     }
     this.woods = this.#placeWoods(map);
     this.valleys = this.#traceValleys(map);
-    for (const line of this.valleys) {
-      for (let i = 1; i < line.length; i++) {
-        const [ax, ay] = line[i - 1] as readonly [number, number];
-        const [bx, by] = line[i] as readonly [number, number];
-        const steps = Math.ceil(Math.hypot(bx - ax, by - ay) / (GRID / 2)) + 1;
-        for (let n = 0; n <= steps; n++) {
-          const key = gridKey(ax + ((bx - ax) * n) / steps, ay + ((by - ay) * n) / steps);
-          const list = this.#valleyGrid.get(key) ?? [];
-          if (!list.some(([cx, cy, dx, dy]) => cx === ax && cy === ay && dx === bx && dy === by)) {
-            list.push([ax, ay, bx, by]);
-          }
-          this.#valleyGrid.set(key, list);
-        }
-      }
-    }
+    indexSegments(this.valleys, this.#valleyGrid);
+    indexSegments(
+      map.rivers.map((river) => river.line),
+      this.#riverGrid,
+    );
     this.deltas = this.#traceDeltas(map);
     this.cultivated = new AreaIndex(this.deltas.map((ring) => [[ring]]));
-    for (const wood of this.woods) {
-      for (const lobe of wood.lobes) {
-        const key = gridKey(lobe.x, lobe.y);
-        const list = this.#woodGrid.get(key) ?? [];
-        list.push(lobe);
-        this.#woodGrid.set(key, list);
-      }
-    }
+    indexLobes(this.woods, this.#woodGrid);
+    this.pans = this.#placePans();
+    indexLobes(this.pans, this.#panGrid);
   }
 
   /** Open land: on the map's land, not in a lake. */
@@ -269,16 +396,100 @@ export class Land {
     return this.land.inside(x, y) && !this.lakes.inside(x, y);
   }
 
+  /**
+   * How dry the land is, from 0 in a forest area to 1, and how arid, from 0 to 1, each
+   * blending over the distances `ARID` names.
+   */
+  dryness(x: number, y: number): { dry: number; arid: number } {
+    if (this.forest.inside(x, y)) return { dry: 0, arid: 0 };
+    const fromForest = this.forest.distance(x, y);
+    const nearDesert = this.desert.inside(x, y)
+      ? 1
+      : 1 - smoothstep(ARID.desertKm - ARID.blendKm, ARID.desertKm, this.desert.distance(x, y));
+    const inland =
+      smoothstep(ARID.forestKm - ARID.blendKm, ARID.forestKm, fromForest) *
+      smoothstep(ARID.coastKm / 2, ARID.coastKm, this.coast.distance(x, y));
+    return { dry: smoothstep(0, DRY_BLEND_KM, fromForest), arid: Math.max(nearDesert, inland) };
+  }
+
+  /**
+   * What grows at a spot, read from its cell of `COVER_CELL` km, which is worked out from
+   * the cell's centre the first time it is asked. Placing a mark asks for thousands of
+   * spots, and the forest's outline is costly to test near its edge.
+   */
+  cover(x: number, y: number): Cover {
+    const i = Math.floor(x / COVER_CELL);
+    const j = Math.floor(y / COVER_CELL);
+    if (
+      i < 0 ||
+      j < 0 ||
+      i >= this.#coverColumns ||
+      j * this.#coverColumns >= this.#covers.length
+    ) {
+      return 'green';
+    }
+    const k = j * this.#coverColumns + i;
+    let known = this.#covers[k] ?? 0;
+    if (known === 0) {
+      const cx = (i + 0.5) * COVER_CELL;
+      const cy = (j + 0.5) * COVER_CELL;
+      known = this.forest.inside(cx, cy) ? 1 : this.dryness(cx, cy).arid >= 0.5 ? 3 : 2;
+      this.#covers[k] = known;
+    }
+    return COVERS[known] ?? 'green';
+  }
+
+  /**
+   * The way a range runs at a spot, in radians: across the way its depth rises, taken
+   * over the land `STRIKE.reach` steps round the spot, so a range's folds run one way
+   * across its width and do not curl round each basin inside it. Rising depth on the two
+   * flanks points opposite ways, so each is counted by its doubled angle.
+   */
+  strike(x: number, y: number): number {
+    const d = STRIKE.step / 2;
+    let c = 0;
+    let s = 0;
+    for (let j = -STRIKE.reach; j <= STRIKE.reach; j++) {
+      for (let i = -STRIKE.reach; i <= STRIKE.reach; i++) {
+        const px = x + i * STRIKE.step;
+        const py = y + j * STRIKE.step;
+        const gx = this.mountains.smoothDepth(px + d, py) - this.mountains.smoothDepth(px - d, py);
+        const gy = this.mountains.smoothDepth(px, py + d) - this.mountains.smoothDepth(px, py - d);
+        c += gx * gx - gy * gy;
+        s += 2 * gx * gy;
+      }
+    }
+    return Math.atan2(s, c) / 2 + Math.PI / 2;
+  }
+
+  /** The nearest river within `reach` km: how far, and which way it runs. */
+  riverAt(x: number, y: number, reach: number): { distance: number; angle: number } | undefined {
+    return nearestSegment(this.#riverGrid, x, y, reach);
+  }
+
+  /**
+   * How deep inside a salt pan the spot is, from 0 outside to 1 at a pan's centre, with
+   * each lobe widened by `spread` so its rim counts too.
+   */
+  panDepth(x: number, y: number, spread = 1): number {
+    return lobeDepth(this.#panGrid, x, y, spread);
+  }
+
   /** How high the land stands, from 0 at a range's foot to 1 at its heart or a high peak. */
   height(x: number, y: number): number {
     const depth = this.mountains.depth(x, y) / DEPTH_FULL.mountains;
+    return Math.min(1, Math.max(depth ** 0.7, this.peakLift(x, y)));
+  }
+
+  /** How much a high named peak nearby raises the land, from 0 to 1. */
+  peakLift(x: number, y: number): number {
     let peak = 0;
     for (const p of this.peaks) {
       const d2 = (p.at[0] - x) ** 2 + (p.at[1] - y) ** 2;
       if (d2 > PEAK_REACH * PEAK_REACH * 4) continue;
       peak = Math.max(peak, Math.min(1, p.height / 4500) * Math.exp(-d2 / (2 * PEAK_REACH ** 2)));
     }
-    return Math.min(1, Math.max(depth ** 0.7, peak));
+    return peak;
   }
 
   placesNear(x: number, y: number, reach: number): Place[] {
@@ -296,14 +507,50 @@ export class Land {
     return found;
   }
 
-  /** Whether the spot lies in the clearing a place keeps, for places shown at this tier. */
-  cleared(x: number, y: number, tier: Tier): boolean {
+  /**
+   * Whether the spot lies in the clearing a place keeps, for places shown at this tier,
+   * hamlets at the close tier included unless `hamlets` is false.
+   */
+  cleared(x: number, y: number, tier: Tier, hamlets = true): boolean {
     if (tier === 'wide') return false;
-    return this.placesNear(x, y, CLEARING.capital).some((place) => {
+    const byPlace = this.placesNear(x, y, CLEARING.capital).some((place) => {
       if (tier === 'middle' && (place.rank === 'village' || place.rank === 'town')) return false;
       const r = CLEARING[place.rank] * (tier === 'middle' ? 1.6 : 1);
       return (place.x - x) ** 2 + (place.y - y) ** 2 < r * r;
     });
+    if (byPlace || !hamlets || tier !== 'close') return byPlace;
+    return this.hamletsNear(x, y, CLEARING.hamlet).length > 0;
+  }
+
+  /** The hamlets within `reach` km, at most a tile's side. */
+  hamletsNear(x: number, y: number, reach: number): Hamlet[] {
+    const found: Hamlet[] = [];
+    const size = HAMLET.tile;
+    for (let j = Math.floor((y - reach) / size); j <= Math.floor((y + reach) / size); j++) {
+      for (let i = Math.floor((x - reach) / size); i <= Math.floor((x + reach) / size); i++) {
+        for (const h of this.#hamletTile(i, j)) {
+          if ((h.x - x) ** 2 + (h.y - y) ** 2 < reach * reach) found.push(h);
+        }
+      }
+    }
+    return found;
+  }
+
+  #hamletTile(i: number, j: number): readonly Hamlet[] {
+    if (i < 0 || j < 0) return [];
+    const key = i * GRID_ROW + j;
+    let tile = this.#hamlets.get(key);
+    if (!tile) {
+      const size = HAMLET.tile;
+      tile = placeHamlets(this, {
+        left: i * size,
+        top: j * size,
+        right: (i + 1) * size,
+        bottom: (j + 1) * size,
+      });
+      this.#hamlets.set(key, tile);
+    }
+    return tile;
   }
 
   /**
@@ -311,19 +558,7 @@ export class Land {
    * each lobe widened by `spread` so a margin around the wood counts too.
    */
   woodDepth(x: number, y: number, spread = 1): number {
-    let best = 0;
-    const cx = Math.floor(x / GRID);
-    const cy = Math.floor(y / GRID);
-    for (let j = cy - 1; j <= cy + 1; j++) {
-      for (let i = cx - 1; i <= cx + 1; i++) {
-        for (const lobe of this.#woodGrid.get(i * GRID_ROW + j) ?? []) {
-          const d = Math.hypot(lobe.x - x, lobe.y - y);
-          const r = lobe.r * spread;
-          if (d < r) best = Math.max(best, 1 - d / r);
-        }
-      }
-    }
-    return best;
+    return lobeDepth(this.#woodGrid, x, y, spread);
   }
 
   treeShape(x: number, y: number, seed: number): TreeShape {
@@ -340,26 +575,7 @@ export class Land {
 
   /** The nearest watered valley within its width: how far, and which way the river runs. */
   valleyAt(x: number, y: number): { distance: number; angle: number } | undefined {
-    let best: { distance: number; angle: number } | undefined;
-    const cx = Math.floor(x / GRID);
-    const cy = Math.floor(y / GRID);
-    for (let j = cy - 1; j <= cy + 1; j++) {
-      for (let i = cx - 1; i <= cx + 1; i++) {
-        for (const [ax, ay, bx, by] of this.#valleyGrid.get(i * GRID_ROW + j) ?? []) {
-          const dx = bx - ax;
-          const dy = by - ay;
-          const t = Math.max(
-            0,
-            Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)),
-          );
-          const distance = Math.hypot(ax + t * dx - x, ay + t * dy - y);
-          if (distance < VALLEY.width && (!best || distance < best.distance)) {
-            best = { distance, angle: Math.atan2(dy, dx) };
-          }
-        }
-      }
-    }
-    return best;
+    return nearestSegment(this.#valleyGrid, x, y, VALLEY.width);
   }
 
   #traceValleys(map: GameMap): [number, number][][] {
@@ -434,7 +650,7 @@ export class Land {
           return undefined;
         }
         if (valueNoise(x, y, 140, 902) < 0.3) return undefined;
-        const depth = this.forest.depth(x, y) / DEPTH_FULL.forest;
+        const depth = Math.min(1, this.forest.depth(x, y) / DEPTH_FULL.forest);
         return WOOD_SPACING.edge + (WOOD_SPACING.middle - WOOD_SPACING.edge) * depth;
       },
       WOOD_SPACING.edge,
@@ -465,6 +681,126 @@ export class Land {
       return clear.length > 0 ? [{ x, y, lobes: clear }] : [];
     });
   }
+
+  /**
+   * Pans of salt crust over the salt deserts, larger and closer together deeper in, with
+   * stony desert between them, as the crust of the Dasht-e Kavir lies.
+   */
+  #placePans(): Wood[] {
+    const b = this.salt.bounds;
+    if (b.right <= b.left) return [];
+    const rect = { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+    return scatter(
+      rect,
+      PAN.spacing / 2,
+      903,
+      (x, y) => {
+        if (!this.salt.inside(x, y) || !this.open(x, y)) return undefined;
+        if (valueNoise(x, y, PAN.spacing * 3, 904) < 0.25) return undefined;
+        return PAN.spacing * (1.3 - 0.5 * Math.min(1, this.salt.depth(x, y) / PAN.depthFull));
+      },
+      PAN.spacing * 1.3,
+    ).flatMap(({ x, y, radius, seed }) => {
+      const random = stream(seed);
+      const size = radius * (0.5 + 0.2 * random());
+      const lobes = [{ x, y, r: size }];
+      for (let n = 0; n < 4; n++) {
+        const angle = random() * Math.PI * 2;
+        const distance = size * (0.5 + 0.5 * random());
+        const lx = x + Math.cos(angle) * distance;
+        const ly = y + Math.sin(angle) * distance;
+        lobes.push({ x: lx, y: ly, r: size * (0.4 + 0.35 * random()) });
+      }
+      const kept = lobes
+        .map((lobe) => ({
+          ...lobe,
+          r: Math.min(lobe.r, (this.salt.depth(lobe.x, lobe.y) - DISTANCE_ERROR) / PAN_RIM - 1),
+        }))
+        .filter((lobe) => lobe.r > size * 0.25 && this.open(lobe.x, lobe.y));
+      return kept.length > 0 ? [{ x, y, lobes: kept }] : [];
+    });
+  }
+}
+
+type SegmentGrid = Map<number, (readonly [number, number, number, number])[]>;
+
+function indexSegments(
+  lines: readonly (readonly (readonly [number, number])[])[],
+  grid: SegmentGrid,
+) {
+  for (const line of lines) {
+    for (let i = 1; i < line.length; i++) {
+      const [ax, ay] = line[i - 1] as readonly [number, number];
+      const [bx, by] = line[i] as readonly [number, number];
+      const steps = Math.ceil(Math.hypot(bx - ax, by - ay) / (GRID / 2)) + 1;
+      for (let n = 0; n <= steps; n++) {
+        const key = gridKey(ax + ((bx - ax) * n) / steps, ay + ((by - ay) * n) / steps);
+        const list = grid.get(key) ?? [];
+        if (!list.some(([cx, cy, dx, dy]) => cx === ax && cy === ay && dx === bx && dy === by)) {
+          list.push([ax, ay, bx, by]);
+        }
+        grid.set(key, list);
+      }
+    }
+  }
+}
+
+/** The nearest segment of the grid within `reach`, which must be under a grid cell. */
+function nearestSegment(
+  grid: SegmentGrid,
+  x: number,
+  y: number,
+  reach: number,
+): { distance: number; angle: number } | undefined {
+  let best: { distance: number; angle: number } | undefined;
+  const cx = Math.floor(x / GRID);
+  const cy = Math.floor(y / GRID);
+  for (let j = cy - 1; j <= cy + 1; j++) {
+    for (let i = cx - 1; i <= cx + 1; i++) {
+      for (const [ax, ay, bx, by] of grid.get(i * GRID_ROW + j) ?? []) {
+        const dx = bx - ax;
+        const dy = by - ay;
+        const t = Math.max(
+          0,
+          Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)),
+        );
+        const distance = Math.hypot(ax + t * dx - x, ay + t * dy - y);
+        if (distance < reach && (!best || distance < best.distance)) {
+          best = { distance, angle: Math.atan2(dy, dx) };
+        }
+      }
+    }
+  }
+  return best;
+}
+
+type LobeGrid = Map<number, Wood['lobes'][number][]>;
+
+function indexLobes(woods: readonly Wood[], grid: LobeGrid) {
+  for (const wood of woods) {
+    for (const lobe of wood.lobes) {
+      const key = gridKey(lobe.x, lobe.y);
+      const list = grid.get(key) ?? [];
+      list.push(lobe);
+      grid.set(key, list);
+    }
+  }
+}
+
+function lobeDepth(grid: LobeGrid, x: number, y: number, spread: number): number {
+  let best = 0;
+  const cx = Math.floor(x / GRID);
+  const cy = Math.floor(y / GRID);
+  for (let j = cy - 1; j <= cy + 1; j++) {
+    for (let i = cx - 1; i <= cx + 1; i++) {
+      for (const lobe of grid.get(i * GRID_ROW + j) ?? []) {
+        const d = Math.hypot(lobe.x - x, lobe.y - y);
+        const r = lobe.r * spread;
+        if (d < r) best = Math.max(best, 1 - d / r);
+      }
+    }
+  }
+  return best;
 }
 
 /**
@@ -473,9 +809,54 @@ export class Land {
  * noise, so a range shows chains of peaks with valleys between them.
  */
 function ridge(land: Land, x: number, y: number, wavelength: number, salt: number): number {
-  const depth = land.mountains.depth(x, y);
+  const depth = Math.min(DEPTH_FULL.mountains, land.mountains.depth(x, y));
   const phase = depth / wavelength - 0.5 + (valueNoise(x, y, wavelength * 3, salt) - 0.5) * 1.1;
   return 0.5 + 0.5 * Math.cos(2 * Math.PI * phase);
+}
+
+/**
+ * A range outside the forests is drawn as long bare folds, as the Zagros and the Atlas
+ * are, except round a high named peak, from the middle zoom in.
+ */
+function folded(land: Land, x: number, y: number, tier: Tier): boolean {
+  return tier !== 'wide' && land.cover(x, y) !== 'green' && land.peakLift(x, y) < FOLD_PEAK_LIFT;
+}
+
+/**
+ * The folds of the dry ranges, each along the way its range runs and kept about half a
+ * fold's length from the next, so they stand side by side across the range with valleys
+ * between them and overlap end to end along it.
+ */
+function folds(
+  land: Land,
+  rect: Rect,
+  tier: Tier,
+  salt: number,
+  nearPeak: (x: number, y: number) => boolean,
+): Mark[] {
+  const { fold: length, mountain } = TIERS[tier];
+  const spacing = length * FOLD.spacing;
+  return scatter(
+    rect,
+    spacing / 2.2,
+    salt + 50,
+    (x, y) => {
+      if (!land.mountains.inside(x, y) || !land.open(x, y) || land.cleared(x, y, tier)) {
+        return undefined;
+      }
+      if (!folded(land, x, y, tier) || nearPeak(x, y)) return undefined;
+      if (land.rivers.distance(x, y) < mountain * 0.9) return undefined;
+      return spacing * (1.15 - 0.3 * land.height(x, y));
+    },
+    spacing * 1.15,
+  ).map(({ x, y, seed }): Mark => {
+    const random = stream(seed);
+    const high = land.height(x, y);
+    const size = length * (0.75 + 0.5 * random()) * (0.85 + 0.3 * high);
+    const angle = land.strike(x, y) + (random() - 0.5) * 0.22;
+    const width = size * (FOLD.width + 0.08 * random());
+    return { kind: 'fold', x, y, length: size, width, angle, high, seed };
+  });
 }
 
 function relief(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
@@ -484,6 +865,9 @@ function relief(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
   const nearPeak = (x: number, y: number, reach: number) =>
     tier !== 'wide' &&
     land.peaks.some((p) => (p.at[0] - x) ** 2 + (p.at[1] - y) ** 2 < reach * reach);
+  if (tier !== 'wide' && dryIn(land, rect)) {
+    marks.push(...folds(land, rect, tier, salt, (x, y) => nearPeak(x, y, spacing.mountain * 1.3)));
+  }
   for (const { x, y, radius, seed } of scatter(
     rect,
     spacing.mountain / 2.2,
@@ -492,7 +876,7 @@ function relief(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
       if (!land.mountains.inside(x, y) || !land.open(x, y) || land.cleared(x, y, tier)) {
         return undefined;
       }
-      if (nearPeak(x, y, spacing.mountain * 1.3)) return undefined;
+      if (nearPeak(x, y, spacing.mountain * 1.3) || folded(land, x, y, tier)) return undefined;
       if (tier !== 'wide' && land.rivers.distance(x, y) < spacing.mountain * 0.9) return undefined;
       const high = land.height(x, y);
       const deep = land.mountains.depth(x, y) > spacing.ridge * 0.5;
@@ -568,16 +952,23 @@ function trees(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
 /** The wind that shapes the dunes blows from the north-east over the whole map. */
 const DUNE_ANGLE = -0.35;
 
+/** The salt crust's polygons, the cells of its cracks, are this wide in km at each tier. */
+const CRACK: Record<Tier, number> = { wide: 0, middle: 4.2, close: 1.8 };
+
 function desert(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
   const { dune, stipple } = TIERS[tier];
   const marks: Mark[] = [];
+  const bare = (x: number, y: number) =>
+    land.desert.inside(x, y) &&
+    land.open(x, y) &&
+    !land.cleared(x, y, tier) &&
+    land.panDepth(x, y, PAN_RIM) === 0;
   for (const { x, y, radius, seed } of scatter(
     rect,
     dune / 2,
     salt + 30,
     (x, y) => {
-      if (!land.desert.inside(x, y) || !land.open(x, y) || land.cleared(x, y, tier))
-        return undefined;
+      if (!bare(x, y)) return undefined;
       const sand = land.sand.inside(x, y);
       const field = valueNoise(x, y, 60, salt + 31);
       if (field < (sand ? 0.3 : 0.62)) return undefined;
@@ -595,14 +986,25 @@ function desert(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
     stipple / 2,
     salt + 40,
     (x, y) => {
-      if (!land.desert.inside(x, y) || !land.open(x, y) || land.cleared(x, y, tier))
-        return undefined;
+      if (!bare(x, y)) return undefined;
       if (valueNoise(x, y, 45, salt + 41) < 0.35) return undefined;
       return stipple;
     },
     stipple,
   )) {
     marks.push({ kind: 'stipple', x, y, spread: radius * 0.45, seed });
+  }
+  const crack = CRACK[tier];
+  if (crack > 0) {
+    for (const { x, y, seed } of scatter(
+      rect,
+      crack / 2,
+      salt + 45,
+      (x, y) => (land.panDepth(x, y) > 0.08 && land.open(x, y) ? crack : undefined),
+      crack,
+    )) {
+      marks.push({ kind: 'crack', x, y, size: crack * 0.55, seed });
+    }
   }
   return marks;
 }
@@ -653,19 +1055,24 @@ function valleyFields(land: Land, rect: Rect): Mark[] {
 
 function fields(land: Land, rect: Rect): Mark[] {
   const marks: Mark[] = [];
-  const places = land
-    .placesNear(
-      (rect.left + rect.right) / 2,
-      (rect.top + rect.bottom) / 2,
-      Math.hypot(rect.right - rect.left, rect.bottom - rect.top) / 2 + 1,
-    )
+  const centre = { x: (rect.left + rect.right) / 2, y: (rect.top + rect.bottom) / 2 };
+  const radius = Math.hypot(rect.right - rect.left, rect.bottom - rect.top) / 2 + 1;
+  const places: (Place | Hamlet)[] = [
+    ...land.placesNear(centre.x, centre.y, radius),
+    ...land.hamletsNear(centre.x, centre.y, radius),
+  ]
     .filter((place) => inRect(rect, place.x, place.y))
     .sort((a, b) => (a.id < b.id ? -1 : 1));
   for (const place of places) {
     const random = stream(hash01(Math.round(place.x * 10), Math.round(place.y * 10), 77));
     const [inner, outer] = FIELD_RING[place.rank];
     const grain = random() * Math.PI;
-    const desert = land.desert.inside(place.x, place.y);
+    const oasis = 'roofs' in place && place.roofs === 'flat';
+    const desert = land.desert.inside(place.x, place.y) || oasis;
+    if ('roofs' in place) {
+      marks.push({ kind: 'hamlet', x: place.x, y: place.y, roofs: place.roofs, seed: place.seed });
+      if (place.qanat) marks.push({ kind: 'qanat', points: place.qanat });
+    }
     const [small, large] = FIELD_SIZE[place.rank];
     const size = (small + large) / 2;
     const c = Math.cos(grain);
@@ -684,8 +1091,8 @@ function fields(land: Land, rect: Rect): Mark[] {
         const distance = Math.hypot(x - place.x, y - place.y);
         const edge = outer * (0.75 + 0.35 * valueNoise(x, y, outer * 0.6, 79));
         if (distance < inner || distance > edge) continue;
-        if (random() < (desert ? 0.55 : 0.12) + 0.5 * ((distance - inner) / (edge - inner)) ** 2)
-          continue;
+        const thin = oasis ? 0.2 : desert ? 0.55 : 0.12;
+        if (random() < thin + 0.5 * ((distance - inner) / (edge - inner)) ** 2) continue;
         if (!onOpenLand(land, x, y)) continue;
         const near = land
           .placesNear(x, y, 6)
@@ -695,7 +1102,7 @@ function fields(land: Land, rect: Rect): Mark[] {
           );
         if (near) continue;
         const depth = Math.min(rowDepth, size * 0.6);
-        if (random() < (desert ? 0.3 : 0.1)) {
+        if (random() < (oasis ? 0.45 : desert ? 0.3 : 0.1)) {
           marks.push({
             kind: 'orchard',
             x,
@@ -705,7 +1112,8 @@ function fields(land: Land, rect: Rect): Mark[] {
             angle: grain,
           });
         } else {
-          const crop = CROPS[Math.floor(random() * CROPS.length)] ?? 'grain';
+          const crops = oasis ? VALLEY_CROPS : CROPS;
+          const crop = crops[Math.floor(random() * crops.length)] ?? 'grain';
           marks.push({
             kind: 'field',
             x,
@@ -720,7 +1128,9 @@ function fields(land: Land, rect: Rect): Mark[] {
     }
     for (const other of nearestPlaces(land, place)) {
       // A pair where each is among the other's nearest is drawn once, from the lower id.
-      if (other.id < place.id && nearestPlaces(land, other).includes(place)) continue;
+      if (other.id < place.id && nearestPlaces(land, other).some((p) => p.id === place.id)) {
+        continue;
+      }
       const track = trackBetween(land, place, other);
       if (track) marks.push(track);
     }
@@ -729,13 +1139,19 @@ function fields(land: Land, rect: Rect): Mark[] {
   return marks;
 }
 
-/** The two places nearest `place` within a track's reach, which its tracks lead to. */
+/**
+ * The two places nearest `place` within a track's reach, which its tracks lead to. A
+ * hamlet's tracks lead to hamlets too, so the hamlets of a dry plain are joined by tracks
+ * where it has no named place; a named place's tracks lead only to named places.
+ */
 function nearestPlaces(land: Land, place: Place): Place[] {
   const distance = (other: Place) => Math.hypot(other.x - place.x, other.y - place.y);
-  return land
-    .placesNear(place.x, place.y, TRACK_REACH)
-    .filter((other) => other !== place)
-    .sort((a, b) => distance(a) - distance(b))
+  return [
+    ...land.placesNear(place.x, place.y, TRACK_REACH),
+    ...(place.rank === 'hamlet' ? land.hamletsNear(place.x, place.y, TRACK_REACH) : []),
+  ]
+    .filter((other) => other.id !== place.id)
+    .sort((a, b) => distance(a) - distance(b) || (a.id < b.id ? -1 : 1))
     .slice(0, 2);
 }
 
@@ -767,14 +1183,160 @@ function trackBetween(land: Land, from: Place, to: Place): Mark | undefined {
 /**
  * Open land away from the fields still shows its ground at the closest zoom: clumps of
  * grass tufts and scrub, rocks near the hills and mountains and on the dry land, and
- * here and there a stream. Each spot is seeded from its place, like every mark.
+ * here and there a stream. Land outside the forests shows its ground from the middle
+ * zoom, with larger marks further apart, and burial mounds stand on its plains. Each
+ * spot is seeded from its place, like every mark.
  */
 const GROUND = { spacing: 2.4, clump: 16, stream: 26, streamStep: 0.7, streamSteps: 14 } as const;
+const MIDDLE_GROUND = { spacing: 5.2, clump: 34, size: [1.9, 1.1] } as const;
+/**
+ * The shares of tufts and bushes on each kind of open ground, the rest being rocks: the
+ * desert, the arid land, rough ground near hills and mountains, the dry land, and the
+ * green land of the forest biomes.
+ */
+type Ground = 'desert' | 'arid' | 'rugged' | 'dry' | 'green';
+const GROUND_MIX: Record<Ground, readonly [tuft: number, scrub: number]> = {
+  desert: [0, 0.45],
+  arid: [0.16, 0.36],
+  rugged: [0.25, 0.35],
+  dry: [0.52, 0.3],
+  green: [0.6, 0.32],
+};
+/**
+ * Burial mounds stand in groups on the plains of the dry land, as the kurgans of the
+ * steppe and the tumuli of Thrace, Phrygia, and Lydia do: `spacing` km apart where a
+ * group stands, `size` km across, per tier.
+ */
+const TUMULUS: Record<'middle' | 'close', { spacing: number; size: number }> = {
+  middle: { spacing: 9, size: 3.4 },
+  close: { spacing: 3.6, size: 1.6 },
+};
+/** Trees line the rivers of the dry land within this many km of the water, per tier. */
+const GALLERY_KM: Record<'middle' | 'close', number> = { middle: 3.2, close: 1.6 };
 
-function inFields(land: Land, x: number, y: number, share = 0.85): boolean {
-  return land
+/**
+ * Whether any land outside the forests lies in `rect`, from a lattice of spots
+ * `DRY_SAMPLE_KM` apart, so the marks only the dry land has are not sought where the
+ * whole rect is green. A dry patch narrower than the lattice may go without them.
+ */
+const DRY_SAMPLE_KM = 10;
+function dryIn(land: Land, rect: Rect): boolean {
+  for (let y = rect.top; y <= rect.bottom; y += DRY_SAMPLE_KM) {
+    for (let x = rect.left; x <= rect.right; x += DRY_SAMPLE_KM) {
+      if (land.cover(x, y) !== 'green' && land.land.inside(x, y)) return true;
+    }
+  }
+  return false;
+}
+
+function groundOf(land: Land, x: number, y: number): Ground {
+  if (land.desert.inside(x, y)) return 'desert';
+  const cover = land.cover(x, y);
+  if (cover === 'arid') return 'arid';
+  if (land.hills.inside(x, y) || land.mountains.distance(x, y) < 20) return 'rugged';
+  return cover;
+}
+
+function groundKind(ground: Ground, roll: number): 'tuft' | 'scrub' | 'rock' {
+  const [tuft, scrub] = GROUND_MIX[ground];
+  return ground === 'desert'
+    ? roll < 1 - scrub
+      ? 'rock'
+      : 'scrub'
+    : ground === 'rugged'
+      ? roll < 1 - tuft - scrub
+        ? 'rock'
+        : roll < 1 - tuft
+          ? 'scrub'
+          : 'tuft'
+      : roll < tuft
+        ? 'tuft'
+        : roll < tuft + scrub
+          ? 'scrub'
+          : 'rock';
+}
+
+/** Whether the spot lies in a share of the ring of fields of a place, or of a hamlet unless `hamlets` is false. */
+function inFields(land: Land, x: number, y: number, share = 0.85, hamlets = true): boolean {
+  const byPlace = land
     .placesNear(x, y, FIELD_RING.capital[1])
     .some((place) => Math.hypot(place.x - x, place.y - y) < FIELD_RING[place.rank][1] * share);
+  if (byPlace || !hamlets) return byPlace;
+  return land.hamletsNear(x, y, FIELD_RING.hamlet[1] * share).length > 0;
+}
+
+/**
+ * The hamlets of a tile: spots on open dry land outside the fields of every place, by a
+ * river or at the foot of a range. One on arid land with no river at hand gets a qanat
+ * from the nearest foot of a range, if one lies within its reach.
+ */
+function placeHamlets(land: Land, rect: Rect): Hamlet[] {
+  return scatter(
+    rect,
+    HAMLET.spacing / 2.5,
+    870,
+    (x, y) => {
+      if (land.cover(x, y) === 'green' || land.desert.inside(x, y)) return undefined;
+      if (valueNoise(x, y, 90, 872) < 0.28) return undefined;
+      if (!openGround(land, x, y) || land.panDepth(x, y, PAN_RIM) > 0) return undefined;
+      if (land.cleared(x, y, 'close', false) || inFields(land, x, y, 1.2, false)) return undefined;
+      const watered =
+        land.riverAt(x, y, HAMLET.riverKm) !== undefined ||
+        land.mountains.distance(x, y) < HAMLET.footKm ||
+        land.hills.inside(x, y);
+      return watered ? HAMLET.spacing : undefined;
+    },
+    HAMLET.spacing,
+  ).flatMap(({ x, y, seed }): Hamlet[] => {
+    if (!footOnLand(land, x, y, CLEARING.hamlet)) return [];
+    const arid = land.cover(x, y) === 'arid';
+    const river = land.riverAt(x, y, HAMLET.riverKm);
+    return [
+      {
+        x,
+        y,
+        rank: 'hamlet',
+        id: `hamlet-${Math.round(x * 10)}-${Math.round(y * 10)}`,
+        roofs: arid ? 'flat' : 'pitched',
+        qanat: arid && !river ? qanatTo(land, x, y) : undefined,
+        seed,
+      },
+    ];
+  });
+}
+
+/**
+ * The shafts of a qanat to a hamlet at `x`, `y`: from the nearest foot of a range, found
+ * by walking out in each of `HAMLET.qanat.directions` ways, down in a line to the
+ * hamlet's edge. A line that would cross a lake, the sea, a range, or a place's
+ * clearing is not dug.
+ */
+function qanatTo(land: Land, x: number, y: number): [number, number][] | undefined {
+  const { reach, shortest, shaft, step, directions } = HAMLET.qanat;
+  let best: { distance: number; angle: number } | undefined;
+  for (let n = 0; n < directions; n++) {
+    const angle = (n / directions) * Math.PI * 2;
+    for (let d = shortest; d <= reach && (!best || d < best.distance); d += step) {
+      if (land.mountains.inside(x + Math.cos(angle) * d, y + Math.sin(angle) * d)) {
+        best = { distance: d, angle };
+        break;
+      }
+    }
+  }
+  if (!best) return undefined;
+  const shafts: [number, number][] = [];
+  const dx = Math.cos(best.angle);
+  const dy = Math.sin(best.angle);
+  const bend = (hash01(Math.round(x * 10), Math.round(y * 10), 871) - 0.5) * 0.25;
+  for (let d = best.distance - step; d > CLEARING.hamlet; d -= shaft) {
+    const sway = Math.sin((d / best.distance) * Math.PI) * bend * d;
+    const sx = x + dx * d - dy * sway;
+    const sy = y + dy * d + dx * sway;
+    if (!land.open(sx, sy) || land.mountains.inside(sx, sy)) return undefined;
+    if (land.cleared(sx, sy, 'close', false)) return undefined;
+    shafts.push([sx, sy]);
+  }
+  return shafts.length >= 4 ? shafts : undefined;
 }
 
 /** Trees keep off the inner fields of each place, so the land round it reads as farmed. */
@@ -789,60 +1351,64 @@ function openGround(land: Land, x: number, y: number): boolean {
   );
 }
 
-function ground(land: Land, rect: Rect): Mark[] {
+/** The drawing reaches its size to each side and above its foot, so all of it keeps to land, as on a coast. */
+function footOnLand(land: Land, x: number, y: number, size: number): boolean {
+  const footprint: [number, number][] = [
+    [x - size, y],
+    [x + size, y],
+    [x, y - size],
+    [x - size * 0.7, y - size * 0.7],
+    [x + size * 0.7, y - size * 0.7],
+  ];
+  return footprint.every(([fx, fy]) => land.open(fx, fy));
+}
+
+function ground(land: Land, rect: Rect, tier: 'middle' | 'close'): Mark[] {
   const marks: Mark[] = [];
+  const close = tier === 'close';
+  const dry = dryIn(land, rect);
+  if (!close && !dry) return marks;
+  const spacing = close ? GROUND.spacing : MIDDLE_GROUND.spacing;
   for (const { x, y, seed } of scatter(
     rect,
-    GROUND.spacing / 2,
-    808,
+    spacing / 2,
+    close ? 808 : 818,
     (x, y) => {
-      if (valueNoise(x, y, GROUND.clump, 809) < 0.42) return undefined;
-      if (!openGround(land, x, y) || land.cleared(x, y, 'close') || inFields(land, x, y))
+      if (valueNoise(x, y, close ? GROUND.clump : MIDDLE_GROUND.clump, 809) < 0.42)
         return undefined;
-      return GROUND.spacing;
+      if (!close && (land.cover(x, y) === 'green' || land.desert.inside(x, y))) return undefined;
+      if (land.panDepth(x, y, PAN_RIM) > 0) return undefined;
+      if (!openGround(land, x, y) || land.cleared(x, y, tier) || inFields(land, x, y))
+        return undefined;
+      return spacing;
     },
-    GROUND.spacing,
+    spacing,
   )) {
     const random = stream(seed);
-    const dry = land.desert.inside(x, y);
-    const rugged = land.hills.inside(x, y) || land.mountains.distance(x, y) < 20;
-    const roll = random();
-    const kind: 'tuft' | 'scrub' | 'rock' = dry
-      ? roll < 0.55
-        ? 'rock'
-        : 'scrub'
-      : rugged
-        ? roll < 0.4
-          ? 'rock'
-          : roll < 0.75
-            ? 'scrub'
-            : 'tuft'
-        : roll < 0.6
-          ? 'tuft'
-          : roll < 0.92
-            ? 'scrub'
-            : 'rock';
-    const size = 0.8 + random() * 0.6;
-    // The drawing reaches its size to each side and above its foot, so all of it keeps
-    // to land, as on a coast.
-    const footprint: [number, number][] = [
-      [x - size, y],
-      [x + size, y],
-      [x, y - size],
-      [x - size * 0.7, y - size * 0.7],
-      [x + size * 0.7, y - size * 0.7],
-    ];
-    if (footprint.some(([fx, fy]) => !land.open(fx, fy))) continue;
-    marks.push({ kind, x, y, size, seed });
+    const here = groundOf(land, x, y);
+    const kind = groundKind(here, random());
+    const [small, spread] = close ? [0.8, 0.6] : MIDDLE_GROUND.size;
+    const size = small + random() * spread;
+    if (!footOnLand(land, x, y, size)) continue;
+    if (kind === 'tuft') {
+      marks.push({ kind, x, y, size, seed, tone: here === 'green' ? 'green' : 'straw' });
+    } else marks.push({ kind, x, y, size, seed });
   }
+  if (dry) marks.push(...tumuli(land, rect, tier), ...gallery(land, rect, tier));
+  if (!close) return marks;
   for (const { x, y, seed } of scatter(
     rect,
     GROUND.stream / 2,
     810,
-    (x, y) =>
-      openGround(land, x, y) && !land.desert.inside(x, y) && !inFields(land, x, y)
-        ? GROUND.stream
-        : undefined,
+    (x, y) => {
+      if (!openGround(land, x, y) || land.desert.inside(x, y) || inFields(land, x, y)) {
+        return undefined;
+      }
+      const cover = land.cover(x, y);
+      if (cover === 'arid' || (cover === 'dry' && hash01(Math.floor(x), Math.floor(y), 811) < 0.5))
+        return undefined;
+      return GROUND.stream;
+    },
     GROUND.stream,
   )) {
     const random = stream(seed);
@@ -864,6 +1430,57 @@ function ground(land: Land, rect: Rect): Mark[] {
   return marks;
 }
 
+function tumuli(land: Land, rect: Rect, tier: 'middle' | 'close'): Mark[] {
+  const { spacing, size } = TUMULUS[tier];
+  return scatter(
+    rect,
+    spacing / 2,
+    tier === 'close' ? 820 : 830,
+    (x, y) => {
+      if (valueNoise(x, y, 70, 821) < 0.66) return undefined;
+      if (land.hills.inside(x, y) || land.desert.inside(x, y) || land.cover(x, y) !== 'dry') {
+        return undefined;
+      }
+      if (!openGround(land, x, y) || land.cleared(x, y, tier) || inFields(land, x, y, 0.5)) {
+        return undefined;
+      }
+      return spacing;
+    },
+    spacing,
+  ).flatMap(({ x, y, seed }): Mark[] => {
+    const grown = size * (0.7 + 0.6 * stream(seed)());
+    return footOnLand(land, x, y, grown) ? [{ kind: 'tumulus', x, y, size: grown, seed }] : [];
+  });
+}
+
+/** Rows of trees along the rivers of the dry and arid land, where the water keeps them. */
+function gallery(land: Land, rect: Rect, tier: 'middle' | 'close'): Mark[] {
+  const spacing = TIERS[tier].tree * 1.4;
+  const reach = GALLERY_KM[tier];
+  return scatter(
+    rect,
+    spacing / 2,
+    tier === 'close' ? 840 : 850,
+    (x, y) => {
+      const river = land.riverAt(x, y, reach);
+      if (!river || river.distance < reach * 0.25) return undefined;
+      if (valueNoise(x, y, 14, 851) < 0.3) return undefined;
+      if (land.cover(x, y) === 'green' || land.desert.inside(x, y)) return undefined;
+      if (!openGround(land, x, y) || land.cleared(x, y, tier)) return undefined;
+      if (inFields(land, x, y, FARMED_SHARE)) return undefined;
+      return spacing;
+    },
+    spacing,
+  ).flatMap(({ x, y, seed }): Mark[] => {
+    const random = stream(seed);
+    const size = TIERS[tier].tree * (1.05 + 0.3 * random());
+    if (!footOnLand(land, x, y, size * 0.6)) return [];
+    const shape: TreeShape =
+      land.cover(x, y) === 'arid' || random() < 0.3 ? 'cypress' : 'broadleaf';
+    return [{ kind: 'tree', x, y, size, shape, seed }];
+  });
+}
+
 /**
  * The relief, trees, and desert marks of one tier whose foot lies in `rect`, drawn from
  * the back (north) to the front. The same rect, tier, and map give the same marks every
@@ -876,9 +1493,9 @@ export function placeRelief(land: Land, rect: Rect, tier: Tier): Mark[] {
     ...(tier === 'wide'
       ? []
       : [...trees(land, rect, tier, salt), ...desert(land, rect, tier, salt)]),
-    // The ground goes with the close relief, whose chunks already hold drawings, so it
-    // adds no chunk to build and fade in where the land had none.
-    ...(tier === 'close' ? ground(land, rect) : []),
+    // The ground goes with the relief, whose chunks already hold drawings, so it adds no
+    // chunk to build and fade in where the land had none.
+    ...(tier === 'wide' ? [] : ground(land, rect, tier)),
   ];
   return marks.sort((a, b) => footOf(a) - footOf(b));
 }

@@ -1,4 +1,12 @@
-import { Container, Graphics, RenderTexture, Sprite, type Renderer } from 'pixi.js';
+import {
+  BufferImageSource,
+  Container,
+  Graphics,
+  RenderTexture,
+  Sprite,
+  Texture,
+  type Renderer,
+} from 'pixi.js';
 import type { GameMap } from '../../sim/map.ts';
 import { coversView, fitTexture } from '../cached-texture.ts';
 import { visibleRect, type Camera, type Size } from '../camera.ts';
@@ -6,7 +14,16 @@ import { BuildQueue, chunkKey, chunkRect, chunkRow, chunksNear, OVERHANG } from 
 import { DETAIL, detailAlpha, type Band } from './detail.ts';
 import { PAPER } from '../palette.ts';
 import { createLakes } from './lakes.ts';
-import { drawDesert, drawMarks, drawPeaks, drawValleys, drawWoods } from './draw.ts';
+import {
+  drawDesert,
+  drawMarks,
+  drawPans,
+  drawPeaks,
+  drawValleys,
+  drawWoods,
+  groundTint,
+  TINT_CELL,
+} from './draw.ts';
 import {
   Land,
   peaksIn,
@@ -98,6 +115,22 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
     for (const [outer] of province.outline) if (outer) landMask.poly(outer.flat()).fill(0xffffff);
   }
   valleys.mask = landMask;
+  // The ground's colour is a raster of 16 km cells, drawn larger with smoothing, so it is
+  // clipped to the land like the valleys.
+  const tint = groundTint(land, map.width, map.height);
+  const tintSprite = new Sprite(
+    new Texture({
+      source: new BufferImageSource({
+        resource: tint.pixels,
+        width: tint.width,
+        height: tint.height,
+        format: 'rgba8unorm',
+      }),
+    }),
+  );
+  tintSprite.scale.set(TINT_CELL);
+  const tintMask = new Graphics(landMask.context);
+  tintSprite.mask = tintMask;
   const paper = new Graphics();
   for (const province of map.provinces) {
     for (const polygon of province.outline) {
@@ -112,7 +145,10 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   let repaint = true;
   const ground = new Container({ label: 'ground' });
   ground.addChild(
+    tintSprite,
+    tintMask,
     new Graphics(drawDesert(map.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline))),
+    new Graphics(drawPans(land.pans)),
     valleys,
     landMask,
     new Graphics(drawWoods(land.woods)),

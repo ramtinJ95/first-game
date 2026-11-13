@@ -25,10 +25,18 @@ function extent(m: Mark): Rect {
         right: m.x + m.width / 2,
         bottom: m.y,
       };
+    case 'fold': {
+      const r = m.length / 2 + m.width;
+      return { left: m.x - r, top: m.y - r, right: m.x + r, bottom: m.y + r };
+    }
     case 'tuft':
     case 'scrub':
     case 'rock':
+    case 'tumulus':
+    case 'crack':
       return { left: m.x - m.size, top: m.y - m.size, right: m.x + m.size, bottom: m.y + m.size };
+    case 'hamlet':
+      return { left: m.x - 2.5, top: m.y - 2.5, right: m.x + 2.5, bottom: m.y + 1.5 };
     case 'tree':
       return { left: m.x - m.size, top: m.y - m.size * 1.3, right: m.x + m.size, bottom: m.y };
     case 'dune':
@@ -51,6 +59,7 @@ function extent(m: Mark): Rect {
       return { left: m.x - r, top: m.y - r, right: m.x + r, bottom: m.y + r };
     }
     case 'track':
+    case 'qanat':
     case 'stream': {
       const xs = m.points.map(([x]) => x);
       const ys = m.points.map(([, y]) => y);

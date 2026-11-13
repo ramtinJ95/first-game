@@ -225,6 +225,30 @@ export class AreaIndex {
   }
 
   /**
+   * The depth read between the centres of the distance cells, so it changes smoothly
+   * from cell to cell instead of in steps of a cell. Rows of drawings laid along the
+   * depth's contours need it.
+   */
+  smoothDepth(x: number, y: number): number {
+    if (!this.inside(x, y)) return 0;
+    const field = this.#distance();
+    const fx = (x - this.#left) / DISTANCE_CELL - 0.5;
+    const fy = (y - this.#top) / DISTANCE_CELL - 0.5;
+    const i = Math.floor(fx);
+    const j = Math.floor(fy);
+    const tx = fx - i;
+    const ty = fy - j;
+    const at = (ci: number, cj: number) => {
+      const c = Math.max(0, Math.min(this.#distanceColumns - 1, ci));
+      const r = Math.max(0, Math.min(this.#distanceRows - 1, cj));
+      return field[r * this.#distanceColumns + c] ?? 0;
+    };
+    const top = at(i, j) * (1 - tx) + at(i + 1, j) * tx;
+    const bottom = at(i, j + 1) * (1 - tx) + at(i + 1, j + 1) * tx;
+    return top * (1 - ty) + bottom * ty;
+  }
+
+  /**
    * Roughly how far the point lies from the area's edge, in km, up to the reach the
    * index was built with. It is good to a cell, which is all a drawing's size needs.
    */
