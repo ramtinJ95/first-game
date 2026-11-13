@@ -3,6 +3,9 @@ import type { MultiPolygon } from '../../sim/map.ts';
 type Edge = readonly [number, number, number, number];
 
 const BAND = 8;
+const STRIP = 16;
+/** Strips per band in a strip's key; the map is under 9,000 km wide. */
+const BAND_ROW = 1024;
 /** The side of a raster cell in km. */
 const CELL = 4;
 const OUTSIDE = 0;
@@ -22,11 +25,15 @@ export const DISTANCE_ERROR = DISTANCE_CELL * Math.SQRT2;
  */
 export class AreaIndex {
   readonly #bands = new Map<number, Edge[]>();
+  /** Each band's edges again, by the strips of `STRIP` km their x spans. */
+  readonly #strips = new Map<number, Edge[]>();
   readonly #left: number;
   readonly #top: number;
   readonly #columns: number;
   readonly #rows: number;
   readonly #cells: Uint8Array;
+  /** The cells a seam runs through or beside, which hold no single state on every row. */
+  #seamCells: Uint8Array | undefined;
   readonly #distanceColumns: number;
   readonly #distanceRows: number;
   /** Distance from each cell's centre to the area's edge in km, up to the reach it was built for. */
@@ -63,10 +70,16 @@ export class AreaIndex {
       const [, ay, , by] = edge;
       if (ay === by) continue;
       const last = Math.floor(Math.max(ay, by) / BAND);
+      const right = Math.floor(Math.max(edge[0], edge[2]) / STRIP);
       for (let b = Math.floor(Math.min(ay, by) / BAND); b <= last; b++) {
         let list = this.#bands.get(b);
         if (!list) this.#bands.set(b, (list = []));
         list.push(edge);
+        for (let s = Math.floor(Math.min(edge[0], edge[2]) / STRIP); s <= right; s++) {
+          let strip = this.#strips.get(b * BAND_ROW + s);
+          if (!strip) this.#strips.set(b * BAND_ROW + s, (strip = []));
+          strip.push(edge);
+        }
       }
     }
     this.#left = Math.floor(bounds.left / CELL) * CELL;
@@ -78,7 +91,8 @@ export class AreaIndex {
     this.#distanceRows = Math.ceil(this.#rows / DISTANCE_STEP);
     this.#fillRows();
     for (const edge of edges) {
-      if (!seams || this.#outer(edge)) this.#markEdge(edge);
+      if (!seams || this.#outer(edge)) this.#markEdge(edge, this.#cells, EDGE);
+      else this.#markEdge(edge, (this.#seamCells ??= new Uint8Array(this.#cells.length)), 1);
     }
     this.#reach = reach;
   }
@@ -113,7 +127,7 @@ export class AreaIndex {
     return !(this.#exact(mx + nx, my + ny) && this.#exact(mx - nx, my - ny));
   }
 
-  #markEdge([ax, ay, bx, by]: Edge) {
+  #markEdge([ax, ay, bx, by]: Edge, cells: Uint8Array, value: number) {
     const steps = Math.max(1, Math.ceil((Math.hypot(bx - ax, by - ay) / CELL) * 2));
     for (let s = 0; s <= steps; s++) {
       const column = Math.floor((ax + ((bx - ax) * s) / steps - this.#left) / CELL);
@@ -121,7 +135,7 @@ export class AreaIndex {
       for (let j = row - 1; j <= row + 1; j++) {
         for (let i = column - 1; i <= column + 1; i++) {
           if (i >= 0 && j >= 0 && i < this.#columns && j < this.#rows) {
-            this.#cells[j * this.#columns + i] = EDGE;
+            cells[j * this.#columns + i] = value;
           }
         }
       }
@@ -198,6 +212,36 @@ export class AreaIndex {
     return inside;
   }
 
+  /**
+   * The point's state read from the nearest cell to its right that no edge or seam
+   * touches, and the crossings between the two. A ray across the whole band crossed every
+   * edge of a wavered desert in that band, thousands of short ones, for each point asked.
+   */
+  #near(x: number, y: number, column: number, row: number): boolean {
+    const base = row * this.#columns;
+    let k = column + 1;
+    while (
+      k < this.#columns &&
+      (this.#cells[base + k] === EDGE || this.#seamCells?.[base + k] === 1)
+    ) {
+      k++;
+    }
+    const known = k < this.#columns && this.#cells[base + k] === INSIDE;
+    const to = this.#left + (k + 0.5) * CELL;
+    const band = Math.floor(y / BAND) * BAND_ROW;
+    let inside = known;
+    for (let b = Math.floor(x / STRIP); b <= Math.floor(to / STRIP); b++) {
+      const from = Math.max(x, b * STRIP);
+      const until = Math.min(to, (b + 1) * STRIP);
+      for (const [ax, ay, bx, by] of this.#strips.get(band + b) ?? []) {
+        if (ay > y === by > y) continue;
+        const cross = ((bx - ax) * (y - ay)) / (by - ay) + ax;
+        if (cross > from && cross <= until) inside = !inside;
+      }
+    }
+    return inside;
+  }
+
   #cell(x: number, y: number): number {
     const i = Math.floor((x - this.#left) / CELL);
     const j = Math.floor((y - this.#top) / CELL);
@@ -211,7 +255,7 @@ export class AreaIndex {
     const cell = this.#cells[k];
     if (cell === OUTSIDE) return false;
     if (cell === INSIDE) return true;
-    return this.#exact(x, y);
+    return this.#near(x, y, k % this.#columns, Math.floor(k / this.#columns));
   }
 
   /**
