@@ -3,7 +3,17 @@ import { decideAll } from '../src/sim/ai/decide.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { tick } from '../src/sim/tick.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
-import { camera, cityPoint, day, map, openGame, pause, startGame } from './support.ts';
+import {
+  camera,
+  cityPoint,
+  day,
+  dropSave,
+  map,
+  openGame,
+  pause,
+  resume,
+  startGame,
+} from './support.ts';
 
 const FOREIGN_POWERS = ['Carthage', 'Macedon', 'Egypt', 'Persia'];
 const MINORS = new Set<string>(
@@ -58,9 +68,15 @@ test('at the highest speed the page plays on until a foreign army has marched an
   });
   page.on('pageerror', (error) => errors.push(error.message));
   await openGame(page);
+  // The page opens a game of a random seed, and the minor cities differ by seed, so it
+  // plays the game of seed 1 that firstForeignConquest played.
+  await pause(page);
+  await dropSave(page, startGame());
+  await expect(page.getByTestId('time-controls-day')).toHaveAttribute('data-day', '1');
 
   const conquest = firstForeignConquest();
   await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
+  await resume(page);
   await expect
     .poll(() => day(page), { timeout: 240_000, intervals: [1000] })
     .toBeGreaterThanOrEqual(conquest.day);

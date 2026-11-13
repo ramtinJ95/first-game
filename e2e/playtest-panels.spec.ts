@@ -20,14 +20,21 @@ import {
   untilDrawn,
 } from './support.ts';
 
-/** A click picks among the banners last drawn, so this waits for a frame of the loaded day. */
+/**
+ * A click picks among the banners last drawn, so this waits for a frame of the loaded day.
+ * The save loads into a paused game, because a running one can pass its day before the
+ * page is read, and the game runs on after if it was running.
+ */
 async function load(page: Page, state: GameState) {
+  const running = await page.getByRole('button', { name: 'Pause', exact: true }).isVisible();
+  await pause(page);
   await dropSave(page, state);
   await expect(page.getByTestId('time-controls-day')).toHaveAttribute(
     'data-day',
     String(state.day),
   );
   await untilDrawn(page);
+  if (running) await resume(page);
 }
 
 async function clickCity(page: Page, id: string) {
