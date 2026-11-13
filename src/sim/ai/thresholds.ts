@@ -20,7 +20,7 @@ export const TROOP_MIX: Readonly<Record<Troop, number>> = {
 };
 
 /** A power declares war when its free strength is this many times the neighbour's, before distance. */
-export const WAR_ODDS = 2;
+export const WAR_ODDS = Number(process.env.XW ?? 2);
 /**
  * The most odds a power needs against a rival great power, so that rivals press each
  * other, and a player who stays at home, while minor cities are still left.
@@ -31,6 +31,13 @@ export const RIVAL_ODDS = 1.2;
  * to its homeland once its own armies outweigh that neighbour's this many times.
  */
 export const RIVAL_PRESSURE_ODDS = 2;
+/**
+ * A great power that holds at least this share of all cities, and more than any other,
+ * leads. Its neighbours declare war on it with no more than COALITION_ODDS, so the
+ * others turn on a power that runs away.
+ */
+export const LEADER_SHARE = Number(process.env.XL ?? 0.2);
+export const COALITION_ODDS = Number(process.env.XO ?? 0.8);
 /** The odds a power at peace with everyone needs, whatever the distance, so that a long peace can end. */
 export const PEACE_WAR_ODDS = 1.6;
 /** The odds needed grow by their own size for each this many km between the nearest cities. */
@@ -50,7 +57,7 @@ export const ATTACK_ODDS = 1.2;
  * garrison in men, so that it holds the blockade with men to spare. It keeps a siege
  * while the besiegers number BLOCKADE_ODDS times the garrison.
  */
-export const GARRISON_ODDS = 1.3;
+export const GARRISON_ODDS = Number(process.env.XG ?? 1.3);
 /** Enemy armies this close to a city defend it. */
 export const DEFENDER_KM = 100;
 /** A km at sea counts as this many km of road when the AI chooses a target. */

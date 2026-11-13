@@ -7,6 +7,9 @@ import type { Troop } from './troops.ts';
 /** How long a city that changed owner stays in unrest. Its output recovers evenly over these days. */
 export const UNREST_DAYS = 90;
 
+/** A city taken from a great power stays in unrest this long, so a rival's city pays later than a minor's. */
+export const CONQUERED_UNREST_DAYS = Number(process.env.XU ?? 90);
+
 /** The new owner may sack or enslave a fallen city for this many days after the fall. */
 export const FATE_DAYS = 10;
 
@@ -31,7 +34,12 @@ export const SACK = {
 export const ENSLAVE = { populationShare: 0.3, manpowerShare: 0.25, unrestDays: 365 } as const;
 
 /** The longest unrest a city can have: the longest a fate gives. */
-export const MAX_UNREST_DAYS = Math.max(UNREST_DAYS, SACK.unrestDays, ENSLAVE.unrestDays);
+export const MAX_UNREST_DAYS = Math.max(
+  UNREST_DAYS,
+  CONQUERED_UNREST_DAYS,
+  SACK.unrestDays,
+  ENSLAVE.unrestDays,
+);
 
 /**
  * Hands a city and its province to a new owner. The city starts its full period of
@@ -45,7 +53,8 @@ export function changeCityOwner(state: GameState, cityId: CityId, owner: Faction
   if (!Object.hasOwn(state.factions, owner)) throw new Error(`faction ${owner} does not exist`);
   const previous = city.owner;
   city.owner = owner;
-  city.unrestDays = UNREST_DAYS;
+  city.unrestDays =
+    state.factions[previous]?.kind === 'greatPower' ? CONQUERED_UNREST_DAYS : UNREST_DAYS;
   city.recruits = [];
   city.fellOn = null;
   if (!Object.values(state.cities).some((other) => other.owner === previous)) {

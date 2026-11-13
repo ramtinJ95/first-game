@@ -1,4 +1,4 @@
-import { STARTING_GENERAL_SKILL } from '../new-game.ts';
+import { newGame, STARTING_GENERAL_SKILL } from '../new-game.ts';
 import { describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { FormationId } from '../ids.ts';
@@ -9,6 +9,7 @@ import type { GameState } from '../state/game-state.ts';
 import { tick } from '../tick.ts';
 import { TROOPS } from '../troops.ts';
 import {
+  ADMIN_CITIES,
   dailyBalances,
   FOOD_PER_PERSON,
   GRANARY_DAYS,
@@ -16,6 +17,7 @@ import {
   MANPOWER_SHARE,
   menOf,
   OUTPUT_PER_PERSON,
+  TREASURY_DAYS,
   UPKEEP_PER_MAN,
 } from './economy.ts';
 
@@ -42,13 +44,13 @@ describe('production and upkeep', () => {
   test('one day adds each city output to its owner and takes each army upkeep', () => {
     const next = tick(buildFixture(), [], world).state;
     // Rome: 58,000 people make 24.36 gold and 34.8 food and eat 23.2 of it; 1,500 men cost
-    // 15 gold and eat 9 food. Its 2,000 manpower is already above its limit: 4% of its
-    // people less its 1,500 men under arms, 820.
+    // 15 gold and eat 9 food. Its 2,000 manpower is already above its limit: 5% of its
+    // people less its 1,500 men under arms, 1,400.
     expect(stores(next).gold).toBeCloseTo(5009.36, 9);
     expect(stores(next).food).toBeCloseTo(1002.6, 9);
     expect(stores(next).manpower).toBe(2000);
     // Carthage: 50,000 people make 21 gold and 30 food and eat 20 food. Its 1,000
-    // manpower is above its limit of 2,000 less 1,500 men.
+    // manpower is above its limit of 2,500 less 1,500 men.
     expect(stores(next, FIXTURE.carthage).gold).toBeCloseTo(3006, 9);
     expect(stores(next, FIXTURE.carthage).food).toBeCloseTo(1001, 9);
     expect(stores(next, FIXTURE.carthage).manpower).toBe(1000);
@@ -318,5 +320,56 @@ describe('recruitment', () => {
     const state = run();
     expect(run()).toStrictEqual(state);
     expectConsistent(state);
+  });
+});
+
+describe('the cost of a large realm', () => {
+  test('past ADMIN_CITIES cities, each city a realm adds yields less gold and manpower', () => {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    const minors = Object.values(state.cities)
+      .filter((city) => city.rank === 'minorCity')
+      .sort((a, b) => (a.id < b.id ? -1 : 1));
+    for (const city of minors) city.population = 12_000;
+    const income = (count: number) => {
+      for (const [i, city] of minors.entries()) {
+        city.owner = (i < count ? FIXTURE.rome : city.id) as never;
+      }
+      return dailyBalances(state).get(FIXTURE.rome) ?? { gold: 0, food: 0, manpower: 0 };
+    };
+    const home = income(0);
+    const perCity = 12_000 * OUTPUT_PER_PERSON.gold;
+    expect(income(ADMIN_CITIES - 4).gold - home.gold).toBeCloseTo((ADMIN_CITIES - 4) * perCity, 6);
+    const doubled = income(2 * ADMIN_CITIES - 4);
+    expect(doubled.gold - home.gold).toBeLessThan((2 * ADMIN_CITIES - 4) * perCity * 0.75);
+    expect(doubled.manpower).toBeLessThan(
+      home.manpower + (2 * ADMIN_CITIES - 4) * 12_000 * OUTPUT_PER_PERSON.manpower * 0.75,
+    );
+    expect(doubled.food - home.food).toBeCloseTo(
+      (2 * ADMIN_CITIES - 4) * 12_000 * (OUTPUT_PER_PERSON.food - FOOD_PER_PERSON),
+      6,
+    );
+  });
+});
+
+describe('the treasury', () => {
+  test('gold stops growing at TREASURY_DAYS of what the people pay, while upkeep still takes it', () => {
+    const state = buildFixture();
+    const rome = state.factions[FIXTURE.rome];
+    const limit = limitsOf(state).get(FIXTURE.rome)?.gold ?? 0;
+    const people = Object.values(state.cities)
+      .filter((city) => city.owner === FIXTURE.rome)
+      .reduce((sum, city) => sum + city.population, 0);
+    expect(limit).toBeCloseTo(TREASURY_DAYS * people * OUTPUT_PER_PERSON.gold, 6);
+    if (!rome) throw new Error('rome is missing');
+    rome.stores.gold = limit;
+    const next = tick(state, [], world).state;
+    expect(next.factions[FIXTURE.rome]?.stores.gold).toBeCloseTo(limit, 6);
+    const army = next.armies[FIXTURE.romanArmy];
+    const spears = next.formations[FIXTURE.hastati];
+    if (!army || !spears) throw new Error('the roman army is missing');
+    spears.men = 5000;
+    const poorer = tick(next, [], world).state;
+    expect(poorer.factions[FIXTURE.rome]?.stores.gold).toBeLessThan(limit);
+    expectConsistent(poorer);
   });
 });

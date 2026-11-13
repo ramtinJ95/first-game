@@ -11,6 +11,8 @@ import {
   type CityView,
 } from './situation.ts';
 import {
+  COALITION_ODDS,
+  LEADER_SHARE,
   PEACE_WAR_ODDS,
   RIVAL_ODDS,
   RIVAL_PRESSURE_ODDS,
@@ -29,7 +31,9 @@ import {
  * is its free strength. It declares on the neighbour with the best odds, free strength over the
  * neighbour's, once they reach WAR_ODDS raised by distance over WAR_DISTANCE_KM. A power
  * at peace with everyone needs only PEACE_WAR_ODDS, whatever the distance. Against a
- * rival great power it needs no more than RIVAL_ODDS in either case.
+ * rival great power it needs no more than RIVAL_ODDS in either case, and against the
+ * leader, a great power with LEADER_SHARE of all cities and more than any other, no more
+ * than COALITION_ODDS.
  */
 export function warDeclaration(context: Context): Order[] {
   const { state, faction, enemies, router } = context;
@@ -82,11 +86,13 @@ export function warDeclaration(context: Context): Order[] {
   );
   if (free <= 0) return rivalPressure(context, strength, rivals, frontOf);
   const odds = enemies.size === 0 ? PEACE_WAR_ODDS : WAR_ODDS;
+  const leader = leaderOf(citiesOf, rivals);
+  const oddsAgainst = (other: FactionId) =>
+    other === leader ? COALITION_ODDS : rivals.has(other) ? RIVAL_ODDS : odds;
   const scoreOf = (other: FactionId, theirs: number, km: number) =>
     free /
     Math.max(1, theirs) /
-    (Math.min(odds, rivals.has(other) ? RIVAL_ODDS : odds) *
-      (enemies.size === 0 ? 1 : 1 + km / WAR_DISTANCE_KM));
+    (Math.min(odds, oddsAgainst(other)) * (enemies.size === 0 ? 1 : 1 + km / WAR_DISTANCE_KM));
 
   // A neighbour scores at most its best city in reach would with no army near it, so
   // most are ruled out before a route to their front is looked for.
@@ -114,6 +120,21 @@ export function warDeclaration(context: Context): Order[] {
   }
   if (best) return [{ kind: 'declareWar', faction, against: best.against }];
   return rivalPressure(context, strength, rivals, frontOf);
+}
+
+/** The great power that holds at least LEADER_SHARE of all cities and more than any other. */
+function leaderOf(
+  citiesOf: ReadonlyMap<FactionId, readonly CityView[]>,
+  rivals: ReadonlySet<FactionId>,
+): FactionId | undefined {
+  let total = 0;
+  for (const cities of citiesOf.values()) total += cities.length;
+  const counts = [...rivals]
+    .map((rival) => ({ rival, count: citiesOf.get(rival)?.length ?? 0 }))
+    .sort((a, b) => b.count - a.count || (a.rival < b.rival ? -1 : 1));
+  const [first, second] = counts;
+  if (!first || first.count < LEADER_SHARE * total) return undefined;
+  return second && second.count === first.count ? undefined : first.rival;
 }
 
 /**

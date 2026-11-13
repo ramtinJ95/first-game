@@ -65,6 +65,52 @@ function war() {
   if (!far) throw new Error('rome holds no city');
   return { state, target, far };
 }
+describe('a league of minor cities', () => {
+  /** The first league, in id order, whose two cities a land route joins. */
+  function leagued() {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    const first = Object.values(state.factions)
+      .sort((a, b) => (a.id < b.id ? -1 : 1))
+      .find(
+        (f) =>
+          f.league != null &&
+          byLand(world, cityOf(state, f.id).position, cityOf(state, f.league).position),
+      );
+    const partner = first?.league ? state.factions[first.league] : undefined;
+    if (!first || !partner) throw new Error('the new game has no league by land');
+    return { state, first: first.id, partner: partner.id };
+  }
+
+  test('a minor joins the war on its league partner', () => {
+    const { state, first, partner } = leagued();
+    expect(executeOrder(state, { kind: 'declareWar', faction: rome, against: first }, world)).toBeUndefined();
+    expect(decideOrders(state, world, partner)).toContainEqual({
+      kind: 'declareWar',
+      faction: partner,
+      against: rome,
+    });
+    expectConsistent(state);
+  });
+
+  test("a minor marches to lift the siege of its partner's city", () => {
+    const { state, first, partner } = leagued();
+    for (const id of [first, partner]) {
+      expect(executeOrder(state, { kind: 'declareWar', faction: rome, against: id }, world)).toBeUndefined();
+    }
+    const besieged = cityOf(state, first);
+    const home = cityOf(state, partner);
+    addArmy(state, rome, 2000, besieged.position);
+    const relief = addArmy(state, partner, 500, home.position);
+    const next = tick(state, [], world).state;
+    expect(Object.values(next.sieges).some((siege) => siege.city === besieged.id)).toBe(true);
+    const orders = decideOrders(next, world, partner);
+    expect(orders).toContainEqual(
+      expect.objectContaining({ kind: 'moveArmy', army: relief, to: besieged.position }),
+    );
+    expectConsistent(next);
+  });
+});
+
 describe('a siege the attack can hold', () => {
   test('an army too few to blockade alone does not march ahead of the army that makes it enough', () => {
     const { state, target, far } = war();

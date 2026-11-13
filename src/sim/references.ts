@@ -54,6 +54,14 @@ export function findBrokenReferences(state: DeepReadonly<GameState>): string[] {
     `player faction ${state.player} does not exist`,
   );
 
+  for (const faction of Object.values(state.factions)) {
+    if (faction.league == null) continue;
+    expect(
+      get(state.factions, faction.league)?.league === faction.id,
+      `faction ${faction.id} is in league with ${faction.league}, which is not in league with it`,
+    );
+  }
+
   for (const province of Object.values(state.provinces)) {
     expect(
       get(state.cities, province.city)?.province === province.id,

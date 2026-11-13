@@ -32,6 +32,8 @@ export const CitySchema = v.object({
   walls: v.pipe(v.number(), v.finite(), v.minValue(0)),
   garrison: v.pipe(v.number(), v.integer(), v.minValue(0)),
   foodDays: v.pipe(v.number(), v.finite(), v.minValue(0)),
+  /** Scales its rank's full walls and food, which a siege wears down and the city recovers to. */
+  fortified: v.pipe(v.number(), v.finite(), v.minValue(0)),
   /** The day the city fell to its owner, until the owner decides its fate. */
   fellOn: v.nullable(DaySchema),
   /** The day the city was last sacked, or null if it never was. Its gold stays low for `SACK.poorDays` after. */

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { parseArgs } from 'node:util';
 import { UNREST_DAYS } from '../src/sim/cities.ts';
 import type { FactionId } from '../src/sim/ids.ts';
 import { parseMap, POWERS } from '../src/sim/map.ts';
@@ -9,7 +10,8 @@ import { dailyBalances, menOf, UPKEEP_PER_MAN } from '../src/sim/systems/economy
 import { tick } from '../src/sim/tick.ts';
 import { TROOPS, type Troop } from '../src/sim/troops.ts';
 
-const YEARS = 3;
+const { values } = parseArgs({ options: { years: { type: 'string', default: '3' } } });
+const YEARS = Number(values.years);
 const SEED = 1;
 const map = parseMap(
   JSON.parse(readFileSync(new URL('../data/map/map.json', import.meta.url), 'utf8')),
