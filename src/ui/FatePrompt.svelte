@@ -45,7 +45,7 @@
       The game is paused. Choose what becomes of its {whole(city.population)} people.
     </p>
     <div class="choices" role="group" aria-label="Fates">
-      <div class="row head" aria-hidden="true">
+      <div class="fate-row fate-head" aria-hidden="true">
         <span></span>
         <span>Now</span>
         <span>Unrest</span>
@@ -55,7 +55,7 @@
       {#each fate.choices as choice (choice.kind)}
         <button
           type="button"
-          class="row"
+          class="fate-row"
           data-testid="fate-{choice.kind}"
           disabled={choice.refusal !== undefined}
           title={choice.refusal}
@@ -118,7 +118,7 @@
     margin: 10px 0 6px;
   }
 
-  .row {
+  .fate-row {
     display: grid;
     grid-template-columns: 5.5rem 1.4fr 0.8fr 1.3fr 1.3fr;
     gap: 10px;
@@ -128,7 +128,7 @@
     text-align: left;
   }
 
-  .head {
+  .fate-head {
     padding-block: 0;
     font-size: 11px;
     color: var(--muted);
@@ -153,24 +153,24 @@
   }
 
   @media (max-width: 639px) {
-    .head {
+    .fate-head {
       display: none;
     }
 
-    .row {
+    .fate-row {
       grid-template-columns: 1fr;
       gap: 2px;
     }
 
-    .row > :nth-child(3)::before {
+    .fate-row > :nth-child(3)::before {
       content: 'Unrest: ';
     }
 
-    .row > :nth-child(4)::before {
+    .fate-row > :nth-child(4)::before {
       content: 'A day in unrest, at first: ';
     }
 
-    .row > :nth-child(5)::before {
+    .fate-row > :nth-child(5)::before {
       content: 'A day once calm: ';
     }
   }

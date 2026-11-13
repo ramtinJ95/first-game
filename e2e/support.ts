@@ -322,14 +322,14 @@ export function camera(page: Page) {
 }
 
 export async function pause(page: Page) {
-  if (await page.getByRole('button', { name: 'Pause' }).isVisible()) {
-    await page.getByRole('button', { name: 'Pause' }).click();
+  if (await page.getByRole('button', { name: 'Pause', exact: true }).isVisible()) {
+    await page.getByRole('button', { name: 'Pause', exact: true }).click();
   }
 }
 
 export async function resume(page: Page) {
-  if (await page.getByRole('button', { name: 'Resume' }).isVisible()) {
-    await page.getByRole('button', { name: 'Resume' }).click();
+  if (await page.getByRole('button', { name: 'Resume', exact: true }).isVisible()) {
+    await page.getByRole('button', { name: 'Resume', exact: true }).click();
   }
 }
 
