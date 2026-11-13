@@ -334,11 +334,17 @@ export function planCommand(
       (order) =>
         order.kind === 'declareWar' && order.faction === army.owner && order.against === owner,
     );
+  // A march to a point within SIEGE_DISTANCE of an enemy city besieges it as a march to the city does.
+  const besieged =
+    city ??
+    Object.values(state.cities)
+      .filter((c) => atWar(c.owner) && distance(c.position, to) <= SIEGE_DISTANCE)
+      .sort((a, b) => distance(a.position, to) - distance(b.position, to))[0];
   const notice =
-    city && city.owner !== army.owner
-      ? atWar(city.owner)
-        ? weakSiegeWarning(state, army, city)
-        : `At peace with ${factionName(state, city.owner)}. Declare war to besiege it.`
+    besieged && besieged.owner !== army.owner
+      ? atWar(besieged.owner)
+        ? weakSiegeWarning(state, army, besieged)
+        : `At peace with ${factionName(state, besieged.owner)}. Declare war to besiege it.`
       : undefined;
   const found = route(state, world, march);
   // The rules name a destination by its coordinates. A city the player clicked reads better by name.
@@ -389,7 +395,9 @@ export function planCommand(
       notice: `${refusal(found)} No way by sea lands within ${MAX_MARCH_DAYS} days' march of it.`,
     };
   }
-  const info = `March to ${city?.name ?? placeName(state, to).replace(/^(at|near) /, 'a point near ')}: ${daysText(found.days)}.`;
+  const where = placeName(state, to);
+  const named = city?.name ?? (where.startsWith('at ') ? where.slice(3) : `a point ${where}`);
+  const info = `March to ${named}: ${daysText(found.days)}.`;
   return { kind: 'issue', order: march, info, ...(notice && { notice }) };
 }
 

@@ -134,6 +134,7 @@ test.describe('orders that finish', () => {
     );
     await page.getByTestId('army-besiege').click();
     await expect(page.getByTestId('army-besiege')).toHaveCount(0);
+    await expect(page.getByTestId('notice')).toHaveText('March to Mediolanum: 1 day.');
     await resume(page);
     await expect(page.getByTestId('army-activity')).toHaveText(/^Besieging Mediolanum · day \d+$/);
   });

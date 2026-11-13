@@ -7,6 +7,7 @@ import { MAX_MARCH_DAYS } from '../sim/march.ts';
 import { GATHER_DAYS } from '../sim/orders/embark.ts';
 import type { MoveArmyOrder } from '../sim/orders/move-army.ts';
 import type { Order } from '../sim/orders/orders.ts';
+import { removeRecord } from '../sim/records.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
@@ -455,6 +456,27 @@ describe('what an order says at once', () => {
     expect(planned.menu.options).toMatchObject([
       { group: 'sea', label: 'Sail from Roma to Carthago' },
     ]);
+  });
+
+  it('a march to a point beside an enemy city warns as a march to the city does', () => {
+    const state = buildFixture();
+    changeCityOwner(state, f.capua, f.carthage);
+    state.wars[warKey(f.rome, f.carthage)] = { since: state.day };
+    const [first] = armyOf(state).formations;
+    const formation = first && state.formations[first];
+    if (!formation) throw new Error('fixture changed');
+    for (const id of armyOf(state).formations.slice(1)) removeRecord(state.formations, id);
+    armyOf(state).formations = [formation.id];
+    formation.men = 200;
+    const capua = cityOf(state, f.capua);
+    const planned = plan(state, atPoint({ x: capua.position.x + 9, y: capua.position.y }));
+    expect(planned).toMatchObject({
+      kind: 'issue',
+      info: expect.stringMatching(/^March to Capua: /),
+    });
+    expect(planned.notice).toMatch(
+      /^Capua holds a garrison of [\d,]+, more than the 200 men who would besiege it\./,
+    );
   });
 
   it('a march given after a war declared on a paused day says nothing of peace', () => {
