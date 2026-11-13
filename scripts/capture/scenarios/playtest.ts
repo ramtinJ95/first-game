@@ -94,10 +94,10 @@ export default defineScenario({
 
     const port = camera(page);
     await page.mouse.click(port.banner(cityPoint('roma')).x, port.banner(cityPoint('roma')).y);
-    const salona = port.city('salona');
-    await page.mouse.click(salona.x, salona.y, { button: 'right' });
+    const massalia = port.city('massalia');
+    await page.mouse.click(massalia.x, massalia.y, { button: 'right' });
     await page.getByTestId('command-menu').waitFor();
-    await shot('port-menu', 'With the army at Roma, a right click on Salona opens the port menu');
+    await shot('port-menu', 'With the army at Roma, a right click on Massalia opens the port menu');
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
 

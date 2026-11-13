@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { CityId, FactionId, FormationId } from '../ids.ts';
 import { changeCityOwner } from '../cities.ts';
-import { marchPath, startMarch } from '../march.ts';
+import { landPath, marchDays, marchPath, MAX_MARCH_DAYS, startMarch } from '../march.ts';
 import { newGame } from '../new-game.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
@@ -359,6 +359,37 @@ describe('a great power', () => {
       if (step?.kind !== 'embark') return expect(step).toBeUndefined();
       const harbour = world.harbours.get(step.to);
       expect(harbour && marchPath(world, harbour, target.position)).toBeInstanceOf(Array);
+    });
+
+    test('takes an army off a march longer than MAX_MARCH_DAYS that a save from before the limit holds', () => {
+      const state = buildFixture();
+      const path = landPath(world, ROMA, city(state, f.carthago).position);
+      if (typeof path === 'string') throw new Error(path);
+      expect(marchDays(ROMA, path)).toBeGreaterThan(MAX_MARCH_DAYS);
+      army(state, f.romanArmy).activity = { kind: 'marching', position: ROMA, waypoints: path };
+      const orders = decideOrders(state, world, f.rome);
+      expect(orders).toContainEqual({ kind: 'halt', faction: f.rome, army: f.romanArmy });
+      const after = tick(state, orders, world);
+      expect(after.rejected).toEqual([]);
+      const activity = army(after.state, f.romanArmy).activity;
+      if (activity.kind === 'marching') {
+        expect(marchDays(activity.position, activity.waypoints)).toBeLessThanOrEqual(
+          MAX_MARCH_DAYS,
+        );
+      }
+      expectConsistent(after.state);
+    });
+
+    test('takes a minor at peace off a march longer than MAX_MARCH_DAYS', () => {
+      const state = buildFixture();
+      const syracusae = city(state, f.syracusae).owner;
+      army(state, f.punicArmy).owner = syracusae;
+      const path = landPath(world, ROMA, city(state, f.carthago).position);
+      if (typeof path === 'string') throw new Error(path);
+      army(state, f.punicArmy).activity = { kind: 'marching', position: ROMA, waypoints: path };
+      expect(decideOrders(state, world, syracusae)).toEqual([
+        { kind: 'halt', faction: syracusae, army: f.punicArmy },
+      ]);
     });
 
     test('never sets out on a march longer than MAX_MARCH_DAYS, such as round the sea from a failed siege overseas', () => {

@@ -2,7 +2,7 @@ import type { Order } from '../orders/orders.ts';
 import { RALLY_DISTANCE, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import { TROOPS, type Troop } from '../troops.ts';
 import { distance } from '../world/find-path.ts';
-import { retreats, type Context } from './armies.ts';
+import { endOverlongMarches, retreats, type Context } from './armies.ts';
 import { balanceOf, besieged, meanMorale, menInTraining, sorted } from './situation.ts';
 import { MARCH_MORALE, MINOR_DEFICIT_DAYS } from './thresholds.ts';
 
@@ -18,8 +18,8 @@ const CHEAPEST: Troop = (Object.keys(TROOPS) as Troop[]).reduce((a, b) =>
  */
 export function minorOrders(context: Context): Order[] {
   const { state, router, faction, enemies } = context;
-  if (enemies.size === 0) return [];
-  const orders = retreats(context);
+  if (enemies.size === 0) return endOverlongMarches(context);
+  const orders = [...endOverlongMarches(context), ...retreats(context)];
   const [home] = sorted(state.cities).filter((city) => city.owner === faction);
   if (!home) return orders;
 

@@ -4,6 +4,7 @@ import type { Order } from '../orders/orders.ts';
 import type { MapPoint } from '../state/map-point.ts';
 import { RALLY_DISTANCE } from '../systems/economy.ts';
 import { BLOCKADE_ODDS, defendersAt, SIEGE_DISTANCE } from '../systems/sieges.ts';
+import { marchDays, MAX_MARCH_DAYS } from '../march.ts';
 import { distance } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import type { Router, Step } from './routes.ts';
@@ -49,6 +50,17 @@ export interface Context {
   faction: FactionId;
   enemies: ReadonlySet<FactionId>;
   router: Router;
+}
+
+/**
+ * Halts every army of the faction on a march longer than MAX_MARCH_DAYS, which only a save
+ * from before the limit holds. A later order of the same day may send it on a march the
+ * rules allow, and otherwise it stands where it is.
+ */
+export function endOverlongMarches({ state, faction }: Context): Order[] {
+  return sorted(state.armies)
+    .filter((army) => army.owner === faction && overlong(army))
+    .map((army) => ({ kind: 'halt', faction, army: army.id }));
 }
 
 /** Retreats every army of the faction whose side in its battle has fallen below RETREAT_ODDS of the enemy. */
@@ -426,11 +438,19 @@ function atOwnCity(state: State, army: ArmyView): boolean {
   );
 }
 
+/** Where the army marches, unless the march is longer than a march may be, as in an old save. */
 function destinationOf(army: ArmyView): MapPoint | undefined {
   const { activity } = army;
-  return activity.kind === 'marching'
-    ? activity.waypoints[activity.waypoints.length - 1]
-    : undefined;
+  if (activity.kind !== 'marching' || overlong(army)) return undefined;
+  return activity.waypoints[activity.waypoints.length - 1];
+}
+
+function overlong(army: ArmyView): boolean {
+  const { activity } = army;
+  return (
+    activity.kind === 'marching' &&
+    marchDays(activity.position, activity.waypoints) > MAX_MARCH_DAYS
+  );
 }
 
 function marchingTo(army: ArmyView, point: MapPoint): boolean {
