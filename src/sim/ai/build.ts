@@ -20,15 +20,22 @@ export const BUILD_PAYBACK_YEARS = 6;
 /** The cities a power takes in a year near a border temple, by which the AI prices one. */
 export const CONQUESTS_A_YEAR = 1;
 
-/** The dearest troop the AI raises, whose price a building never takes from it. */
-const RECRUIT_RESERVE = Math.max(
+/**
+ * Food counts in a building's worth only while the realm's harvest, after its upkeep,
+ * feeds fewer than this many more men. Beyond that more food only spoils.
+ */
+export const FOOD_MARGIN_MEN = 2000;
+
+/** The cheapest troop the AI raises, whose price a building never takes from it. */
+const RECRUIT_RESERVE = Math.min(
   ...(Object.keys(TROOP_MIX) as (keyof typeof TROOPS)[]).map((troop) => TROOPS[troop].recruit.gold),
 );
 const CHEAPEST = Math.min(...BUILDING_KINDS.map((kind) => BUILDINGS[kind].gold));
 
 /**
- * What a building in the city is worth to its owner in gold a day. Gold, food, and
- * manpower count at FOOD_PRICE and MANPOWER_PRICE. On a border, towers are worth the
+ * What a building in the city is worth to its owner in gold a day. Gold counts as it
+ * is, manpower at MANPOWER_PRICE, and food at FOOD_PRICE while the realm's harvest feeds
+ * fewer than FOOD_MARGIN_MEN more men. On a border, towers are worth the
  * upkeep of the field army their garrison spares. A temple is worth the output it saves
  * in CONQUESTS_A_YEAR cities like the nearest city of another faction in its reach, and
  * towers behind the border and a temple with no city to take are worth nothing.
@@ -36,7 +43,8 @@ const CHEAPEST = Math.min(...BUILDING_KINDS.map((kind) => BUILDINGS[kind].gold))
 export function buildingWorth(state: State, city: CityView, kind: BuildingKind): number {
   const gain = buildingGain(state, city, kind);
   const { gold, food, manpower } = gain.daily;
-  let worth = gold + food * FOOD_PRICE + manpower * MANPOWER_PRICE;
+  const fed = (balanceOf(state, city.owner)?.food ?? 0) / UPKEEP_PER_MAN.food;
+  let worth = gold + (fed < FOOD_MARGIN_MEN ? food * FOOD_PRICE : 0) + manpower * MANPOWER_PRICE;
   if (kind === 'towers' && onBorder(state, city)) {
     worth += gain.garrison * (UPKEEP_PER_MAN.gold + UPKEEP_PER_MAN.food * FOOD_PRICE);
   }
@@ -60,8 +68,8 @@ export function buildingWorth(state: State, city: CityView, kind: BuildingKind):
  * Orders at most one building a day, on a day the power raised no recruit: the one that
  * pays back its gold soonest among those its cities can start, if that is within
  * BUILD_PAYBACK_YEARS. It builds only while its gold and food balances are not falling
- * and only with gold left over the reserve for its men and the price of its dearest
- * recruit, so a building never stops it raising or keeping an army.
+ * and only with gold left over the reserve for its men and the price of its cheapest
+ * recruit, so a building never stops it keeping an army or raising one in haste.
  */
 export function construction(state: State, faction: FactionId, recruiting: boolean): Order[] {
   const record = state.factions[faction];

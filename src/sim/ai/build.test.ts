@@ -6,6 +6,7 @@ import { expectConsistent } from '../references.ts';
 import type { GameState } from '../state/game-state.ts';
 import { buildingWorth, construction } from './build.ts';
 import { decideOrders } from './decide.ts';
+import { TROOPS } from '../troops.ts';
 import { reserveOf } from './situation.ts';
 
 const world = fixtureWorld();
@@ -50,7 +51,8 @@ describe('the AI builds', () => {
   test('nothing with the gold that keeps its men and pays for its next recruit', () => {
     const tight = buildFixture();
     const reserve = reserveOf(tight, f.rome, 'gold');
-    tight.factions[f.rome]!.stores.gold = reserve + 3200 + BUILDINGS.temple.gold - 1;
+    tight.factions[f.rome]!.stores.gold =
+      reserve + TROOPS.skirmishers.recruit.gold + BUILDINGS.temple.gold - 1;
     expect(construction(tight, f.rome, false)).toEqual([]);
     tight.factions[f.rome]!.stores.gold += 1 + BUILDINGS.canals.gold;
     expect(construction(tight, f.rome, false)).toHaveLength(1);
