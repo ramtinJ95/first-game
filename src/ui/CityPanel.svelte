@@ -20,6 +20,7 @@
   import {
     armiesAt,
     cityBalance,
+    minorText,
     unrestText,
     cityFoodText,
     cssColour,
@@ -123,6 +124,9 @@
     <span class="muted" data-testid="city-rank">{rankText(game, map, city)}</span>
   </div>
   <p data-testid="city-owner">{ownerLine(game, city.owner)}</p>
+  {#if minorText(game, sight, city)}
+    <p class="muted" data-testid="city-minor">{minorText(game, sight, city)}</p>
+  {/if}
   <table>
     <tbody>
       <tr>

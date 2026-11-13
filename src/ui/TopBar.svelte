@@ -45,12 +45,7 @@
   {:else if stores && balance}
     <span class="stores">
       {#each STORES as { key, name } (key)}
-        {@const note = storeNote(
-          key,
-          stores[key],
-          balance[key],
-          key === 'gold' ? undefined : limits?.[key],
-        )}
+        {@const note = storeNote(key, stores[key], balance[key], limits?.[key])}
         <span class="store" class:falling={note?.bad} data-testid="store-{key}" title={note?.why}>
           <span class="line">
             <span class="muted">{name}</span>

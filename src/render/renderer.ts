@@ -994,6 +994,15 @@ export async function createRenderer({
       if (event.pointerId !== drag?.pointer) return;
       if (!drag.moved) {
         const screen = local(event);
+        // Men and tents stand clear of a city's symbol, so a click on the symbol itself
+        // means the city, though a camp's edge reaches over it.
+        const onSymbol = drawnCities.some(
+          ({ symbol }) =>
+            screen.x >= symbol.left &&
+            screen.x <= symbol.right &&
+            screen.y >= symbol.top &&
+            screen.y <= symbol.bottom,
+        );
         const pick = pickAt(
           map,
           camera,
@@ -1001,7 +1010,7 @@ export async function createRenderer({
           bannersShown(),
           screen,
           battlesShown(),
-          figuresShown(),
+          onSymbol ? [] : figuresShown(),
         );
         // A city's name can stand over a neighbouring province, so a click on it, or on
         // its symbol, picks the city's own province.

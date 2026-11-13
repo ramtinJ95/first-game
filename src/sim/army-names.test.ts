@@ -16,8 +16,14 @@ describe('army names', () => {
   it('names each starting army in its power manner', () => {
     const state = newGame(parseMap(mapData), { seed: 1, player: 'rome' });
     const names = Object.fromEntries(
-      Object.values(state.armies).map((army) => [army.owner, army.name]),
+      Object.values(state.armies)
+        .filter((army) => state.factions[army.owner]?.kind === 'greatPower')
+        .map((army) => [army.owner, army.name]),
     );
+    const minor = Object.values(state.armies).find(
+      (army) => state.factions[army.owner]?.kind === 'minor',
+    );
+    expect(minor?.name).toBe(`Army of ${state.factions[minor?.owner ?? FIXTURE.rome]?.name}`);
     expect(names).toEqual({
       rome: 'First Legion',
       carthage: 'Host of Hanno',
