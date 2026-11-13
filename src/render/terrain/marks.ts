@@ -181,10 +181,14 @@ const DELTA = {
   reach: 220,
   spread: 0.62,
   lake: 10,
-  bulge: 0.08,
-  waver: 7,
-  waverCell: 28,
-  step: 4,
+  bulge: 0.15,
+  shoulder: 0.55,
+  waver: [
+    { cell: 46, reach: 10, salt: 71 },
+    { cell: 16, reach: 4, salt: 72 },
+    { cell: 6, reach: 1.4, salt: 73 },
+  ],
+  step: 1.5,
 } as const;
 const WOOD_SPACING = { edge: 62, middle: 30 } as const;
 /** A wood's pale rim reaches this far beyond its lobes. */
@@ -252,9 +256,11 @@ function inRect(rect: Rect, x: number, y: number): boolean {
 }
 
 /**
- * A delta fan's side from the river's end to a coast point, without its two ends: it
- * swells out from the fan by DELTA.bulge of its length and wavers by up to DELTA.waver
- * km, so the fan's sides are a silted plain's edge and not two ruled lines.
+ * A delta fan's side from the river's end to a coast point, without its two ends. It
+ * swells out from the fan by DELTA.bulge of its length, rising steeply from the apex so
+ * the fan has shoulders instead of a point, and wanders by the sum of DELTA.waver, so the
+ * fan's sides are a silted plain's edge and not two ruled lines. Each point moves square
+ * to the side by a function of how far along it lies, so a side never crosses itself.
  */
 function deltaSide(
   [ax, ay]: readonly [number, number],
@@ -276,8 +282,12 @@ function deltaSide(
     const t = k / steps;
     const x = ax + dx * t;
     const y = ay + dy * t;
-    const waver = DELTA.waver * (2 * valueNoise(x, y, DELTA.waverCell, 71) - 1);
-    const out = Math.sin(Math.PI * t) * (DELTA.bulge * length + waver);
+    const arch = Math.sin(Math.PI * t);
+    let waver = 0;
+    for (const { cell, reach, salt } of DELTA.waver) {
+      waver += reach * (2 * valueNoise(x, y, cell, salt) - 1);
+    }
+    const out = DELTA.bulge * length * arch ** DELTA.shoulder + Math.sqrt(arch) * waver;
     side.push([x + nx * out, y + ny * out]);
   }
   return side;

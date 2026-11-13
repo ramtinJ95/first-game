@@ -846,7 +846,12 @@ export function drawValleys(
       for (const [x, y] of rest) g.lineTo(x, y);
     }
   };
-  for (const delta of deltas) g.poly(delta.flat()).fill(TERRAIN_COLOURS.cultivatedEdge);
+  const rim = 7;
+  for (const delta of deltas) {
+    g.poly(delta.flat())
+      .fill(TERRAIN_COLOURS.cultivatedEdge)
+      .stroke({ width: rim, color: TERRAIN_COLOURS.cultivatedEdge, join: 'round' });
+  }
   trace();
   g.stroke({
     width: 2 * VALLEY.width,
@@ -856,19 +861,11 @@ export function drawValleys(
   });
   trace();
   g.stroke({
-    width: 2 * VALLEY.width - 7,
+    width: 2 * VALLEY.width - rim,
     color: TERRAIN_COLOURS.cultivated,
     cap: 'round',
     join: 'round',
   });
-  for (const delta of deltas) {
-    const [apex] = delta;
-    if (!apex) continue;
-    const inner = delta.map(([x, y]) => [
-      apex[0] + (x - apex[0]) * 0.9,
-      apex[1] + (y - apex[1]) * 0.9,
-    ]);
-    g.poly(inner.flat()).fill(TERRAIN_COLOURS.cultivated);
-  }
+  for (const delta of deltas) g.poly(delta.flat()).fill(TERRAIN_COLOURS.cultivated);
   return g;
 }
