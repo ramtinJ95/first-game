@@ -121,12 +121,12 @@
   },
   {
     "file": "closest-village.png",
-    "title": "The closest zoom on Elkharas, the village farthest from any city",
+    "title": "The closest zoom on Mosarna, the village farthest from any city",
     "kind": "screenshot"
   },
   {
     "file": "pan-frame-time.png",
-    "title": "widest pan, day 300 of an AI game, at 0.16 px per km: 331 frames, main thread busy 1.6 ms per frame, frame interval median 16.7 ms, p95 16.8 ms; middle pan, day 300 of an AI game, at 0.96 px per km: 343 frames, main thread busy 4.1 ms per frame, frame interval median 16.7 ms, p95 16.8 ms; closest pan, day 300 of an AI game, at 3.88 px per km: 347 frames, main thread busy 3.3 ms per frame, frame interval median 16.7 ms, p95 16.8 ms",
+    "title": "widest pan, day 300 of an AI game, at 0.16 px per km: 346 frames, main thread busy 6.7 ms per frame, frame interval median 16.7 ms, p95 16.7 ms; middle pan, day 300 of an AI game, at 0.96 px per km: 340 frames, main thread busy 3.6 ms per frame, frame interval median 16.7 ms, p95 16.7 ms; closest pan, day 300 of an AI game, at 3.88 px per km: 359 frames, main thread busy 4.0 ms per frame, frame interval median 16.7 ms, p95 16.8 ms",
     "kind": "screenshot"
   },
   {

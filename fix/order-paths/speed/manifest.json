@@ -16,7 +16,7 @@
   },
   {
     "file": "speed-numbers.png",
-    "title": "A year into an AI game, middle zoom over Italy: 78 figures drawn, 149 frames while panning, main thread busy 1.5 ms per frame, of which script 0.7 ms; A hundred armies of four formations, middle zoom: 6426 figures drawn, 135 frames while panning, main thread busy 3.8 ms per frame, of which script 2.6 ms; A battle of two armies of eight full formations, closest zoom: 434 figures drawn, 132 frames while panning, main thread busy 4.8 ms per frame, of which script 3.6 ms",
+    "title": "A year into an AI game, middle zoom over Italy: 78 figures drawn, 133 frames while panning, main thread busy 4.2 ms per frame, of which script 2.6 ms; A hundred armies of four formations, middle zoom: 5520 figures drawn, 135 frames while panning, main thread busy 10.7 ms per frame, of which script 8.2 ms; A battle of two armies of eight full formations, closest zoom: 423 figures drawn, 136 frames while panning, main thread busy 7.2 ms per frame, of which script 5.4 ms",
     "kind": "screenshot"
   },
   {
