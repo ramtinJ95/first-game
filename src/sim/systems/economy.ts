@@ -48,8 +48,8 @@ export const DESERTION = 0.01;
  * yields (ADMIN_CITIES / cities) ** ADMIN_EXPONENT of its gold and manpower, so a
  * realm's income grows ever more slowly with its size.
  */
-export const ADMIN_CITIES = Number(process.env.XC ?? 8);
-export const ADMIN_EXPONENT = Number(process.env.XA ?? 0.75);
+export const ADMIN_CITIES = 8;
+export const ADMIN_EXPONENT = 0.75;
 /** A recruit joins an idle army of its owner this close to the city, in kilometres. */
 export const RALLY_DISTANCE = 10;
 
@@ -83,9 +83,7 @@ function fill(store: number, change: number, limit: number): number {
  * people pay at full, GRANARY_DAYS of what its people and its men eat, and MANPOWER_SHARE of its people less its men under arms and in
  * training, so a large army leaves few men to call up.
  */
-export function limitsOf(
-  state: DeepReadonly<GameState>,
-): Map<FactionId, Stores> {
+export function limitsOf(state: DeepReadonly<GameState>): Map<FactionId, Stores> {
   const limits = new Map<FactionId, Stores>();
   const of = (faction: FactionId) => {
     let limit = limits.get(faction);

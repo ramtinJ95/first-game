@@ -4,7 +4,13 @@ import * as v from 'valibot';
 import { describe, expect, test } from 'vitest';
 import type { CityId, FactionId } from './ids.ts';
 import { parseMap, POWERS, type PowerId } from './map.ts';
-import { MINOR_KINDS, newGame, STARTING_GENERAL_SKILL, STARTING_STORES } from './new-game.ts';
+import {
+  FRONTIER_KM,
+  MINOR_KINDS,
+  newGame,
+  STARTING_GENERAL_SKILL,
+  STARTING_STORES,
+} from './new-game.ts';
 import type { Order } from './orders/orders.ts';
 import { expectConsistent } from './references.ts';
 import { loadGame, saveGame } from './save.ts';
@@ -317,5 +323,30 @@ describe('a power that raises every troop it can afford', () => {
     expect(hungry).toBeGreaterThan(0);
     expect(men).toBeLessThanOrEqual(1.1 * landFeeds);
     expectConsistent(state);
+  });
+});
+
+describe('minor cities far from every great power', () => {
+  test(`beyond FRONTIER_KM of every great capital, a minor is more often a standing army or rich and walled`, () => {
+    const capitals = map.provinces.filter((p) => p.owner !== 'independent' && p.capital);
+    const tally = { far: { strong: 0, all: 0 }, near: { strong: 0, all: 0 } };
+    for (let seed = 1; seed <= 10; seed++) {
+      const state = newGame(map, { seed, player: 'rome' });
+      for (const city of Object.values(state.cities)) {
+        if (city.rank !== 'minorCity') continue;
+        const km = Math.min(
+          ...capitals.map((c) =>
+            Math.hypot(c.city[0] - city.position.x, c.city[1] - city.position.y),
+          ),
+        );
+        const side = km > FRONTIER_KM ? tally.far : tally.near;
+        const fielded = Object.values(state.armies).some((army) => army.owner === city.owner);
+        side.all += 1;
+        if (fielded || city.fortified > 1) side.strong += 1;
+      }
+    }
+    expect(tally.far.all).toBeGreaterThan(50);
+    expect(tally.far.strong / tally.far.all).toBeGreaterThan(0.65);
+    expect(tally.near.strong / tally.near.all).toBeLessThan(0.55);
   });
 });

@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { fixtureWorld } from '../fixture.ts';
 import { allocateId, type ArmyId, type CityId, type FactionId } from '../ids.ts';
+import { changeCityOwner } from '../cities.ts';
 import { newGame } from '../new-game.ts';
+import { SIEGE_DISTANCE } from '../systems/sieges.ts';
+import { LEADER_SHARE } from './thresholds.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
 import { removeRecord } from '../records.ts';
 import { expectConsistent } from '../references.ts';
@@ -83,7 +86,9 @@ describe('a league of minor cities', () => {
 
   test('a minor joins the war on its league partner', () => {
     const { state, first, partner } = leagued();
-    expect(executeOrder(state, { kind: 'declareWar', faction: rome, against: first }, world)).toBeUndefined();
+    expect(
+      executeOrder(state, { kind: 'declareWar', faction: rome, against: first }, world),
+    ).toBeUndefined();
     expect(decideOrders(state, world, partner)).toContainEqual({
       kind: 'declareWar',
       faction: partner,
@@ -95,7 +100,9 @@ describe('a league of minor cities', () => {
   test("a minor marches to lift the siege of its partner's city", () => {
     const { state, first, partner } = leagued();
     for (const id of [first, partner]) {
-      expect(executeOrder(state, { kind: 'declareWar', faction: rome, against: id }, world)).toBeUndefined();
+      expect(
+        executeOrder(state, { kind: 'declareWar', faction: rome, against: id }, world),
+      ).toBeUndefined();
     }
     const besieged = cityOf(state, first);
     const home = cityOf(state, partner);
@@ -302,5 +309,79 @@ describe('the strength a war holds back', () => {
     );
     expect(declared).toEqual(['minor']);
     expectConsistent(state);
+  });
+});
+
+describe('a siege with no way home', () => {
+  test('besiegers too few to blockade, with no road or port to their muster city, step out of the siege', () => {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    for (const army of Object.values(state.armies)) {
+      for (const id of army.formations) removeRecord(state.formations, id);
+      removeRecord(state.armies, army.id);
+    }
+    const carthage = 'carthage' as FactionId;
+    expect(
+      executeOrder(state, { kind: 'declareWar', faction: rome, against: carthage }, world),
+    ).toBeUndefined();
+    const carthago = cityOf(state, carthage);
+    const besiegers = addArmy(state, rome, 300, carthago.position);
+    const next = tick(state, [], world).state;
+    expect(next.armies[besiegers]?.activity.kind).toBe('besieging');
+    const order = decideOrders(next, world, rome).find(
+      (o) => o.kind === 'moveArmy' && o.army === besiegers,
+    );
+    expect(order).toBeDefined();
+    if (order?.kind !== 'moveArmy') return;
+    expect(distance(order.to, carthago.position)).toBeGreaterThan(SIEGE_DISTANCE);
+    const after = tick(next, [order], world).state;
+    expectConsistent(after);
+  });
+});
+
+describe('the leader', () => {
+  const carthage = 'carthage' as FactionId;
+  /** Carthage at peace, with an army as strong as Rome's city nearest to it, and Rome holding `extra` more cities far from Carthage. */
+  function carthageFacing(extra: number) {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    for (const army of Object.values(state.armies)) {
+      if (army.owner === carthage || army.owner === rome) {
+        for (const id of army.formations) removeRecord(state.formations, id);
+        removeRecord(state.armies, army.id);
+      }
+    }
+    const carthago = cityOf(state, carthage);
+    const far = Object.values(state.cities)
+      .filter((city) => state.factions[city.owner]?.kind === 'minor')
+      .sort(
+        (a, b) => distance(b.position, carthago.position) - distance(a.position, carthago.position),
+      )
+      .slice(0, extra);
+    for (const city of far) {
+      changeCityOwner(state, city.id, rome);
+      city.unrestDays = 0;
+    }
+    const front = Object.values(state.cities)
+      .filter((city) => city.owner === rome)
+      .sort(
+        (a, b) => distance(a.position, carthago.position) - distance(b.position, carthago.position),
+      )[0];
+    if (!front) throw new Error('rome holds no city');
+    addArmy(
+      state,
+      carthage,
+      Math.ceil(front.garrison / (Math.sqrt(1.2) * 1.045)),
+      carthago.position,
+    );
+    return state;
+  }
+  const declaredOnRome = (state: GameState) =>
+    decideOrders(state, world, carthage).some(
+      (order) => order.kind === 'declareWar' && order.against === rome,
+    );
+
+  test(`neighbours declare war on a power that holds ${LEADER_SHARE * 100}% of the cities at odds they would not take against a rival`, () => {
+    const total = Object.keys(carthageFacing(0).cities).length;
+    expect(declaredOnRome(carthageFacing(Math.ceil(LEADER_SHARE * total)))).toBe(true);
+    expect(declaredOnRome(carthageFacing(2))).toBe(false);
   });
 });
