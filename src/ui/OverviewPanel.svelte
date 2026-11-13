@@ -54,6 +54,21 @@
       {/each}
     </ul>
 
+    {#if overview.columns.length > 0}
+      <h3>On the road</h3>
+      <ul class="pick-list" data-testid="overview-columns">
+        {#each overview.columns as row (row.column)}
+          <li>
+            <button type="button" class="pick" onclick={() => actions.show(row.pick, row.at)}>
+              <span class="swatch" style:background={colour}></span>
+              <span class="who">{row.route}</span>
+              <span class="what">{whole(row.people)} people</span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+
     <h3>Wars</h3>
     <ul class="wars" data-testid="overview-wars">
       {#each overview.wars as war (war.against)}

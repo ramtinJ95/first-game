@@ -9,7 +9,14 @@ import {
 import { factionColour } from '../render/palette.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { Pick } from '../render/pick.ts';
-import type { ArmyId, BattleId, CityId, FactionId, ProvinceId } from '../sim/ids.ts';
+import type {
+  ArmyId,
+  BattleId,
+  CityId,
+  FactionId,
+  ProvinceId,
+  RefugeeColumnId,
+} from '../sim/ids.ts';
 import type { GameMap } from '../sim/map.ts';
 import { CONVOY_KM_PER_DAY, MARCH_KM_PER_DAY } from '../sim/march.ts';
 import type { Order } from '../sim/orders/orders.ts';
@@ -306,13 +313,26 @@ export interface WarRow {
   readonly since: Day;
 }
 
-/** The player's cities, armies, and wars, as the overview lists them. */
-/** The player's realm while it stands, or the day it fell, when nothing is left to list. */
+/** A column of the player's people on the road from one city to another. */
+export interface ColumnRow {
+  readonly column: RefugeeColumnId;
+  readonly people: number;
+  readonly route: string;
+  /** The destination, which a click on the row selects. */
+  readonly pick: Pick;
+  readonly at: MapPoint;
+}
+
+/**
+ * The player's cities, armies, people on the road, and wars, as the overview lists them,
+ * or the day the realm fell, when nothing is left to list.
+ */
 export type Overview =
   | {
       readonly kind: 'standing';
       readonly cities: readonly CityRow[];
       readonly armies: readonly ArmyRow[];
+      readonly columns: readonly ColumnRow[];
       readonly wars: readonly WarRow[];
     }
   | { readonly kind: 'fallen'; readonly on: Day };
@@ -390,7 +410,24 @@ export function overviewOf(state: State, sight: Sight): Overview {
         },
       ];
     });
-  return { kind: 'standing', cities, armies, wars: warsOf(state, state.player) };
+  const columns = Object.values(state.refugeeColumns)
+    .filter((column) => column.owner === state.player)
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .flatMap((column) => {
+      const to = state.cities[column.to];
+      if (!to) return [];
+      const from = state.cities[column.from]?.name ?? 'the road';
+      return [
+        {
+          column: column.id,
+          people: column.people,
+          route: `${from} to ${to.name}`,
+          pick: { kind: 'province', province: to.province } as const,
+          at: column.position,
+        },
+      ];
+    });
+  return { kind: 'standing', cities, armies, columns, wars: warsOf(state, state.player) };
 }
 
 /** What the city adds to its owner's stores each day: the economy's own balance of a realm of this city alone. */

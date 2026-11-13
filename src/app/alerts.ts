@@ -32,7 +32,9 @@ export type AlertKind =
   | 'fateLapsed'
   | 'enemySighted'
   | 'siegeTooWeak'
-  | 'siegeBled';
+  | 'siegeBled'
+  | 'columnLeft'
+  | 'columnArrived';
 
 export interface Alert {
   readonly kind: AlertKind;
@@ -201,6 +203,33 @@ export function alertsOfDay(
       tone: 'neutral',
       text: `No fate was chosen for ${city.name}: you occupy it as it stands`,
       focus: { at: city.position, select: { kind: 'province', province: city.province } },
+    });
+  }
+
+  for (const column of Object.values(after.refugeeColumns)) {
+    if (column.owner !== player || before.refugeeColumns[column.id]) continue;
+    const from = after.cities[column.from];
+    const to = after.cities[column.to];
+    if (!from || !to) continue;
+    add({
+      kind: 'columnLeft',
+      tone: 'neutral',
+      text: `${whole(column.people)} people left ${from.name} for ${to.name}`,
+      focus: { at: column.position, select: { kind: 'province', province: from.province } },
+    });
+  }
+  for (const column of Object.values(before.refugeeColumns)) {
+    if (column.owner !== player || after.refugeeColumns[column.id]) continue;
+    // A defeat removes its columns too, and that is told as the fall of the last city.
+    if (after.factions[player]?.defeatedOn !== null) continue;
+    const from = after.cities[column.from];
+    const to = after.cities[column.to];
+    if (!to) continue;
+    add({
+      kind: 'columnArrived',
+      tone: 'good',
+      text: `${whole(column.people)} people from ${from?.name ?? 'the road'} settled in ${to.name}`,
+      focus: { at: to.position, select: { kind: 'province', province: to.province } },
     });
   }
 

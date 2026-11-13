@@ -459,6 +459,24 @@ describe('alertsOfDay', () => {
     ]);
   });
 
+  it('tells when an evacuation leaves its city and when its people settle at the other', () => {
+    const { alerts, state } = play(
+      buildFixture(),
+      [{ kind: 'evacuate', faction: f.rome, city: f.roma, to: f.capua, share: 0.1 }],
+      (s) => Object.keys(s.refugeeColumns).length === 0,
+      60,
+    );
+    expect(Object.keys(state.refugeeColumns)).toEqual([]);
+    expect(
+      alerts
+        .filter((a) => a.kind === 'columnLeft' || a.kind === 'columnArrived')
+        .map((a) => [a.kind, a.tone, a.text]),
+    ).toEqual([
+      ['columnLeft', 'neutral', '4,000 people left Roma for Capua'],
+      ['columnArrived', 'good', '4,000 people from Roma settled in Capua'],
+    ]);
+  });
+
   it('tells when a store of the player runs out, and not while it stays out', () => {
     const before = buildFixture();
     const after = buildFixture();

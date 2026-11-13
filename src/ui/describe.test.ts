@@ -300,6 +300,19 @@ describe('overviewOf', () => {
     expect(standing(state, sight).armies[0]?.at).toEqual(sea);
   });
 
+  it("lists the player's people on the road, with their route, and selects where they go", () => {
+    const state = buildFixture();
+    const next = tick(
+      state,
+      [{ kind: 'evacuate', faction: f.rome, city: f.roma, to: f.capua, share: 0.1 }],
+      world,
+    ).state;
+    const rows = standing(next, sightOf(next, world, f.rome)).columns;
+    expect(rows.map(({ people, route, pick }) => [people, route, pick])).toEqual([
+      [4000, 'Roma to Capua', { kind: 'province', province: f.campania }],
+    ]);
+  });
+
   it('lists no war for a player at peace', () => {
     const state = buildFixture();
     expect(standing(state, sightOf(state, world, f.rome)).wars).toEqual([]);
