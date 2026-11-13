@@ -1,4 +1,5 @@
 import { chromium, type Browser } from '@playwright/test';
+import { clipFrame } from './clip.ts';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -120,7 +121,8 @@ async function captureScenario(
     const start = performance.now();
     while (!finished && performance.now() - start < CLIP_LIMIT_MS) {
       const atMs = performance.now() - start;
-      frames.push({ png: await page.screenshot(), atMs });
+      const png = await clipFrame(page);
+      if (png) frames.push({ png, atMs });
       await delay(Math.max(0, FRAME_INTERVAL_MS - (performance.now() - start - atMs)));
     }
   })().catch((error: unknown) => {

@@ -44,3 +44,74 @@ export function chunksNear(
   for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) keys.push(chunkKey(i, j));
   return keys;
 }
+
+/** When work runs, so a test can drive the queue by hand. */
+export interface Timers {
+  later(run: () => void): unknown;
+  cancel(handle: unknown): void;
+  now(): number;
+}
+
+const REAL_TIMERS: Timers = {
+  later: (run) => setTimeout(run, 0),
+  cancel: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  now: () => performance.now(),
+};
+
+/**
+ * Chunks waiting to be built, built in slices of `sliceMs` on a timer between frames
+ * and not inside a frame, so building runs at the speed of the main thread however
+ * slow the frames are. `want` replaces the waiting list with the chunks the view needs
+ * now, those it needs first. An item already built when its turn comes is skipped.
+ */
+export class BuildQueue<T extends { readonly needed: boolean }> {
+  readonly #build: (item: T) => void;
+  readonly #built: (item: T) => boolean;
+  readonly #sliceMs: number;
+  readonly #timers: Timers;
+  #items: T[] = [];
+  #handle: unknown;
+
+  constructor(
+    build: (item: T) => void,
+    built: (item: T) => boolean,
+    sliceMs: number,
+    timers: Timers = REAL_TIMERS,
+  ) {
+    this.#build = build;
+    this.#built = built;
+    this.#sliceMs = sliceMs;
+    this.#timers = timers;
+  }
+
+  want(items: readonly T[]) {
+    this.#items = [...items];
+    if (this.#items.length > 0) this.#schedule();
+  }
+
+  /** Whether a chunk the view shows still waits to be built. */
+  get waitingInView(): boolean {
+    return this.#items.some((item) => item.needed);
+  }
+
+  /** Stops building: nothing waits, and a scheduled slice does not run. */
+  destroy() {
+    if (this.#handle !== undefined) this.#timers.cancel(this.#handle);
+    this.#handle = undefined;
+    this.#items = [];
+  }
+
+  #schedule() {
+    this.#handle ??= this.#timers.later(() => this.#slice());
+  }
+
+  #slice() {
+    this.#handle = undefined;
+    const started = this.#timers.now();
+    while (this.#items.length > 0 && this.#timers.now() - started < this.#sliceMs) {
+      const item = this.#items.shift() as T;
+      if (!this.#built(item)) this.#build(item);
+    }
+    if (this.#items.length > 0) this.#schedule();
+  }
+}

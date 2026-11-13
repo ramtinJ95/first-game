@@ -66,6 +66,31 @@ export async function openGame(
   await page.getByTestId('top-bar').waitFor({ state: 'visible' });
 }
 
+/**
+ * Waits until the map has drawn the state the page holds now. Call it once the page
+ * shows the state the test wants, such as a loaded day: a click picks what the map last
+ * drew. The canvas numbers each state it is given and says the latest it was given and
+ * the latest it drew. One animation frame first, so the draw loop has been handed the
+ * page's state, then wait until the drawn number reaches it. Counting animation frames
+ * is not enough, because a frame is held while the GPU still draws the one before.
+ */
+export async function untilDrawn(page: Page) {
+  await page.waitForFunction(
+    () =>
+      new Promise<boolean>((done) => {
+        requestAnimationFrame(() => {
+          const canvas = document.querySelector<HTMLCanvasElement>('canvas[data-renderer]');
+          const latest = Number(canvas?.dataset['latestState'] ?? 0);
+          const check = () => {
+            if (Number(canvas?.dataset['drawnState'] ?? 0) >= latest) done(true);
+            else requestAnimationFrame(check);
+          };
+          check();
+        });
+      }),
+  );
+}
+
 /** A new game like the one `openGame` starts, with Rome as the player. */
 export function startGame(): GameState {
   return newGame(map, { seed: 1, player: 'rome' });

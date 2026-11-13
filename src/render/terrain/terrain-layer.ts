@@ -1,7 +1,7 @@
 import { Container, Graphics, RenderTexture, Sprite, type Renderer } from 'pixi.js';
 import type { GameMap } from '../../sim/map.ts';
 import { visibleRect, type Camera, type Size } from '../camera.ts';
-import { chunkKey, chunkRect, chunkRow, chunksNear, OVERHANG } from './chunks.ts';
+import { BuildQueue, chunkKey, chunkRect, chunkRow, chunksNear, OVERHANG } from './chunks.ts';
 import { DETAIL, detailAlpha, type Band } from './detail.ts';
 import { PAPER } from '../palette.ts';
 import { createLakes } from './lakes.ts';
@@ -22,13 +22,14 @@ const CACHE_MARGIN = 256;
 /** A chunk fades in over this long once it is built, so a late chunk does not pop. */
 const CHUNK_FADE_MS = 260;
 /**
- * Chunks are built until BUILD_BUDGET_MS of a frame has gone, and always at least one,
- * so a slow chunk delays one frame and never stalls a pan. Once the camera has rested this long, the chunks
- * around the view, and those of a tier that is within this zoom factor of fading in, are
- * built ahead, so a pan or a zoom finds most of its chunks ready.
+ * Chunks are built in slices of BUILD_SLICE_MS between frames, on a timer and not in
+ * the frame, so the building runs at the speed of the main thread however slow the
+ * frames are, and a frame only draws what has been built. Once the camera has rested
+ * PREFETCH_AFTER_MS, the chunks around the view, and those of a tier within
+ * PREFETCH_ZOOM of fading in, are built ahead, so a pan or a zoom finds most ready.
  */
+const BUILD_SLICE_MS = 12;
 const PREFETCH_AFTER_MS = 250;
-const BUILD_BUDGET_MS = 8;
 const PREFETCH_ZOOM = 1.6;
 
 interface Chunk {
@@ -62,10 +63,15 @@ export interface Terrain {
   /** The lakes, which sit over the washes so no owner's colour tints them. */
   readonly lakes: Container;
   readonly land: Land;
-  /** Places and shows the drawings for this view. Returns true while something still fades in. */
-  update(camera: Camera, viewport: Size, now: number): boolean;
+  /**
+   * Places and shows the drawings for this view. Says whether something still builds or
+   * fades in, and whether the cached texture was drawn again, which the frame must show.
+   */
+  update(camera: Camera, viewport: Size, now: number): { busy: boolean; redrawn: boolean };
   /** Rebuilds the lakes' lines at a fixed width on screen, as the renderer does for the coast. */
   restroke(scale: number): void;
+  /** Stops building chunks, before the renderer is destroyed. */
+  destroy(): void;
 }
 
 /**
@@ -183,6 +189,23 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       }
     }
   }
+  type Pending = { layer: Layer; key: number; distance: number; needed: boolean };
+  const queue = new BuildQueue<Pending>(
+    ({ layer, key, needed }) => {
+      const graphics = layer.build(chunkRect(layer.size, key));
+      graphics.alpha = 0;
+      graphics.visible = needed;
+      layer.chunks.set(key, { graphics, bornAt: performance.now() });
+      const row = chunkRow(key);
+      let before = 0;
+      for (const other of layer.chunks.keys())
+        if (other !== key && chunkRow(other) <= row) before++;
+      layer.container.addChildAt(graphics, Math.min(before, layer.container.children.length));
+    },
+    ({ layer, key }) => layer.chunks.has(key),
+    BUILD_SLICE_MS,
+  );
+
   let lastCamera: Camera = { centre: { x: NaN, y: NaN }, scale: NaN };
   let stillSince = 0;
 
@@ -193,6 +216,9 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
     },
     lakes: lakes.container,
     land,
+    destroy() {
+      queue.destroy();
+    },
     restroke(scale) {
       lakes.restroke(scale);
       lakesStale = true;
@@ -209,6 +235,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       const still = now - stillSince > PREFETCH_AFTER_MS;
       let fading = false;
       let changed = false;
+      let redrawn = false;
       const missing: { layer: Layer; key: number; distance: number; needed: boolean }[] = [];
       for (const layer of layers) {
         const alpha = detailAlpha(layer.band, camera.scale);
@@ -253,20 +280,8 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
         }
       }
       missing.sort((a, b) => Number(b.needed) - Number(a.needed) || a.distance - b.distance);
-      const started = performance.now();
-      for (const { layer, key, needed } of missing) {
-        if (performance.now() - started > BUILD_BUDGET_MS) break;
-        const graphics = layer.build(chunkRect(layer.size, key));
-        graphics.alpha = 0;
-        graphics.visible = needed;
-        layer.chunks.set(key, { graphics, bornAt: now });
-        const row = chunkRow(key);
-        let before = 0;
-        for (const other of layer.chunks.keys())
-          if (other !== key && chunkRow(other) <= row) before++;
-        layer.container.addChildAt(graphics, Math.min(before, layer.container.children.length));
-        if (needed) fading = true;
-      }
+      queue.want(missing);
+      if (queue.waitingInView) fading = true;
       const x = viewport.width / 2 - camera.centre.x * camera.scale;
       const y = viewport.height / 2 - camera.centre.y * camera.scale;
       const width = Math.ceil(viewport.width) + 2 * CACHE_MARGIN;
@@ -288,6 +303,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
         art.scale.set(camera.scale);
         art.position.set(x + CACHE_MARGIN, y + CACHE_MARGIN);
         renderer.render({ container: root, target: texture, clear: true });
+        redrawn = true;
         drawn = { x, y, scale: camera.scale };
         repaint = false;
         sprite.scale.set(1 / camera.scale);
@@ -300,7 +316,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
         });
         lakesStale = false;
       }
-      return fading;
+      return { busy: fading, redrawn };
     },
   };
 }

@@ -46,6 +46,7 @@ import {
 } from './palette.ts';
 import { paperTexture, waterTexture } from './paper.ts';
 import { toPixels } from './lines.ts';
+import { FramePacer } from './frame-pacer.ts';
 import { cityAt, pickAt, provinceAt, type DrawnCity, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
 import { citySymbols } from './symbols.ts';
@@ -428,6 +429,20 @@ export async function createRenderer({
   let cameraMoved = true;
   let strokedAt = 0;
   let shown: DeepReadonly<GameState> | undefined;
+  let laidOut: DeepReadonly<GameState> | undefined;
+  // Each game state the page hands over gets a number, and the canvas says the latest it
+  // was given and the latest it has drawn, so a test or a capture can wait until the
+  // map shows a state it loaded: a click picks what the map last drew.
+  const stateIds = new WeakMap<object, number>();
+  let lastStateId = 0;
+  function stateId(state: object): number {
+    let id = stateIds.get(state);
+    if (id === undefined) {
+      id = ++lastStateId;
+      stateIds.set(state, id);
+    }
+    return id;
+  }
   let highlighted: { selection: Pick | undefined; scale: number } | undefined;
   let armies: DrawnArmy[] = [];
   let drawnCities: DrawnCity[] = [];
@@ -822,6 +837,9 @@ export async function createRenderer({
     swell.position.set(-tile + drift.x, -tile + drift.y);
   }
 
+  const gl = 'gl' in app.renderer ? app.renderer.gl : undefined;
+  const pacer = new FramePacer(gl instanceof WebGL2RenderingContext ? gl : undefined);
+
   const pixel = new Uint8Array(4);
   function finish() {
     if ('gl' in app.renderer) {
@@ -964,6 +982,16 @@ export async function createRenderer({
 
   return {
     draw({ previous, current, progress, selection, planned, replaced, previousSight, sight }) {
+      const given = String(stateId(current));
+      if (canvas.dataset['latestState'] !== given) canvas.dataset['latestState'] = given;
+      // While the GPU still draws the last frame, this one sends it nothing and keeps every
+      // change for the next, but lays the cities out again, which costs the GPU nothing,
+      // so a click picks what the screen will show.
+      if (!pacer.ready()) {
+        if (cameraMoved || current !== laidOut) layoutCities(current);
+        laidOut = current;
+        return false;
+      }
       const now = performance.now();
       let dirty = cameraMoved;
       if (current !== shown) {
@@ -981,11 +1009,12 @@ export async function createRenderer({
         dirty = true;
       }
       if (cameraMoved) applyCamera();
-      const terrainBusy = terrain.update(camera, viewport(), now);
-      if (terrainBusy) dirty = true;
-      const terrainState = terrainBusy ? 'busy' : 'ready';
+      const terrainNow = terrain.update(camera, viewport(), now);
+      if (terrainNow.busy || terrainNow.redrawn) dirty = true;
+      const terrainState = terrainNow.busy ? 'busy' : 'ready';
       if (canvas.dataset['terrain'] !== terrainState) canvas.dataset['terrain'] = terrainState;
       if (dirty) layoutCities(current);
+      laidOut = current;
       if (
         !highlighted ||
         highlighted.scale !== camera.scale ||
@@ -1116,6 +1145,8 @@ export async function createRenderer({
       if (layers.fog.visible) fog.paint();
       app.render();
       if (waitForGpu) finish();
+      else pacer.rendered();
+      canvas.dataset['drawnState'] = String(stateId(current));
       return true;
     },
     focus(point) {
@@ -1127,6 +1158,7 @@ export async function createRenderer({
       cameraMoved = true;
     },
     destroy() {
+      terrain.destroy();
       listening.abort();
       app.renderer.off('resize', onResize);
       seaRoot.destroy({ children: true });

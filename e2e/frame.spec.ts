@@ -26,6 +26,7 @@ import {
   romeWinsTomorrow,
   startGame,
   untilDay,
+  untilDrawn,
 } from './support.ts';
 
 const world = buildWorld(map);
@@ -41,10 +42,7 @@ async function load(page: Page, state: GameState) {
     'data-day',
     String(state.day),
   );
-  await page.evaluate(
-    () =>
-      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
-  );
+  await untilDrawn(page);
 }
 
 /** Puts the state in the browser's autosave slot before the page opens. */
