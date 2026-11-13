@@ -1,0 +1,27 @@
+[
+  {
+    "file": "speed-pressed.png",
+    "title": "Speed 3 just clicked, still under the pointer and focused: its number stays readable",
+    "kind": "screenshot"
+  },
+  {
+    "file": "port-menu.png",
+    "title": "With the army at Roma, a right click on Salona opens the port menu",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The playtest fixes: the layout at four widths, battle controls, the overview, several armies at one city, why an army does not besiege, and the port menu",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The playtest fixes: the layout at four widths, battle controls, the overview, several armies at one city, why an army does not besiege, and the port menu (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The playtest fixes: the layout at four widths, battle controls, the overview, several armies at one city, why an army does not besiege, and the port menu (Playwright trace)",
+    "kind": "trace"
+  }
+]
