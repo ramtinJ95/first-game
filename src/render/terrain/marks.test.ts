@@ -26,7 +26,7 @@ interface Foot {
 
 function feet(marks: readonly Mark[]): Foot[] {
   return marks.flatMap((m): Foot[] =>
-    m.kind === 'track'
+    'points' in m
       ? m.points.map(([x, y]) => ({ kind: m.kind, x, y }))
       : [{ kind: m.kind, x: m.x, y: m.y }],
   );
@@ -124,5 +124,26 @@ describe('placing the terrain', () => {
         placeRelief(land, rect, 'close').flatMap((m) => (m.kind === 'tree' ? [m.shape] : [])),
       );
     expect(shapes({ left: 2048, top: 1152, right: 2176, bottom: 1280 }).has('cypress')).toBe(false);
+  });
+});
+
+describe('the ground at the closest zoom', () => {
+  it('keeps every tuft, bush, rock, and stream on land along the coast round Roma', () => {
+    const rect = { left: 2440, top: 2240, right: 2720, bottom: 2480 };
+    const marks = placeRelief(land, rect, 'close');
+    const ground = marks.filter(
+      (m) => m.kind === 'tuft' || m.kind === 'scrub' || m.kind === 'rock',
+    );
+    const streams = marks.filter((m) => m.kind === 'stream');
+    expect(ground.length).toBeGreaterThan(50);
+    const wet = ground.filter((m) =>
+      [
+        [m.x - m.size, m.y],
+        [m.x + m.size, m.y],
+        [m.x, m.y - m.size],
+      ].some(([x = 0, y = 0]) => !land.open(x, y)),
+    );
+    expect(wet).toEqual([]);
+    for (const s of streams) for (const [x, y] of s.points) expect(land.open(x, y)).toBe(true);
   });
 });

@@ -142,9 +142,13 @@ test('a town is urban or fortified, or has another place at or in it; the rest a
 
 test('a title becomes the plain name a map writes, with the editors’ marks gone', () => {
   const cases: [string, string | undefined][] = [
-    ['Tarracina(e)', 'Tarracinae'],
+    ['Tarracina(e)', 'Tarracina'],
+    ['Durno(no)varia', 'Durnovaria'],
+    ['Ur(i)', 'Ur'],
+    // Cappadocian Nyssa, the see of Gregory of Nyssa, keeps its double s.
+    ['Nys(s)a', 'Nyssa'],
     ['Al(l)ifae', 'Allifae'],
-    ['(H)Emesa', 'Hemesa'],
+    ['(H)Emesa', 'Emesa'],
     ['(Tri)Paradeisos', 'Triparadeisos'],
     ['[(A)Bivard]', 'Abivard'],
     ['Dur-(Kuri)galzu', 'Dur-Kurigalzu'],

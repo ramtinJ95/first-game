@@ -94,6 +94,21 @@ export function readCandidates(files: PleiadesFiles): SettlementCandidate[] {
 }
 
 /**
+ * Places a reader knows by another form than the letters in brackets give, by the title's
+ * first form. A name not listed keeps the form the rule gives.
+ */
+const USUAL_NAMES: Readonly<Record<string, string>> = {
+  'Durno(no)varia': 'Durnovaria',
+  'Tarracina(e)': 'Tarracina',
+  'Ur(i)': 'Ur',
+  '(H)Emesa': 'Emesa',
+  'Bletisa(ma)': 'Bletisa',
+  'Adra(h)a': 'Adraa',
+  'Ab(ou)la': 'Abula',
+  'Alyz(e)ia': 'Alyzia',
+};
+
+/**
  * A Pleiades title as the plain name a map writes. The title's first form is read, and the
  * editors' marks go: brackets round a name no ancient source gives, a star on a reconstructed
  * form, and a word in brackets after the name, such as "(settlement)" or "(or Ricciacus)".
@@ -103,6 +118,8 @@ export function readCandidates(files: PleiadesFiles): SettlementCandidate[] {
 export function plainName(title: string): string | undefined {
   const first = (title.split('/')[0] ?? '').trim();
   if (first.includes('(...)')) return undefined;
+  const usual = USUAL_NAMES[first];
+  if (usual) return usual;
   return first
     .replace(/[[\]*]/g, '')
     .replace(/\s+\([^()]*\)/g, '')
