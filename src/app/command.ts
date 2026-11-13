@@ -21,7 +21,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { SIEGE_DISTANCE } from '../sim/systems/sieges.ts';
 import { areAtWar } from '../sim/wars.ts';
-import { distance, findPath, surfaceAt } from '../sim/world/find-path.ts';
+import { connected, distance, findPath, locate, surfaceAt } from '../sim/world/find-path.ts';
 import { nearestSea, type World } from '../sim/world/world.ts';
 import { movedArmy } from './clock.ts';
 import { factionName, placeName, refusalText } from './names.ts';
@@ -112,17 +112,18 @@ export function route(
   };
 }
 
-/** Where the army would sail from today, chosen as the embark order chooses it. */
+/** Where the army would sail from today for the sea point, chosen as the embark order chooses it. */
 function embarkationOf(
   state: State,
   world: World,
   army: DeepReadonly<Army>,
+  toward: MapPoint,
 ): Embarkation | undefined {
   const { activity } = army;
   if (activity.kind !== 'idle' && activity.kind !== 'marching' && activity.kind !== 'besieging') {
     return undefined;
   }
-  return embarkationAt(state, world, army.owner, activity.position);
+  return embarkationAt(state, world, army.owner, activity.position, toward);
 }
 
 function daysText(days: number): string {
@@ -146,7 +147,7 @@ function wayDays(way: SeaWay): number {
 
 /**
  * The quickest way by sea for the army to the place: a march of at most MAX_MARCH_DAYS to
- * a port of its owner or to the nearest shore, or none when it stands at its own port or
+ * a port of its owner or to the nearest shore of the sea the landing lies on, or none when it stands at its own port or
  * sails from the shore it stands on, the days it
  * waits for ships on a shore that is no port of its own, a crossing to a port, and a march
  * of at most MAX_MARCH_DAYS from that port's harbour to the place.
@@ -168,23 +169,40 @@ function seaWay(
   const ports = Object.values(state.cities)
     .filter((port) => world.harbours.has(port.id))
     .sort((a, b) => (a.id < b.id ? -1 : 1));
-  const here = embarkationAt(state, world, army.owner, at);
-  const shore = here ? undefined : nearestSea(world.mesh, at);
-  const starts: Embarkation[] = here?.port
-    ? [here]
-    : [
-        ...(here ? [here] : []),
-        ...ports
-          .filter((port) => port.owner === army.owner && distance(at, port.position) <= reach)
-          .map((port) => ({ from: harbour(port), port, waitDays: 0 })),
-        ...(!here && shore && distance(at, shore) <= reach
-          ? [{ from: shore, port: undefined, waitDays: GATHER_DAYS }]
-          : []),
-      ];
   const landings =
     city && world.harbours.has(city.id)
       ? [city]
       : ports.filter((port) => distance(harbour(port), to) <= reach);
+  // Where the army sails from depends on the sea it sails on, so the starts are found once for each sea.
+  const startsBySea = new Map<number, { here: Embarkation | undefined; starts: Embarkation[] }>();
+  const startsFor = (landing: DeepReadonly<City>) => {
+    const toward = harbour(landing);
+    const sea = world.mesh.component[locate(world.mesh, toward, 'sea')] as number;
+    let found = startsBySea.get(sea);
+    if (!found) {
+      const here = embarkationAt(state, world, army.owner, at, toward);
+      const shore = here ? undefined : nearestSea(world.mesh, at, sea);
+      const starts: Embarkation[] = here?.port
+        ? [here]
+        : [
+            ...(here ? [here] : []),
+            ...ports
+              .filter(
+                (port) =>
+                  port.owner === army.owner &&
+                  distance(at, port.position) <= reach &&
+                  connected(world.mesh, harbour(port), toward, 'sea'),
+              )
+              .map((port) => ({ from: harbour(port), port, waitDays: 0 })),
+            ...(shore && distance(at, shore) <= reach
+              ? [{ from: shore, port: undefined, waitDays: GATHER_DAYS }]
+              : []),
+          ];
+      found = { here, starts };
+      startsBySea.set(sea, found);
+    }
+    return found;
+  };
 
   const marched = new Map<string, number | undefined>();
   const march = (from: MapPoint, end: MapPoint) => {
@@ -196,18 +214,19 @@ function seaWay(
     return marched.get(key);
   };
   const walkTo = (start: Embarkation) => (start.port ? start.port.position : start.from);
-  const pairs = starts
-    .flatMap((start) =>
-      landings
+  const pairs = landings
+    .flatMap((landing) => {
+      const { here, starts } = startsFor(landing);
+      return starts
         .filter(
-          (landing) => landing.id !== start.port?.id && distance(harbour(landing), start.from) >= 1,
+          (start) => landing.id !== start.port?.id && distance(harbour(landing), start.from) >= 1,
         )
-        .map((landing) => ({ start, landing })),
-    )
+        .map((start) => ({ start, landing, here: start === here }));
+    })
     .map((pair) => ({
       ...pair,
       bound:
-        (pair.start === here ? 0 : distance(at, walkTo(pair.start)) / MARCH_KM_PER_DAY) +
+        (pair.here ? 0 : distance(at, walkTo(pair.start)) / MARCH_KM_PER_DAY) +
         pair.start.waitDays +
         distance(pair.start.from, harbour(pair.landing)) / CONVOY_KM_PER_DAY +
         distance(harbour(pair.landing), to) / MARCH_KM_PER_DAY,
@@ -215,9 +234,9 @@ function seaWay(
     .sort((a, b) => a.bound - b.bound);
 
   let best: SeaWay | undefined;
-  for (const { start, landing, bound } of pairs) {
+  for (const { start, landing, bound, here } of pairs) {
     if (best && bound >= wayDays(best)) break;
-    const walk = start === here ? 0 : march(at, walkTo(start));
+    const walk = here ? 0 : march(at, walkTo(start));
     if (walk === undefined) continue;
     const ashore =
       city?.id === landing.id && distance(harbour(landing), to) <= SIEGE_DISTANCE
@@ -228,11 +247,10 @@ function seaWay(
     if (!path) continue;
     const sail = travelDays(start.from, path, CONVOY_KM_PER_DAY);
     const onward = city?.id === landing.id ? {} : { then: { x: to.x, y: to.y } };
-    const order: EmbarkOrder | MoveArmyOrder =
-      start === here
-        ? { kind: 'embark', faction: army.owner, army: army.id, to: landing.id, ...onward }
-        : { kind: 'moveArmy', faction: army.owner, army: army.id, to: walkTo(start) };
-    const way = { order, start, landing, walk, sail, ashore, here: start === here };
+    const order: EmbarkOrder | MoveArmyOrder = here
+      ? { kind: 'embark', faction: army.owner, army: army.id, to: landing.id, ...onward }
+      : { kind: 'moveArmy', faction: army.owner, army: army.id, to: walkTo(start) };
+    const way = { order, start, landing, walk, sail, ashore, here };
     if (!best || wayDays(way) < wayDays(best)) best = way;
   }
   return best;
@@ -296,7 +314,8 @@ export function planCommand(
     return { kind: 'refuse', notice: refusal(found) };
   }
 
-  const start = city && world.harbours.has(city.id) ? embarkationOf(state, world, army) : undefined;
+  const landing = city && world.harbours.get(city.id);
+  const start = landing && embarkationOf(state, world, army, landing);
   const portToPort = !!start && start.port?.id !== city?.id;
   // No way by sea is quicker than a march in a straight line, so only a longer march can be far longer.
   const straight = Math.max(1, Math.ceil(distance(activity.position, to) / MARCH_KM_PER_DAY));
