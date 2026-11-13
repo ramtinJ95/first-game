@@ -4,7 +4,7 @@ import type { DayEvent } from '../events.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
-import { saveGame, loadGame } from '../save.ts';
+import { loadGame, SAVE_FORMAT, saveGame } from '../save.ts';
 import type { GameState } from '../state/game-state.ts';
 import { dailyBalances, limitsOf } from '../systems/economy.ts';
 import { CITY_DEFENCES, fullDefences } from '../systems/sieges.ts';
@@ -254,7 +254,7 @@ describe('building', () => {
     expectConsistent(after);
   });
 
-  test('a save keeps what is built and what is at work, and an old save has neither', () => {
+  test('a save keeps what is built and what is at work, and a save from before buildings is refused', () => {
     const state = withBuilt(rich(), FIXTURE.roma, 'forum');
     executeOrder(state, build('temple'), world);
     const loaded = loadGame(saveGame(state));
@@ -267,10 +267,9 @@ describe('building', () => {
       delete (city as Partial<typeof city>).buildings;
       delete (city as Partial<typeof city>).construction;
     }
-    const reloaded = loadGame(JSON.stringify(old));
-    expect(reloaded.ok && reloaded.state.cities[FIXTURE.roma]).toMatchObject({
-      buildings: [],
-      construction: null,
+    expect(loadGame(JSON.stringify({ format: 9, state: old.state }))).toMatchObject({ ok: false });
+    expect(loadGame(JSON.stringify({ format: SAVE_FORMAT, state: old.state }))).toMatchObject({
+      ok: false,
     });
   });
 });

@@ -129,6 +129,7 @@ Known faults in the source data. Check them before you draw or label terrain.
 - A city that falls keeps its finished buildings for the new owner, and `changeCityOwner` drops the one at work with a `buildingsLost` event. `sack` destroys every building with a `buildingsLost` event. `enslave` keeps them.
 - The AI's rule is `construction` in `src/sim/ai/build.ts`: on a day it raised no recruit, with gold beyond its reserve and the price of the recruit it would raise next (`mostNeeded`), and food counted only while the harvest is tight (`FOOD_MARGIN_MEN`) and balances not falling, it starts the building that pays back soonest by `buildingWorth`, if within `BUILD_PAYBACK_YEARS`. Its constants sit at the top of that file.
 - To add a building, add its kind to `BUILDING_KINDS`, its row to `BUILDINGS`, one function beside them that its hook reads, and its numbers to `buildingGain` if a new kind of number. Run `npm run sim:buildings` and put the tables in the pull request.
+- The buildings raised `SAVE_FORMAT` to 11, after the 10 of the panels and saves unit.
 - `npm run sim:buildings` prints the table, the years each building takes to pay back in a sample of cities with the first choice of each, and four Romes at peace for 5 and 10 years: one that does nothing, one that recruits, one that builds, and one that does both by the AI's rules.
 
 ### Sieges

@@ -215,10 +215,21 @@ console.log(
   '"Short of gold" counts the days on which the ruler wanted to recruit or build and lacked the gold for it. "At the treasury limit" counts the days its gold stood at `TREASURY_DAYS` of its people\'s pay.\n',
 );
 const rows: string[][] = [];
+interface Outcome {
+  short: number;
+  atLimit: number;
+  firstAtLimit: number | undefined;
+  lastBuilt: number;
+  goldIncome: number;
+  men: number;
+}
+const outcomes = new Map<Ruler, Outcome>();
 for (const ruler of RULERS) {
   let state: DeepReadonly<GameState> = start;
   let short = 0;
   let atLimit = 0;
+  let firstAtLimit: number | undefined;
+  let lastBuilt = 0;
   for (let day = 1; day <= 10 * 365; day++) {
     const orders = ordersOf(state, ruler);
     if (day <= 5 * 365 && ruler !== 'nothing') {
@@ -226,7 +237,11 @@ for (const ruler of RULERS) {
       if (wanted.length > orders.length) short += 1;
     }
     const gold = need(state.factions[rome]).stores.gold;
-    if (day <= 5 * 365 && gold >= (limitsOf(state).get(rome)?.gold ?? Infinity) - 1) atLimit += 1;
+    if (day <= 5 * 365 && gold >= (limitsOf(state).get(rome)?.gold ?? Infinity) - 1) {
+      atLimit += 1;
+      firstAtLimit ??= day;
+    }
+    if (orders.some((order) => order.kind === 'build')) lastBuilt = day;
     state = tick(state as GameState, orders, world).state;
     if (day === 5 * 365 || day === 10 * 365) {
       const stores = need(state.factions[rome]).stores;
@@ -247,6 +262,16 @@ for (const ruler of RULERS) {
         day === 5 * 365 ? String(atLimit) : '',
       ]);
     }
+    if (day === 10 * 365) {
+      outcomes.set(ruler, {
+        short,
+        atLimit,
+        firstAtLimit,
+        lastBuilt,
+        goldIncome: need(dailyBalances(state).get(rome)).gold,
+        men: menUnderArms(state, rome),
+      });
+    }
   }
 }
 table(
@@ -263,4 +288,31 @@ table(
     'days at the treasury limit, years 1-5',
   ],
   rows,
+);
+
+const of = (ruler: Ruler) => need(outcomes.get(ruler), `the outcome of the ruler who ${ruler}`);
+const mark = (ok: boolean) => (ok ? 'met' : 'NOT met');
+const both = of('both');
+const builds = of('builds');
+const recruits = of('recruits');
+const nothing = of('nothing');
+console.log('Targets:\n');
+console.log(
+  `- Building pays: the Rome that builds earns more gold a day at year 10 than the one that does nothing (${signed(builds.goldIncome)} against ${signed(nothing.goldIncome)}): ${mark(builds.goldIncome > nothing.goldIncome)}.`,
+);
+console.log(
+  `- Building leaves recruiting worth it: the Rome that does both keeps at least the men of the one that only recruits (${whole(both.men)} against ${whole(recruits.men)}): ${mark(both.men >= recruits.men)}.`,
+);
+console.log(
+  `- The Rome that builds and recruits is short of gold more days than not in years 1-5 (${both.short} of ${5 * 365}): ${mark(both.short > (5 * 365) / 2)}.`,
+);
+console.log(
+  `- The Rome that builds and recruits never reaches the treasury limit in years 1-5 (${both.atLimit} days): ${mark(both.atLimit === 0)}.`,
+);
+const idleAfter = builds.firstAtLimit === undefined || builds.firstAtLimit > builds.lastBuilt;
+console.log(
+  `- The Rome that only builds reaches the treasury limit only once it has nothing left worth building (first at the limit on day ${builds.firstAtLimit ?? '-'}, last building ordered on day ${builds.lastBuilt}): ${mark(idleAfter)}.`,
+);
+console.log(
+  `- The Rome that only recruits reaches the treasury limit on ${recruits.atLimit} days in years 1-5, as on main, because food and the levy cap its army before its gold. This is outside the buildings and belongs to the balance of recruiting.`,
 );

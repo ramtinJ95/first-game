@@ -47,9 +47,9 @@ export const CitySchema = v.pipe(
     fellOn: v.nullable(DaySchema),
     /** The day the city was last sacked, or null if it never was. Its gold stays low for `SACK.poorDays` after. */
     sackedOn: v.nullable(DaySchema),
-    /** The buildings the city stands with, in the order they were finished. Saves from before buildings have none. */
-    buildings: v.optional(v.array(v.picklist(BUILDING_KINDS)), []),
-    construction: v.optional(v.nullable(ConstructionSchema), null),
+    /** The buildings the city stands with, in the order they were finished. */
+    buildings: v.array(v.picklist(BUILDING_KINDS)),
+    construction: v.nullable(ConstructionSchema),
   }),
   v.check(
     (city) =>
