@@ -146,7 +146,8 @@ function wayDays(way: SeaWay): number {
 
 /**
  * The quickest way by sea for the army to the place: a march of at most MAX_MARCH_DAYS to
- * a port of its owner or to the nearest shore, or none when it stands at one, the days it
+ * a port of its owner or to the nearest shore, or none when it stands at its own port or
+ * sails from the shore it stands on, the days it
  * waits for ships on a shore that is no port of its own, a crossing to a port, and a march
  * of at most MAX_MARCH_DAYS from that port's harbour to the place.
  */
@@ -169,13 +170,14 @@ function seaWay(
     .sort((a, b) => (a.id < b.id ? -1 : 1));
   const here = embarkationAt(state, world, army.owner, at);
   const shore = here ? undefined : nearestSea(world.mesh, at);
-  const starts: Embarkation[] = here
+  const starts: Embarkation[] = here?.port
     ? [here]
     : [
+        ...(here ? [here] : []),
         ...ports
           .filter((port) => port.owner === army.owner && distance(at, port.position) <= reach)
           .map((port) => ({ from: harbour(port), port, waitDays: 0 })),
-        ...(shore && distance(at, shore) <= reach
+        ...(!here && shore && distance(at, shore) <= reach
           ? [{ from: shore, port: undefined, waitDays: GATHER_DAYS }]
           : []),
       ];

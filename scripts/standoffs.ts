@@ -5,8 +5,11 @@ import type { Army } from '../src/sim/state/army.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { ENGAGEMENT_DISTANCE } from '../src/sim/systems/battles.ts';
 import { areAtWar } from '../src/sim/wars.ts';
-import { connected, distance } from '../src/sim/world/find-path.ts';
+import { MARCH_KM_PER_DAY, marchPath, MAX_MARCH_DAYS } from '../src/sim/march.ts';
+import { distance } from '../src/sim/world/find-path.ts';
 import type { World } from '../src/sim/world/world.ts';
+
+const MAX_MARCH_KM = MAX_MARCH_DAYS * MARCH_KM_PER_DAY;
 
 /** An army that stands this many days or more counts as left there. */
 export const STANDOFF_DAYS = 31;
@@ -23,12 +26,12 @@ function fit(state: State, army: DeepReadonly<Army>): boolean {
 /**
  * Counts, over one game, the armies that stand idle beside an enemy army or an enemy city
  * of a faction at war with theirs for STANDOFF_DAYS days in a row, and the armies that stand
- * idle overseas, with no city of their owner on their land, for as long, and of those the
- * ones that the player's menu would give no way to their owner's nearest city.
+ * idle as long overseas, where no march of at most MAX_MARCH_DAYS reaches a city of their
+ * owner, and of those the ones that the player's menu gives no way to their owner's nearest city.
  */
 export function createStandoffCounter(world: World) {
   const beside = new Map<ArmyId, number>();
-  const overseas = new Map<ArmyId, number>();
+  const idle = new Map<ArmyId, number>();
   const besideArmies = new Set<ArmyId>();
   const overseasArmies = new Set<ArmyId>();
   const noWayHome = new Set<ArmyId>();
@@ -39,7 +42,7 @@ export function createStandoffCounter(world: World) {
       const owner = state.factions[army.owner];
       if (activity.kind !== 'idle' || !fit(state, army) || owner?.defeatedOn !== null) {
         beside.delete(army.id);
-        overseas.delete(army.id);
+        idle.delete(army.id);
         continue;
       }
       const at = activity.position;
@@ -61,16 +64,22 @@ export function createStandoffCounter(world: World) {
       beside.set(army.id, besideDays);
       if (besideDays >= STANDOFF_DAYS) besideArmies.add(army.id);
 
-      const own = Object.values(state.cities).filter((city) => city.owner === army.owner);
-      const home = own.some((city) => connected(world.mesh, at, city.position, 'land'));
-      const awayDays = home ? 0 : (overseas.get(army.id) ?? 0) + 1;
-      overseas.set(army.id, awayDays);
-      if (awayDays === STANDOFF_DAYS) {
-        overseasArmies.add(army.id);
-        const [nearest] = own.sort((a, b) => distance(at, a.position) - distance(at, b.position));
-        const plan = nearest && planCommand(state, world, army, { kind: 'city', city: nearest });
-        if (!plan || plan.kind === 'refuse') noWayHome.add(army.id);
-      }
+      const idleDays = (idle.get(army.id) ?? 0) + 1;
+      idle.set(army.id, idleDays);
+      if (idleDays !== STANDOFF_DAYS) continue;
+      const own = Object.values(state.cities)
+        .filter((city) => city.owner === army.owner)
+        .sort((a, b) => distance(at, a.position) - distance(at, b.position));
+      const home = own.some(
+        (city) =>
+          distance(at, city.position) <= MAX_MARCH_KM &&
+          typeof marchPath(world, at, city.position) !== 'string',
+      );
+      if (home) continue;
+      overseasArmies.add(army.id);
+      const [nearest] = own;
+      const plan = nearest && planCommand(state, world, army, { kind: 'city', city: nearest });
+      if (!plan || plan.kind === 'refuse') noWayHome.add(army.id);
     }
   }
 
@@ -92,6 +101,6 @@ export function standoffLines(all: readonly Standoffs[]): string[] {
   const sum = (key: keyof Standoffs) => all.reduce((total, one) => total + one[key], 0);
   return [
     `- Armies idle beside an enemy army or an enemy city at war for more than ${STANDOFF_DAYS - 1} days: ${sum('idleBesideEnemy')}.`,
-    `- Armies idle overseas, with no city of their owner on their land, for more than ${STANDOFF_DAYS - 1} days: ${sum('idleOverseas')}, of which the menu gives no way to their owner's nearest city: ${sum('noWayHome')}.`,
+    `- Armies idle overseas, where no march reaches a city of their owner, for more than ${STANDOFF_DAYS - 1} days: ${sum('idleOverseas')}, of which the menu gives no way to their owner's nearest city: ${sum('noWayHome')}.`,
   ];
 }
