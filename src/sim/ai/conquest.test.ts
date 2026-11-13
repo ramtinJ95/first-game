@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { fixtureWorld } from '../fixture.ts';
-import { allocateId, type ArmyId, type FactionId } from '../ids.ts';
+import { allocateId, type ArmyId, type CityId, type FactionId } from '../ids.ts';
 import { newGame } from '../new-game.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
 import { removeRecord } from '../records.ts';
@@ -11,6 +11,7 @@ import type { MapPoint } from '../state/map-point.ts';
 import { tick } from '../tick.ts';
 import { distance } from '../world/find-path.ts';
 import { decideOrders } from './decide.ts';
+import { createRouter } from './routes.ts';
 import { byLand } from './situation.ts';
 
 const world = fixtureWorld();
@@ -207,6 +208,33 @@ describe('arrival by road, not by the straight line', () => {
       expect.objectContaining({ kind: 'moveArmy', army: coming, to: home.position }),
     );
     expect(orders).toContainEqual(expect.objectContaining({ kind: 'moveArmy', army: besiegers }));
+  });
+
+  test('an army sent by sea does not count as there before an army that marches', () => {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    for (const army of Object.values(state.armies)) {
+      for (const id of army.formations) removeRecord(state.formations, id);
+      removeRecord(state.armies, army.id);
+    }
+    const salona = cityOf(state, 'salona' as FactionId);
+    Object.assign(salona, { garrison: 1200, walls: 100, foodDays: 40 });
+    expect(
+      executeOrder(state, { kind: 'declareWar', faction: rome, against: salona.owner }, world),
+    ).toBeUndefined();
+    const router = createRouter(state, world, rome);
+    const from = (id: string) => state.cities[id as CityId]?.position ?? salona.position;
+    const sailing = router.routeTo(from('ariminum'), salona);
+    const marching = router.routeTo(from('capua'), salona);
+    expect(sailing?.step.kind).toBe('embark');
+    expect(marching?.step.kind).toBe('march');
+    expect(marching?.cost ?? 0).toBeGreaterThan(sailing?.cost ?? Number.POSITIVE_INFINITY);
+    addArmy(state, rome, 1700, from('ariminum'));
+    const weak = addArmy(state, rome, 400, from('capua'));
+    const step = marching?.step.kind === 'march' ? marching.step.to : undefined;
+    expect(decideOrders(state, world, rome)).not.toContainEqual(
+      expect.objectContaining({ kind: 'moveArmy', army: weak, to: step }),
+    );
+    expectConsistent(state);
   });
 });
 

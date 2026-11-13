@@ -318,7 +318,8 @@ export function movements(context: Context, muster: CityView | undefined): Order
    * Whether the men at the city by the time an army arrives after `km` of road and sea,
    * counting those besieging and those sent there that arrive no later, and `men` more,
    * hold the blockade, so it does not start a siege that sallies wear down while the rest
-   * are still far off.
+   * are still far off. An army sent by sea, or in a group that has not set out, has no
+   * known day of arrival, so it counts for no other army.
    */
   const holdsOnArrival = (city: CityView, km: number, men: number) =>
     (arrivals.get(city.id) ?? [])
@@ -398,7 +399,8 @@ export function movements(context: Context, muster: CityView | undefined): Order
       }
     }
     if (best) {
-      sendAt(best.city, mover, best.cost);
+      const byRoad = best.step.kind === 'march' && marchesOn(best.step.to, best.city);
+      sendAt(best.city, mover, byRoad ? best.cost : Number.POSITIVE_INFINITY);
       send(mover, best.step);
     } else left.push(mover);
   }
@@ -449,7 +451,7 @@ export function movements(context: Context, muster: CityView | undefined): Order
       }
     }
     if (assembled) {
-      for (const mover of group.members) assign(group.city.id, mover);
+      for (const mover of group.members) assign(group.city.id, mover, Number.POSITIVE_INFINITY);
     }
     rest = rest.filter((m) => !used.has(m.army.id));
   }
@@ -514,6 +516,11 @@ function atOwnCity(state: State, army: ArmyView): boolean {
 }
 
 /** Where the army marches, unless the march is longer than a march may be, as in an old save. */
+/** Whether a march to the point goes straight to the city, not to a port on the way. */
+function marchesOn(to: MapPoint, city: CityView): boolean {
+  return distance(to, city.position) <= SAME_POINT_KM;
+}
+
 /** The km of road still ahead of a marching army, or 0 for one that stands. */
 function marchKm(army: ArmyView): number {
   const { activity } = army;
