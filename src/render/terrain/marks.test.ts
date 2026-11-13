@@ -4,7 +4,16 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { parseMap } from '../../sim/map.ts';
 import { PAPER } from '../palette.ts';
 import { groundTint, TINT_CELL } from './draw.ts';
-import { Land, placeFields, placeRelief, TIERS, WOOD_RIM, type Mark, type Tier } from './marks.ts';
+import {
+  foldOutline,
+  Land,
+  placeFields,
+  placeRelief,
+  TIERS,
+  WOOD_RIM,
+  type Mark,
+  type Tier,
+} from './marks.ts';
 
 const map = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../../../data/map/map.json'), 'utf8')),
@@ -209,6 +218,27 @@ describe('the dry lands', () => {
     expect(count(zagros, 'fold')).toBeGreaterThan(count(zagros, 'mountain') * 4);
     expect(count(alps, 'mountain')).toBeGreaterThan(300);
     expect(count(alps, 'fold') * 15).toBeLessThan(count(alps, 'mountain'));
+  });
+
+  it('keeps the whole of every fold on the coastal ranges of Cilicia, Cyprus, and Tingis on land', () => {
+    const coasts = [
+      { left: 4352, top: 2816, right: 4608, bottom: 3072 },
+      { left: 4096, top: 3072, right: 4352, bottom: 3328 },
+      { left: 640, top: 2432, right: 896, bottom: 2688 },
+    ];
+    let folds = 0;
+    for (const tier of ['middle', 'close'] as const) {
+      for (const rect of coasts.flatMap((c) => chunks(c, tier))) {
+        for (const m of placeRelief(land, rect, tier)) {
+          if (m.kind !== 'fold') continue;
+          folds++;
+          for (const [x, y] of foldOutline(m)) {
+            expect(land.open(x, y), `fold at ${m.x},${m.y} reaches ${x},${y}`).toBe(true);
+          }
+        }
+      }
+    }
+    expect(folds).toBeGreaterThan(20);
   });
 
   it('shows the ground of the dry land from the middle zoom, with burial mounds on the steppe', () => {

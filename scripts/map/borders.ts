@@ -67,8 +67,9 @@ const SMOOTH_PASSES = 3;
  */
 export const TREMOR_KM = 3;
 const TREMOR_OCTAVES: readonly (readonly [km: number, weight: number])[] = [
-  [18, 0.6],
-  [8, 0.4],
+  [18, 0.45],
+  [8, 0.3],
+  [4, 0.25],
 ];
 const TREMOR_SEEDS = [301, 302] as const;
 /** The tolerance each smoothed border is simplified to, in km. */
@@ -585,7 +586,8 @@ function race(
       const step =
         ((length + climb * CLIMB_KM_PER_M) * 2) / ((speed[i] as number) + (speed[j] as number)) +
         (flags & RIVER ? RIVER_CROSSING_KM : 0);
-      const via = here + step;
+      // Stored as the cost array stores it, or a cost rounded down marks its own entry stale.
+      const via = Math.fround(here + step);
       if (via < (cost[j] as number)) {
         cost[j] = via;
         labels[j] = labels[i] as number;

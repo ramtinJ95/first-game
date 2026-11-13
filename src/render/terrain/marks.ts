@@ -850,13 +850,37 @@ function folds(
       return spacing * (1.15 - 0.3 * land.height(x, y));
     },
     spacing * 1.15,
-  ).map(({ x, y, seed }): Mark => {
+  ).flatMap(({ x, y, seed }): Mark[] => {
     const random = stream(seed);
     const high = land.height(x, y);
     const size = length * (0.75 + 0.5 * random()) * (0.85 + 0.3 * high);
     const angle = land.strike(x, y) + (random() - 0.5) * 0.22;
     const width = size * (FOLD.width + 0.08 * random());
-    return { kind: 'fold', x, y, length: size, width, angle, high, seed };
+    const fold = { kind: 'fold', x, y, length: size, width, angle, high, seed } as const;
+    return foldOutline(fold).every(([px, py]) => land.open(px, py)) ? [fold] : [];
+  });
+}
+
+/**
+ * Points round the most a fold's oval can cover, its bow included, so a fold on a range by
+ * the coast is dropped when its centre is on land and its end or flank is not.
+ */
+export function foldOutline(m: Extract<Mark, { kind: 'fold' }>): [number, number][] {
+  const dx = Math.cos(m.angle);
+  const dy = Math.sin(m.angle);
+  return [
+    [0.5, 0],
+    [0.25, 0.75],
+    [0, 0.9],
+    [-0.25, 0.75],
+    [-0.5, 0],
+    [-0.25, -0.75],
+    [0, -0.9],
+    [0.25, -0.75],
+  ].map(([along = 0, across = 0]) => {
+    const u = along * m.length;
+    const v = across * m.width;
+    return [m.x + dx * u - dy * v, m.y + dy * u + dx * v];
   });
 }
 
