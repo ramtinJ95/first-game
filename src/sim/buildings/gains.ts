@@ -31,12 +31,13 @@ export function buildingGain(
   city: DeepReadonly<City>,
   kind: BuildingKind,
 ): BuildingGain {
+  const realm = realmOf(state, city);
   const without = withBuildings(
-    state,
+    realm,
     city,
     city.buildings.filter((b) => b !== kind),
   );
-  const withIt = withBuildings(state, city, [...city.buildings.filter((b) => b !== kind), kind]);
+  const withIt = withBuildings(realm, city, [...city.buildings.filter((b) => b !== kind), kind]);
   const before = dailyBalances(without).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
   const after = dailyBalances(withIt).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
   const levyBefore = limitsOf(without).get(city.owner)?.manpower ?? 0;
@@ -55,6 +56,22 @@ export function buildingGain(
     trainingShare: kind === 'barracks' ? BUILDINGS.barracks.trainingShare : 1,
     calmed: kind === 'temple' ? calmedBy(state, city) : [],
   };
+}
+
+/**
+ * The owner's cities alone, with no armies. A building changes its owner's sums by the
+ * same amount without the rest of the world, and the realm's size, which sets the share
+ * each city yields, stays the same.
+ */
+function realmOf(
+  state: DeepReadonly<GameState>,
+  city: DeepReadonly<City>,
+): DeepReadonly<GameState> {
+  const cities: Record<string, DeepReadonly<City>> = {};
+  for (const other of Object.values(state.cities)) {
+    if (other.owner === city.owner) cities[other.id] = other;
+  }
+  return { ...state, cities: cities as DeepReadonly<GameState>['cities'], armies: {} };
 }
 
 function withBuildings(
