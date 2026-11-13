@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { parseArgs } from 'node:util';
+import { BUILDING_KINDS, type BuildingKind } from '../src/sim/buildings/buildings.ts';
 import { changeCityOwner } from '../src/sim/cities.ts';
 import type { CityId, FactionId } from '../src/sim/ids.ts';
 import { parseMap } from '../src/sim/map.ts';
@@ -17,7 +19,14 @@ import { buildWorld } from '../src/sim/world/world.ts';
  * more with the city lost to Macedon on day 90. A fate's worth is what Rome
  * earns, its daily balance summed plus what the fate gives at once, less what Rome earns
  * in the same game without the city. Stores are not read, because their limits clip them.
+ * With `--buildings forum,temple`, Salona stands with those buildings when it falls.
  */
+
+const { values } = parseArgs({ options: { buildings: { type: 'string', default: '' } } });
+const BUILT = (values.buildings ? values.buildings.split(',') : []).map((kind) => {
+  if (!(BUILDING_KINDS as readonly string[]).includes(kind)) throw new Error(`no building ${kind}`);
+  return kind as BuildingKind;
+});
 
 const map = parseMap(
   JSON.parse(readFileSync(new URL('../data/map/map.json', import.meta.url), 'utf8')),
@@ -54,6 +63,7 @@ function earnings(population: number, start: (state: GameState) => void, lostOn?
   const city = state.cities[CITY];
   if (!city) throw new Error(`the map has no ${CITY}`);
   city.population = population;
+  city.buildings = [...BUILT];
   start(state);
   let total: Stores = { ...ZERO };
   const marks: Stores[] = [];
@@ -92,7 +102,7 @@ const whole = (n: number) => Math.round(n).toLocaleString('en-US');
 const cell = (s: Stores) => `${whole(s.gold)} / ${whole(s.food)} / ${whole(s.manpower)}`;
 
 console.log(
-  `What Salona adds to Rome under each fate, gold / food / manpower, against a game in which Rome never took it. The city is taken on day 1, and "lost on day ${LOST_ON}" gives it to Macedon then.\n`,
+  `What Salona adds to Rome under each fate, gold / food / manpower, against a game in which Rome never took it. The city is taken on day 1${BUILT.length > 0 ? `, standing with ${BUILT.join(', ')}` : ''}, and "lost on day ${LOST_ON}" gives it to Macedon then.\n`,
 );
 console.log(
   '| size | fate | after 1 year | after 2 years | after 5 years | lost on day 90, after 5 years | out-earns sack in gold from day |',

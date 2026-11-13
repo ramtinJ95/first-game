@@ -73,7 +73,7 @@ export function goldShareOf(city: Built): number {
   return hasBuilt(city, 'forum') ? 1 + BUILDINGS.forum.goldShare : 1;
 }
 
-/** The food a day the city's buildings grow at full, before unrest cuts it. */
+/** The food a day the city's buildings grow, in unrest or not. */
 export function extraFoodOf(city: Built): number {
   return hasBuilt(city, 'canals') ? BUILDINGS.canals.food : 0;
 }
