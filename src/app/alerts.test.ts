@@ -357,6 +357,29 @@ describe('alertsOfDay', () => {
     expect(ofKind(alerts, 'formationMustered')).toEqual([]);
   });
 
+  it('still tells of a recruit that was due anyway on the day its besieged city musters early', () => {
+    const state = buildFixture();
+    atWar(state);
+    const roma = state.cities[f.roma];
+    const roman = state.armies[f.romanArmy];
+    const punic = state.armies[f.punicArmy];
+    const capua = state.cities[f.capua];
+    if (!roma || !roman || !punic || !capua) throw new Error('fixture changed');
+    roma.recruits = [
+      { troop: 'spearmen', readyOn: 40 as Day },
+      { troop: 'archers', readyOn: state.day },
+    ];
+    roman.activity = { kind: 'idle', position: { ...capua.position } };
+    punic.activity = { kind: 'idle', position: { x: roma.position.x + 5, y: roma.position.y } };
+    const { alerts } = play(state, [], (s) => Object.keys(s.sieges).length > 0);
+    expect(ofKind(alerts, 'musteredEarly').map((a) => a.text)).toEqual([
+      'Besieged Roma mustered its recruits early: Spearmen. It cannot fall or be stormed while they stand',
+    ]);
+    expect(ofKind(alerts, 'formationMustered').map((a) => a.text)).toEqual([
+      'Archers mustered at Roma',
+    ]);
+  });
+
   it('tells when a city the player besieges musters its recruits, and not of a siege of others', () => {
     const besieged = (owner: typeof f.rome) => {
       const state = buildFixture();

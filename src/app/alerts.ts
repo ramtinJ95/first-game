@@ -99,7 +99,7 @@ export function alertsOfDay(
   }
 
   const musters = earlyMusters(before, after);
-  const musteredAt: MapPoint[] = [];
+  const told: { at: MapPoint; troop: Troop }[] = [];
   for (const muster of musters) {
     const city = after.cities[muster.city];
     if (!city) continue;
@@ -108,7 +108,9 @@ export function alertsOfDay(
         siege.city === city.id && siege.besiegers.some((id) => after.armies[id]?.owner === player),
     );
     if (muster.owner !== player && !besieging) continue;
-    if (muster.owner === player) musteredAt.push(city.position);
+    if (muster.owner === player) {
+      for (const troop of muster.troops) told.push({ at: city.position, troop });
+    }
     const troops = troopsText(muster.troops);
     add({
       kind: 'musteredEarly',
@@ -126,7 +128,13 @@ export function alertsOfDay(
     const army = after.armies[formation.army];
     const at = army && positionOf(after, army);
     if (!army || army.owner !== player || !at) continue;
-    if (musteredAt.some((city) => distanceKm(city, at) <= RALLY_DISTANCE)) continue;
+    const early = told.findIndex(
+      ({ at: city, troop }) => troop === formation.troop && distanceKm(city, at) <= RALLY_DISTANCE,
+    );
+    if (early >= 0) {
+      told.splice(early, 1);
+      continue;
+    }
     add({
       kind: 'formationMustered',
       tone: 'good',
