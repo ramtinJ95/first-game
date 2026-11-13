@@ -26,8 +26,10 @@ export const MINOR_COLOUR = 0x8f8872;
  * How much of an owner's colour its wash lays over the ground: the paper, the desert, or
  * the wood. The colour is laid on, not multiplied, so it keeps its hue on the yellow
  * desert, where a multiply turned Carthage's violet into Rome's red and Macedon's blue grey.
+ * A power's wash leaves the ground and its drawings readable through it, and a minor's is
+ * lighter still, so the many small realms do not grey the map.
  */
-export const WASH_STRENGTH = 0.5;
+export const WASH_STRENGTH = { greatPower: 0.34, minor: 0.14 } as const;
 
 export function factionColour(state: DeepReadonly<GameState>, faction: FactionId): number {
   if (state.factions[faction]?.kind !== 'greatPower') return MINOR_COLOUR;

@@ -9,7 +9,7 @@ import {
   TilingSprite,
 } from 'pixi.js';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { ArmyId, BattleId, CityId, ProvinceId, RefugeeColumnId } from '../sim/ids.ts';
+import type { ArmyId, BattleId, CityId, RefugeeColumnId } from '../sim/ids.ts';
 import type { GameMap, MapLine, MultiPolygon } from '../sim/map.ts';
 import type { City, CityRank } from '../sim/state/city.ts';
 import type { Sight } from '../sim/sight.ts';
@@ -28,6 +28,7 @@ import {
   type Camera,
   type Size,
 } from './camera.ts';
+import { BORDER_WEIGHTS, borderRuns, sharedBorders } from './borders.ts';
 import type { DrawOptions } from './draw-options.ts';
 import { coversView, fitTexture } from './cached-texture.ts';
 import { drawColumnMark, drawnColumns, type DrawnColumn } from './columns.ts';
@@ -56,6 +57,7 @@ import { createLife } from './terrain/life.ts';
 import { createPlaces } from './terrain/places-layer.ts';
 import { createTerrain } from './terrain/terrain-layer.ts';
 import { createArmyLayer } from './armies/layer.ts';
+import { createWash } from './washes.ts';
 import {
   buildScene,
   figureHeight,
@@ -387,14 +389,10 @@ export async function createRenderer({
 
   const terrain = createTerrain(map, layers.terrain, app.renderer);
 
-  const washes = new Map<ProvinceId, Graphics>();
-  for (const province of map.provinces) {
-    const wash = fillOutline(new Graphics(), province.outline, 0xffffff);
-    wash.alpha = 0;
-    washes.set(province.id, wash);
-    terrain.washes.addChild(wash);
-  }
+  const wash = createWash(map);
+  terrain.washes.addChild(wash.root);
 
+  const borderLines = borderRuns(sharedBorders(map));
   const borders = new Graphics();
   layers.borders.addChild(borders);
   // The map build clips rivers and the coastline to the extent, so they need no mask.
@@ -548,8 +546,10 @@ export async function createRenderer({
       });
     }
     borders.clear();
-    for (const province of map.provinces) traceOutline(borders, province.outline, scale);
-    borders.stroke({ width: 0.8, color: BORDER, ...round });
+    for (const weight of BORDER_WEIGHTS) {
+      const runs = borderLines.filter((run) => run.weight === weight).map((run) => run.line);
+      traceLines(borders, runs, scale, 0.5).stroke({ width: weight, color: BORDER, ...round });
+    }
     inkLines.clear();
     traceLines(
       inkLines,
@@ -565,15 +565,20 @@ export async function createRenderer({
   }
 
   function recolour(state: DeepReadonly<GameState>) {
-    for (const [province, wash] of washes) {
-      const owner = provinceOwner(state, province);
-      const colour = owner ? factionColour(state, owner) : 0xffffff;
-      const alpha = owner ? WASH_STRENGTH : 0;
-      if (wash.tint === colour && wash.alpha === alpha) continue;
-      wash.tint = colour;
-      wash.alpha = alpha;
-      terrain.repaint();
-    }
+    const washes = map.provinces.map((province) => {
+      const owner = provinceOwner(state, province.id);
+      if (!owner) return undefined;
+      const power = state.factions[owner]?.kind === 'greatPower';
+      return {
+        owner,
+        colour: factionColour(state, owner),
+        strength: power ? WASH_STRENGTH.greatPower : WASH_STRENGTH.minor,
+      };
+    });
+    const started = performance.now();
+    if (!wash.paint(washes)) return;
+    performance.measure('wash', { start: started });
+    terrain.repaint();
   }
 
   function labelText(city: DeepReadonly<City>): string {
