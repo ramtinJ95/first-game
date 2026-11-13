@@ -45,6 +45,16 @@
     "kind": "screenshot"
   },
   {
+    "file": "battle-and-army.png",
+    "title": "Panel refresh with the top bar, the army panel, the battle panel, and the alerts open: 40 refreshes, median 0.30 ms, p95 0.50 ms, max 1.50 ms",
+    "kind": "screenshot"
+  },
+  {
+    "file": "alerts.png",
+    "title": "The alerts at the left edge: the battle began, and who held the field when it ended",
+    "kind": "screenshot"
+  },
+  {
     "file": "clip.gif",
     "title": "Each panel in use: the top bar, your army and a foreign one, a city raising troops, the sea crossing, a battle, a siege, a fallen city, a refused order, and the alerts",
     "kind": "clip"

@@ -126,7 +126,7 @@
   },
   {
     "file": "pan-frame-time.png",
-    "title": "widest pan, day 300 of an AI game, at 0.16 px per km: 376 frames, main thread busy 8.6 ms per frame, frame interval median 16.7 ms, p95 16.8 ms; middle pan, day 300 of an AI game, at 0.96 px per km: 341 frames, main thread busy 4.2 ms per frame, frame interval median 16.7 ms, p95 16.8 ms; closest pan, day 300 of an AI game, at 3.88 px per km: 373 frames, main thread busy 5.6 ms per frame, frame interval median 16.7 ms, p95 16.8 ms",
+    "title": "widest pan, day 300 of an AI game, at 0.16 px per km: 382 frames, main thread busy 10.6 ms per frame, frame interval median 16.7 ms, p95 16.8 ms; middle pan, day 300 of an AI game, at 0.96 px per km: 355 frames, main thread busy 5.9 ms per frame, frame interval median 16.7 ms, p95 16.8 ms; closest pan, day 300 of an AI game, at 3.88 px per km: 401 frames, main thread busy 8.5 ms per frame, frame interval median 16.7 ms, p95 16.8 ms",
     "kind": "screenshot"
   },
   {
