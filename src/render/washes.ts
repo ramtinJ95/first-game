@@ -13,16 +13,22 @@ export const WASH_FADE_KM = { clear: 3, full: 30 } as const;
  * otherwise swallow the colour, so each power's hue holds on the sand as on the paper.
  */
 export const WASH_DESERT_GAIN = 1.45;
+/**
+ * The gain rises over twice this many km across a desert's edge, as the desert's share of
+ * the land this far round each cell. The deserts' outlines run in long straight lines,
+ * and a gain that switched on at the outline drew them in the wash as a sharp step.
+ */
+export const WASH_DESERT_BLEND_KM = 40;
 
 /**
  * Which province holds the centre of each cell of a raster over the map, -1 at sea, and
- * whether the cell is desert.
+ * how much of the land round the cell is desert, from 0 to 1.
  */
 export interface ProvinceRaster {
   readonly columns: number;
   readonly rows: number;
   readonly province: Int16Array;
-  readonly desert: Uint8Array;
+  readonly desert: Float32Array;
 }
 
 /** What one province's land is washed with: its owner, the colour, and how much of it. */
@@ -48,12 +54,55 @@ export function rasterise(map: WashedMap): ProvinceRaster {
   for (const [index, { outline }] of map.provinces.entries()) {
     fillCells(columns, rows, outline, (from, to) => province.fill(index, from, to));
   }
-  const desert = new Uint8Array(columns * rows);
+  const desert = new Float32Array(columns * rows);
   for (const { kind, outline } of map.terrain) {
     if (kind === 'desert')
       fillCells(columns, rows, outline, (from, to) => desert.fill(1, from, to));
   }
+  const land = new Float32Array(province.length);
+  for (let i = 0; i < province.length; i++) if ((province[i] as number) >= 0) land[i] = 1;
+  const reach = Math.round(WASH_DESERT_BLEND_KM / WASH_CELL_KM);
+  boxBlur(desert, columns, rows, reach);
+  boxBlur(land, columns, rows, reach);
+  for (let i = 0; i < desert.length; i++) {
+    const near = land[i] as number;
+    desert[i] = near > 0 ? Math.min(1, (desert[i] as number) / near) : 0;
+  }
   return { columns, rows, province, desert };
+}
+
+/** Averages each value over the cells within `reach` along each row, then each column. */
+function boxBlur(values: Float32Array, columns: number, rows: number, reach: number): void {
+  const width = 2 * reach + 1;
+  const row = new Float32Array(columns);
+  for (let r = 0; r < rows; r++) {
+    const base = r * columns;
+    row.set(values.subarray(base, base + columns));
+    let sum = 0;
+    for (let c = 0; c < Math.min(reach, columns); c++) sum += row[c] as number;
+    for (let c = 0; c < columns; c++) {
+      if (c + reach < columns) sum += row[c + reach] as number;
+      if (c > reach) sum -= row[c - reach - 1] as number;
+      values[base + c] = sum / width;
+    }
+  }
+  const copy = Float32Array.from(values);
+  const sums = new Float32Array(columns);
+  for (let r = 0; r < Math.min(reach, rows); r++) {
+    for (let c = 0; c < columns; c++)
+      sums[c] = (sums[c] as number) + (copy[r * columns + c] as number);
+  }
+  for (let r = 0; r < rows; r++) {
+    const added = (r + reach) * columns;
+    const dropped = (r - reach - 1) * columns;
+    for (let c = 0; c < columns; c++) {
+      let sum = sums[c] as number;
+      if (r + reach < rows) sum += copy[added + c] as number;
+      if (r > reach) sum -= copy[dropped + c] as number;
+      sums[c] = sum;
+      values[r * columns + c] = sum / width;
+    }
+  }
 }
 
 /** Calls `fill` with each run of cells whose centres lie inside the outline, by the even-odd rule. */
@@ -92,8 +141,8 @@ function fillCells(
  * Paints the washes as RGBA, four bytes a cell. Each cell takes its province's colour,
  * full from WASH_FADE_KM.full over land from the nearest cell of another owner and clear
  * by WASH_FADE_KM.clear, so the wash runs on unbroken between two provinces of one owner
- * and fades toward the border of another. The sea stays clear, and the desert takes
- * WASH_DESERT_GAIN times the strength.
+ * and fades toward the border of another. The sea stays clear, and the desert takes up
+ * to WASH_DESERT_GAIN times the strength.
  */
 export function paintWash(
   raster: ProvinceRaster,
@@ -176,7 +225,8 @@ export function paintWash(
     into[k] = (wash.colour >> 16) & 0xff;
     into[k + 1] = (wash.colour >> 8) & 0xff;
     into[k + 2] = wash.colour & 0xff;
-    const strength = Math.min(1, wash.strength * (desert[i] ? WASH_DESERT_GAIN : 1));
+    const gain = 1 + (WASH_DESERT_GAIN - 1) * (desert[i] as number);
+    const strength = Math.min(1, wash.strength * gain);
     into[k + 3] = Math.round(255 * strength * t * t * (3 - 2 * t));
   }
 }

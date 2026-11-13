@@ -24,13 +24,13 @@ const square = (x0: number, x1: number): MultiPolygon => [
  * whose eastern end is desert.
  */
 const MAP = {
-  width: 480,
+  width: 640,
   height: 200,
-  terrain: [{ kind: 'desert', outline: square(340, 400) }],
+  terrain: [{ kind: 'desert', outline: square(400, 600) }],
   provinces: [
     { outline: square(40, 160) },
     { outline: square(160, 280) },
-    { outline: square(280, 400) },
+    { outline: square(280, 600) },
   ],
 };
 const STRENGTH = 0.3;
@@ -71,7 +71,9 @@ test('the coast is no border, so a wash stays full to the sea, and the sea stays
   expect(washAt(20, 100).alpha).toBe(0);
 });
 
-test('on the desert a wash is laid stronger, so its hue holds on the yellow ground', () => {
-  expect(washAt(370, 100).alpha).toBeCloseTo(STRENGTH * WASH_DESERT_GAIN, 2);
-  expect(washAt(320, 100).alpha).toBeCloseTo(STRENGTH, 2);
+test('deep in the desert a wash is laid stronger, rising across the desert edge, so its hue holds on the yellow ground', () => {
+  expect(washAt(598, 100).alpha).toBeCloseTo(STRENGTH * WASH_DESERT_GAIN, 2);
+  const edge = washAt(400, 100).alpha;
+  expect(edge).toBeGreaterThan(STRENGTH);
+  expect(edge).toBeLessThan(STRENGTH * WASH_DESERT_GAIN);
 });
