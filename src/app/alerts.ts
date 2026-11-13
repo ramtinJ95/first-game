@@ -13,6 +13,8 @@ import { insideOutline, type Sight } from '../sim/sight.ts';
 import { menOf, RALLY_DISTANCE } from '../sim/systems/economy.ts';
 import type { Troop } from '../sim/troops.ts';
 import { BLOCKADE_ODDS } from '../sim/systems/sieges.ts';
+import { peaceText, termsText } from '../sim/ai/peace.ts';
+import { warKey } from '../sim/state/war.ts';
 import { areAtWar } from '../sim/wars.ts';
 import type { World } from '../sim/world/world.ts';
 import { armyTitle, buildingList, factionName, placeName, TROOP_NAMES, whole } from './names.ts';
@@ -39,6 +41,9 @@ export const ALERT_KINDS = [
   'columnArrived',
   'buildingFinished',
   'buildingsLost',
+  'peaceOffered',
+  'peaceRefused',
+  'peaceMade',
 ] as const;
 export type AlertKind = (typeof ALERT_KINDS)[number];
 
@@ -640,6 +645,62 @@ function eventAlert(
             : `${city.name} fell with its ${buildingList(event.buildings)} unfinished`,
         focus: { at: event.position, select: { kind: 'province', province: city.province } },
       };
+    }
+    case 'peaceOffered': {
+      const terms = peaceText(after, event.terms, player);
+      if (event.to === player) {
+        return {
+          kind: 'peaceOffered',
+          tone: 'neutral',
+          text: `${factionName(after, event.from)} offers ${terms}`,
+        };
+      }
+      if (event.from === player) {
+        return {
+          kind: 'peaceOffered',
+          tone: 'neutral',
+          text: `You offered ${factionName(after, event.to)} ${terms}`,
+        };
+      }
+      return undefined;
+    }
+    case 'peaceRefused':
+      if (event.from === player) {
+        return {
+          kind: 'peaceRefused',
+          tone: 'bad',
+          text: `${factionName(after, event.by)} refused your offer of peace, and the war goes on`,
+        };
+      }
+      if (event.by === player) {
+        return {
+          kind: 'peaceRefused',
+          tone: 'neutral',
+          text: `You refused peace with ${factionName(after, event.from)}, and the war goes on`,
+        };
+      }
+      return undefined;
+    case 'peaceMade': {
+      const [a, b] = event.between;
+      const other = a === player ? b : b === player ? a : undefined;
+      if (other) {
+        const truce = after.truces[warKey(a, b)];
+        const until = truce ? `. The truce holds until day ${truce.endsOn}` : '';
+        return {
+          kind: 'peaceMade',
+          tone: 'good',
+          text: `Peace with ${factionName(after, other)}${event.terms.kind === 'asThingsStand' ? ' as things stand' : `: ${termsText(after, event.terms, player)}`}${until}`,
+        };
+      }
+      const terms = peaceText(after, event.terms);
+      const powers = event.between.every((id) => after.factions[id]?.kind === 'greatPower');
+      return powers
+        ? {
+            kind: 'peaceMade',
+            tone: 'neutral',
+            text: `${factionName(after, a)} and ${factionName(after, b)} made ${terms}`,
+          }
+        : undefined;
     }
   }
 }

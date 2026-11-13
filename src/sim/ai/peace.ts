@@ -32,6 +32,17 @@ export interface PeaceFactor {
   readonly text: string;
 }
 
+/** "peace as things stand", or "peace: you give 1,000 gold", as the reader reads an offer. */
+export function peaceText(
+  state: State,
+  terms: DeepReadonly<PeaceTerms>,
+  reader?: FactionId,
+): string {
+  return terms.kind === 'asThingsStand'
+    ? 'peace as things stand'
+    : `peace: ${termsText(state, terms, reader)}`;
+}
+
 /** How much a faction wants peace with an enemy, before any terms. */
 export interface PeaceWish {
   readonly faction: FactionId;
@@ -58,21 +69,31 @@ export interface PeaceAnswer {
 
 const nameOf = (state: State, faction: FactionId) => state.factions[faction]?.name ?? faction;
 const cityName = (state: State, id: CityId) => state.cities[id]?.name ?? id;
-const gold = (amount: number) => `${Math.round(amount).toLocaleString('en-GB')} gold`;
+const gold = (amount: number) => `${Math.round(amount).toLocaleString('en')} gold`;
 
 function listed(items: readonly string[]): string {
   if (items.length <= 1) return items.join('');
   return `${items.slice(0, -1).join(', ')} and ${items.at(-1) as string}`;
 }
 
-/** The terms in words, as the side that gains or pays reads them. */
-export function termsText(state: State, terms: DeepReadonly<PeaceTerms>): string {
-  if (terms.kind === 'asThingsStand') return 'peace as things stand';
-  const goods = [
+/** What the payer gives, in words. */
+function goodsText(state: State, terms: DeepReadonly<PeaceTerms & { kind: 'payment' }>): string {
+  return listed([
     ...(terms.gold > 0 ? [gold(terms.gold)] : []),
     ...terms.cities.map((id) => cityName(state, id)),
-  ];
-  return `${nameOf(state, terms.payer)} gives ${listed(goods)}`;
+  ]);
+}
+
+/** The terms in words, as the reader reads them when one is named: "you give", "gives you". */
+export function termsText(
+  state: State,
+  terms: DeepReadonly<PeaceTerms>,
+  reader?: FactionId,
+): string {
+  if (terms.kind === 'asThingsStand') return 'peace as things stand';
+  const goods = goodsText(state, terms);
+  if (reader === terms.payer) return `you give ${goods}`;
+  return `${nameOf(state, terms.payer)} gives ${reader ? 'you ' : ''}${goods}`;
 }
 
 /**
@@ -152,7 +173,7 @@ export function peaceAnswer(
     text:
       terms.kind === 'asThingsStand'
         ? 'Nothing changes hands'
-        : `${terms.payer === faction ? 'It pays' : 'It gains'} ${termsText(state, terms).replace(/^.* gives /, '')}`,
+        : `${terms.payer === faction ? `${name} gives` : `${name} gains`} ${goodsText(state, terms)}`,
   };
   const problem = termsProblem(state, [faction, enemy], terms);
   const short = Math.max(0, Math.ceil(-(wish.wish + worth)));

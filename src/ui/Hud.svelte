@@ -19,6 +19,7 @@
   import OverviewPanel from './OverviewPanel.svelte';
   import StartScreen from './StartScreen.svelte';
   import TopBar from './TopBar.svelte';
+  import WarsPanel from './WarsPanel.svelte';
 
   let {
     view,
@@ -67,8 +68,20 @@
       <TopBar {view} {actions} {frame} />
     </div>
     <div class="slot main">
-      {#if view.current.panel === 'overview'}
-        <OverviewPanel {game} {sight} {actions} />
+      {#if view.current.panel === 'wars' || modal?.kind === 'peaceOffer'}
+        <WarsPanel
+          {game}
+          pending={view.current.pending}
+          {actions}
+          prompted={modal?.kind === 'peaceOffer' ? modal.from : undefined}
+          answered={frame.closeModal}
+          close={() => {
+            if (view.current.panel === 'wars') actions.togglePanel('wars');
+            if (modal?.kind === 'peaceOffer') frame.closeModal();
+          }}
+        />
+      {:else if view.current.panel === 'overview'}
+        <OverviewPanel {game} {sight} {actions} openWars={() => actions.togglePanel('wars')} />
       {:else if view.current.panel === 'chronicle'}
         <ChroniclePanel alerts={view.current.alerts} {actions} />
       {/if}

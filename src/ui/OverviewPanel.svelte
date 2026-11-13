@@ -6,8 +6,18 @@
   import type { Actions } from './actions.ts';
   import { cssColour, overviewOf } from './describe.ts';
 
-  let { game, sight, actions }: { game: DeepReadonly<GameState>; sight: Sight; actions: Actions } =
-    $props();
+  let {
+    game,
+    sight,
+    actions,
+    openWars,
+  }: {
+    game: DeepReadonly<GameState>;
+    sight: Sight;
+    actions: Actions;
+    /** Opens the wars panel, where peace is made. */
+    openWars: () => void;
+  } = $props();
 
   const overview = $derived(overviewOf(game, sight));
   const colour = $derived(cssColour(game, game.player));
@@ -70,13 +80,18 @@
     {/if}
 
     <h3>Wars</h3>
-    <ul class="wars" data-testid="overview-wars">
+    <ul class="pick-list" data-testid="overview-wars">
       {#each overview.wars as war (war.against)}
-        <li class="bad">At war with {war.name} since day {war.since}</li>
+        <li>
+          <button type="button" class="pick bad" onclick={openWars}
+            >At war with {war.name} since day {war.since}. Peace…</button
+          >
+        </li>
       {:else}
         <li>At peace with everyone</li>
       {/each}
     </ul>
+    <button type="button" data-testid="open-wars" onclick={openWars}>Wars and peace</button>
   {/if}
 </section>
 
@@ -92,10 +107,5 @@
   .count {
     font-weight: normal;
     color: var(--muted);
-  }
-
-  .wars {
-    margin: 0;
-    padding-left: 1.1em;
   }
 </style>

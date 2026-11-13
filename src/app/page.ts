@@ -14,7 +14,7 @@ import { MapPointSchema } from '../sim/state/map-point.ts';
 import { ALERT_KINDS, PAUSE_KINDS, type Alert, type Occupied, type WeakSiege } from './alerts.ts';
 
 /** The panels that open over the map's left side, one at a time. */
-export const PANELS = ['overview', 'chronicle'] as const;
+export const PANELS = ['overview', 'chronicle', 'wars'] as const;
 export type Panel = (typeof PANELS)[number];
 
 /**

@@ -3,6 +3,7 @@ import type { CityId, FactionId } from '../sim/ids.ts';
 import { outcomeOf } from '../sim/outcome.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
+import { warSides } from '../sim/state/war.ts';
 import type { World } from '../sim/world/world.ts';
 
 /** A day that stops the game for the player: the end of it, or a fate to choose. */
@@ -15,7 +16,8 @@ export type TurningPoint =
       readonly by: FactionId | undefined;
     }
   | { readonly kind: 'won'; readonly on: Day }
-  | { readonly kind: 'fate'; readonly city: CityId };
+  | { readonly kind: 'fate'; readonly city: CityId }
+  | { readonly kind: 'peaceOffer'; readonly from: FactionId };
 
 type State = DeepReadonly<GameState>;
 
@@ -40,6 +42,12 @@ export function turningPoints(before: State, after: State, world: World): Turnin
     const then = before.cities[city.id];
     if (then?.owner === player && then.fellOn === city.fellOn) continue;
     points.push({ kind: 'fate', city: city.id });
+  }
+  for (const [key, offer] of Object.entries(after.peaceOffers)) {
+    if (offer.from === player || !warSides(key)?.includes(player)) continue;
+    if (before.peaceOffers[key as keyof typeof before.peaceOffers]?.madeOn === offer.madeOn)
+      continue;
+    points.push({ kind: 'peaceOffer', from: offer.from });
   }
   return points;
 }

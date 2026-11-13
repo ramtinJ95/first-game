@@ -93,8 +93,11 @@ function play(seed: number): Seed {
     }
     state = result.state;
     for (const power of POWERS) {
-      const fighting = Object.keys(state.wars).some((key) => warSides(key)?.includes(power));
-      if (!fighting && state.factions[power]?.defeatedOn === null) peaceDays[power] += 1;
+      const id = power as FactionId;
+      const fighting = Object.keys(state.wars).some((key) => warSides(key)?.includes(id));
+      if (!fighting && state.factions[id]?.defeatedOn === null) {
+        peaceDays[power] = (peaceDays[power] ?? 0) + 1;
+      }
     }
   }
   for (const [key, from] of open) {

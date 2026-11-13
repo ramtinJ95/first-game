@@ -6,6 +6,7 @@
   import type { GameState } from '../sim/state/game-state.ts';
   import { warKey } from '../sim/state/war.ts';
   import type { Actions } from './actions.ts';
+  import { truceDaysLeft } from '../sim/peace/truce.ts';
   import { pendingOrder } from './describe.ts';
 
   let {
@@ -28,6 +29,7 @@
     pendingOrder(pending, 'declareWar', (order) => order.against === owner) !== undefined,
   );
   const defeated = $derived(game.factions[owner]?.defeatedOn != null);
+  const truce = $derived(owner === game.player ? 0 : truceDaysLeft(game, game.player, owner));
 </script>
 
 <div class="war" data-testid="war-status">
@@ -39,6 +41,11 @@
     <p>At peace with {name}</p>
     {#if defeated}
       <p class="muted">{name} is out of the game</p>
+    {:else if truce > 0}
+      <p class="muted" data-testid="truce">
+        A truce with {name} holds for {truce} more days. Neither side may declare war until day {game.day +
+          truce}.
+      </p>
     {:else if confirming}
       <div class="row">
         <span>Declare war on {name}?</span>

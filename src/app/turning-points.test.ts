@@ -118,3 +118,22 @@ describe('fateChoices', () => {
     expect(enslave?.refusal).toMatch(/no army of rome stands at syracusae/);
   });
 });
+
+it('an offer of peace to the player stops the game once, on the day it is made', () => {
+  const state = buildFixture();
+  state.wars[warKey(f.rome, f.carthage)] = newWar(f.carthage, f.rome, state.day);
+  const terms = { kind: 'asThingsStand' } as const;
+  const offered = tick(
+    state,
+    [{ kind: 'offerPeace', faction: f.carthage, to: f.rome, terms }],
+    world,
+  ).state;
+  expect(turningPoints(state, offered, world)).toEqual([{ kind: 'peaceOffer', from: f.carthage }]);
+  expect(turningPoints(offered, tick(offered, [], world).state, world)).toEqual([]);
+  const own = tick(
+    state,
+    [{ kind: 'offerPeace', faction: f.rome, to: f.carthage, terms }],
+    world,
+  ).state;
+  expect(turningPoints(state, own, world)).toEqual([]);
+});
