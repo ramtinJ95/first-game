@@ -466,23 +466,16 @@ export function movements(context: Context, muster: CityView | undefined): Order
 
   for (const mover of rest) {
     if (!muster || distance(mover.at, muster.position) <= RALLY_DISTANCE) continue;
-    if (targets.length > 0 || !onHomeLand(state, world, faction, mover.at)) headFor(mover, muster);
+    if (targets.length > 0 || !context.router.routeTo(mover.at, muster)) headFor(mover, muster);
   }
   return orders;
 }
 
-/** Whether a city of the faction stands on the same land as the point. */
-function onHomeLand(state: State, world: World, faction: FactionId, at: MapPoint): boolean {
-  return sorted(state.cities).some(
-    (city) => city.owner === faction && connected(world.mesh, at, city.position, 'land'),
-  );
-}
-
 /**
  * The step home for an army that no road and no port of its own takes to the city: a
- * crossing from the shore it stands on, after the days that gather ships, to the port of
- * its owner nearest the city from which the city is a march, or else the march to the
- * nearest shore. It costs a scan of the coast, so only an army with no other way pays it.
+ * crossing from the shore it stands on, after the days that gather ships, to the port
+ * nearest the city from which the city is a march, one of its owner's first, or else the
+ * march to the nearest shore. It costs a scan of the coast, so only an army with no other way pays it.
  */
 function wayFromShore(context: Context, at: MapPoint, city: CityView): Step | undefined {
   const { state, world, faction, router } = context;
@@ -492,8 +485,12 @@ function wayFromShore(context: Context, at: MapPoint, city: CityView): Step | un
     return shore && router.marches(at, shore) ? { kind: 'march', to: shore } : undefined;
   }
   const landing = sorted(state.cities)
-    .filter((port) => port.owner === faction && world.harbours.has(port.id))
-    .sort((a, b) => distance(a.position, city.position) - distance(b.position, city.position))
+    .filter((port) => world.harbours.has(port.id))
+    .sort(
+      (a, b) =>
+        Number(b.owner === faction) - Number(a.owner === faction) ||
+        distance(a.position, city.position) - distance(b.position, city.position),
+    )
     .find((port) => {
       const harbour = world.harbours.get(port.id) as MapPoint;
       return (

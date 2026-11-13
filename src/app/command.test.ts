@@ -407,6 +407,22 @@ describe('a way home from overseas', () => {
   });
 });
 
+describe('a shore beside a port of its own', () => {
+  it('offers the march to the port of its own when it sails sooner than ships gathered on the shore', () => {
+    const state = buildFixture();
+    armyOf(state, f.punicArmy).activity = { kind: 'idle', position: { x: 2225, y: 2960 } };
+    const planned = plan(state, atCity(state, f.syracusae), f.punicArmy);
+    if (planned.kind !== 'menu') throw new Error(`expected a menu, got ${planned.kind}`);
+    expect(planned.menu.options).toMatchObject([
+      {
+        group: 'sea',
+        label: 'March to Carthago to sail for Syracusae',
+        order: { kind: 'moveArmy', to: cityOf(state, f.carthago).position },
+      },
+    ]);
+  });
+});
+
 describe('route', () => {
   it('runs a waiting march from the army to its destination, and a crossing by the harbours', () => {
     const state = buildFixture();
