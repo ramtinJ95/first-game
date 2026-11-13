@@ -1,5 +1,7 @@
 import { expect, test } from 'vitest';
-import { plainName, readCandidates, type PleiadesFiles } from './settlements.ts';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { plainName, readCandidates, usualName, type PleiadesFiles } from './settlements.ts';
 
 const BOM = String.fromCharCode(0xfeff);
 const csv = (header: string, rows: string[]) => `${BOM}${[header, ...rows].join('\n')}\n`;
@@ -10,6 +12,8 @@ interface Place {
   types?: string[];
   precision?: string;
   locations?: [after: string, before: string, certainty?: string][];
+  /** The place's names in Pleiades; by default one Latin name, its title. */
+  names?: [form: string, language: string, after: string, before: string][];
 }
 
 function files(places: Place[], connections: [from: number, type: string, to: number][] = []) {
@@ -25,7 +29,7 @@ function files(places: Place[], connections: [from: number, type: string, to: nu
       'created,description,details,provenance,title,uri,id,representative_latitude,representative_longitude,bounding_box_wkt,location_precision',
       places.map(
         (p) =>
-          `2020,"A place, described",,P,"${p.title ?? `Place ${p.id}`}",u,${p.id},40,20,,${p.precision ?? 'precise'}`,
+          `2020,"A place, described",,P,"${p.title ?? placeName(p.id)}",u,${p.id},40,20,,${p.precision ?? 'precise'}`,
       ),
     ),
     placeTypes: csv(
@@ -41,6 +45,15 @@ function files(places: Place[], connections: [from: number, type: string, to: nu
         ),
       ),
     ),
+    names: csv(
+      'created,description,details,provenance,title,uri,id,place_id,name_type,language_tag,attested_form,romanized_form_1,romanized_form_2,romanized_form_3,association_certainty,transcription_accuracy,transcription_completeness,year_after_which,year_before_which',
+      places.flatMap((p) =>
+        (p.names ?? [[p.title ?? placeName(p.id), 'la', '', '']]).map(
+          ([form, language, after, before], i) =>
+            `2020,,,P,"${form}",u,n-${p.id}-${i},${p.id},geographic,${language},"${form}","${form}",,,certain,accurate,complete,${after},${before}`,
+        ),
+      ),
+    ),
     connections: csv(
       'created,description,details,provenance,title,uri,id,place_id,connection_type,connects_to,association_certainty,year_after_which,year_before_which',
       connections.map(
@@ -51,6 +64,10 @@ function files(places: Place[], connections: [from: number, type: string, to: nu
   };
   return all;
 }
+
+/** A test place's default title, in letters, since a figure in a name marks an editor's form. */
+const placeName = (id: number) =>
+  `Locus ${[...String(id)].map((d) => String.fromCharCode(97 + Number(d))).join('')}`;
 
 const ids = (all: PleiadesFiles) => readCandidates(all).map((candidate) => candidate.pleiadesId);
 
@@ -163,4 +180,48 @@ test('a title becomes the plain name a map writes, with the editors’ marks gon
     ['Aquae S(...)', undefined],
   ];
   for (const [title, name] of cases) expect(plainName(title)).toBe(name);
+});
+
+test('a place is written by the name it bore in the game’s periods, or left off the map', () => {
+  const cases: [string, [string, string, string, string][], string | null][] = [
+    ['Tell el-Moqdam', [['Leontopolis', '', '-330', '300']], 'Leontopolis'],
+    ['Hérisson, Cm.', [], null],
+    ['Kablow', [], null],
+    ['Col. Barcino', [['Col. Barcino', 'akk', '-30', '640']], 'Barcino'],
+    ['Pherai', [['Phérai', 'grc', '-750', '640']], 'Pherai'],
+    [
+      'Carchemish',
+      [
+        ['Carchemish', 'en', '1700', '2100'],
+        ['Εὔρωπος', 'grc', '-550', '-30'],
+        ['Europos', '', '-330', '640'],
+      ],
+      'Europos',
+    ],
+    [
+      'Amman',
+      [
+        ['ʿAmmān', 'ar', '-3300', '2000'],
+        ['Philadelpheia', 'grc', '-330', '640'],
+      ],
+      'Philadelpheia',
+    ],
+    ['Dur-Katlimmu', [['Dūr-Katlimmu', 'arc', '-750', '300']], 'Dur-Katlimmu'],
+    ['Semnan', [['Semína', 'grc', '-330', '-30']], 'Semina'],
+  ];
+  for (const [title, names, name] of cases) {
+    const [candidate] = readCandidates(files([{ id: 1, title, names }]));
+    expect(candidate?.name ?? null).toBe(name);
+  }
+  expect(usualName('Alauna', [{ form: 'Alauna', language: '' }])).toBe('Alauna');
+});
+
+test('every place on the built map has a plain ancient name', () => {
+  const map = JSON.parse(
+    readFileSync(resolve(import.meta.dirname, '../../data/map/map.json'), 'utf8'),
+  ) as { settlements: { name: string }[] };
+  const modern =
+    /[,.;?()\d]|[^\p{Script=Latin}\s'’-]|\p{M}|\b(?:Tell|Tall|Tepe|tepe|Kom|Bir|Ain|Henchir|Khirbet|Qasr|Wadi|Jebel|Gebel|Bad|Col|Fort|Roman|Settlement|Villa)\b|\b(?:el|al|ed|es)-/u;
+  const names = map.settlements.map(({ name }) => name);
+  expect(names.filter((name) => modern.test(name.normalize('NFD')))).toEqual([]);
 });
