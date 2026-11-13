@@ -394,7 +394,9 @@ test.describe('the panels', () => {
   test('the reason for a refused order shows for a few seconds', async ({ page }) => {
     const view = camera(page);
     await page.mouse.click(view.banner(cityPoint('roma')).x, view.banner(cityPoint('roma')).y);
-    const sea = view.screen({ x: 2400, y: 2500 });
+    // The open sea farthest on screen from every city at the opening zoom, 136 px, so no
+    // city's symbol or name reaches the click wherever its name is placed.
+    const sea = view.screen({ x: 5457, y: 1694 });
     await page.mouse.click(sea.x, sea.y, { button: 'right' });
     const notice = page.getByTestId('notice');
     await expect(notice).toHaveText('Order refused. The destination is in the sea.');

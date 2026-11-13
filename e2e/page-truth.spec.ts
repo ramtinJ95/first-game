@@ -73,7 +73,11 @@ test.describe('the game stops when the player must decide', () => {
     await loadSave(page, state);
     await speed3(page);
     await page.getByRole('button', { name: 'Resume' }).click();
-    await expect(page.getByTestId('battle-panel').getByTestId('battle-day')).toHaveText('day 3');
+    const battleDay = page.getByTestId('battle-panel').getByTestId('battle-day');
+    // A slow frame plays several days at once, so the panel can pass over day 3.
+    await expect
+      .poll(async () => Number(/\d+/.exec((await battleDay.textContent()) ?? '')?.[0] ?? 0))
+      .toBeGreaterThanOrEqual(3);
     await expect(page.getByTestId('time-controls-speed')).toHaveText('Speed 3');
     await expect(page.getByTestId('alert-paused')).toHaveCount(0);
 
