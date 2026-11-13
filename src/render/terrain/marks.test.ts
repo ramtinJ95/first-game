@@ -130,7 +130,7 @@ describe('placing the terrain', () => {
 describe('the ground at the closest zoom', () => {
   it('keeps every tuft, bush, rock, and stream on land along the coast round Roma', () => {
     const rect = { left: 2440, top: 2240, right: 2720, bottom: 2480 };
-    const marks = placeFields(land, rect);
+    const marks = placeRelief(land, rect, 'close');
     const ground = marks.filter(
       (m) => m.kind === 'tuft' || m.kind === 'scrub' || m.kind === 'rock',
     );

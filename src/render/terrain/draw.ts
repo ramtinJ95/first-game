@@ -378,7 +378,12 @@ function ground(g: GraphicsContext, marks: readonly GroundMark[]) {
 /** Draws marks of one tier into a new context, in the order given. */
 export function drawMarks(marks: readonly Mark[], tier: Tier): GraphicsContext {
   const g = new GraphicsContext();
-  const groundMarks: GroundMark[] = [];
+  // The ground lies flat, under the relief and the trees of its tier.
+  const groundMarks = marks.filter(
+    (m): m is GroundMark =>
+      m.kind === 'tuft' || m.kind === 'scrub' || m.kind === 'rock' || m.kind === 'stream',
+  );
+  if (groundMarks.length) ground(g, groundMarks);
   for (const m of marks) {
     switch (m.kind) {
       case 'mountain':
@@ -409,11 +414,9 @@ export function drawMarks(marks: readonly Mark[], tier: Tier): GraphicsContext {
       case 'scrub':
       case 'rock':
       case 'stream':
-        groundMarks.push(m);
         break;
     }
   }
-  if (groundMarks.length) ground(g, groundMarks);
   return g;
 }
 

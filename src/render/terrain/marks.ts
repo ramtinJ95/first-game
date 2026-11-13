@@ -827,6 +827,9 @@ export function placeRelief(land: Land, rect: Rect, tier: Tier): Mark[] {
     ...(tier === 'wide'
       ? []
       : [...trees(land, rect, tier, salt), ...desert(land, rect, tier, salt)]),
+    // The ground goes with the close relief, whose chunks already hold drawings, so it
+    // adds no chunk to build and fade in where the land had none.
+    ...(tier === 'close' ? ground(land, rect) : []),
   ];
   return marks.sort((a, b) => footOf(a) - footOf(b));
 }
@@ -843,7 +846,7 @@ export function placeTexture(land: Land, rect: Rect): Mark[] {
 
 /** The fields, orchards, and tracks of the places that stand in `rect`. */
 export function placeFields(land: Land, rect: Rect): Mark[] {
-  return [...ground(land, rect), ...fields(land, rect)].sort((a, b) => footOf(a) - footOf(b));
+  return fields(land, rect).sort((a, b) => footOf(a) - footOf(b));
 }
 
 function footOf(mark: Mark): number {
