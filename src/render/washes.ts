@@ -10,13 +10,14 @@ export const WASH_CELL_KM = 4;
 export const WASH_FADE_KM = { clear: 3, full: 30 } as const;
 /**
  * A wash is laid this many times as strong over the desert, whose yellow ground would
- * otherwise swallow the colour, so each power's hue holds on the sand as on the paper.
+ * otherwise swallow the colour. A stronger gain held the hue but hid the sand and dunes
+ * under it, so the gain is only enough to tell whose the sand is.
  */
-export const WASH_DESERT_GAIN = 1.45;
+export const WASH_DESERT_GAIN = 1.15;
 /**
  * The gain rises over twice this many km across a desert's edge, as the desert's share of
- * the land this far round each cell. The deserts' outlines run in long straight lines,
- * and a gain that switched on at the outline drew them in the wash as a sharp step.
+ * the land this far round each cell. A gain that switched on at the outline drew the
+ * outline in the wash as a sharp step.
  */
 export const WASH_DESERT_BLEND_KM = 40;
 
