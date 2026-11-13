@@ -116,12 +116,26 @@ async function captureScenario(
   const ran = Promise.withResolvers<undefined>();
   const frames: { png: Buffer; atMs: number }[] = [];
   const firstLoad = page.waitForEvent('load', { timeout: 0 }).catch(() => undefined);
+  // A clip screenshot that is taken while the scenario resizes the page puts back the size
+  // it began with, so the page went back to its old size behind the scenario's back. A
+  // resize waits for the frame in hand, and no frame starts until the resize is done.
+  let inFlight: Promise<unknown> = Promise.resolve();
+  let resizing: Promise<unknown> = Promise.resolve();
+  const setViewportSize = page.setViewportSize.bind(page);
+  page.setViewportSize = (size) => {
+    const done = inFlight.then(() => setViewportSize(size));
+    resizing = done.catch(() => undefined);
+    return done;
+  };
   const recording = (async () => {
     await Promise.race([firstLoad, ran.promise]);
     const start = performance.now();
     while (!finished && performance.now() - start < CLIP_LIMIT_MS) {
       const atMs = performance.now() - start;
-      const png = await clipFrame(page);
+      await resizing;
+      const taking = clipFrame(page);
+      inFlight = taking;
+      const png = await taking;
       if (png) frames.push({ png, atMs });
       await delay(Math.max(0, FRAME_INTERVAL_MS - (performance.now() - start - atMs)));
     }

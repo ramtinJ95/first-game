@@ -1,4 +1,4 @@
-import { openGame, pause, untilDrawn } from '../../../e2e/support.ts';
+import { openGame, pause, resizeTo, untilDrawn } from '../../../e2e/support.ts';
 import { defineScenario } from '../scenario.ts';
 
 export default defineScenario({
@@ -13,8 +13,7 @@ export default defineScenario({
       { width: 1600, height: 900 },
       { width: 1024, height: 768 },
     ]) {
-      await page.setViewportSize(size);
-      await untilDrawn(page);
+      await resizeTo(page, size);
       await page.locator('canvas[data-terrain="ready"]').waitFor();
       await page.waitForTimeout(1500);
       await shot(

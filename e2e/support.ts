@@ -639,3 +639,54 @@ export async function clearCentre(page: Page) {
     return { x: (left + right) / 2, y: (top + window.innerHeight) / 2 };
   });
 }
+
+/**
+ * How many screen frames the page takes for each frame its map draws, over a few drawn
+ * frames, so a test can count a wait in the page's own frames on a slow or a fast GPU.
+ * The full drawing draws every frame. The test drawing draws only on a change.
+ */
+export function framePace(page: Page): Promise<number> {
+  return page.evaluate(
+    () =>
+      new Promise<number>((done) => {
+        const canvas = document.querySelector<HTMLCanvasElement>('canvas[data-renderer]');
+        const drawn = () => Number(canvas?.dataset['drawnFrames'] ?? 0);
+        const start = drawn();
+        let screens = 0;
+        const tick = () => {
+          screens += 1;
+          if (drawn() >= start + 4) done(screens / 4);
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+}
+
+/**
+ * Resizes the page and waits until the map has followed: the GPU has finished a frame of
+ * the window's size, which the screen then shows (`data-drawn-size` on the canvas). The
+ * canvas element takes the new size at once, so its own size says nothing. Gives how many
+ * screen frames that took. The capture's layout and resize scenarios share it.
+ */
+export async function resizeTo(page: Page, size: { width: number; height: number }) {
+  await page.evaluate(() => {
+    const counted = window as unknown as { resizeScreens: number };
+    counted.resizeScreens = 0;
+    const count = () => {
+      counted.resizeScreens += 1;
+      requestAnimationFrame(count);
+    };
+    requestAnimationFrame(count);
+  });
+  await page.setViewportSize(size);
+  await page.waitForFunction(
+    ({ width, height }) =>
+      window.innerWidth === width &&
+      window.innerHeight === height &&
+      document.querySelector<HTMLCanvasElement>('canvas[data-renderer]')?.dataset['drawnSize'] ===
+        `${width}x${height}`,
+    size,
+  );
+  return page.evaluate(() => (window as unknown as { resizeScreens: number }).resizeScreens);
+}

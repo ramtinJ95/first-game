@@ -1,6 +1,6 @@
 import { Container, Graphics, RenderTexture, Sprite, type Renderer } from 'pixi.js';
 import type { GameMap } from '../../sim/map.ts';
-import { fitTexture } from '../cached-texture.ts';
+import { coversView, fitTexture } from '../cached-texture.ts';
 import { visibleRect, type Camera, type Size } from '../camera.ts';
 import { BuildQueue, chunkKey, chunkRect, chunkRow, chunksNear, OVERHANG } from './chunks.ts';
 import { DETAIL, detailAlpha, type Band } from './detail.ts';
@@ -287,21 +287,16 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       const y = viewport.height / 2 - camera.centre.y * camera.scale;
       const width = Math.ceil(viewport.width) + 2 * CACHE_MARGIN;
       const height = Math.ceil(viewport.height) + 2 * CACHE_MARGIN;
-      const resized = texture.width !== width || texture.height !== height;
-      if (resized) {
-        texture = fitTexture(texture, width, height, renderer.resolution);
-        sprite.texture = texture;
-      }
       if (
         repaint ||
         lakesStale ||
         changed ||
-        resized ||
         !drawn ||
         drawn.scale !== camera.scale ||
-        Math.abs(x - drawn.x) > CACHE_MARGIN ||
-        Math.abs(y - drawn.y) > CACHE_MARGIN
+        !coversView(texture, x - drawn.x - CACHE_MARGIN, y - drawn.y - CACHE_MARGIN, viewport)
       ) {
+        texture = fitTexture(texture, width, height, renderer.resolution);
+        sprite.texture = texture;
         art.scale.set(camera.scale);
         art.position.set(x + CACHE_MARGIN, y + CACHE_MARGIN);
         renderer.render({ container: root, target: texture, clear: true });

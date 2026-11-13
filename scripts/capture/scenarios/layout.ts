@@ -1,5 +1,13 @@
 import { expect, type Page } from '@playwright/test';
-import { dropSave, openGame, pause, rome, startGame, untilDrawn } from '../../../e2e/support.ts';
+import {
+  dropSave,
+  openGame,
+  pause,
+  resizeTo,
+  rome,
+  startGame,
+  untilDrawn,
+} from '../../../e2e/support.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
 import { defineScenario } from '../scenario.ts';
 
@@ -13,15 +21,10 @@ async function load(page: Page, state: GameState) {
   await untilDrawn(page);
 }
 
-/**
- * Resizes the page and waits, as the resize scenario does, until the map has drawn at
- * the new size and the shot no longer holds the old one.
- */
+/** Resizes the page, waits until the map has followed, and lets its new chunks fade in. */
 async function resize(page: Page, size: { width: number; height: number }) {
-  await page.setViewportSize(size);
-  await untilDrawn(page);
+  await resizeTo(page, size);
   await page.locator('canvas[data-terrain="ready"]').waitFor();
-  await page.waitForTimeout(1500);
 }
 
 /** Rome's gold and food ran out. */

@@ -29,7 +29,7 @@ import {
   type Size,
 } from './camera.ts';
 import type { DrawOptions } from './draw-options.ts';
-import { fitTexture } from './cached-texture.ts';
+import { coversView, fitTexture } from './cached-texture.ts';
 import { drawColumnMark, drawnColumns, type DrawnColumn } from './columns.ts';
 import { createFog, fogCircles } from './fog.ts';
 import { LABEL_PRIORITY, placeLabels, type Box, type LabelRequest } from './labels.ts';
@@ -855,19 +855,17 @@ export async function createRenderer({
     if (Math.abs(Math.log(camera.scale / strokedAt)) > Math.log(RESTROKE_RATIO)) {
       restroke(camera.scale);
     }
-    const size = { width: width + 2 * SEA_MARGIN, height: height + 2 * SEA_MARGIN };
-    const resized = seaTexture.width !== size.width || seaTexture.height !== size.height;
-    if (resized) {
-      seaTexture = fitTexture(seaTexture, size.width, size.height, app.renderer.resolution);
-      seaSprite.texture = seaTexture;
-    }
     if (
-      resized ||
       !seaDrawn ||
       seaDrawn.scale !== camera.scale ||
-      Math.abs(x - seaDrawn.x) > SEA_MARGIN ||
-      Math.abs(y - seaDrawn.y) > SEA_MARGIN
+      !coversView(seaTexture, x - seaDrawn.x - SEA_MARGIN, y - seaDrawn.y - SEA_MARGIN, {
+        width,
+        height,
+      })
     ) {
+      const size = { width: width + 2 * SEA_MARGIN, height: height + 2 * SEA_MARGIN };
+      seaTexture = fitTexture(seaTexture, size.width, size.height, app.renderer.resolution);
+      seaSprite.texture = seaTexture;
       seaArt.scale.set(camera.scale);
       seaArt.position.set(x + SEA_MARGIN, y + SEA_MARGIN);
       app.renderer.render({ container: seaRoot, target: seaTexture, clear: true });
@@ -1020,6 +1018,15 @@ export async function createRenderer({
     },
     { signal, passive: false },
   );
+  /** The size of the frame the pacer waits on, which becomes `data-drawn-size` once it is done. */
+  let fenced: string | undefined;
+  let finishedFrames = 0;
+  /** Says on the canvas that the GPU has finished a frame of this size, and how many it has. */
+  const finished = (size: string) => {
+    finishedFrames += 1;
+    canvas.dataset['drawnSize'] = size;
+    canvas.dataset['drawnFrames'] = String(finishedFrames);
+  };
   const onResize = () => {
     camera = clampCamera(camera, viewport(), map);
     cameraMoved = true;
@@ -1038,6 +1045,8 @@ export async function createRenderer({
         laidOut = current;
         return false;
       }
+      if (fenced) finished(fenced);
+      fenced = undefined;
       const now = performance.now();
       let dirty = cameraMoved;
       if (current !== shown) {
@@ -1197,8 +1206,16 @@ export async function createRenderer({
       }
       if (layers.fog.visible) fog.paint();
       app.render();
-      if (waitForGpu) finish();
-      else pacer.rendered();
+      // The size of the last frame the GPU has finished, which the screen shows, so a test
+      // or a capture knows the map has followed a resize. The element's size says it at once.
+      const size = `${app.screen.width}x${app.screen.height}`;
+      if (waitForGpu) {
+        finish();
+        finished(size);
+      } else {
+        pacer.rendered();
+        fenced = size;
+      }
       canvas.dataset['drawnState'] = String(stateId(current));
       return true;
     },
