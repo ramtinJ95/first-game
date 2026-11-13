@@ -6,7 +6,7 @@ import { createRenderer, type Command } from '../render/renderer.ts';
 import { decideAll } from '../sim/ai/decide.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import { FATE_DAYS } from '../sim/cities.ts';
-import type { CityId } from '../sim/ids.ts';
+import type { CityId, SiegeId } from '../sim/ids.ts';
 import { parseMap, POWERS, type GameMap, type PowerId } from '../sim/map.ts';
 import { newGame, POWER_NAMES } from '../sim/new-game.ts';
 import type { Order } from '../sim/orders/orders.ts';
@@ -21,7 +21,14 @@ import type { Actions } from '../ui/actions.ts';
 import { GAME_NAME, type FrameActions } from '../ui/frame-actions.ts';
 import Hud from '../ui/Hud.svelte';
 import '../ui/panels.css';
-import { alertsOfDay, groupAlerts, type Alert } from './alerts.ts';
+import {
+  alertsOfDay,
+  groupAlerts,
+  sightingsOfDay,
+  weakSiegeNews,
+  type Alert,
+  type WeakSiege,
+} from './alerts.ts';
 import { createClock } from './clock.ts';
 import { planCommand, plannedRoutes, type CommandTarget } from './command.ts';
 import { fateChoices, type FateChoice } from './fates.ts';
@@ -132,6 +139,8 @@ function readPauseOnFate(): boolean {
 
 /** Cities the player chose to occupy, with the day each fell. A new game or a load forgets them. */
 let occupied = new Map<CityId, Day>();
+/** The player's sieges too weak to cut the food that the player has been told of. */
+let weakSieges = new Map<SiegeId, WeakSiege>();
 
 function fateOpen(state: DeepReadonly<GameState>, id: CityId): boolean {
   const city = state.cities[id];
@@ -199,13 +208,15 @@ const clock = createClock({
     if (last) showNotice(refusalText(clock.state, last.reason));
   },
   onDay(before, after, events) {
-    const news = groupAlerts(
-      alertsInSight(
-        alertsOfDay(before, after, events, occupied),
-        sightFor(before),
-        sightFor(after),
-      ),
-    );
+    const saw = sightFor(before);
+    const sees = sightFor(after);
+    const weak = weakSiegeNews(before, after, weakSieges);
+    weakSieges = weak.watched;
+    const news = groupAlerts([
+      ...alertsInSight(alertsOfDay(before, after, events, occupied), saw, sees),
+      ...sightingsOfDay(before, after, saw, sees, world),
+      ...weak.alerts,
+    ]);
     if (news.length > 0) alerts = [...news.reverse(), ...alerts].slice(0, ALERTS_KEPT);
     for (const point of turningPoints(before, after, world)) {
       if (point.kind === 'fate' && !pauseOnFate) continue;
@@ -370,6 +381,7 @@ function enter(state: GameState, { pause, focus }: { pause: boolean; focus: bool
   clock.load(state);
   alerts = [];
   occupied = new Map();
+  weakSieges = new Map();
   menu = undefined;
   stopAsked = false;
   const outcome = outcomeOf(state, world, state.player);

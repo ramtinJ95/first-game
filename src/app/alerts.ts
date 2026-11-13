@@ -2,16 +2,19 @@ import type { Pick } from '../render/pick.ts';
 import { earlyMusters, FATE_DAYS } from '../sim/cities.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { BattleSideOutcome, DayEvent } from '../sim/events.ts';
-import type { ArmyId, CityId, FactionId } from '../sim/ids.ts';
+import type { ArmyId, CityId, FactionId, SiegeId } from '../sim/ids.ts';
 import type { Army, ArmyActivity } from '../sim/state/army.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { Stores } from '../sim/state/faction.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
-import { RALLY_DISTANCE } from '../sim/systems/economy.ts';
+import { insideOutline, type Sight } from '../sim/sight.ts';
+import { menOf, RALLY_DISTANCE } from '../sim/systems/economy.ts';
 import type { Troop } from '../sim/troops.ts';
+import { BLOCKADE_ODDS } from '../sim/systems/sieges.ts';
 import { areAtWar } from '../sim/wars.ts';
-import { factionName, placeName, TROOP_NAMES } from './names.ts';
+import type { World } from '../sim/world/world.ts';
+import { factionName, placeName, TROOP_NAMES, whole } from './names.ts';
 
 export type AlertKind =
   | 'battleBegan'
@@ -26,7 +29,10 @@ export type AlertKind =
   | 'cityChangedOwner'
   | 'siegeBegan'
   | 'storeRanOut'
-  | 'fateLapsed';
+  | 'fateLapsed'
+  | 'enemySighted'
+  | 'siegeTooWeak'
+  | 'siegeBled';
 
 export interface Alert {
   readonly kind: AlertKind;
@@ -49,6 +55,12 @@ type State = DeepReadonly<GameState>;
  * fell. The rules have no order for it, so the page keeps the choice.
  */
 export type Occupied = ReadonlyMap<CityId, Day>;
+
+/**
+ * A march or a crossing heads for the player's land when it ends on one of the player's
+ * provinces or this close to one of the player's cities, in km, which takes in its harbour.
+ */
+export const THREAT_KM = 40;
 
 /** A march has reached its end when the army stands this close to its last waypoint, in km. */
 const ARRIVED_KM = 0.5;
@@ -209,6 +221,141 @@ export function alertsOfDay(
     }
   }
 
+  return alerts;
+}
+
+/** A siege of the player's that is too weak to cut the food, from the day it was told of. */
+export interface WeakSiege {
+  /** The besiegers' men on that day. */
+  readonly men: number;
+  /** Whether the player has been told that sallies killed a third of them. */
+  readonly bled: boolean;
+}
+
+/** The share of a weak siege's men that sallies kill before the player is warned again. */
+export const BLED_SHARE = 1 / 3;
+
+/**
+ * The news of the player's sieges too weak to cut the food (besiegers fewer than
+ * `BLOCKADE_ODDS` times the garrison): one alert on the day a siege is weak, and one
+ * when the sallies have killed `BLED_SHARE` of its men since. `watched` is what was
+ * told before, which the page keeps, and the result gives it for the next day.
+ */
+export function weakSiegeNews(
+  before: State,
+  after: State,
+  watched: ReadonlyMap<SiegeId, WeakSiege>,
+): { alerts: Alert[]; watched: Map<SiegeId, WeakSiege> } {
+  const player = after.player;
+  const alerts: Alert[] = [];
+  const next = new Map<SiegeId, WeakSiege>();
+  for (const siege of Object.values(after.sieges)) {
+    const city = after.cities[siege.city];
+    const armies = siege.besiegers.flatMap((id) => after.armies[id] ?? []);
+    if (!city || !armies.some((army) => army.owner === player)) continue;
+    const men = armies.reduce((sum, army) => sum + menOf(after, army), 0);
+    if (men >= BLOCKADE_ODDS * city.garrison) continue;
+    const focus = {
+      at: city.position,
+      select: { kind: 'province', province: city.province },
+    } as const;
+    const was = watched.get(siege.id);
+    if (!was) {
+      alerts.push({
+        kind: 'siegeTooWeak',
+        day: before.day,
+        tone: 'bad',
+        text: `Your siege of ${city.name} is too weak to starve it: ${whole(men)} men against a garrison of ${whole(city.garrison)}, whose sallies kill besiegers each day`,
+        focus,
+      });
+      next.set(siege.id, { men, bled: false });
+      continue;
+    }
+    const bled = !was.bled && men <= was.men * (1 - BLED_SHARE);
+    if (bled) {
+      alerts.push({
+        kind: 'siegeBled',
+        day: before.day,
+        tone: 'bad',
+        text: `Sallies from ${city.name} have killed a third of your besiegers: ${whole(men)} of ${whole(was.men)} men are left`,
+        focus,
+      });
+    }
+    next.set(siege.id, { men: was.men, bled: was.bled || bled });
+  }
+  return { alerts, watched: next };
+}
+
+/**
+ * The enemies that came into the player's sight today on their way to the player's land:
+ * a convoy or a marching army of a faction at war with the player, which the player did
+ * not see the day before. Each is one alert with its men, and with the place it heads for
+ * when the player sees that place.
+ */
+export function sightingsOfDay(
+  before: State,
+  after: State,
+  saw: Sight,
+  sees: Sight,
+  world: World,
+): Alert[] {
+  const player = after.player;
+  const day = before.day;
+  const held = new Set<string>(
+    Object.values(after.provinces)
+      .filter((province) => after.cities[province.city]?.owner === player)
+      .map((province) => province.id),
+  );
+  const own = world.map.provinces.filter((province) => held.has(province.id));
+  const ownCities = Object.values(after.cities).filter((city) => city.owner === player);
+  const threatens = (to: MapPoint) =>
+    ownCities.some((city) => distanceKm(city.position, to) <= THREAT_KM) ||
+    own.some((province) => insideOutline(province.outline, to));
+  const target = (to: MapPoint) => {
+    if (!sees.sees(to)) return 'your land';
+    const city = [...ownCities].sort(
+      (a, b) => distanceKm(a.position, to) - distanceKm(b.position, to),
+    )[0];
+    return city && distanceKm(city.position, to) <= THREAT_KM ? city.name : 'your land';
+  };
+  const alerts: Alert[] = [];
+
+  for (const convoy of Object.values(after.convoys)) {
+    if (!sees.convoys.has(convoy.id) || saw.convoys.has(convoy.id)) continue;
+    if (!areAtWar(after, convoy.owner, player)) continue;
+    const to = convoy.waypoints[convoy.waypoints.length - 1];
+    if (!to || !threatens(to)) continue;
+    const men = convoy.armies.reduce((sum, id) => {
+      const army = after.armies[id];
+      return sum + (army ? menOf(after, army) : 0);
+    }, 0);
+    const first = convoy.armies[0];
+    alerts.push({
+      kind: 'enemySighted',
+      day,
+      tone: 'bad',
+      text: `A fleet of ${factionName(after, convoy.owner)} with ${whole(men)} men is sailing for ${target(to)}`,
+      focus: {
+        at: convoy.position,
+        ...(first && { select: { kind: 'army', army: first } as const }),
+      },
+    });
+  }
+
+  for (const army of Object.values(after.armies)) {
+    if (army.activity.kind !== 'marching') continue;
+    if (!sees.armies.has(army.id) || saw.armies.has(army.id)) continue;
+    if (!areAtWar(after, army.owner, player)) continue;
+    const to = army.activity.waypoints[army.activity.waypoints.length - 1];
+    if (!to || !threatens(to)) continue;
+    alerts.push({
+      kind: 'enemySighted',
+      day,
+      tone: 'bad',
+      text: `An army of ${factionName(after, army.owner)} with ${whole(menOf(after, army))} men is marching on ${target(to)}`,
+      focus: { at: army.activity.position, select: { kind: 'army', army: army.id } },
+    });
+  }
   return alerts;
 }
 
