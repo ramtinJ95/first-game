@@ -340,7 +340,14 @@ test.describe('the panels', () => {
       fallenTo(state, 'mediolanum');
       await pause(page);
       await load(page, state);
+      // Occupy would settle the fate, so the prompt is turned off and the save loaded
+      // again, which leaves the choice to the city panel.
+      await page
+        .getByTestId('fate-prompt')
+        .getByRole('checkbox', { name: 'Pause and ask when a city falls to you' })
+        .uncheck();
       await page.getByTestId('fate-occupy').click();
+      await load(page, state);
       const view = camera(page);
       const at = view.city('mediolanum');
       await page.mouse.click(at.x, at.y);

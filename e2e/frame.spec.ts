@@ -405,9 +405,8 @@ test.describe('the frame round the game', () => {
       await expect(panel.getByTestId('city-unrest')).toHaveText(
         `Unrest · ${unrest - (now - asked)} days left`,
       );
-      await expect(panel.getByText('Fate of the city', { exact: false })).toHaveCount(
-        fate === 'occupy' ? 1 : 0,
-      );
+      // Each choice settles the fate, Occupy too, so the panel no longer asks.
+      await expect(panel.getByText('Fate of the city', { exact: false })).toHaveCount(0);
     });
   }
 

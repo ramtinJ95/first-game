@@ -390,7 +390,7 @@ for (const viewport of [
 
       const old = alerts
         .getByRole('button')
-        .filter({ hasText: /^Day 2\b/ })
+        .filter({ hasText: /^Year 1, day 1\b/ })
         .first();
       expect(await legibility(old.locator('.text'))).toBeGreaterThanOrEqual(4.5);
     });
