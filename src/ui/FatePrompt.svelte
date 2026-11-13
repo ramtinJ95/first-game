@@ -24,17 +24,21 @@
   const city = $derived(game.cities[fate.city]);
 
   function now(choice: FateChoice): string {
-    const lines: string[] = [];
-    if (choice.gold > 0) lines.push(`+${whole(choice.gold)} gold`);
-    if (choice.manpower > 0) lines.push(`+${whole(choice.manpower)} manpower`);
-    if (choice.peopleMoved > 0) lines.push(`${whole(choice.peopleMoved)} captives to your capital`);
-    if (choice.peopleLost > 0) lines.push(`−${whole(choice.peopleLost)} people`);
-    if (choice.buildingsKept.length > 0)
-      lines.push(`keeps its ${buildingList(choice.buildingsKept)}`);
-    if (choice.buildingsLost.length > 0) {
-      lines.push(`destroys its ${buildingList(choice.buildingsLost)}`);
+    const gains: string[] = [];
+    if (choice.gold > 0) gains.push(`+${whole(choice.gold)} gold`);
+    if (choice.manpower > 0) gains.push(`+${whole(choice.manpower)} manpower`);
+    if (choice.peopleMoved > 0) gains.push(`${whole(choice.peopleMoved)} captives to your capital`);
+    if (choice.peopleLost > 0) gains.push(`−${whole(choice.peopleLost)} people`);
+    const sentences = [
+      gains.length > 0 ? gains.join(', ') : 'Nothing, and the city keeps its people',
+    ];
+    if (choice.buildingsKept.length > 0) {
+      sentences.push(`Keeps its ${buildingList(choice.buildingsKept)}`);
     }
-    return lines.length > 0 ? lines.join(', ') : 'Nothing, and the city keeps its people';
+    if (choice.buildingsLost.length > 0) {
+      sentences.push(`Destroys its ${buildingList(choice.buildingsLost)}`);
+    }
+    return sentences.join('. ');
   }
 </script>
 
