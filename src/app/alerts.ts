@@ -2,7 +2,7 @@ import type { Pick } from '../render/pick.ts';
 import { earlyMusters, FATE_DAYS } from '../sim/cities.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { BattleSideOutcome, DayEvent } from '../sim/events.ts';
-import type { ArmyId, FactionId } from '../sim/ids.ts';
+import type { ArmyId, CityId, FactionId } from '../sim/ids.ts';
 import type { Army, ArmyActivity } from '../sim/state/army.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { Stores } from '../sim/state/faction.ts';
@@ -44,6 +44,12 @@ export interface Alert {
 
 type State = DeepReadonly<GameState>;
 
+/**
+ * The cities whose fate the player settled by choosing to occupy them, with the day each
+ * fell. The rules have no order for it, so the page keeps the choice.
+ */
+export type Occupied = ReadonlyMap<CityId, Day>;
+
 /** A march has reached its end when the army stands this close to its last waypoint, in km. */
 const ARRIVED_KM = 0.5;
 
@@ -63,9 +69,11 @@ export function alertsOfDay(
   before: State,
   after: State,
   events: readonly DeepReadonly<DayEvent>[],
+  occupied: Occupied = new Map(),
 ): Alert[] {
   const player = after.player;
-  const day = after.day;
+  // The day played, which the rules also stamp on what happened in it, such as a city's fall.
+  const day = before.day;
   const alerts: Alert[] = [];
   const add = (alert: Omit<Alert, 'day'>) => alerts.push({ ...alert, day });
 
@@ -175,6 +183,7 @@ export function alertsOfDay(
     if (city.owner !== player || city.fellOn === null) continue;
     if (after.day - city.fellOn !== FATE_DAYS + 1) continue;
     if (before.cities[city.id]?.fellOn !== city.fellOn) continue;
+    if (occupied.get(city.id) === city.fellOn) continue;
     add({
       kind: 'fateLapsed',
       tone: 'neutral',

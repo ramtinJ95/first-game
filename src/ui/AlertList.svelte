@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Alert } from '../app/alerts.ts';
+  import { dateText } from '../app/names.ts';
   import type { Actions } from './actions.ts';
 
   let { alerts, day, actions }: { alerts: readonly Alert[]; day: number; actions: Actions } =
@@ -20,7 +21,7 @@
           disabled={!alert.focus}
           onclick={() => actions.openAlert(alert)}
         >
-          <span class="day">Day {alert.day}</span>
+          <span class="day">{dateText(alert.day)}</span>
           <span class="text">{alert.text}</span>
           {#if alert.count && alert.count > 1}
             <span class="count" data-testid="alert-count">×{alert.count}</span>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Occupied } from '../app/alerts.ts';
   import { factionName, TROOP_NAMES, whole } from '../app/names.ts';
   import { ENSLAVE, FATE_DAYS, SACK } from '../sim/cities.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
@@ -22,6 +23,7 @@
     rankText,
     sackText,
     signed,
+    stormText,
     weakSiegeText,
   } from './describe.ts';
   import WarStatus from './WarStatus.svelte';
@@ -32,6 +34,7 @@
     city,
     sight,
     pending,
+    occupied,
     actions,
   }: {
     game: DeepReadonly<GameState>;
@@ -39,6 +42,7 @@
     city: DeepReadonly<City>;
     sight: Sight;
     pending: readonly Order[];
+    occupied: Occupied;
     actions: Actions;
   } = $props();
 
@@ -60,6 +64,7 @@
     siege?.besiegers.flatMap((id) => (sight.armies.has(id) ? (game.armies[id] ?? []) : [])) ?? [],
   );
   const weak = $derived(siege && weakSiegeText(game, sight, siege));
+  const stormed = $derived(storming && siege ? stormText(game, siege) : undefined);
   const sacked = $derived(sackText(game, city));
   const canStorm = $derived(besiegers.some((army) => army.owner === game.player));
   const ordered = $derived(
@@ -106,7 +111,9 @@
   const to = $derived(destinations.find((other) => other.id === chosen)?.id ?? destinations[0]?.id);
   const leaving = $derived(Math.floor(city.population * share));
   const fateDaysLeft = $derived(
-    own && city.fellOn !== null ? FATE_DAYS - (game.day - city.fellOn) : -1,
+    own && city.fellOn !== null && occupied.get(city.id) !== city.fellOn
+      ? FATE_DAYS - (game.day - city.fellOn)
+      : -1,
   );
 </script>
 
@@ -169,6 +176,7 @@
       <p data-testid="city-weak-siege">{weak}</p>
     {/if}
     {#if canStorm}
+      {#if stormed}<p data-testid="storm-odds">{stormed}</p>{/if}
       <div class="row">
         {#if storming}
           <span>Storm the walls today?</span>
@@ -195,6 +203,9 @@
   {#if fateDaysLeft >= 0}
     <h3>Fate of the city · {fateDaysLeft} days to choose</h3>
     <div class="row">
+      <button type="button" data-testid="city-occupy" onclick={() => actions.occupy(city.id)}
+        >Occupy</button
+      >
       <button
         type="button"
         onclick={() => actions.issue({ kind: 'sack', faction: game.player, city: city.id })}
@@ -206,7 +217,7 @@
         >Enslave {whole(city.population * ENSLAVE.populationShare)} people</button
       >
     </div>
-    <p class="muted">Leave both to occupy the city as it stands.</p>
+    <p class="muted">With no choice the city is occupied as it stands when the days run out.</p>
   {/if}
 
   {#if raising.length > 0 || own}

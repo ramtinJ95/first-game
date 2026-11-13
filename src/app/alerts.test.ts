@@ -60,7 +60,7 @@ describe('alertsOfDay', () => {
     expect(ofKind(alerts, 'battleBegan')).toEqual([
       {
         kind: 'battleBegan',
-        day: 2,
+        day: 1,
         tone: 'neutral',
         text: 'Battle at Roma against Carthage',
         focus: { at: battle?.position, select: { kind: 'battle', battle: battle?.id } },
@@ -202,7 +202,7 @@ describe('alertsOfDay', () => {
       () => true,
     );
     expect(declared.alerts).toEqual([
-      { kind: 'warDeclared', day: 2, tone: 'bad', text: 'Carthage declared war on you' },
+      { kind: 'warDeclared', day: 1, tone: 'bad', text: 'Carthage declared war on you' },
     ]);
     const declaring = play(
       buildFixture(),
@@ -258,7 +258,7 @@ describe('alertsOfDay', () => {
       return told.map((a) => [a.day, a.tone, a.text]);
     };
     expect(deserting({ x: 2164.9, y: 2895.1 })).toEqual([
-      [2, 'neutral', expect.stringMatching(/^\d+ men deserted an army of Carthage at Carthago$/)],
+      [1, 'neutral', expect.stringMatching(/^\d+ men deserted an army of Carthage at Carthago$/)],
     ]);
     const roma = buildFixture().cities[f.roma]?.position;
     if (!roma) throw new Error('fixture changed');
@@ -275,7 +275,7 @@ describe('alertsOfDay', () => {
     const { alerts } = play(state, [], () => false, 5);
     const deserted = ofKind(alerts, 'armyDeserted');
     expect(deserted.map((a) => [a.day, a.focus?.select])).toEqual([
-      [2, { kind: 'army', army: f.romanArmy }],
+      [1, { kind: 'army', army: f.romanArmy }],
     ]);
     expect(deserted[0]?.text).toMatch(/^\d+ men deserted your army at Roma$/);
   });
@@ -298,7 +298,7 @@ describe('alertsOfDay', () => {
     const recruit: Order = { kind: 'recruit', faction: f.rome, city: f.roma, troop: 'skirmishers' };
     const { alerts } = play(buildFixture(), [recruit], () => false, 12);
     const mustered = ofKind(alerts, 'formationMustered');
-    expect(mustered.map((a) => [a.text, a.day])).toEqual([['Skirmishers mustered at Roma', 12]]);
+    expect(mustered.map((a) => [a.text, a.day])).toEqual([['Skirmishers mustered at Roma', 11]]);
     expect(mustered[0]?.focus?.select).toEqual({ kind: 'army', army: f.romanArmy });
   });
 
@@ -412,7 +412,7 @@ describe('alertsOfDay', () => {
     expect(alertsOfDay(before, after, [])).toEqual([
       {
         kind: 'cityChangedOwner',
-        day: 2,
+        day: 1,
         tone: 'bad',
         text: 'Capua fell to Carthage',
         focus: { at: capua.position, select: { kind: 'province', province: f.campania } },
@@ -433,6 +433,22 @@ describe('alertsOfDay', () => {
     const { alerts } = play(state, [], () => true);
     expect(ofKind(alerts, 'siegeBegan').map((a) => [a.text, a.focus?.select])).toEqual([
       ['Your army besieges Syracusae', { kind: 'province', province: f.sicilia }],
+    ]);
+  });
+
+  it("dates a city's fall on the day the rules record it, the day the defeat screen names", () => {
+    const state = buildFixture();
+    atWar(state, f.rome, f.syracusaeFaction);
+    const roman = state.armies[f.romanArmy];
+    const syracusae = state.cities[f.syracusae];
+    if (!roman || !syracusae) throw new Error('fixture changed');
+    roman.activity = { kind: 'idle', position: { ...syracusae.position } };
+    syracusae.garrison = 0;
+    const { state: next, events } = tick(state, [], world);
+    const fell = next.cities[f.syracusae]?.fellOn;
+    expect(fell).toBe(state.day);
+    expect(ofKind(alertsOfDay(state, next, events), 'cityChangedOwner').map((a) => a.day)).toEqual([
+      fell,
     ]);
   });
 
@@ -457,7 +473,7 @@ describe('alertsOfDay', () => {
     expect(ofKind(alertsOfDay(before, after, []), 'storeRanOut')).toEqual([]);
   });
 
-  it('tells once that a captured city is occupied when its days to choose a fate pass, and not after a sack', () => {
+  it('tells once that a captured city is occupied when its days to choose a fate pass, and not after a sack or a choice to occupy', () => {
     const fallen = () => {
       const state = buildFixture();
       const roman = state.armies[f.romanArmy];
@@ -468,9 +484,19 @@ describe('alertsOfDay', () => {
       syracusae.fellOn = state.day;
       return state;
     };
+    const occupiedOn = new Map([[f.syracusae, fallen().day]]);
+    const chosen = fallen();
+    const told: Alert[] = [];
+    let at = chosen;
+    for (let i = 0; i < FATE_DAYS + 5; i++) {
+      const { state: next, events } = tick(at, [], world);
+      told.push(...alertsOfDay(at, next, events, occupiedOn));
+      at = next;
+    }
+    expect(ofKind(told, 'fateLapsed')).toEqual([]);
     const left = play(fallen(), [], () => false, FATE_DAYS + 5);
     expect(ofKind(left.alerts, 'fateLapsed').map((a) => [a.day, a.text])).toEqual([
-      [FATE_DAYS + 2, 'No fate was chosen for Syracusae: you occupy it as it stands'],
+      [FATE_DAYS + 1, 'No fate was chosen for Syracusae: you occupy it as it stands'],
     ]);
     const sacked = play(
       fallen(),

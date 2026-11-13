@@ -1,8 +1,10 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { CityId } from '../sim/ids.ts';
 import { executeOrder, type Order } from '../sim/orders/orders.ts';
+import type { Stores } from '../sim/state/faction.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { World } from '../sim/world/world.ts';
+import { cityBalance, signed } from '../ui/describe.ts';
 
 /** One way to settle a captured city, with what it gives and costs today. */
 export interface FateChoice {
@@ -16,6 +18,8 @@ export interface FateChoice {
   /** Captives who settle in the player's other cities. */
   readonly peopleMoved: number;
   readonly unrestDays: number;
+  /** What the city then adds to the player's stores each day, by the economy's own balance. */
+  readonly daily: Stores;
   /** Why the rules refuse it today, or undefined. */
   readonly refusal: string | undefined;
 }
@@ -41,6 +45,7 @@ export function fateChoices(
     peopleLost: 0,
     peopleMoved: 0,
     unrestDays: city.unrestDays,
+    daily: cityBalance(state, city),
     refusal: undefined,
   };
   const others = (s: DeepReadonly<GameState>) =>
@@ -65,8 +70,26 @@ export function fateChoices(
       peopleLost: city.population - after.population,
       peopleMoved: others(copy) - others(state),
       unrestDays: after.unrestDays,
+      daily: cityBalance(copy, after),
       refusal: undefined,
     };
   });
   return [occupy, ...tried];
+}
+
+const STORE_ORDER = ['gold', 'food', 'manpower'] as const;
+
+/** What a city adds to the stores each day after a fate, such as "+2.1 gold, −0.4 food a day". */
+export function dailyText(daily: Stores): string {
+  return `${STORE_ORDER.map((store) => `${signed(daily[store])} ${store}`).join(', ')} a day`;
+}
+
+/** What a fate takes from the city's daily yield against occupying it, or nothing. */
+export function forgoneText(choice: FateChoice, occupy: FateChoice): string | undefined {
+  const lost = STORE_ORDER.filter((store) => choice.daily[store] < occupy.daily[store] - 0.05);
+  if (lost.length === 0) return undefined;
+  const parts = lost.map(
+    (store) => `${signed(choice.daily[store] - occupy.daily[store])} ${store}`,
+  );
+  return `${parts.join(', ')} a day against occupying`;
 }

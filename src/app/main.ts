@@ -13,6 +13,7 @@ import type { Order } from '../sim/orders/orders.ts';
 import { outcomeOf, standingOf } from '../sim/outcome.ts';
 import { loadGame, saveGame } from '../sim/save.ts';
 import { sightOf, type Sight } from '../sim/sight.ts';
+import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { buildWorld } from '../sim/world/world.ts';
@@ -129,14 +130,25 @@ function readPauseOnFate(): boolean {
   }
 }
 
+/** Cities the player chose to occupy, with the day each fell. A new game or a load forgets them. */
+let occupied = new Map<CityId, Day>();
+
 function fateOpen(state: DeepReadonly<GameState>, id: CityId): boolean {
   const city = state.cities[id];
   return (
     !!city &&
     city.owner === state.player &&
     city.fellOn !== null &&
+    occupied.get(id) !== city.fellOn &&
     state.day - city.fellOn <= FATE_DAYS
   );
+}
+
+/** Settles the fate of a city the player captured by occupying it as it stands. */
+function occupy(id: CityId) {
+  const city = clock.state.cities[id];
+  if (!city || city.fellOn === null) return;
+  occupied = new Map(occupied).set(id, city.fellOn);
 }
 
 /** Writes the day to a browser slot, or tells the player why the browser refused it. */
@@ -188,7 +200,11 @@ const clock = createClock({
   },
   onDay(before, after, events) {
     const news = groupAlerts(
-      alertsInSight(alertsOfDay(before, after, events), sightFor(before), sightFor(after)),
+      alertsInSight(
+        alertsOfDay(before, after, events, occupied),
+        sightFor(before),
+        sightFor(after),
+      ),
     );
     if (news.length > 0) alerts = [...news.reverse(), ...alerts].slice(0, ALERTS_KEPT);
     for (const point of turningPoints(before, after, world)) {
@@ -229,6 +245,7 @@ const view = createView(
     notice,
     menu,
     sight: sightFor(clock.state),
+    occupied,
     frame: {
       powers,
       modal: shownModal(),
@@ -352,6 +369,7 @@ function homeOf(state: DeepReadonly<GameState>): MapPoint | undefined {
 function enter(state: GameState, { pause, focus }: { pause: boolean; focus: boolean }) {
   clock.load(state);
   alerts = [];
+  occupied = new Map();
   menu = undefined;
   stopAsked = false;
   const outcome = outcomeOf(state, world, state.player);
@@ -434,7 +452,9 @@ const frame: FrameActions = {
     view.refresh();
   },
   decideFate(order) {
+    const front = modals[0];
     if (order) clock.issue(order);
+    else if (front?.kind === 'fate') occupy(front.city);
     closeModal();
   },
   setPauseOnFate(on) {
@@ -518,6 +538,15 @@ const actions: Actions = {
   },
   closeMenu() {
     menu = undefined;
+    view.refresh();
+  },
+  occupy(city) {
+    occupy(city);
+    const front = modals[0];
+    if (front?.kind === 'fate' && front.city === city) {
+      closeModal();
+      return;
+    }
     view.refresh();
   },
 };

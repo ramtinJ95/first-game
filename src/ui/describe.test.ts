@@ -4,7 +4,7 @@ import { changeCityOwner } from '../sim/cities.ts';
 import { buildFixture, FIXTURE as f, fixtureWorld } from '../sim/fixture.ts';
 import type { ArmyId, BattleId, CityId, ConvoyId, FactionId, SiegeId } from '../sim/ids.ts';
 import { newGame } from '../sim/new-game.ts';
-import type { Order } from '../sim/orders/orders.ts';
+import { executeOrder, type Order } from '../sim/orders/orders.ts';
 import { sightOf } from '../sim/sight.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
@@ -15,6 +15,7 @@ import {
   cityFoodText,
   sackText,
   storeNote,
+  stormText,
   weakSiegeText,
   ordersWaitingText,
   overviewOf,
@@ -409,5 +410,38 @@ describe('weakSiegeText', () => {
   it('says nothing of a siege strong enough to cut the food', () => {
     const { state, siege } = siegeOfSyracusae(3000);
     expect(weakSiegeText(state, sightOf(state, world, f.rome), siege)).toBeUndefined();
+  });
+
+  it('gives the odds of a storm as often as storms played on many days take the city, and what one costs', () => {
+    for (const men of [3000, 4500, 6000]) {
+      const { state, siege } = siegeOfSyracusae(men);
+      const text = stormText(state, siege) ?? '';
+      const percent = /takes Syracusae (\d+) times in 100/.exec(text)?.[1];
+      const cost = Number(/cost ([\d,]+) of your/.exec(text)?.[1]?.replace(/,/g, ''));
+      const tries = 400;
+      let taken = 0;
+      let lost = 0;
+      for (let i = 0; i < tries; i++) {
+        const copy = structuredClone(state) as GameState;
+        copy.rng = (i * 2654435761) >>> 0;
+        const romans = () =>
+          Object.values(copy.formations)
+            .filter((formation) => formation.army === f.romanArmy)
+            .reduce((sum, formation) => sum + formation.men, 0);
+        const had = romans();
+        executeOrder(copy, { kind: 'storm', faction: f.rome, city: f.syracusae }, world);
+        const won = copy.cities[f.syracusae]?.owner === f.rome;
+        if (won) taken += 1;
+        // The winners leave men of their own as the new garrison, which the storm did not kill.
+        lost += had - romans() - (won ? (copy.cities[f.syracusae]?.garrison ?? 0) : 0);
+      }
+      if (percent === undefined) {
+        expect(text, `${men} men`).toMatch(/cannot take|for certain/);
+        expect(taken === 0 || taken === tries, `${men} men`).toBe(true);
+      } else {
+        expect(taken / tries, `${men} men: ${text}`).toBeCloseTo(Number(percent) / 100, 1);
+      }
+      expect(lost / tries / cost, `${men} men`).toBeCloseTo(1, 1);
+    }
   });
 });

@@ -74,7 +74,15 @@
       {/if}
       {#if city}
         {#key city.id}
-          <CityPanel {game} {map} {city} {sight} pending={view.current.pending} {actions} />
+          <CityPanel
+            {game}
+            {map}
+            {city}
+            {sight}
+            pending={view.current.pending}
+            occupied={view.current.occupied}
+            {actions}
+          />
         {/key}
       {/if}
       {#each battles as battle (battle.id)}

@@ -32,6 +32,7 @@ import {
   MANPOWER_SHARE,
   menOf,
 } from '../sim/systems/economy.ts';
+import { stormOdds } from '../sim/ai/situation.ts';
 import { BLOCKADE_ODDS } from '../sim/systems/sieges.ts';
 import { areAtWar } from '../sim/wars.ts';
 import { distance } from '../sim/world/find-path.ts';
@@ -485,4 +486,27 @@ export function weakSiegeText(
   if (men >= BLOCKADE_ODDS * city.garrison) return undefined;
   const needed = Math.ceil(BLOCKADE_ODDS * city.garrison) - men;
   return `Too few to starve ${city.name}: ${whole(men)} besiegers against a garrison of ${whole(city.garrison)}. The food does not fall, and sallies cut down besiegers each day. ${whole(needed)} more men would cut the food.`;
+}
+
+/**
+ * What a storm of the city today would do, by the storm rule's own odds (`stormOdds`): the
+ * chance that the player's besiegers take it, and the men they are expected to lose either way.
+ */
+export function stormText(state: State, siege: DeepReadonly<Siege>): string | undefined {
+  const city = state.cities[siege.city];
+  if (!city) return undefined;
+  const stormers = siege.besiegers.flatMap((id) => {
+    const army = state.armies[id];
+    return army?.owner === state.player ? [army] : [];
+  });
+  if (stormers.length === 0) return undefined;
+  const { chance, loss, men } = stormOdds(state, city, stormers);
+  const percent = Math.round(chance * 100);
+  const odds =
+    chance <= 0
+      ? `A storm cannot take ${city.name} today`
+      : chance >= 1
+        ? `A storm takes ${city.name} for certain`
+        : `A storm takes ${city.name} ${percent === 0 ? 'less than 1' : percent === 100 ? 'more than 99' : percent} times in 100`;
+  return `${odds}. It is expected to cost ${whole(loss)} of your ${whole(men)} men, whether it takes the city or not.`;
 }
