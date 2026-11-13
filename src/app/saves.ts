@@ -55,6 +55,7 @@ export function writeSaved(
   slot: Slot,
   state: DeepReadonly<GameState>,
   savedAt: number,
+  page?: unknown,
 ): Saved | string {
   if (!storage) return 'This browser keeps no storage for the page.';
   const saved: Saved = {
@@ -62,7 +63,7 @@ export function writeSaved(
     savedAt,
     day: state.day,
     realm: state.factions[state.player]?.name ?? state.player,
-    text: saveGame(state),
+    text: saveGame(state, page),
   };
   try {
     storage.setItem(key(slot), JSON.stringify({ ...saved, slot: undefined }));

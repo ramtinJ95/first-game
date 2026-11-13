@@ -6,6 +6,7 @@
   import AlertList from './AlertList.svelte';
   import ArmyPanel from './ArmyPanel.svelte';
   import BattlePanel from './BattlePanel.svelte';
+  import ChroniclePanel from './ChroniclePanel.svelte';
   import CityPanel from './CityPanel.svelte';
   import CommandMenu from './CommandMenu.svelte';
   import { shownBattles } from './describe.ts';
@@ -26,7 +27,8 @@
     frame,
   }: { view: View; map: DeepReadonly<GameMap>; actions: Actions; frame: FrameActions } = $props();
 
-  let overview = $state(false);
+  /** The latest alerts the corner shows. The chronicle keeps them all. */
+  const ALERTS_SHOWN = 5;
   const modal = $derived(view.current.frame.modal);
 
   const game = $derived(view.current.state);
@@ -62,11 +64,13 @@
   <!-- The grid spans the map, so it lets clicks through and only the panels take them. -->
   <div class="hud">
     <div class="slot top">
-      <TopBar {view} {actions} {frame} {overview} toggleOverview={() => (overview = !overview)} />
+      <TopBar {view} {actions} {frame} />
     </div>
     <div class="slot main">
-      {#if overview}
+      {#if view.current.panel === 'overview'}
         <OverviewPanel {game} {sight} {actions} />
+      {:else if view.current.panel === 'chronicle'}
+        <ChroniclePanel alerts={view.current.alerts} {actions} />
       {/if}
     </div>
     <aside class="side" aria-label="Selection">
@@ -91,7 +95,7 @@
       {/each}
     </aside>
     <div class="slot alerts">
-      <AlertList alerts={view.current.alerts} day={game.day} {actions} />
+      <AlertList alerts={view.current.alerts.slice(0, ALERTS_SHOWN)} day={game.day} {actions} />
     </div>
   </div>
   {#if !modal}
@@ -184,6 +188,11 @@
     .side {
       align-self: end;
       max-height: 42vh;
+    }
+
+    /* The open sheet takes the bottom of a phone. The latest news waits in the chronicle. */
+    .hud:has(.side > *) .alerts {
+      display: none;
     }
   }
 </style>

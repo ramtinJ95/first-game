@@ -47,8 +47,8 @@
         <li>
           <button type="button" class="pick" onclick={() => actions.show(row.pick, row.at)}>
             <span class="swatch" style:background={colour}></span>
-            <span class="who">{row.activity}</span>
-            <span class="what">{whole(row.men)} men</span>
+            <span class="who">{row.name} <span class="count">{whole(row.men)} men</span></span>
+            <span class="what">{row.activity}</span>
           </button>
         </li>
       {/each}

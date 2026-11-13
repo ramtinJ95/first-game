@@ -22,7 +22,10 @@
           onclick={() => actions.openAlert(alert)}
         >
           <span class="day">{dateText(alert.day)}</span>
-          <span class="text">{alert.text}</span>
+          <span class="text"
+            >{#if alert.paused}<span class="paused" data-testid="alert-paused">Paused</span
+              >{/if}{alert.text}</span
+          >
           {#if alert.count && alert.count > 1}
             <span class="count" data-testid="alert-count">×{alert.count}</span>
           {/if}
@@ -83,6 +86,15 @@
     margin-left: auto;
     font-weight: bold;
     font-variant-numeric: tabular-nums;
+  }
+
+  .paused {
+    margin-right: 6px;
+    padding: 0 4px;
+    font-size: 11px;
+    color: var(--paper-solid);
+    text-transform: uppercase;
+    background: var(--bad);
   }
 
   .fresh .day {

@@ -120,6 +120,10 @@ export interface Renderer {
    * part of the map they leave clear.
    */
   focus(point: MapPoint, covered?: Insets): void;
+  /** Where the view looks now, which a save keeps. */
+  camera(): Camera;
+  /** Puts the view where a save left it, kept inside the map. */
+  lookAt(camera: Camera): void;
   destroy(): void;
 }
 
@@ -952,6 +956,25 @@ export async function createRenderer({
     });
   };
   const bannersShown = () => (scene && scene.height > 0 ? [] : armies);
+  /**
+   * The army whose drawn figures stand round the screen point, reaching up a man's
+   * height over their heads for the standard, the last drawn first.
+   */
+  const armyBlockAt = (screen: MapPoint): ArmyId | undefined => {
+    if (!scene || scene.height === 0) return undefined;
+    const { x, y } = sceneShift();
+    const boxes = [...scene.armyBoxes];
+    for (let i = boxes.length - 1; i >= 0; i--) {
+      const [army, box] = boxes[i] as (typeof boxes)[number];
+      const inside =
+        screen.x >= box.left + x &&
+        screen.x <= box.right + x &&
+        screen.y >= box.top + y - scene.height &&
+        screen.y <= box.bottom + y;
+      if (inside) return army;
+    }
+    return undefined;
+  };
 
   const listening = new AbortController();
   const { signal } = listening;
@@ -999,11 +1022,17 @@ export async function createRenderer({
           battlesShown(),
           figuresShown(),
         );
+        // A click between an army's men or on its standard still means the army, though
+        // a city's name or the province lies under it.
+        const block = !pick || pick.kind === 'province' ? armyBlockAt(screen) : undefined;
         // A city's name can stand over a neighbouring province, so a click on it, or on
         // its symbol, picks the city's own province.
-        const city = !pick || pick.kind === 'province' ? cityAt(drawnCities, screen) : undefined;
+        const city =
+          !block && (!pick || pick.kind === 'province') ? cityAt(drawnCities, screen) : undefined;
         const province = city && map.provinces.find((p) => (p.id as string) === city)?.id;
-        onPick(province ? { kind: 'province', province } : pick);
+        onPick(
+          block ? { kind: 'army', army: block } : province ? { kind: 'province', province } : pick,
+        );
       }
       drag = undefined;
       canvas.style.cursor = 'grab';
@@ -1262,6 +1291,11 @@ export async function createRenderer({
         y: point.y - (covered.top - covered.bottom) / 2 / scale,
       };
       camera = clampCamera({ centre, scale }, viewport(), map);
+      cameraMoved = true;
+    },
+    camera: () => camera,
+    lookAt(next) {
+      camera = clampCamera(next, viewport(), map);
       cameraMoved = true;
     },
     destroy() {

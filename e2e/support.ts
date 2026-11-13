@@ -56,7 +56,9 @@ export const carthage = 'carthage' as FactionId;
  * The one way a browser test or a capture scenario enters a game: a running game as
  * `power`, at the widest zoom, with no start screen and no guide, by the page's
  * `?play=` query. `query` adds to it, such as `draw=full`, and `base` names another
- * server than the test's own.
+ * server than the test's own. The news does not stop the game (`pauses=off`) unless
+ * `pauses` asks for the Game menu's settings, so a test that plays through a battle at
+ * speed sees it play out, and a test of the pauses says so.
  */
 export async function openGame(
   page: Page,
@@ -64,9 +66,11 @@ export async function openGame(
     query = '',
     power = 'rome',
     base = '',
-  }: { query?: string; power?: PowerId; base?: string } = {},
+    pauses = false,
+  }: { query?: string; power?: PowerId; base?: string; pauses?: boolean } = {},
 ) {
-  await page.goto(`${base}/?play=${power}${query ? `&${query}` : ''}`);
+  const asked = [query, pauses ? '' : 'pauses=off'].filter(Boolean).join('&');
+  await page.goto(`${base}/?play=${power}${asked ? `&${asked}` : ''}`);
   await page.getByTestId('top-bar').waitFor({ state: 'visible' });
 }
 

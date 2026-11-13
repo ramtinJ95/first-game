@@ -359,6 +359,7 @@ export interface CityRow extends Shown {
 
 export interface ArmyRow extends Shown {
   readonly army: ArmyId;
+  readonly name: string;
   readonly activity: string;
   readonly men: number;
 }
@@ -459,6 +460,7 @@ export function overviewOf(state: State, sight: Sight): Overview {
       return [
         {
           army: army.id,
+          name: army.name,
           activity: activityText(state, army),
           men: menOf(state, army),
           pick: { kind: 'army', army: army.id } as const,

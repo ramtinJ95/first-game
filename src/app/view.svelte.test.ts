@@ -1,3 +1,4 @@
+import { ALL_PAUSES } from './pauses.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import { standingOf } from '../sim/outcome.ts';
@@ -22,6 +23,7 @@ describe('view', () => {
       selection: undefined,
       pending: [],
       alerts: [],
+      panel: undefined,
       occupied: new Map(),
       notice: undefined,
       menu: undefined,
@@ -31,6 +33,7 @@ describe('view', () => {
         modal: undefined,
         saves: {},
         pauseOnFate: true,
+        pauses: ALL_PAUSES,
         standing: standingOf(state, fixtureWorld(), FIXTURE.rome),
       },
     };

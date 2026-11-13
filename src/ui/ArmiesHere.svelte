@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { factionName, STANCE_NAMES, whole } from '../app/names.ts';
+  import { armyTitle, STANCE_NAMES, whole } from '../app/names.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { Army } from '../sim/state/army.ts';
   import type { GameState } from '../sim/state/game-state.ts';
@@ -27,9 +27,7 @@
         >
           <span class="swatch" style:background={cssColour(game, army.owner)}></span>
           <span class="who"
-            >{factionName(game, army.owner)} · {STANCE_NAMES[army.stance]} · {whole(
-              menOf(game, army),
-            )} men</span
+            >{armyTitle(game, army)} · {STANCE_NAMES[army.stance]} · {whole(menOf(game, army))} men</span
           >
           <span class="what">{activityText(game, army)}</span>
         </button>

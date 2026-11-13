@@ -1,5 +1,6 @@
 import type { Alert } from '../app/alerts.ts';
 import type { Speed } from '../app/clock.ts';
+import type { Panel } from '../app/page.ts';
 import type { Pick } from '../render/pick.ts';
 import type { CityId } from '../sim/ids.ts';
 import type { Order } from '../sim/orders/orders.ts';
@@ -15,6 +16,8 @@ export interface Actions {
   show(pick: Pick, at: MapPoint): void;
   openAlert(alert: Alert): void;
   closeMenu(): void;
+  /** Opens the panel over the map's left side, or closes it when it is open. */
+  togglePanel(panel: Panel): void;
   /** Settles a captured city's fate by occupying it as it stands, which the rules need no order for. */
   occupy(city: CityId): void;
 }
