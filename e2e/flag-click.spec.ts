@@ -28,17 +28,20 @@ function besideMediolanum(): GameState {
   return state;
 }
 
-/** Rome's army three days into the siege of Mediolanum, camped round it, as the tester found it. */
-function besiegingMediolanum(): GameState {
+/** Rome's army three days into the siege of a minor city, camped round it, as the tester found Mediolanum. */
+function besieging(id: string): GameState {
   const state = startGame();
-  const city = state.cities['mediolanum' as CityId];
-  if (!city) throw new Error('no Mediolanum');
+  const city = state.cities[id as CityId];
+  if (!city) throw new Error(`no city ${id}`);
   declareWar(state, rome, city.owner);
   armyOf(state, rome).activity = { kind: 'idle', position: { ...city.position } };
   return playDays(state, 3);
 }
 
 const world = buildWorld(map);
+
+/** A minor city in the desert, with no town about it to move the camp off the place the test works out. */
+const SIEGED = 'ammon';
 
 /** The figures the page draws for a state it shows still, as the renderer works them out. */
 function figuresOn(page: Page, state: GameState, at: Camera): Sprite[] {
@@ -87,11 +90,11 @@ test.describe("a click on an army's flag or its camp", () => {
   }
 
   test('on a tent or a stack of arms at a siege selects the army', async ({ page }) => {
-    const state = besiegingMediolanum();
+    const state = besieging(SIEGED);
     await loadSave(page, state);
     const view = camera(page);
-    await view.jumpTo(cityPoint('mediolanum'), 2);
-    const city = view.city('mediolanum');
+    await view.jumpTo(cityPoint(SIEGED), 2);
+    const city = view.city(SIEGED);
     const sprites = figuresOn(page, state, view.camera);
     const men = sprites.filter((s) => s.hit && !/^(tent|commandTent|arms)\./.test(s.key));
     const onMan = (spot: { x: number; y: number }) =>
