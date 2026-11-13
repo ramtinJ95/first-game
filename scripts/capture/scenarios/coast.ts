@@ -7,6 +7,7 @@ import {
   pause,
   playDays,
   rome,
+  cityPoint,
   ROMAN_FOUR,
   startGame,
   withFormations,
@@ -61,6 +62,30 @@ export default defineScenario({
     await shot(
       'coast-battle',
       'Rome and Carthage fight on the shore at Arausa: both lines stand on land, none in the sea',
+    );
+
+    // A battle beside Roma, which stands by the Tyrrhenian shore.
+    const roma = cityPoint('roma');
+    const atRoma = startGame();
+    declareWar(atRoma, rome, carthage);
+    withFormations(atRoma, armyOf(atRoma, rome), ROMAN_FOUR).activity = {
+      kind: 'idle',
+      position: { x: roma.x - 2, y: roma.y + 4 },
+    };
+    withFormations(atRoma, armyOf(atRoma, carthage), [
+      ['spearmen', 1300],
+      ['skirmishers', 500],
+      ['heavyCavalry', 400],
+      ['swordsmen', 1100],
+    ]).activity = { kind: 'idle', position: { x: roma.x - 8, y: roma.y + 8 } };
+    await view.jumpTo(roma, 0.1);
+    await loadSave(page, playDays(atRoma, 2));
+    await view.jumpTo({ x: roma.x + 40, y: roma.y + 12 }, 4);
+    await page.mouse.click(80, 650);
+    await page.waitForTimeout(2500);
+    await shot(
+      'coast-battle-roma',
+      'Rome and Carthage fight beside Roma, on the Tyrrhenian shore: the horse and both lines stand on land',
     );
   },
 });
