@@ -2,9 +2,9 @@
   import { factionName, whole } from '../app/names.ts';
   import type { View } from '../app/view.svelte.ts';
   import type { Stores } from '../sim/state/faction.ts';
-  import { dailyBalances } from '../sim/systems/economy.ts';
+  import { dailyBalances, limitsOf } from '../sim/systems/economy.ts';
   import type { Actions } from './actions.ts';
-  import { cssColour, ordersWaitingText, signed } from './describe.ts';
+  import { cssColour, ordersWaitingText, signed, storeNote } from './describe.ts';
   import type { FrameActions } from './frame-actions.ts';
   import FrameControls from './FrameControls.svelte';
   import TimeControls from './TimeControls.svelte';
@@ -23,8 +23,6 @@
     toggleOverview: () => void;
   } = $props();
 
-  /** A store that runs out within this many days at today's balance is marked. */
-  const WARN_DAYS = 60;
   const STORES: { key: keyof Stores; name: string }[] = [
     { key: 'gold', name: 'Gold' },
     { key: 'food', name: 'Food' },
@@ -34,16 +32,10 @@
   const game = $derived(view.current.state);
   const stores = $derived(game.factions[game.player]?.stores);
   const balance = $derived(dailyBalances(game).get(game.player));
+  const limits = $derived(limitsOf(game).get(game.player));
   const waiting = $derived(
     view.current.paused ? ordersWaitingText(view.current.pending, game.player) : undefined,
   );
-
-  function warning(amount: number, change: number): string | undefined {
-    if (amount <= 0) return 'Ran out: formations desert';
-    if (change >= 0) return undefined;
-    const days = Math.floor(amount / -change);
-    return days <= WARN_DAYS ? `Runs out in ${days} days` : undefined;
-  }
 </script>
 
 <header class="panel bar" data-testid="top-bar">
@@ -54,17 +46,17 @@
   {#if stores && balance}
     <span class="stores">
       {#each STORES as { key, name } (key)}
-        {@const warn = key === 'manpower' ? undefined : warning(stores[key], balance[key])}
-        <span
-          class="store"
-          class:falling={warn !== undefined}
-          data-testid="store-{key}"
-          title={warn}
-        >
+        {@const note = storeNote(
+          key,
+          stores[key],
+          balance[key],
+          key === 'gold' ? undefined : limits?.[key],
+        )}
+        <span class="store" class:falling={note?.bad} data-testid="store-{key}" title={note?.why}>
           <span class="muted">{name}</span>
           <strong data-testid="store-{key}-amount">{whole(stores[key])}</strong>
           <span class="change" data-testid="store-{key}-change">{signed(balance[key])}/day</span>
-          {#if warn}<span class="warn">{warn}</span>{/if}
+          {#if note}<span class="note" data-testid="store-{key}-note">{note.text}</span>{/if}
         </span>
       {/each}
     </span>
@@ -113,14 +105,15 @@
     color: var(--muted);
   }
 
-  .falling strong,
-  .falling .change,
-  .warn {
-    color: var(--bad);
-  }
-
-  .warn {
+  .note {
     font-size: 12px;
     font-style: italic;
+    color: var(--muted);
+  }
+
+  .falling strong,
+  .falling .change,
+  .falling .note {
+    color: var(--bad);
   }
 </style>

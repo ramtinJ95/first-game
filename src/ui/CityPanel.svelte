@@ -13,7 +13,17 @@
   import { TROOPS, type Troop } from '../sim/troops.ts';
   import type { Actions } from './actions.ts';
   import ArmiesHere from './ArmiesHere.svelte';
-  import { armiesAt, cssColour, ownerLine, rankText } from './describe.ts';
+  import {
+    armiesAt,
+    cityBalance,
+    cityFoodText,
+    cssColour,
+    ownerLine,
+    rankText,
+    sackText,
+    signed,
+    weakSiegeText,
+  } from './describe.ts';
   import WarStatus from './WarStatus.svelte';
 
   let {
@@ -49,6 +59,8 @@
   const besiegers = $derived(
     siege?.besiegers.flatMap((id) => (sight.armies.has(id) ? (game.armies[id] ?? []) : [])) ?? [],
   );
+  const weak = $derived(siege && weakSiegeText(game, sight, siege));
+  const sacked = $derived(sackText(game, city));
   const canStorm = $derived(besiegers.some((army) => army.owner === game.player));
   const ordered = $derived(
     pending.filter(
@@ -127,8 +139,23 @@
           >{Math.floor(city.foodDays)} of {full.foodDays} days</td
         >
       </tr>
+      {#if own}
+        <tr>
+          <td>Gold</td><td class="number" data-testid="city-gold-balance"
+            >{signed(cityBalance(game, city).gold)} a day</td
+          >
+        </tr>
+        <tr>
+          <td>Harvest</td><td class="number" data-testid="city-food-balance"
+            >{cityFoodText(game, city)}</td
+          >
+        </tr>
+      {/if}
     </tbody>
   </table>
+  {#if sacked}
+    <p class="bad" data-testid="city-sacked">{sacked}</p>
+  {/if}
   <p data-testid="city-unrest" class:bad={city.unrestDays > 0}>
     {city.unrestDays > 0 ? `Unrest · ${city.unrestDays} days left` : 'Calm'}
   </p>
@@ -138,6 +165,9 @@
         ' and ',
       )} · day {game.day - siege.startedOn + 1}
     </p>
+    {#if weak}
+      <p data-testid="city-weak-siege">{weak}</p>
+    {/if}
     {#if canStorm}
       <div class="row">
         {#if storming}
