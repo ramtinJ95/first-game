@@ -10,6 +10,7 @@ import {
   type Camera,
 } from '../src/render/camera.ts';
 import { BANNER } from '../src/render/markers.ts';
+import { nameNewArmy } from '../src/sim/army-names.ts';
 import { decideAll } from '../src/sim/ai/decide.ts';
 import { changeCityOwner } from '../src/sim/cities.ts';
 import {
@@ -142,6 +143,7 @@ export function battleAt(state: GameState, city: string) {
   state.armies[defenders] = {
     id: defenders,
     owner: target.owner,
+    name: nameNewArmy(state, target.owner),
     formations: formations.map(({ id }) => id),
     stance: 'holdTheLine',
     generalSkill: 3,
@@ -181,6 +183,7 @@ export function outnumberedAt(state: GameState, city: string, enemyMen: number) 
   state.armies[invaders] = {
     id: invaders,
     owner: carthage,
+    name: nameNewArmy(state, carthage),
     formations: formations.map(({ id }) => id),
     stance: 'holdTheLine',
     generalSkill: 3,
@@ -462,7 +465,8 @@ export function hundredArmies(): GameState {
   const roma = cityPoint('roma');
   for (let i = 0; i < 100; i++) {
     const id = (i === 0 ? first.id : allocateId(state, 'army')) as ArmyId;
-    const army: Army = i === 0 ? first : { ...first, id, formations: [] };
+    const army: Army =
+      i === 0 ? first : { ...first, id, name: nameNewArmy(state, rome), formations: [] };
     state.armies[id] = army;
     withFormations(state, army, ROMAN_FOUR);
     army.activity = {

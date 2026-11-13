@@ -34,6 +34,7 @@ test('a faction that loses its last city leaves the game with its armies, stores
   state.armies[raider] = {
     id: raider,
     owner: FIXTURE.carthage,
+    name: 'Test Army',
     formations: [formation],
     stance: 'holdTheLine',
     generalSkill: 0,

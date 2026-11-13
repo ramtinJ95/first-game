@@ -56,6 +56,7 @@ export function buildFixture(seed = 1): GameState {
         stores: { gold: 5000, food: 1000, manpower: 2000 },
         league: null,
         defeatedOn: null,
+        armiesRaised: 1,
       },
       [f.carthage]: {
         id: f.carthage,
@@ -64,6 +65,7 @@ export function buildFixture(seed = 1): GameState {
         stores: { gold: 3000, food: 1000, manpower: 1000 },
         league: null,
         defeatedOn: null,
+        armiesRaised: 1,
       },
       [f.syracusaeFaction]: {
         id: f.syracusaeFaction,
@@ -154,6 +156,7 @@ export function buildFixture(seed = 1): GameState {
       [f.romanArmy]: {
         id: f.romanArmy,
         owner: f.rome,
+        name: 'First Legion',
         formations: [f.hastati, f.equites],
         stance: 'holdTheLine',
         generalSkill: 3,
@@ -162,6 +165,7 @@ export function buildFixture(seed = 1): GameState {
       [f.punicArmy]: {
         id: f.punicArmy,
         owner: f.carthage,
+        name: 'Host of Hanno',
         formations: [f.citizenSpears],
         stance: 'holdTheLine',
         generalSkill: 3,

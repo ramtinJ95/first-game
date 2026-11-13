@@ -47,7 +47,7 @@ describe('save and load', () => {
     const save = JSON.stringify({ format: 99, state: buildFixture() });
     expect(loadGame(save)).toEqual({
       ok: false,
-      error: 'The save has format 99, but this game reads format 11.',
+      error: `The save has format 99, but this game reads format ${SAVE_FORMAT}.`,
     });
   });
 

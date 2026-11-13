@@ -245,6 +245,7 @@ describe('a great power', () => {
       state.armies[defenders] = {
         id: defenders,
         owner: f.syracusaeFaction,
+        name: 'Test Army',
         formations: [spears],
         stance: 'holdTheLine',
         generalSkill: 0,
@@ -572,6 +573,7 @@ describe('a minor', () => {
     state.armies[id] = {
       id,
       owner: f.syracusaeFaction,
+      name: 'Test Army',
       formations: [f.citizenSpears],
       stance: 'holdTheLine',
       generalSkill: 0,

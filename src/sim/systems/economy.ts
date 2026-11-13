@@ -1,4 +1,5 @@
 import { extraFoodOf, goldShareOf, levyShareOf } from '../buildings/buildings.ts';
+import { nameNewArmy } from '../army-names.ts';
 import { SACK, UNREST_DAYS } from '../cities.ts';
 import type { DeepReadonly } from '../deep-readonly.ts';
 import { emit } from '../events.ts';
@@ -218,6 +219,7 @@ function rallyArmy(state: GameState, city: City): Army {
   const army: Army = {
     id,
     owner: city.owner,
+    name: nameNewArmy(state, city.owner),
     formations: [],
     stance: 'holdTheLine',
     generalSkill: STARTING_GENERAL_SKILL,

@@ -176,6 +176,7 @@ describe('alertsOfDay', () => {
     state.armies[greek] = {
       id: greek,
       owner: f.syracusaeFaction,
+      name: 'Test Army',
       formations: [spears],
       stance: 'holdTheLine',
       generalSkill: 3,
