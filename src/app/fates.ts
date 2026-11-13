@@ -7,7 +7,7 @@ import type { Day } from '../sim/state/day.ts';
 import type { Stores } from '../sim/state/faction.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { World } from '../sim/world/world.ts';
-import { cityBalance, signed } from '../ui/describe.ts';
+import { cityBalance, signed, unrestDaysLeft } from '../ui/describe.ts';
 
 /** One way to settle a captured city, with what it gives and costs today. */
 export interface FateChoice {
@@ -20,6 +20,7 @@ export interface FateChoice {
   readonly peopleLost: number;
   /** Captives who settle in the player's other cities. */
   readonly peopleMoved: number;
+  /** The days until the city is calm, at the pace the rules count its unrest down. */
   readonly unrestDays: number;
   /** The buildings the city keeps, and those the fate destroys with the one at work. */
   readonly buildingsKept: readonly BuildingKind[];
@@ -55,7 +56,7 @@ export function fateChoices(
     manpower: 0,
     peopleLost: 0,
     peopleMoved: 0,
-    unrestDays: city.unrestDays,
+    unrestDays: unrestDaysLeft(state, city),
     buildingsKept: city.buildings,
     buildingsLost: [],
     unrest: cityBalance(state, city),
@@ -83,7 +84,7 @@ export function fateChoices(
       manpower: has.manpower - stores.manpower,
       peopleLost: city.population - after.population,
       peopleMoved: others(copy) - others(state),
-      unrestDays: after.unrestDays,
+      unrestDays: unrestDaysLeft(copy, after),
       buildingsKept: after.buildings,
       buildingsLost: standing(city).filter((kind) => !standing(after).includes(kind)),
       unrest: cityBalance(copy, after),
@@ -104,7 +105,7 @@ function standing(city: DeepReadonly<City>): BuildingKind[] {
  * same city on that day with no unrest left, so a sack's poor years still count.
  */
 function calmBalance(state: DeepReadonly<GameState>, city: DeepReadonly<City>): Stores {
-  const day = (state.day + city.unrestDays) as Day;
+  const day = (state.day + unrestDaysLeft(state, city)) as Day;
   return cityBalance({ ...state, day }, { ...city, unrestDays: 0 });
 }
 

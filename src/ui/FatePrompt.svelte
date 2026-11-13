@@ -2,6 +2,7 @@
   import { dailyText, type FateChoice } from '../app/fates.ts';
   import { buildingList, whole } from '../app/names.ts';
   import type { ShownModal } from '../app/view.svelte.ts';
+  import { BUILDINGS } from '../sim/buildings/buildings.ts';
   import { UNREST_DAYS } from '../sim/cities.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { GameState } from '../sim/state/game-state.ts';
@@ -79,9 +80,10 @@
       {/each}
     </div>
     <p class="muted small">
-      A city's yield rises evenly from its first day's to its calm one over the last {UNREST_DAYS}
-      days of unrest. Without a choice the city is occupied when its days to choose run out, and the city
-      panel offers these choices until then.
+      A city's yield rises evenly from its first day's to its calm one as the last {UNREST_DAYS} days
+      of its unrest count down. A temple of yours within {BUILDINGS.temple.reachKm} km counts them down
+      {BUILDINGS.temple.unrestPace} at a time, and the days above count it. Without a choice the city
+      is occupied when its days to choose run out, and the city panel offers these choices until then.
     </p>
     <label class="row-check">
       <input

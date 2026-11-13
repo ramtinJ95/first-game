@@ -1,3 +1,4 @@
+import { unrestPaceOf } from '../sim/buildings/buildings.ts';
 import {
   AT_CITY_KM,
   factionName,
@@ -422,7 +423,7 @@ export function cityStatus(state: State, sight: Sight, city: DeepReadonly<City>)
     const by = owners.size > 0 ? ` by ${[...owners].join(' and ')}` : '';
     parts.push(`Besieged${by} since day ${siege.startedOn}`);
   }
-  if (city.unrestDays > 0) parts.push(`In unrest for ${city.unrestDays} more days`);
+  if (city.unrestDays > 0) parts.push(`In unrest for ${unrestDaysLeft(state, city)} more days`);
   if (city.recruits.length > 0) parts.push(`Training ${troopsText(city.recruits)}`);
   return parts.length > 0 ? parts.join(' · ') : 'Calm';
 }
@@ -513,6 +514,14 @@ export function minorText(
     .reduce((sum, army) => sum + menOf(state, army), 0);
   if (men > 0) parts.push(`Keeps an army of ${whole(men)} men at the city`);
   return parts.length > 0 ? parts.join('. ') : undefined;
+}
+
+/**
+ * The days until the city is calm, at the pace the rules count its unrest down today:
+ * faster within reach of its owner's temple (`unrestPaceOf`).
+ */
+export function unrestDaysLeft(state: State, city: DeepReadonly<City>): number {
+  return Math.ceil(city.unrestDays / unrestPaceOf(state, city));
 }
 
 /** How long a city's unrest lasts from today, as the city panel and the fate prompt both say it. */

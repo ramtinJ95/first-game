@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import type { Order } from '../sim/orders/orders.ts';
+import { unrestDaysLeft, unrestText } from '../ui/describe.ts';
 import { changeCityOwner } from '../sim/cities.ts';
 import { buildFixture, FIXTURE as f, fixtureWorld } from '../sim/fixture.ts';
 import mapData from '../../data/map/map.json' with { type: 'json' };
@@ -113,5 +115,47 @@ describe('fateChoices and buildings', () => {
       buildingsLost: [],
     });
     expect(byKind['sack']).toMatchObject({ buildingsKept: [], buildingsLost: ['forum', 'towers'] });
+  });
+});
+
+describe('fateChoices and a temple', () => {
+  /** Carthago fell to Rome today with a Temple, which counts its unrest down faster while it stands. */
+  function carthagoWithTemple() {
+    const state = buildFixture();
+    const carthago = state.cities[f.carthago];
+    const army = state.armies[f.romanArmy];
+    if (!carthago || !army) throw new Error('no Carthago or no Roman army');
+    carthago.buildings = ['temple'];
+    changeCityOwner(state, f.carthago, f.rome);
+    carthago.fellOn = state.day;
+    army.activity = { kind: 'idle', position: { ...carthago.position } };
+    return state;
+  }
+
+  function daysUntilCalm(start: GameState, order: Order | undefined): number {
+    let state = tick(start, order ? [order] : [], fixtureWorld()).state;
+    let days = 1;
+    while ((state.cities[f.carthago]?.unrestDays ?? 0) > 0) {
+      state = tick(state, [], fixtureWorld()).state;
+      days += 1;
+    }
+    expectConsistent(state);
+    return days;
+  }
+
+  it('counts the days of unrest at the pace the rules count them, with the temple kept or sacked', () => {
+    const fallen = carthagoWithTemple();
+    const [occupy, sack, enslave] = fateChoices(fallen, fixtureWorld(), f.carthago);
+    if (!occupy || !sack || !enslave) throw new Error('three fates');
+    expect(occupy.buildingsKept).toEqual(['temple']);
+    expect(sack.buildingsLost).toEqual(['temple']);
+    for (const choice of [occupy, sack, enslave]) {
+      expect(daysUntilCalm(fallen, choice.order)).toBe(choice.unrestDays);
+    }
+    expect(occupy.unrestDays).toBeLessThan(fallen.cities[f.carthago]?.unrestDays ?? 0);
+    expect(enslave.unrestDays).toBeLessThan(sack.unrestDays);
+    const carthago = fallen.cities[f.carthago];
+    if (carthago)
+      expect(unrestText(unrestDaysLeft(fallen, carthago))).toBe(`${occupy.unrestDays} days left`);
   });
 });
