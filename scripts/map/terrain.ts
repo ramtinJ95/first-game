@@ -317,3 +317,21 @@ export function peaksOnLand(points: NaturalEarthPoint[], plane: Plane, land: Mul
     })
     .sort((a, b) => b.height - a.height || compare(a.name, b.name));
 }
+
+/** The height of the ground in metres at a map point, between the ETOPO10 nodes round it, 0 at sea. */
+export function groundHeight(heights: ElevationGrid, plane: Plane): (point: Point) => number {
+  const { columns, perDegree } = ELEVATION_GRID;
+  const z = (row: number, column: number) => Math.max(0, heights[row * columns + column] ?? 0);
+  return (point) => {
+    const [lon, lat] = plane.toLonLat(point);
+    const x = (lon + 180) * perDegree;
+    const y = (90 - lat) * perDegree;
+    const column = Math.floor(x);
+    const row = Math.floor(y);
+    const tx = x - column;
+    const ty = y - row;
+    const top = z(row, column) * (1 - tx) + z(row, column + 1) * tx;
+    const bottom = z(row + 1, column) * (1 - tx) + z(row + 1, column + 1) * tx;
+    return top * (1 - ty) + bottom * ty;
+  };
+}
