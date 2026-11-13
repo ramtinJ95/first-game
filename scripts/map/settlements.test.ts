@@ -145,6 +145,8 @@ test('a title becomes the plain name a map writes, with the editors’ marks gon
     ['Tarracina(e)', 'Tarracina'],
     ['Durno(no)varia', 'Durnovaria'],
     ['Ur(i)', 'Ur'],
+    // Cappadocian Nyssa, the see of Gregory of Nyssa, keeps its double s.
+    ['Nys(s)a', 'Nyssa'],
     ['Al(l)ifae', 'Allifae'],
     ['(H)Emesa', 'Emesa'],
     ['(Tri)Paradeisos', 'Triparadeisos'],

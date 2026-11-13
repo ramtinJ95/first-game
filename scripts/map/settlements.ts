@@ -106,7 +106,6 @@ const USUAL_NAMES: Readonly<Record<string, string>> = {
   'Adra(h)a': 'Adraa',
   'Ab(ou)la': 'Abula',
   'Alyz(e)ia': 'Alyzia',
-  'Nys(s)a': 'Nysa',
 };
 
 /**
