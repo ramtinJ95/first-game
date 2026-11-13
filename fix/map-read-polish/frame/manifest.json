@@ -1,0 +1,22 @@
+[
+  {
+    "file": "start-1600.png",
+    "title": "1600 px. The start screen: the name, and the five powers with their colour, capital, cities, and position",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The frame round the game at 1600 and 1024 px: the start screen, the guide, the save menu, the fate prompt, the victory announcement, the defeat screen, and Continue",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The frame round the game at 1600 and 1024 px: the start screen, the guide, the save menu, the fate prompt, the victory announcement, the defeat screen, and Continue (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The frame round the game at 1600 and 1024 px: the start screen, the guide, the save menu, the fate prompt, the victory announcement, the defeat screen, and Continue (Playwright trace)",
+    "kind": "trace"
+  }
+]
