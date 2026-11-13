@@ -24,7 +24,8 @@ export interface PleiadesFiles {
 
 export interface SettlementCandidate {
   pleiadesId: number;
-  name: string;
+  /** The plain name, or undefined when the source gives only part of one. */
+  name: string | undefined;
   at: LonLat;
   town: boolean;
   /** Other Pleiades places that lie at or in this one. */
@@ -69,7 +70,7 @@ export function readCandidates(files: PleiadesFiles): SettlementCandidate[] {
     const id = field(row, 'id');
     const title = field(row, 'title');
     const kinds = types.get(id) ?? new Set<string>();
-    const name = (title.split('/')[0] ?? '').trim();
+    const name = plainName(title);
     if (
       !SETTLEMENT_TYPES.some((type) => kinds.has(type)) ||
       field(row, 'location_precision') !== 'precise' ||
@@ -90,6 +91,28 @@ export function readCandidates(files: PleiadesFiles): SettlementCandidate[] {
     const town = TOWN_TYPES.some((type) => kinds.has(type)) || sites > 0;
     return [{ pleiadesId, name, at: [lon, lat], town, sites }];
   });
+}
+
+/**
+ * A Pleiades title as the plain name a map writes. The title's first form is read, and the
+ * editors' marks go: brackets round a name no ancient source gives, a star on a reconstructed
+ * form, and a word in brackets after the name, such as "(settlement)" or "(or Ricciacus)".
+ * Letters in brackets inside a word are kept, so "Al(l)ifae" is "Allifae" and "(H)Emesa" is
+ * "Hemesa". A name the source cuts short, such as "Aquae S(...)", has no plain form.
+ */
+export function plainName(title: string): string | undefined {
+  const first = (title.split('/')[0] ?? '').trim();
+  if (first.includes('(...)')) return undefined;
+  return first
+    .replace(/[[\]*]/g, '')
+    .replace(/\s+\([^()]*\)/g, '')
+    .replace(
+      /\(([^()]*)\)(\p{Lu})/gu,
+      (_, letters: string, next: string) => letters + next.toLowerCase(),
+    )
+    .replace(/\(([^()]*)\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
@@ -126,6 +149,9 @@ export function chooseSettlements(
     if (!province || room === 0 || !contains(land, at)) continue;
     left.set(province.id, room - 1);
     accepted.add(at);
+    // A place whose name the source cuts short keeps its room, so no other place takes
+    // it, but stays off the map.
+    if (candidate.name === undefined) continue;
     chosen.push({
       id: `s-${candidate.pleiadesId}` as SettlementId,
       name: candidate.name,

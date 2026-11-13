@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { fixtureWorld } from '../../sim/fixture.ts';
 import { claimSymbols } from './places.ts';
 
 const box = (x: number, y: number, half = 5) => ({
@@ -42,5 +43,18 @@ describe('claimSymbols', () => {
         expect(overlap).toBe(false);
       }
     }
+  });
+});
+
+describe('the names the map draws', () => {
+  it('are plain names, with no bracket, star, or question mark', () => {
+    const { map } = fixtureWorld();
+    const names = [
+      ...map.provinces.map((p) => p.name),
+      ...map.settlements.map((s) => s.name),
+      ...map.peaks.map((p) => p.name),
+    ];
+    expect(names.length).toBeGreaterThan(500);
+    expect(names.filter((name) => /[()[\]*?]/.test(name))).toEqual([]);
   });
 });

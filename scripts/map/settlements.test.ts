@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { readCandidates, type PleiadesFiles } from './settlements.ts';
+import { plainName, readCandidates, type PleiadesFiles } from './settlements.ts';
 
 const BOM = String.fromCharCode(0xfeff);
 const csv = (header: string, rows: string[]) => `${BOM}${[header, ...rows].join('\n')}\n`;
@@ -138,4 +138,25 @@ test('a town is urban or fortified, or has another place at or in it; the rest a
     [4, 'village', 0],
     [5, 'town', 1],
   ]);
+});
+
+test('a title becomes the plain name a map writes, with the editors’ marks gone', () => {
+  const cases: [string, string | undefined][] = [
+    ['Tarracina(e)', 'Tarracinae'],
+    ['Al(l)ifae', 'Allifae'],
+    ['(H)Emesa', 'Hemesa'],
+    ['(Tri)Paradeisos', 'Triparadeisos'],
+    ['[(A)Bivard]', 'Abivard'],
+    ['Dur-(Kuri)galzu', 'Dur-Kurigalzu'],
+    ['[Siraf]', 'Siraf'],
+    ['*Moridunum', 'Moridunum'],
+    ['Vicus *Ramidava', 'Vicus Ramidava'],
+    ['Ricciacum (or Ricciacus)', 'Ricciacum'],
+    ['Thasos (settlement)', 'Thasos'],
+    ['Calagurris (Nassica) Iulia', 'Calagurris Iulia'],
+    ['Tell al-Deir (al-Aqul)', 'Tell al-Deir'],
+    ['Lugdunum/Lyon', 'Lugdunum'],
+    ['Aquae S(...)', undefined],
+  ];
+  for (const [title, name] of cases) expect(plainName(title)).toBe(name);
 });
