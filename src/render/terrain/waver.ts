@@ -148,14 +148,82 @@ export function drawnTerrain(
         .map((area) => new AreaIndex([area.outline], 0, { seams: false })),
     ]),
   );
+  const corners = new Map(
+    WAVER.kinds.map((kind) => [
+      kind,
+      cornerGrid(terrain.filter((area) => area.kind === kind).map((area) => area.outline)),
+    ]),
+  );
   return terrain.map((area) => {
     const areas = indexes.get(area.kind);
-    if (!areas) return area;
+    const grid = corners.get(area.kind);
+    if (!areas || !grid) return area;
     return {
       ...area,
       outline: area.outline.map((polygon) =>
-        polygon.map((ring) => waverRing(ring, coast, areas)),
+        polygon.map((ring) => waverRing(conform(ring, grid), coast, areas)),
       ) as MultiPolygon,
     };
+  });
+}
+
+const CORNER_CELL = 16;
+/**
+ * How near an edge another outline's corner must lie to be taken as on it, in km. The map
+ * rounds its points to a 0.1 km lattice, so the corners of a shared edge lie up to that
+ * far off the other outline's line.
+ */
+const ON_EDGE_KM = 0.15;
+
+function cornerGrid(outlines: readonly MultiPolygon[]): Map<string, Point[]> {
+  const grid = new Map<string, Point[]>();
+  for (const outline of outlines) {
+    for (const polygon of outline) {
+      for (const ring of polygon) {
+        for (const point of ring) {
+          const key = `${Math.floor(point[0] / CORNER_CELL)},${Math.floor(point[1] / CORNER_CELL)}`;
+          const list = grid.get(key);
+          if (list) list.push(point);
+          else grid.set(key, [point]);
+        }
+      }
+    }
+  }
+  return grid;
+}
+
+/**
+ * The ring with every corner of an outline of its kind that lies on one of its edges
+ * added to that edge. Two deserts that share only part of an edge then share it from
+ * corner to corner, so it bends alike in both and they neither overlap nor part.
+ */
+function conform(ring: readonly Point[], grid: Map<string, Point[]>): Point[] {
+  return ring.flatMap((a, i) => {
+    const b = ring[(i + 1) % ring.length] as Point;
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const length2 = dx * dx + dy * dy;
+    if (length2 === 0) return [a];
+    const on: [number, Point][] = [];
+    const seen = new Set<Point>();
+    const left = Math.floor((Math.min(a[0], b[0]) - ON_EDGE_KM) / CORNER_CELL);
+    const right = Math.floor((Math.max(a[0], b[0]) + ON_EDGE_KM) / CORNER_CELL);
+    const top = Math.floor((Math.min(a[1], b[1]) - ON_EDGE_KM) / CORNER_CELL);
+    const bottom = Math.floor((Math.max(a[1], b[1]) + ON_EDGE_KM) / CORNER_CELL);
+    const length = Math.sqrt(length2);
+    for (let cx = left; cx <= right; cx++) {
+      for (let cy = top; cy <= bottom; cy++) {
+        for (const p of grid.get(`${cx},${cy}`) ?? []) {
+          if (seen.has(p)) continue;
+          seen.add(p);
+          const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length2;
+          if (t * length <= ON_EDGE_KM || (1 - t) * length <= ON_EDGE_KM) continue;
+          const off = Math.abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / length;
+          if (off <= ON_EDGE_KM) on.push([t, p]);
+        }
+      }
+    }
+    on.sort((u, v) => u[0] - v[0]);
+    return [a, ...on.map(([, p]) => p)];
   });
 }

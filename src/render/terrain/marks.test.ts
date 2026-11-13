@@ -420,6 +420,21 @@ describe("the desert's edge", () => {
     expect(crossed).toEqual([]);
   });
 
+  it('bends an edge two deserts share alike in both, so no ground lies in two deserts', () => {
+    const each = drawn().map((outline) => new AreaIndex([outline], 0, { seams: false }));
+    const twice: string[] = [];
+    const corners = original.flatMap((outline) => outline.flat(2));
+    for (const [cx, cy] of [...corners, [3525, 3840] as Point]) {
+      for (let x = cx - 6; x <= cx + 6; x += 0.5) {
+        for (let y = cy - 6; y <= cy + 6; y += 0.5) {
+          if (each.filter((index) => index.inside(x, y)).length > 1) twice.push(`${x},${y}`);
+        }
+      }
+    }
+    expect(twice.slice(0, 5)).toEqual([]);
+    expect(land.desert.inside(3525, 3840)).toBe(each.some((index) => index.inside(3525, 3840)));
+  });
+
   it('keeps the dunes and stipple on the drawn desert', () => {
     const tacape = map.provinces.find((p) => p.id === 'tacape');
     if (!tacape) throw new Error('no tacape');

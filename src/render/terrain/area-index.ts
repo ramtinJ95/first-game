@@ -231,12 +231,12 @@ export class AreaIndex {
     const band = Math.floor(y / BAND) * BAND_ROW;
     let inside = known;
     for (let b = Math.floor(x / STRIP); b <= Math.floor(to / STRIP); b++) {
-      const from = Math.max(x, b * STRIP);
-      const until = Math.min(to, (b + 1) * STRIP);
       for (const [ax, ay, bx, by] of this.#strips.get(band + b) ?? []) {
         if (ay > y === by > y) continue;
         const cross = ((bx - ax) * (y - ay)) / (by - ay) + ax;
-        if (cross > from && cross <= until) inside = !inside;
+        // An edge is filed in every strip its x spans, so each crossing is counted in the
+        // one strip it falls in, or an edge that starts on a strip's line is missed.
+        if (cross > x && cross <= to && Math.floor(cross / STRIP) === b) inside = !inside;
       }
     }
     return inside;
