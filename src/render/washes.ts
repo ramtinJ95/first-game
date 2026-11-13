@@ -1,4 +1,5 @@
 import { Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { fillLand, landOutline } from './land-outline.ts';
 import type { MultiPolygon } from '../sim/map.ts';
 
 /** The side of a cell of the wash in km. */
@@ -250,12 +251,7 @@ export function createWash(map: WashedMap): WashLayer {
   const texture = Texture.from(canvas);
   const sprite = new Sprite(texture);
   sprite.scale.set(WASH_CELL_KM);
-  const land = new Graphics();
-  for (const [outer, ...holes] of map.provinces.flatMap((province) => province.outline)) {
-    if (!outer) continue;
-    land.poly(outer.flat()).fill(0xffffff);
-    for (const hole of holes) land.poly(hole.flat()).cut();
-  }
+  const land = fillLand(new Graphics(), landOutline(map), 0xffffff);
   sprite.mask = land;
   const root = new Container({ label: 'wash' });
   root.addChild(sprite, land);

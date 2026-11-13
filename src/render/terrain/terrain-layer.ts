@@ -9,6 +9,7 @@ import {
 } from 'pixi.js';
 import type { GameMap } from '../../sim/map.ts';
 import { coversView, fitTexture } from '../cached-texture.ts';
+import { fillLand, landOutline } from '../land-outline.ts';
 import { visibleRect, type Camera, type Size } from '../camera.ts';
 import { BuildQueue, chunkKey, chunkRect, chunkRow, chunksNear, OVERHANG } from './chunks.ts';
 import { DETAIL, detailAlpha, type Band } from './detail.ts';
@@ -110,10 +111,9 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   // The ground's colour is a raster of 16 km cells drawn larger with smoothing, and the
   // watered strips follow rivers and fan out to the coast, so both are clipped to the
   // land, by one mask. The mask costs only when the cached texture is drawn again.
+  const outline = landOutline(map);
   const landMask = new Graphics();
-  for (const province of map.provinces) {
-    for (const [outer] of province.outline) if (outer) landMask.poly(outer.flat()).fill(0xffffff);
-  }
+  fillLand(landMask, outline, 0xffffff);
   const tint = groundTint(land, map.width, map.height);
   const tintSprite = new Sprite(
     new Texture({
@@ -135,14 +135,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   );
   clipped.mask = landMask;
   const paper = new Graphics();
-  for (const province of map.provinces) {
-    for (const polygon of province.outline) {
-      const [outer, ...holes] = polygon;
-      if (!outer) continue;
-      paper.poly(outer.flat()).fill(PAPER);
-      for (const hole of holes) paper.poly(hole.flat()).cut();
-    }
-  }
+  fillLand(paper, outline, PAPER);
   const washes = new Container({ label: 'washes' });
   const borders = new Container({ label: 'borders' });
   let repaint = true;

@@ -1230,7 +1230,12 @@ function trackBetween(land: Land, from: Place, to: Place): Mark | undefined {
  * spot is seeded from its place, like every mark.
  */
 const GROUND = { spacing: 2.4, clump: 16, stream: 26, streamStep: 0.7, streamSteps: 14 } as const;
-const MIDDLE_GROUND = { spacing: 5.2, clump: 34, size: [1.9, 1.1] } as const;
+/**
+ * The middle zoom's ground stands in clumps on a share `bare` of the land, so it reads as
+ * patches of grass and scrub rather than an even sprinkle, and a frame that redraws the
+ * terrain at a new zoom draws about a third as many marks as an even cover would.
+ */
+const MIDDLE_GROUND = { spacing: 8, clump: 46, bare: 0.55, size: [2.2, 1.3] } as const;
 /**
  * The shares of tufts and bushes on each kind of open ground, the rest being rocks: the
  * desert, the arid land, rough ground near hills and mountains, the dry land, and the
@@ -1419,7 +1424,8 @@ function ground(land: Land, rect: Rect, tier: 'middle' | 'close'): Mark[] {
     spacing / 2,
     close ? 808 : 818,
     (x, y) => {
-      if (valueNoise(x, y, close ? GROUND.clump : MIDDLE_GROUND.clump, 809) < 0.42)
+      const bare = close ? 0.42 : MIDDLE_GROUND.bare;
+      if (valueNoise(x, y, close ? GROUND.clump : MIDDLE_GROUND.clump, 809) < bare)
         return undefined;
       if (!close && (land.cover(x, y) === 'green' || land.desert.inside(x, y))) return undefined;
       if (land.panDepth(x, y, PAN_RIM) > 0) return undefined;
