@@ -63,8 +63,8 @@ function controls(page: Page) {
     /**
      * Zooms out to the whole map, then in on `point` to about `scale`, and centres it.
      * The wheel and the drags stay inside `SAFE`, clear of the top bar and the side
-     * panels, so every step reaches the map. The point is pulled to the centre between
-     * steps, so it stays on screen.
+     * panels. Batch the zoom once the target is inside `SAFE`; stage only unsafe
+     * anchors, to avoid rendering unused intermediate close-up scenes.
      */
     async goTo(point: MapPoint, scale: number) {
       await page.keyboard.press('Escape');
@@ -72,8 +72,10 @@ function controls(page: Page) {
       if (out > 0) await this.zoom(centre, -out);
       let notches = scale > this.scale ? Math.round(Math.log(scale / this.scale) / NOTCH) : 0;
       while (notches > 0) {
-        const step = Math.min(3, notches);
-        await this.zoom(safe(this.screen(point)), step);
+        const at = this.screen(point);
+        const anchor = safe(at);
+        const step = at.x === anchor.x && at.y === anchor.y ? notches : Math.min(3, notches);
+        await this.zoom(anchor, step);
         notches -= step;
         await this.pull(point);
       }

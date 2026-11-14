@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { planCommand } from '../src/app/command.ts';
-import { zoomAt, wheelFactor } from '../src/render/camera.ts';
+import { panBy, zoomAt, wheelFactor } from '../src/render/camera.ts';
 import { BANNER } from '../src/render/markers.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 import {
@@ -22,6 +22,70 @@ test.beforeEach(({ page }) => {
   page.on('pageerror', (error) => errors.push(error.message));
 });
 test.afterEach(() => expect(errors).toEqual([]));
+
+test('draw readiness does not accept missing renderer metadata', async ({ page }) => {
+  await page.setContent('<canvas data-renderer="probe"></canvas>');
+  let returned = false;
+  const drawn = untilDrawn(page).then(() => {
+    returned = true;
+  });
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+  );
+  expect(returned).toBe(false);
+  await page.locator('canvas').evaluate((canvas) => {
+    Object.assign(canvas.dataset, { latestState: '1', latestView: '1' });
+  });
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+  );
+  expect(returned).toBe(false);
+  await page.locator('canvas').evaluate((canvas) => {
+    Object.assign(canvas.dataset, { drawnState: '1', drawnView: '1' });
+  });
+  await drawn;
+});
+
+test('fractional input coordinates keep the helper model aligned with native events', async ({
+  page,
+}) => {
+  await openGame(page);
+  await pause(page);
+  await page.evaluate(() => {
+    const points: { kind: string; x: number; y: number }[] = [];
+    Reflect.set(window, 'cameraInputs', points);
+    for (const kind of ['wheel', 'pointerdown', 'pointerup']) {
+      document.addEventListener(kind, (event) => {
+        const mouse = event as MouseEvent;
+        points.push({ kind, x: mouse.clientX, y: mouse.clientY });
+      });
+    }
+  });
+  const view = camera(page);
+  let expected = view.camera;
+  await view.zoom({ x: 416.44, y: 482.78967 }, 10);
+  await view.drag({ x: 512.8, y: 460.7 }, { x: 621.2, y: 380.3 }, 3);
+  const beforeTinyDrag = view.camera;
+  await view.drag({ x: 512.8, y: 460.7 }, { x: 514.1, y: 461.1 });
+  expect(view.camera).toEqual(beforeTinyDrag);
+  const inputs = await page.evaluate(
+    () => Reflect.get(window, 'cameraInputs') as { kind: string; x: number; y: number }[],
+  );
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error('no viewport');
+  const wheels = inputs.filter(({ kind }) => kind === 'wheel');
+  expect(wheels).toHaveLength(10);
+  for (const point of wheels) expected = zoomAt(expected, point, wheelFactor(-100), viewport, map);
+  const down = inputs.find(({ kind }) => kind === 'pointerdown');
+  const up = inputs.find(({ kind }) => kind === 'pointerup');
+  if (!down || !up) throw new Error('drag did not reach map');
+  expected = panBy(expected, up.x - down.x, up.y - down.y, viewport, map);
+  expect(view.camera.scale).toBeCloseTo(expected.scale, 10);
+  expect(view.camera.centre.x).toBeCloseTo(expected.centre.x, 8);
+  expect(view.camera.centre.y).toBeCloseTo(expected.centre.y, 8);
+});
 
 test('opening a game waits for its first completed map before a map click', async ({ page }) => {
   await page.addInitScript(() => {
