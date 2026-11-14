@@ -67,7 +67,7 @@ const PREFETCH_ZOOM = 1.6;
  * zoom out and in again finds its chunks built, and a session that looks at the whole
  * map does not keep the whole map.
  */
-const KEPT_VIEWS = 2;
+const KEPT_VIEWS = 1;
 
 interface Chunk {
   readonly graphics: Container;
