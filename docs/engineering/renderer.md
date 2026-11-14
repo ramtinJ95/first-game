@@ -17,3 +17,10 @@
 - City symbols are drawn in code in `src/render/symbols.ts`, one per `city.rank`: a great power's capital, its other cities, and a minor city. They grow up to 2.5 times at the closest zoom, and the town and village symbols grow by the same factor (`symbolGrowth` in `src/render/camera.ts`), so a city stays larger than a town and a town than a village.
 - The selection lives in `src/app/main.ts` and reaches panels as `view.current.selection`. It is not game state.
 - Dropping a save file on the page loads it through `loadGame` and `clock.load`.
+
+#### Natural shores and inhabited ground
+
+- `lake-shore.ts` details every outer and island shore once, retaining all geographic control points. Fill, mask, ink and water lines share that outline; island holes cut the fill too. Sample displacement is bounded by clearance over the whole chord, so narrow inlets and nearby islands constrain the detail. Tests cover all lake rings for crossings/containment, a 0.6 km maximum shore deviation, and no straight run longer than 3 km within a 20 m chord tolerance.
+- Hills have seeded width, height, skew and readable inclination around their own relief's strike; their depth index needs a nonzero 36 km reach and samples on a 12 km lattice. Dry folds keep the full range strike, with broader seeded angle, aspect, size and spacing variation. Both retain the existing chunk-overhang budget.
+- `rural.ts`/`rural-draw.ts` enrich the close fields tier using existing land, cover and river data: river-attached irrigation branches and irregular reed/palm pools in coastal cultivated fans; meadow ribbons and small pastoral camps/flocks on watered open dry plains, clear of woods, relief and farm rings. These are atlas ornaments, never rules entities or navigable water. Farm tracts vary coherently with local river direction instead of a constant delta angle. [Seven-region audit, lake metrics and verification](../evidence/map-natural.md).
+- Pinned-before captures use the historical revision's own save helper, not a compatibility exception in the current game.

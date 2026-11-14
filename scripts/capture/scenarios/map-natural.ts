@@ -21,10 +21,11 @@ export async function captureNaturalViews(
   { page, shot }: CaptureContext,
   stage: string,
   base = '',
+  load = loadSave,
 ) {
   await openGame(page, { base });
   await pause(page);
-  await loadSave(page, startGame());
+  await load(page, startGame());
   const view = camera(page);
   for (const { name, title, at } of NATURAL_VIEWS) {
     await view.jumpTo(at, 4);
@@ -48,7 +49,7 @@ export default defineScenario({
   title:
     'Natural shores, varied relief, and all seven regions at the closest zoom, before and after',
   async run(context) {
-    await withBaseline(BEFORE, (base) => captureNaturalViews(context, 'before', base));
+    await withBaseline(BEFORE, (base, load) => captureNaturalViews(context, 'before', base, load));
     await captureNaturalViews(context, 'after');
   },
 });

@@ -10,6 +10,7 @@ Province borders follow the land. `partition` in `scripts/map/provinces.ts` firs
 
 The map also holds terrain areas, peaks, and settlements. A settlement is a named place with no people and no rules. The rules that choose them sit at the top of `scripts/map/terrain.ts` and `scripts/map/settlements.ts`.
 
+- Natural Earth 10m lake outlines use `LAKE_SIMPLIFY_KM` (0.1 km), not the relief/forest tolerance of 2 km, which erased whole bays and simplified three valid lakes below the area floor. Clipping, rounding, source classes and exclusions remain unchanged; no province or city moves. The renderer adds bounded shore detail without translating the geographic control points. [Before/after lake audit](../evidence/map-natural.md).
 - A place is written by the name it bore in antiquity, read from Pleiades' own name records (`usualName` in `settlements.ts`): its title when one of its names in an ancient language, or dated in the game's periods and out of use by `MODERN_FROM`, has the same letters, or else the first such name, Latin before Greek. A place with no ancient name, such as one Pleiades knows only by a modern village or a "tepe", is not a candidate, so its room goes to a place with one. A test over the built map rejects any name with an editor's mark, accents, or a modern word such as "Tell" or "Col.".
 - Natural Earth names the peaks in modern languages, so a peak's name is drawn only from `PEAK_NAMES` in `src/render/terrain/places.ts`, its classical name, and a peak not in it is drawn with none.
 
