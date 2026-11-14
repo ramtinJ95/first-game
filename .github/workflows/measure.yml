@@ -67,17 +67,6 @@ jobs:
           du -sh current reference; ls current | wc -l; ls reference | wc -l
       - name: Measure
         run: node .github/measure/measure.ts current reference '${{ matrix.settings }}' > result.tsv
-      - name: Crop differences
-        if: ${{ matrix.current == 'self' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          node .github/measure/crops.ts current reference result.tsv crops
-          for f in crops/*.png; do
-            jq -n --arg name "crop $(basename "$f")" --arg sha "${{ github.sha }}" --rawfile t "$f.txt" --arg b "$(base64 -w0 "$f")" \
-              '{name:$name, head_sha:$sha, status:"completed", conclusion:"neutral", output:{title:$t, summary:$t, text:$b}}' \
-              | gh api repos/${{ github.repository }}/check-runs --input - > /dev/null
-          done
       - name: Report as a check run
         env:
           GH_TOKEN: ${{ github.token }}
@@ -85,3 +74,15 @@ jobs:
           jq -n --arg name "measure ${{ matrix.name }}" --arg sha "${{ github.sha }}" --rawfile text result.tsv \
             '{name:$name, head_sha:$sha, status:"completed", conclusion:"neutral", output:{title:$name, summary:"tab-separated per file", text:$text}}' \
             | gh api repos/${{ github.repository }}/check-runs --input -
+      - name: Crop differences
+        if: ${{ matrix.current == 'self' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node .github/measure/crops.ts current reference result.tsv crops
+          for f in crops/*.png; do
+            base64 -w0 "$f" > "$f.b64"
+            jq -n --arg name "crop $(basename "$f")" --arg sha "${{ github.sha }}" --rawfile t "$f.txt" --rawfile b "$f.b64" \
+              '{name:$name, head_sha:$sha, status:"completed", conclusion:"neutral", output:{title:$t, summary:$t, text:$b}}' \
+              | gh api repos/${{ github.repository }}/check-runs --input - > /dev/null
+          done

@@ -31,15 +31,19 @@ for (const [file] of picked) {
     const x = i % a.width, y = (i - x) / a.width; pts.push(x, y); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
   // crop 180x120 around the densest changed point (the median one)
   const mid = Math.floor(pts.length / 4) * 2;
-  const cx = Math.min(Math.max(0, pts[mid]! - 90), a.width - 180), cy = Math.min(Math.max(0, pts[mid + 1]! - 60), a.height - 120);
-  const o = new PNG({ width: 540, height: 120 });
-  for (let y = 0; y < 120; y++) for (let x = 0; x < 180; x++) {
+  const cx = Math.min(Math.max(0, pts[mid]! - 60), a.width - 120), cy = Math.min(Math.max(0, pts[mid + 1]! - 40), a.height - 80);
+  const parts = [0, 1, 2].map(() => new PNG({ width: 120, height: 80 }));
+  for (let y = 0; y < 80; y++) for (let x = 0; x < 120; x++) {
     const s = ((cy + y) * a.width + cx + x) * 4;
     const ok = inside(a, b, (cy + y) * a.width + cx + x) && inside(b, a, (cy + y) * a.width + cx + x);
-    for (let c = 0; c < 4; c++) { o.data[(y * 540 + x) * 4 + c] = a.data[s + c]!; o.data[(y * 540 + 180 + x) * 4 + c] = b.data[s + c]!; }
-    const m = (y * 540 + 360 + x) * 4; o.data[m] = ok ? a.data[s]! >> 2 : 255; o.data[m + 1] = ok ? a.data[s + 1]! >> 2 : 0; o.data[m + 2] = ok ? a.data[s + 2]! >> 2 : 0; o.data[m + 3] = 255;
+    const t = (y * 120 + x) * 4;
+    for (let c = 0; c < 4; c++) { parts[0]!.data[t + c] = a.data[s + c]!; parts[1]!.data[t + c] = b.data[s + c]!; }
+    parts[2]!.data[t] = ok ? a.data[s]! >> 2 : 255; parts[2]!.data[t + 1] = ok ? a.data[s + 1]! >> 2 : 0; parts[2]!.data[t + 2] = ok ? a.data[s + 2]! >> 2 : 0; parts[2]!.data[t + 3] = 255;
   }
   const name = file!.replaceAll('/', '__');
-  writeFileSync(join(out, name), PNG.sync.write(o));
+  for (const [i, part] of parts.entries()) {
+    writeFileSync(join(out, `${name}.${i}.png`), PNG.sync.write(part));
+    writeFileSync(join(out, `${name}.${i}.png.txt`), `${['current', 'reference', 'mask'][i]} ${file} crop=${cx},${cy}`);
+  }
   writeFileSync(join(out, name + '.txt'), `${file} bbox=${x0},${y0},${x1},${y1} changed=${pts.length / 2} crop=${cx},${cy}`);
 }
