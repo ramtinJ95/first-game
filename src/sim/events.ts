@@ -28,6 +28,8 @@ export type DayEvent =
       position: MapPoint;
       attackers: readonly FactionId[];
       defenders: readonly FactionId[];
+      /** Men at contact, before losses, including a battle over within this day. */
+      forces: readonly { army: ArmyId; faction: FactionId; men: number }[];
     }
   | {
       kind: 'battleEnded';

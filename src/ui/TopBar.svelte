@@ -10,6 +10,7 @@
   import type { FrameActions } from './frame-actions.ts';
   import FrameControls from './FrameControls.svelte';
   import TimeControls from './TimeControls.svelte';
+  import { desertionLine } from '../app/desertion.ts';
 
   let {
     view,
@@ -30,6 +31,7 @@
   const game = $derived(view.current.state);
   const fallen = $derived((game.factions[game.player]?.defeatedOn ?? null) !== null);
   const stores = $derived(game.factions[game.player]?.stores);
+  const deserting = $derived(!fallen && desertionLine(game));
   const balance = $derived(dailyBalances(game).get(game.player));
   const limits = $derived(limitsOf(game).get(game.player));
   const wars = $derived(warsOf(game, game.player));
@@ -94,8 +96,15 @@
     <FrameControls frame={view.current.frame} actions={frame} />
   </span>
 </header>
+{#if deserting}
+  <div class="panel desertion" role="status" data-testid="desertion-standing">{deserting}</div>
+{/if}
 
 <style>
+  .desertion {
+    color: var(--bad);
+    padding-block: 3px;
+  }
   .bar {
     display: flex;
     flex-wrap: wrap;

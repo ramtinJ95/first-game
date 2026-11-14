@@ -16,6 +16,7 @@
     joinChoices,
     weakSiegeText,
     whyNotBesieging,
+    joinOrderedText,
   } from './describe.ts';
   import Formations from './Formations.svelte';
   import StanceControls from './StanceControls.svelte';
@@ -44,6 +45,7 @@
     return at ? armiesAt(game, sight, at, army.id) : [];
   });
   const joins = $derived(joinChoices(game, sight, army));
+  const joined = $derived(joinOrderedText(game, pending, army));
   const blocked = $derived(own ? whyNotBesieging(game, army, pending) : undefined);
   const weak = $derived.by(() => {
     const siege = army.activity.kind === 'besieging' ? game.sieges[army.activity.siege] : undefined;
@@ -58,6 +60,7 @@
     <span class="muted" data-testid="army-men">{whole(menOf(game, army))} men</span>
   </div>
   <p data-testid="army-activity">{activityText(game, army)}</p>
+  {#if joined}<p data-testid="join-ordered">{joined}</p>{/if}
   {#if blocked}
     <p class="bad" data-testid="army-siege-block">{blocked.text}</p>
     {#if blocked.besiege}

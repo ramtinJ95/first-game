@@ -29,15 +29,16 @@ import {
 } from './names.ts';
 
 import { ALERT_KINDS } from './alert-kinds.generated.ts';
+import { cityDanger } from './city-danger.ts';
+import { importantBattle } from './battle-importance.ts';
 export { ALERT_KINDS };
 export type AlertKind = (typeof ALERT_KINDS)[number];
 
 /**
- * The news that can stop the game for the player to decide: a battle of theirs begins,
- * a siege of theirs is too weak to starve the city, and an enemy army comes near their
- * land. The Game menu turns each on or off.
+ * Decision points: an important battle, an own city besieged/in danger/lost, a weak
+ * offensive siege, or the first enemy near the player's land. The Game menu sets each.
  */
-export const PAUSE_KINDS = ['battle', 'weakSiege', 'sighted'] as const;
+export const PAUSE_KINDS = ['battle', 'weakSiege', 'sighted', 'ownCity'] as const;
 export type PauseKind = (typeof PAUSE_KINDS)[number];
 
 export interface Alert {
@@ -108,15 +109,47 @@ export function alertsOfDay(
   after: State,
   events: readonly DeepReadonly<DayEvent>[],
   occupied: Occupied = new Map(),
+  remembered?: Set<string>,
 ): Alert[] {
   const player = after.player;
   // The day played, which the rules also stamp on what happened in it, such as a city's fall.
   const day = before.day;
   const alerts: Alert[] = [];
   const add = (alert: Omit<Alert, 'day'>) => alerts.push({ ...alert, day });
+  const small = events.filter(
+    (event) =>
+      event.kind === 'battleBegan' &&
+      event.forces.some((force) => force.faction === player) &&
+      !importantBattle(before, event),
+  );
+  const smallArmies = new Set(
+    small.flatMap((event) =>
+      event.kind === 'battleBegan' ? event.forces.map((force) => force.army) : [],
+    ),
+  );
+  const smallBattles = new Set(
+    small.flatMap((event) => (event.kind === 'battleBegan' ? [event.battle] : [])),
+  );
+  // The existing saved news keys keep the decision until this battle ends, not just
+  // on its first day. A later retreat must not turn a quiet sally into two loud alerts.
+  const quietKey = (id: string) => `quiet-battle:${id}`;
+  for (const id of smallBattles) remembered?.add(quietKey(id));
+  for (const battle of Object.values(before.battles)) {
+    if (!remembered?.has(quietKey(battle.id))) continue;
+    smallBattles.add(battle.id);
+    for (const id of [...battle.attackers, ...battle.defenders]) smallArmies.add(id);
+  }
 
   for (const event of events) {
-    const alert = eventAlert(before, after, event);
+    let alert = eventAlert(before, after, event);
+    if (
+      alert &&
+      (event.kind === 'armyRetreated' || event.kind === 'armyDestroyed') &&
+      smallArmies.has(event.army)
+    )
+      alert = { ...alert, world: 'chronicle' };
+    if (alert && event.kind === 'battleEnded' && smallBattles.has(event.battle))
+      alert = { ...alert, tone: 'neutral' };
     const seenAs = goneRecord(event);
     if (alert) add(seenAs ? { ...alert, seenAs } : alert);
   }
@@ -200,6 +233,7 @@ export function alertsOfDay(
       kind: 'cityChangedOwner',
       tone: city.owner === player ? 'good' : 'bad',
       text: `${city.name} fell to ${factionName(after, city.owner)}`,
+      ...(was.owner === player && { pause: { kind: 'ownCity' as const } }),
       focus: { at: city.position, select: { kind: 'province', province: city.province } },
     });
   }
@@ -217,6 +251,7 @@ export function alertsOfDay(
     add({
       kind: 'siegeBegan',
       tone: ours ? 'neutral' : 'bad',
+      ...(city.owner === player && { pause: { kind: 'ownCity' as const } }),
       text: ours
         ? `${namesOfArmies(
             after,
@@ -224,6 +259,18 @@ export function alertsOfDay(
           )} ${verb} ${city.name}`
         : `${ownersOf(after, siege.besiegers)} ${verb} ${city.name}`,
       focus: { at: city.position, select: { kind: 'province', province: city.province } },
+    });
+  }
+
+  for (const city of Object.values(after.cities)) {
+    const danger = cityDanger(after, city.id);
+    if (!danger || cityDanger(before, city.id)) continue;
+    add({
+      kind: 'cityInDanger',
+      tone: 'bad',
+      text: `${city.name} is in danger: ${danger}. Relieve it with an army, sally with troops at the city, or seek peace in Wars.`,
+      focus: { at: city.position, select: { kind: 'province', province: city.province } },
+      pause: { kind: 'ownCity' },
     });
   }
 
@@ -284,6 +331,7 @@ export function alertsOfDay(
     }
   }
 
+  for (const id of smallBattles) if (!after.battles[id]) remembered?.delete(quietKey(id));
   return alerts;
 }
 
@@ -561,7 +609,9 @@ function eventAlert(
           tone: 'neutral',
           text: `Battle ${where} against ${namesOf(after, enemies)}`,
           focus,
-          pause: { kind: 'battle' },
+          ...(importantBattle(before, event)
+            ? { pause: { kind: 'battle' as const } }
+            : { world: 'chronicle' as const }),
         };
       }
       return {
@@ -663,6 +713,8 @@ function eventAlert(
       };
     }
     case 'armyDeserted': {
+      // The player's losses are aggregated into start/tenth/end notices by desertionNews.
+      if (event.owner === player) return undefined;
       if (isShort(before, event.owner)) return undefined;
       const ours = event.owner === player;
       return {

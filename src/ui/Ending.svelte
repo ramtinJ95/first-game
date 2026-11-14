@@ -23,70 +23,84 @@
   const standing = $derived(frame.standing);
   const capitals = $derived(standing.capitals.map((id) => game.cities[id]?.name ?? id));
   let picker = $state<HTMLInputElement>();
+  let dialog = $state<HTMLDialogElement>();
+  $effect(() => {
+    if (dialog && !dialog.open) dialog.showModal();
+  });
+
+  function onkeydown(event: KeyboardEvent) {
+    if (event.key !== 'Tab' || !dialog) return;
+    const buttons = [...dialog.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+    const first = buttons[0];
+    const last = buttons.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
+  }
 </script>
 
-<div class="backdrop">
-  <div
-    class="panel ending {ending.kind}"
-    data-testid={ending.kind === 'lost' ? 'defeat' : 'victory'}
-    role="alertdialog"
-    aria-modal="true"
-    aria-labelledby="ending-title"
-  >
-    {#if ending.kind === 'lost'}
-      <p class="kicker">{dateText(ending.on)}</p>
-      <h2 id="ending-title">{realm} has fallen</h2>
-      <p data-testid="defeat-text">
-        {#if ending.city && ending.by}
-          {game.cities[ending.city]?.name ?? ending.city}, your last city, fell to
-          {factionName(game, ending.by)}.
-        {:else}
-          Your last city has fallen.
-        {/if}
-        Your armies are gone and your people serve new masters.
-      </p>
-      <div class="row">
-        <button type="button" onclick={() => actions.watchOn()}>Watch on</button>
-        {#if latest}
-          <button type="button" onclick={() => actions.loadFromBrowser(latest.slot)}
-            >Load the save of {dateText(latest.day)}</button
-          >
-        {/if}
-        <button type="button" onclick={() => picker?.click()}>Load a file</button>
-        <button type="button" onclick={() => actions.showStart()}>Start again</button>
-      </div>
-      <input
-        bind:this={picker}
-        type="file"
-        accept=".json,application/json"
-        hidden
-        data-testid="defeat-import"
-        onchange={(event) => {
-          const file = event.currentTarget.files?.[0];
-          if (file) actions.importFile(file);
-        }}
-      />
-    {:else}
-      <p class="kicker">{dateText(ending.on)}</p>
-      <h2 id="ending-title">{realm} is victorious</h2>
-      <p data-testid="victory-text">
-        You hold {standing.provinces} of the {Object.keys(game.provinces).length} provinces and the great
-        capitals {capitals.join(', ')}. You have won.
-      </p>
-      <div class="row">
-        <button type="button" onclick={() => actions.closeModal()}>Play on</button>
-        <button type="button" onclick={() => actions.showStart()}>Start again</button>
-      </div>
-    {/if}
-  </div>
-</div>
+<dialog
+  bind:this={dialog}
+  class="panel ending {ending.kind}"
+  data-testid={ending.kind === 'lost' ? 'defeat' : 'victory'}
+  aria-modal="true"
+  aria-labelledby="ending-title"
+  oncancel={(event) => event.preventDefault()}
+  {onkeydown}
+>
+  {#if ending.kind === 'lost'}
+    <p class="kicker">{dateText(ending.on)}</p>
+    <h2 id="ending-title">{realm} has fallen</h2>
+    <p data-testid="defeat-text">
+      {#if ending.city && ending.by}
+        {game.cities[ending.city]?.name ?? ending.city}, your last city, fell to
+        {factionName(game, ending.by)}.
+      {:else}
+        Your last city has fallen.
+      {/if}
+      Your armies are gone and your people serve new masters.
+    </p>
+    <div class="row">
+      <button type="button" onclick={() => actions.watchOn()}>Watch on</button>
+      {#if latest}
+        <button type="button" onclick={() => actions.loadFromBrowser(latest.slot)}
+          >Load the save of {dateText(latest.day)}</button
+        >
+      {/if}
+      <button type="button" onclick={() => picker?.click()}>Load a file</button>
+      <button type="button" onclick={() => actions.showStart()}>Start again</button>
+    </div>
+    <input
+      bind:this={picker}
+      type="file"
+      accept=".json,application/json"
+      hidden
+      data-testid="defeat-import"
+      onchange={(event) => {
+        const file = event.currentTarget.files?.[0];
+        if (file) actions.importFile(file);
+      }}
+    />
+  {:else}
+    <p class="kicker">{dateText(ending.on)}</p>
+    <h2 id="ending-title">{realm} is victorious</h2>
+    <p data-testid="victory-text">
+      You hold {standing.provinces} of the {Object.keys(game.provinces).length} provinces and the great
+      capitals {capitals.join(', ')}. You have won.
+    </p>
+    <div class="row">
+      <button type="button" onclick={() => actions.closeModal()}>Play on</button>
+      <button type="button" onclick={() => actions.showStart()}>Start again</button>
+    </div>
+  {/if}
+</dialog>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    display: grid;
-    place-items: center;
+  .ending::backdrop {
     background: rgb(59 42 26 / 30%);
   }
 

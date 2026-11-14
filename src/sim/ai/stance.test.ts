@@ -74,6 +74,9 @@ describe('the stance a power chooses in a battle', () => {
 
   test('after its first choice in a battle, an army that is not beaten keeps its stance', () => {
     expect(changesOf(inBattle('holdTheLine', 'holdTheLine', REFORM_DAYS, 5))).toEqual([]);
+    expect(
+      changesOf(inBattle('skirmishAndWithdraw', 'skirmishAndWithdraw', REFORM_DAYS, 5)),
+    ).toEqual([]);
   });
 
   test('after its first choice in a battle, an army that is beaten changes again', () => {

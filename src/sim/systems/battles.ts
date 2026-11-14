@@ -308,6 +308,10 @@ function startBattles(state: GameState) {
       position: { ...battle.position },
       attackers: [...battle.sides.attackers.factions],
       defenders: [...battle.sides.defenders.factions],
+      forces: [...battle.attackers, ...battle.defenders].flatMap((id) => {
+        const army = state.armies[id];
+        return army ? [{ army: army.id, faction: army.owner, men: menOf(state, army) }] : [];
+      }),
     });
   }
 }

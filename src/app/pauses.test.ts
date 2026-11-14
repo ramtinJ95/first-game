@@ -67,7 +67,7 @@ describe('stopsOfDay', () => {
     } as Storage;
     expect(readPauses(storage)).toEqual(ALL_PAUSES);
     writePauses(storage, { ...ALL_PAUSES, weakSiege: false });
-    expect(readPauses(storage)).toEqual({ battle: true, weakSiege: false, sighted: true });
+    expect(readPauses(storage)).toEqual({ ...ALL_PAUSES, weakSiege: false });
     store.set('pauses', 'not json');
     expect(readPauses(storage)).toEqual(ALL_PAUSES);
   });

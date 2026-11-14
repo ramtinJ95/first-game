@@ -34,6 +34,7 @@
     weakSiegeText,
   } from './describe.ts';
   import WarStatus from './WarStatus.svelte';
+  import { recruitForecast } from './recruit-forecast.ts';
 
   let {
     game,
@@ -58,6 +59,16 @@
   let share = $state<number>(0.25);
   let chosen = $state<CityId | undefined>();
   let storming = $state(false);
+  let confirming = $state<Troop | undefined>();
+
+  function raise(troop: Troop) {
+    if (
+      recruitForecast(game, pending, troop, trainingDaysAt(city, TROOPS[troop].recruit.days))
+        .warning
+    )
+      confirming = troop;
+    else actions.issue({ kind: 'recruit', faction: game.player, city: city.id, troop });
+  }
 
   const own = $derived(city.owner === game.player);
   const full = $derived(fullDefences(city));
@@ -259,21 +270,46 @@
 
   {#if own}
     <h3>Raise</h3>
+    <p class="muted small">
+      Forecast at today's yields, after all training and waiting recruits muster; no growth or
+      losses predicted. Store runway includes payment now and upkeep from each muster day.
+    </p>
+    {#if confirming}
+      {@const troop = confirming}
+      {@const forecast = recruitForecast(
+        game,
+        pending,
+        troop,
+        trainingDaysAt(city, TROOPS[troop].recruit.days),
+      )}
+      <div data-testid="recruit-warning">
+        <p class="bad">{TROOP_NAMES[troop]}: {forecast.warning}</p>
+        <p>{forecast.text}</p>
+        <div class="row">
+          <button
+            type="button"
+            disabled={refusal(troop) !== undefined}
+            onclick={() => {
+              actions.issue({ kind: 'recruit', faction: game.player, city: city.id, troop });
+              confirming = undefined;
+            }}>Raise anyway</button
+          >
+          <button type="button" onclick={() => (confirming = undefined)}>Cancel raising</button>
+        </div>
+      </div>
+    {/if}
     <div class="troops">
       {#each Object.keys(TROOPS) as Troop[] as troop (troop)}
         {@const why = refusal(troop)}
         {@const cost = TROOPS[troop].recruit}
-        <button
-          type="button"
-          disabled={why !== undefined}
-          title={why}
-          onclick={() =>
-            actions.issue({ kind: 'recruit', faction: game.player, city: city.id, troop })}
-        >
+        {@const forecast = recruitForecast(game, pending, troop, trainingDaysAt(city, cost.days))}
+        <button type="button" disabled={why !== undefined} title={why} onclick={() => raise(troop)}>
           <span class="troop">{TROOP_NAMES[troop]}</span>
           <span class="cost"
             >{whole(cost.gold)} gold · {whole(cost.men)} men · {trainingDaysAt(city, cost.days)} days</span
           >
+          <span class="cost">{forecast.text}</span>
+          {#if forecast.warning}<span class="why">Shortfall — review before raising</span>{/if}
           {#if why}<span class="why">{why}</span>{/if}
         </button>
       {/each}
