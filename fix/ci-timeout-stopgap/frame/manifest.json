@@ -1,0 +1,87 @@
+[
+  {
+    "file": "start-1600.png",
+    "title": "1600 px. The start screen: the name, and the five powers with their colour, capital, cities, and position",
+    "kind": "screenshot"
+  },
+  {
+    "file": "guide-1600.png",
+    "title": "1600 px. Rome chosen: the game is paused on Roma and the guide gives the goal and the five things to know",
+    "kind": "screenshot"
+  },
+  {
+    "file": "save-menu-1600.png",
+    "title": "1600 px. The Game menu after a save: save, load your save of day 1, the autosave, export, import, and the start screen",
+    "kind": "screenshot"
+  },
+  {
+    "file": "fate-1600.png",
+    "title": "1600 px. Mediolanum falls to Rome: the game pauses and asks its fate, with what occupying, sacking, and enslaving give and cost",
+    "kind": "screenshot"
+  },
+  {
+    "file": "victory-1600.png",
+    "title": "1600 px. Rome takes its 32nd province with three great capitals: the win is announced and the game waits",
+    "kind": "screenshot"
+  },
+  {
+    "file": "defeat-1600.png",
+    "title": "1600 px. Roma, Rome's last city, falls to Carthage: the game stops on the defeat screen with the day and the choices",
+    "kind": "screenshot"
+  },
+  {
+    "file": "continue-1600.png",
+    "title": "1600 px. Back on the start screen, Continue offers the save written last",
+    "kind": "screenshot"
+  },
+  {
+    "file": "start-1024.png",
+    "title": "1024 px. The start screen: the name, and the five powers with their colour, capital, cities, and position",
+    "kind": "screenshot"
+  },
+  {
+    "file": "guide-1024.png",
+    "title": "1024 px. Rome chosen: the game is paused on Roma and the guide gives the goal and the five things to know",
+    "kind": "screenshot"
+  },
+  {
+    "file": "save-menu-1024.png",
+    "title": "1024 px. The Game menu after a save: save, load your save of day 1, the autosave, export, import, and the start screen",
+    "kind": "screenshot"
+  },
+  {
+    "file": "fate-1024.png",
+    "title": "1024 px. Mediolanum falls to Rome: the game pauses and asks its fate, with what occupying, sacking, and enslaving give and cost",
+    "kind": "screenshot"
+  },
+  {
+    "file": "victory-1024.png",
+    "title": "1024 px. Rome takes its 32nd province with three great capitals: the win is announced and the game waits",
+    "kind": "screenshot"
+  },
+  {
+    "file": "defeat-1024.png",
+    "title": "1024 px. Roma, Rome's last city, falls to Carthage: the game stops on the defeat screen with the day and the choices",
+    "kind": "screenshot"
+  },
+  {
+    "file": "continue-1024.png",
+    "title": "1024 px. Back on the start screen, Continue offers the save written last",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The frame round the game at 1600 and 1024 px: the start screen, the guide, the save menu, the fate prompt, the victory announcement, the defeat screen, and Continue",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The frame round the game at 1600 and 1024 px: the start screen, the guide, the save menu, the fate prompt, the victory announcement, the defeat screen, and Continue (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The frame round the game at 1600 and 1024 px: the start screen, the guide, the save menu, the fate prompt, the victory announcement, the defeat screen, and Continue (Playwright trace)",
+    "kind": "trace"
+  }
+]
