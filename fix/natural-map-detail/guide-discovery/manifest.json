@@ -1,0 +1,67 @@
+[
+  {
+    "file": "wars-1280.png",
+    "title": "Wars and an offer waiting, Full tomorrow and At the call-up limit, one row at 1280 px",
+    "kind": "screenshot"
+  },
+  {
+    "file": "wars-1024.png",
+    "title": "Wars and an offer waiting, Full tomorrow and At the call-up limit, one row at 1024 px",
+    "kind": "screenshot"
+  },
+  {
+    "file": "guide-first.png",
+    "title": "Guide: selecting, sieges, buildings, peace, and pauses",
+    "kind": "screenshot"
+  },
+  {
+    "file": "guide-last.png",
+    "title": "Guide: stances, Overview, Chronicle, saving, and city-fate pauses",
+    "kind": "screenshot"
+  },
+  {
+    "file": "building-cautions.png",
+    "title": "Food is full and no nearby city is in unrest: Canals and Temple warn but remain allowed",
+    "kind": "screenshot"
+  },
+  {
+    "file": "siege-arrivals.png",
+    "title": "Two legions, 17 days apart: arrival dates, committed men, and exposure to sallies",
+    "kind": "screenshot"
+  },
+  {
+    "file": "minor-rich.png",
+    "title": "Alexandria Arachosion: the rich minor kind is always described",
+    "kind": "screenshot"
+  },
+  {
+    "file": "minor-poor.png",
+    "title": "Ambrakia: the poor minor kind is always described",
+    "kind": "screenshot"
+  },
+  {
+    "file": "minor-leagued.png",
+    "title": "Athenai: the leagued minor kind is always described",
+    "kind": "screenshot"
+  },
+  {
+    "file": "minor-standing.png",
+    "title": "Alexandria Areion: the standing minor kind is always described",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The whole-game guide, visible wars, useful building cautions, coordinated siege arrivals, and every minor kind",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The whole-game guide, visible wars, useful building cautions, coordinated siege arrivals, and every minor kind (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The whole-game guide, visible wars, useful building cautions, coordinated siege arrivals, and every minor kind (Playwright trace)",
+    "kind": "trace"
+  }
+]
