@@ -2,7 +2,7 @@
 
 ## Method
 
-Source: GitHub pull-request file lists and patches for the ten merged PRs on the rebased main `46a5181`: [#45](https://github.com/ramtinJ95/first-game/pull/45), [#42](https://github.com/ramtinJ95/first-game/pull/42), [#44](https://github.com/ramtinJ95/first-game/pull/44), [#41](https://github.com/ramtinJ95/first-game/pull/41), [#40](https://github.com/ramtinJ95/first-game/pull/40), [#39](https://github.com/ramtinJ95/first-game/pull/39), [#38](https://github.com/ramtinJ95/first-game/pull/38), [#37](https://github.com/ramtinJ95/first-game/pull/37), [#36](https://github.com/ramtinJ95/first-game/pull/36), [#35](https://github.com/ramtinJ95/first-game/pull/35). The six requested feature PRs are 36, 35, 37, 39, 38, and 40. File overlap is not proof of a textual merge conflict. “After” is a conservative replay of those changes using the new extension points, not a claim that already-merged commits changed retroactively. All original behavior files remain shared unless their edits were only replaced registrations/version assertions. New shared area-guide paths are counted too.
+Source: GitHub pull-request file lists and patches for the ten most recently merged PRs at main snapshot `0031bb7`: [#43](https://github.com/ramtinJ95/first-game/pull/43), [#46](https://github.com/ramtinJ95/first-game/pull/46), [#42](https://github.com/ramtinJ95/first-game/pull/42), [#45](https://github.com/ramtinJ95/first-game/pull/45), [#41](https://github.com/ramtinJ95/first-game/pull/41), [#44](https://github.com/ramtinJ95/first-game/pull/44), [#40](https://github.com/ramtinJ95/first-game/pull/40), [#38](https://github.com/ramtinJ95/first-game/pull/38), [#39](https://github.com/ramtinJ95/first-game/pull/39), [#37](https://github.com/ramtinJ95/first-game/pull/37). The six requested feature PRs are 36, 35, 37, 39, 38, and 40. File overlap is not proof of a textual merge conflict. “After” is a conservative replay of those changes using the new extension points, not a claim that already-merged commits changed retroactively. All original behavior files remain shared unless their edits were only replaced registrations/version assertions. New shared area-guide paths are counted too.
 
 - Save version bumps/comments move to feature-specific change files. The format-number-only assertions in 36/39 and the interpolation cleanup in 38 disappear; 40’s real war-save test remains. Only 38 still changes the save envelope itself, so neither save file remains pairwise shared.
 - New simulation commands use the generic discovery command, and their usage belongs in the feature guide, not another row appended to the legacy command table. Thus 39/40 no longer edit `package.json` or a shared command table.
@@ -34,32 +34,37 @@ Total pairwise file incidences: **114 → 90**. This does not imply a proportion
 
 ## Files touched by three or more of the last ten merged PRs
 
-| File                                       | PR count | Treatment                                                                                                     |
-| ------------------------------------------ | -------: | ------------------------------------------------------------------------------------------------------------- |
-| `CLAUDE.md`                                |        8 | Area details moved to linked guides; cross-cutting rules remain.                                              |
-| `e2e/support.ts`                           |        5 | Fixture helpers remain shared; splitting exported fixtures and all consumers is a separate refactor.          |
-| `src/app/alerts.test.ts`                   |        4 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
-| `src/app/alerts.ts`                        |        4 | Kinds generated from feature files; news behavior still shared.                                               |
-| `src/app/main.ts`                          |        4 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
-| `src/sim/fixture.ts`                       |        4 | Real state/rule changes remain shared; not a registration-only edit.                                          |
-| `src/sim/new-game.ts`                      |        4 | Real state/rule changes remain shared; not a registration-only edit.                                          |
-| `src/sim/save.test.ts`                     |        4 | Version bump/assertion contention removed with named change files; real parser tests remain.                  |
-| `src/sim/save.ts`                          |        4 | Version bump/assertion contention removed with named change files; real parser tests remain.                  |
-| `docs/design.md`                           |        3 | Agreed design remains one document; splitting decisions would hide cross-area tradeoffs.                      |
-| `e2e/panels.spec.ts`                       |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
-| `package.json`                             |        3 | New simulation commands use file discovery; existing aliases remain compatible.                               |
-| `scripts/capture/scenarios/stage-three.ts` |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
-| `src/app/clock.ts`                         |        3 | Slots generated from independent typed order registrations; actual clock behavior remains.                    |
-| `src/app/fates.test.ts`                    |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
-| `src/app/page.ts`                          |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
-| `src/render/armies/every-city.test.ts`     |        3 | Renderer/map changes are outside this refactor; no game drawing changes.                                      |
-| `src/render/renderer.ts`                   |        3 | Renderer/map changes are outside this refactor; no game drawing changes.                                      |
-| `src/sim/systems/economy.ts`               |        3 | Real state/rule changes remain shared; not a registration-only edit.                                          |
-| `src/ui/CityPanel.svelte`                  |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
-| `src/ui/Hud.svelte`                        |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
-| `src/ui/describe.test.ts`                  |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
+| File                              | PR count | Treatment                                                                                                              |
+| --------------------------------- | -------: | ---------------------------------------------------------------------------------------------------------------------- |
+| `CLAUDE.md`                       |        7 | Area details moved to linked guides; cross-cutting rules remain.                                                       |
+| `e2e/support.ts`                  |        5 | Fixture helpers remain shared; splitting exported fixtures and all consumers is a separate refactor.                   |
+| `src/app/alerts.test.ts`          |        5 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup.          |
+| `src/app/main.ts`                 |        5 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup.          |
+| `e2e/panels.spec.ts`              |        4 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup.          |
+| `src/app/alerts.ts`               |        4 | Kinds generated from feature files; news behavior still shared.                                                        |
+| `src/app/clock.ts`                |        4 | Slots generated from independent typed order registrations; actual clock behavior remains.                             |
+| `src/app/fates.test.ts`           |        4 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup.          |
+| `src/ui/describe.test.ts`         |        4 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup.          |
+| `docs/design.md`                  |        3 | Agreed design remains one document; splitting decisions would hide cross-area tradeoffs.                               |
+| `package.json`                    |        3 | New simulation commands use file discovery; existing aliases remain compatible.                                        |
+| `src/app/page.ts`                 |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup.          |
+| `src/sim/ai/decide.test.ts`       |        3 | Real rule, UI, fixture, or scenario changes remain shared; splitting is not a small registration cleanup.              |
+| `src/sim/ai/decide.ts`            |        3 | Real rule, UI, fixture, or scenario changes remain shared; splitting is not a small registration cleanup.              |
+| `src/sim/cities.ts`               |        3 | Real rule, UI, fixture, or scenario changes remain shared; splitting is not a small registration cleanup.              |
+| `src/sim/fixture.ts`              |        3 | Real state/rule changes remain shared; not a registration-only edit.                                                   |
+| `src/sim/new-game.ts`             |        3 | Real state/rule changes remain shared; not a registration-only edit.                                                   |
+| `src/sim/orders/orders.ts`        |        3 | Handlers and kinds are generated from one typed registration per order; real handler behavior remains in its own file. |
+| `src/sim/save.test.ts`            |        3 | Version bump/assertion contention removed with named change files; real parser tests remain.                           |
+| `src/sim/save.ts`                 |        3 | Version bump/assertion contention removed with named change files; real parser tests remain.                           |
+| `src/sim/systems/battles.test.ts` |        3 | Real rule, UI, fixture, or scenario changes remain shared; splitting is not a small registration cleanup.              |
+| `src/sim/systems/battles.ts`      |        3 | Real rule, UI, fixture, or scenario changes remain shared; splitting is not a small registration cleanup.              |
+| `src/sim/systems/economy.ts`      |        3 | Real state/rule changes remain shared; not a registration-only edit.                                                   |
+| `src/ui/ArmyPanel.svelte`         |        3 | Real rule, UI, fixture, or scenario changes remain shared; splitting is not a small registration cleanup.              |
+| `src/ui/CityPanel.svelte`         |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup.          |
+| `src/ui/Hud.svelte`               |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup.          |
+| `src/ui/describe.ts`              |        3 | Real rule, UI, fixture, or scenario changes remain shared; splitting is not a small registration cleanup.              |
 
-`package.json` reached three PRs after world news landed. `orders/orders.ts` remains below the three-PR threshold, but its named extension point was fixed as explicitly requested.
+`package.json` and `src/sim/orders/orders.ts` both reach the three-PR threshold in this snapshot. Their named extension points now use independent files; existing simulation aliases forward through the same fresh-registry dispatcher.
 
 ## Documentation replay assignments
 
