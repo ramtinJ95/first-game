@@ -1,7 +1,7 @@
 import { LEADER_SHARE } from '../sim/ai/thresholds.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { DayEvent } from '../sim/events.ts';
-import type { FactionId } from '../sim/ids.ts';
+import type { CityId, FactionId } from '../sim/ids.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { warSides, type WarKey } from '../sim/state/war.ts';
@@ -23,7 +23,7 @@ export const NEAR_KM = 400;
  * The news of the world beyond the player's own affairs, which every power hears
  * whether it sees the place or not: a war between two other great powers and a peace
  * between them, a great capital that falls, a great power destroyed, a new leading
- * power, and a city near the player's land that changes hands. The player's own wars,
+ * power, and a city near the player's land that changes hands, in war or by a peace. The player's own wars,
  * cities, and defeat are told by `alertsOfDay`, so none of these is about the player.
  */
 export function worldNewsOfDay(
@@ -63,12 +63,21 @@ export function worldNewsOfDay(
     });
   }
 
+  // A city a peace hands over, by who receives it, so one taken from them later that day fell.
+  const ceded = new Map<CityId, FactionId>();
+  for (const event of events) {
+    if (event.kind !== 'peaceMade' || event.terms.kind !== 'payment') continue;
+    const payer = event.terms.payer;
+    const receiver = event.between.find((side) => side !== payer);
+    if (receiver) for (const id of event.terms.cities) ceded.set(id, receiver);
+  }
   const own = Object.values(after.cities).filter((city) => city.owner === player);
   const near = (at: MapPoint) =>
     own.some((city) => Math.hypot(city.position.x - at.x, city.position.y - at.y) <= NEAR_KM);
   for (const city of Object.values(after.cities)) {
     const was = before.cities[city.id];
     if (!was || was.owner === city.owner || !others(was.owner, city.owner)) continue;
+    const byPeace = ceded.get(city.id) === city.owner;
     const focus = {
       at: city.position,
       select: { kind: 'province', province: city.province },
@@ -84,17 +93,17 @@ export function worldNewsOfDay(
         world: 'corner',
         text:
           first === city.owner
-            ? `${factionName(after, city.owner)} took back its capital ${city.name} from ${factionName(after, was.owner)}`
+            ? `${factionName(after, city.owner)} took back its capital ${city.name} from ${factionName(after, was.owner)}${byPeace ? ' by a peace' : ''}`
             : first === was.owner
-              ? `${city.name}, the capital of ${factionName(after, first)}, fell to ${factionName(after, city.owner)}`
-              : `${city.name}, the capital of ${factionName(after, first)}, fell from ${factionName(after, was.owner)} to ${factionName(after, city.owner)}`,
+              ? `${city.name}, the capital of ${factionName(after, first)}, ${byPeace ? 'was ceded' : 'fell'} to ${factionName(after, city.owner)}`
+              : `${city.name}, the capital of ${factionName(after, first)}, ${byPeace ? 'was ceded by' : 'fell from'} ${factionName(after, was.owner)} to ${factionName(after, city.owner)}`,
         focus,
       });
     } else if (near(city.position)) {
       add({
         kind: 'cityNearFell',
         world: 'chronicle',
-        text: `${city.name} fell to ${factionName(after, city.owner)}, ${whole(nearestKm(own, city.position))} km from your land`,
+        text: `${city.name} ${byPeace ? 'was ceded' : 'fell'} to ${factionName(after, city.owner)}, ${whole(nearestKm(own, city.position))} km from your land`,
         focus,
       });
     }

@@ -4,7 +4,7 @@ import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import type { CityId, FactionId } from '../sim/ids.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { warKey } from '../sim/state/war.ts';
+import { newWar, warKey } from '../sim/state/war.ts';
 import { cornerAlerts, type Alert } from './alerts.ts';
 import { worldNewsOfDay } from './world-news.ts';
 
@@ -36,7 +36,7 @@ describe('worldNewsOfDay', () => {
     const before = buildFixture();
     before.player = f.syracusaeFaction;
     const after = structuredClone(before);
-    after.wars[warKey(f.rome, f.carthage)] = { since: after.day };
+    after.wars[warKey(f.rome, f.carthage)] = newWar(f.carthage, f.rome, after.day);
     const war = worldNewsOfDay(
       before,
       after,
@@ -54,7 +54,7 @@ describe('worldNewsOfDay', () => {
   it("does not tell the player's own wars, which alertsOfDay tells", () => {
     const before = buildFixture();
     const after = structuredClone(before);
-    after.wars[warKey(f.rome, f.carthage)] = { since: after.day };
+    after.wars[warKey(f.rome, f.carthage)] = newWar(f.carthage, f.rome, after.day);
     expect(
       worldNewsOfDay(
         before,
@@ -109,6 +109,33 @@ describe('worldNewsOfDay', () => {
       ),
     ).toEqual([['cityNearFell', 'chronicle', 'Capua fell to Syracusae, 170 km from your land']]);
     expect(newsOf((state) => owner(state, f.syracusae, f.carthage))).toEqual([]);
+  });
+
+  it('tells a city handed over by a peace as ceded, and one taken from its receiver that day as fallen', () => {
+    const before = buildFixture();
+    owner(before, f.capua, f.carthage);
+    const numidia = 'numidia' as FactionId;
+    const minor = before.factions[f.syracusaeFaction];
+    if (!minor) throw new Error('fixture changed');
+    before.factions[numidia] = { ...structuredClone(minor), id: numidia, name: 'Numidia' };
+    const after = structuredClone(before);
+    after.day = (before.day + 1) as Day;
+    owner(after, f.capua, f.syracusaeFaction);
+    owner(after, f.carthago, numidia);
+    const terms = {
+      kind: 'payment',
+      payer: f.carthage,
+      gold: 0,
+      cities: [f.capua, f.carthago],
+    } as const;
+    const news = worldNewsOfDay(
+      before,
+      after,
+      [{ kind: 'peaceMade', between: [f.carthage, f.syracusaeFaction], terms }],
+      world,
+    ).map((alert) => alert.text);
+    expect(news).toContain('Capua was ceded to Syracusae, 170 km from your land');
+    expect(news).toContain('Carthago, the capital of Carthage, fell to Numidia');
   });
 
   it('tells when another great power is destroyed, and once', () => {
