@@ -8,6 +8,7 @@ import {
   type WeakSiege,
 } from '../src/app/alerts.ts';
 import { alertsInSight } from '../src/app/sighted.ts';
+import { worldNewsOfDay } from '../src/app/world-news.ts';
 import { decideAll } from '../src/sim/ai/decide.ts';
 import type { FactionId, SiegeId } from '../src/sim/ids.ts';
 import { parseMap } from '../src/sim/map.ts';
@@ -17,8 +18,9 @@ import { tick } from '../src/sim/tick.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 
 /**
- * How often the player, Rome, hears nothing: the news of each day is worked out as the
- * page works it out, and the days with none are counted, while Rome is still in the game.
+ * How often the player, Rome, hears nothing: the news of each day that the corner list
+ * shows, the world's news included, is worked out as the page works it out, and the days
+ * with none are counted, while Rome is still in the game.
  * Rome either gives no orders or plays under the faction AI.
  */
 
@@ -59,6 +61,9 @@ function play(seed: number, passive: boolean) {
       ...alertsInSight(alertsOfDay(before, after, result.events), saw, sees),
       ...sightingsOfDay(before, after, saw, sees, world),
       ...weak.alerts,
+      ...worldNewsOfDay(before, after, result.events, world).filter(
+        (alert) => alert.world !== 'chronicle',
+      ),
     ]);
     played++;
     if (news.length === 0) {
