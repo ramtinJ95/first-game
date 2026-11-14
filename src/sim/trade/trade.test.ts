@@ -182,6 +182,18 @@ describe('trade orders and consent', () => {
 });
 
 describe('caravans, interruption, and saves', () => {
+  test('a tick never changes its previous caravan, even with its immutable road frozen', () => {
+    const { state, route } = opened();
+    for (const point of route.path) Object.freeze(point);
+    Object.freeze(route.path);
+    Object.freeze(route);
+    const before = saveGame(state);
+    const result = tick(state, [], world);
+    expect(saveGame(state)).toBe(before);
+    expect(result.state.tradeRoutes[route.id]?.progress).toBeGreaterThan(0);
+    expectConsistent(result.state);
+  });
+
   test('moves along the path and pays BOTH ends only on arrival, then returns', () => {
     const { state, route } = opened();
     const gold = state.factions[f.rome]?.stores.gold ?? 0;
@@ -338,7 +350,7 @@ describe('caravans, interruption, and saves', () => {
       const state = buildFixture();
       const trader = state.factions[faction];
       if (!trader) throw new Error('missing trader');
-      trader.stores.gold = 5000;
+      trader.stores.gold = 10000;
       expect(bestTrade(state, world, f.rome)).toEqual(
         bestTrade(structuredClone(state), world, f.rome),
       );
