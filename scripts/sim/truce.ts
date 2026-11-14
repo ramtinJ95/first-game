@@ -108,9 +108,9 @@ function play(seed: number, policy: Policy): Run {
       if (enemy === rome || !warSides(key)?.includes(rome)) continue;
       if (before.peaceOffers[key as keyof GameState['peaceOffers']]?.madeOn === offer.madeOn)
         continue;
-      const wish = peaceWish(result.state, enemy, rome);
-      if (wish)
-        asks.push({ asked: termsPoints(result.state, offer.terms, enemy), least: -wish.wish });
+      // The AI chose the price on the day's facts before the tick, so its floor is read there.
+      const wish = peaceWish(before, enemy, rome);
+      if (wish) asks.push({ asked: termsPoints(before, offer.terms, enemy), least: -wish.wish });
     }
     for (const [enemy, record] of [...waiting]) {
       if (!Object.hasOwn(result.state.wars, warKey(rome, enemy))) continue;

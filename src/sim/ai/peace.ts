@@ -345,7 +345,8 @@ export function paymentBetween(
  * The terms the faction offers the enemy, or undefined when no terms satisfy both sides
  * by `peaceWish`. A faction that is winning opens above the least it would take, by
  * OPENING_MARGIN points or halfway to the most the enemy would give, whichever is less.
- * Any other asks for no more than it needs, or offers the least the enemy would take,
+ * When no payment fits under that, because the enemy can pay only with a city worth more,
+ * it asks the least payment it would take, which is also the cheapest counter. Any other asks for no more than it needs, or offers the least the enemy would take,
  * which is peace as things stand when neither side wants anything.
  */
 export function proposal(
