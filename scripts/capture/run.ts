@@ -133,7 +133,9 @@ async function captureScenario(
   const recording = (async () => {
     await Promise.race([firstLoad, ran.promise]);
     const start = performance.now();
-    while (!finished && performance.now() - start < CLIP_LIMIT_MS) {
+    const recordFor =
+      scenario.clipSeconds === undefined ? CLIP_LIMIT_MS : scenario.clipSeconds * 1000;
+    while (!finished && performance.now() - start < recordFor) {
       const atMs = performance.now() - start;
       await resizing;
       const taking = clipFrame(page);

@@ -75,3 +75,22 @@ The two browser tests open a route through the panel, observe its delivery count
 and rising gold, load a saved caravan in transit, and declare war through the panel
 to close a saved sea route. The first look is intentionally a plain moving marker;
 drawn trade figures, selected routes, map goods, raids and the guide are the second PR.
+
+## Drawing trade
+
+`src/render/trade.ts` interpolates a crossing through arrival before reversing it and
+adds a province's stored good to its existing city label from 0.9 px/km. The existing
+label collision rule decides where it fits. Selecting a city draws its active routes
+with the same dashed ink and halo as army paths.
+
+The army scene reuses its owned cart, civilian walking cycles and ship sheets for
+merchants, with a wake at sea and dry-ground checks on land. Own trade stays known;
+foreign traders require sight. They do not grant sight or reveal hostile armies.
+The last road raid is readonly saved data, under the separate `trade-raid-marks`
+change. It shows a damaged cart, settling dust and a marked location for six days.
+
+`trade-look` captures both zooms for cart and ship, selected routes, goods and the
+raid. It waits for terrain and exact-resolution figure sheets, not a fixed sleep or
+a blurry fallback. It opts into a 90-second **recording cap** so the clip includes
+the ship and raid after the caravan; scenario and test execution timeouts are
+unchanged. Other scenarios keep the existing 12-second recording cap.
