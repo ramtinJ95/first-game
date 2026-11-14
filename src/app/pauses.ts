@@ -14,7 +14,7 @@ export const PAUSE_LABELS: Record<PauseKind, string> = {
 };
 
 /** The Game menu's setting for the prompt to choose a captured city's fate. */
-export const FATE_PAUSE_LABEL = 'A city falls to you';
+export const FATE_PAUSE_LABEL = 'You take a city, so you choose its fate';
 
 /** An offer of peace always stops the game, and only the player runs it again. */
 export const OFFER_PAUSE_TEXT =

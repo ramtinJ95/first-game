@@ -289,5 +289,5 @@ export function declarationFacts(state: State, against: FactionId): string[] {
 /** How a war starts and ends, as the wars panel at peace and the guide both tell it. */
 export const PEACE_TEXT = {
   start: `A war starts when you declare it from a city's panel, with Declare war on its owner, or when another power declares war on you. A minor city's league partner joins a war on it.`,
-  end: `Here you then see how each war stands, the enemy's offers of peace, and terms to send. Either side may offer peace once a war is ${whole(MIN_WAR_DAYS)} days old. A peace starts a truce of ${whole(TRUCE_DAYS)} days, in which neither side may declare war on the other.`,
+  end: `The wars panel then shows how each war stands, the enemy's offers of peace, and terms to send. Either side may offer peace once a war is ${whole(MIN_WAR_DAYS)} days old. A peace starts a truce of ${whole(TRUCE_DAYS)} days, in which neither side may declare war on the other.`,
 } as const;
