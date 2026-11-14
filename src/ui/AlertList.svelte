@@ -17,6 +17,7 @@
         <button
           type="button"
           class="panel {alert.tone}"
+          class:world={alert.world !== undefined}
           class:fresh={day - alert.day <= FRESH_DAYS}
           disabled={!alert.focus}
           onclick={() => actions.openAlert(alert)}
@@ -100,5 +101,10 @@
   .fresh .day {
     font-weight: bold;
     color: var(--ink);
+  }
+
+  .world .text {
+    font-style: italic;
+    color: var(--muted);
   }
 </style>

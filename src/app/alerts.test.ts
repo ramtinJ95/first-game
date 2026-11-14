@@ -639,6 +639,67 @@ describe('sightingsOfDay', () => {
     ]);
   });
 
+  /** Carthage's fleets of these men, out of Rome's sight one day and near Roma the next, sailing for these places. */
+  function fleets(men: readonly number[], to: (i: number) => 'roma' | 'capua', seesEnd = true) {
+    const before = buildFixture();
+    atWar(before);
+    const roma = before.cities[f.roma]?.position;
+    const punic = before.armies[f.punicArmy];
+    const spears = before.formations[f.citizenSpears];
+    if (!roma || !punic || !spears) throw new Error('fixture changed');
+    const after = structuredClone(before);
+    after.day = (before.day + 1) as Day;
+    men.forEach((n, i) => {
+      const end = after.cities[to(i) === 'roma' ? f.roma : f.capua]?.position;
+      if (!end) throw new Error('fixture changed');
+      const army = `army-fleet-${i}` as ArmyId;
+      const formation = `formation-fleet-${i}` as FormationId;
+      const convoy = `convoy-${i}` as ConvoyId;
+      after.formations[formation] = { ...structuredClone(spears), id: formation, army, men: n };
+      after.armies[army] = {
+        ...structuredClone(punic),
+        id: army,
+        formations: [formation],
+        activity: { kind: 'embarked', convoy },
+      };
+      after.convoys[convoy] = {
+        id: convoy,
+        owner: f.carthage,
+        position: { x: roma.x + i, y: roma.y + 130 },
+        armies: [army],
+        waypoints: [end],
+      };
+    });
+    const sees = sightOf(after, world, f.rome);
+    return sightingsOfDay(
+      before,
+      after,
+      sightOf(before, world, f.rome),
+      seesEnd ? sees : { ...sees, sees: () => false },
+      world,
+    );
+  }
+
+  it("tells of an enemy's fleets seen on one day sailing for one city as one line with all their men", () => {
+    expect(
+      fleets([400, 302, 396, 382, 649], () => 'roma').map((a) => [a.kind, a.text, a.focus?.select]),
+    ).toEqual([
+      [
+        'enemySighted',
+        '5 fleets of Carthage with 2,129 men are sailing for Roma',
+        { kind: 'army', army: 'army-fleet-0' },
+      ],
+    ]);
+  });
+
+  it('keeps apart the fleets of one day that sail for different places, though the player sees neither', () => {
+    const alerts = fleets([400, 302, 396], (i) => (i === 0 ? 'capua' : 'roma'), false);
+    expect(alerts.map((a) => a.text)).toEqual([
+      "A fleet of Carthage with Carthage's Host of Hanno, 400 men, is sailing for your land",
+      '2 fleets of Carthage with 698 men are sailing for your land',
+    ]);
+  });
+
   it('says nothing of an enemy heading elsewhere, or of a power at peace', () => {
     expect(sighted('march', 'carthago')).toEqual([]);
     expect(sighted('sail', 'carthago')).toEqual([]);

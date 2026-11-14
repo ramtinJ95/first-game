@@ -116,6 +116,15 @@
       ? FATE_DAYS - (game.day - city.fellOn)
       : -1,
   );
+  /** A sack or an enslavement ordered for this city, which the next day carries out. */
+  const fateOrdered = $derived(
+    pending.find(
+      (order) =>
+        (order.kind === 'sack' || order.kind === 'enslave') &&
+        order.faction === game.player &&
+        order.city === city.id,
+    )?.kind,
+  );
 </script>
 
 <section class="panel" data-testid="city-panel" aria-label="City">
@@ -207,7 +216,12 @@
 
   <ArmiesHere {game} armies={armiesAt(game, sight, city.position)} {actions} />
 
-  {#if fateDaysLeft >= 0}
+  {#if fateDaysLeft >= 0 && fateOrdered}
+    <h3>Fate of the city</h3>
+    <p data-testid="city-fate-ordered">
+      {fateOrdered === 'sack' ? 'Sack' : 'Enslavement'} ordered for the next day
+    </p>
+  {:else if fateDaysLeft >= 0}
     <h3>Fate of the city · {fateDaysLeft} days to choose</h3>
     <div class="row">
       <button type="button" data-testid="city-occupy" onclick={() => actions.occupy(city.id)}

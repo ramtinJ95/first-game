@@ -17,6 +17,7 @@
         <button
           type="button"
           class="entry {alert.tone}"
+          class:world={alert.world !== undefined}
           disabled={!alert.focus}
           onclick={() => actions.openAlert(alert)}
         >
@@ -93,5 +94,10 @@
     color: var(--paper-solid);
     text-transform: uppercase;
     background: var(--bad);
+  }
+
+  .world .text {
+    font-style: italic;
+    color: var(--muted);
   }
 </style>

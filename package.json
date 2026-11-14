@@ -29,7 +29,8 @@
     "sim:world": "node scripts/sim-world.ts",
     "sim:recruit": "node scripts/sim-recruit.ts",
     "sim:buildings": "node scripts/sim-buildings.ts",
-    "sim:peace": "node scripts/sim-peace.ts"
+    "sim:peace": "node scripts/sim-peace.ts",
+    "sim:news": "node scripts/sim-news.ts"
   },
   "dependencies": {
     "pixi.js": "^8.23.0",

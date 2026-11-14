@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { cornerAlerts } from '../app/alerts.ts';
   import type { View } from '../app/view.svelte.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { GameMap } from '../sim/map.ts';
@@ -116,7 +117,11 @@
         onclick={() => actions.togglePanel('chronicle')}>Chronicle</button
       >
       <div class="latest">
-        <AlertList alerts={view.current.alerts.slice(0, ALERTS_SHOWN)} day={game.day} {actions} />
+        <AlertList
+          alerts={cornerAlerts(view.current.alerts, ALERTS_SHOWN)}
+          day={game.day}
+          {actions}
+        />
       </div>
     </div>
   </div>
