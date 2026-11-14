@@ -3,6 +3,7 @@
   import type { CityId } from '../sim/ids.ts';
   import type { Order } from '../sim/orders/orders.ts';
   import { afterWaiting } from './buildings-text.ts';
+  import { tradeCaution } from './trade-caution.ts';
   import type { City } from '../sim/state/city.ts';
   import type { GameState } from '../sim/state/game-state.ts';
   import {
@@ -44,6 +45,7 @@
     to ? tradeProblem(waiting, world, game.player, city.id, to.id, mode) : 'No other city',
   );
   const consent = $derived(to && tradeConsent(waiting, world, city, to));
+  const caution = $derived(to && tradeCaution(waiting, city, to));
   const routes = $derived(routesAt(waiting, city.id));
   const good = (id: CityId) => {
     const at = game.cities[id];
@@ -136,6 +138,7 @@
         ? 'Both ends are yours; no foreign consent needed.'
         : `Consent: ${game.factions[to.owner]?.name} ${consent ? `cannot agree: ${consent}` : 'agrees: peaceful, profitable, and a free slot'}.`}
     </p>
+    {#if caution}<p class="muted" data-testid="trade-caution">{caution}</p>{/if}
   {/if}
   {#if why}<p class="bad" data-testid="trade-refusal">{why}</p>{/if}
   <button
