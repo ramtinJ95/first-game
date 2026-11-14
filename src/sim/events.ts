@@ -83,7 +83,7 @@ export type DayEvent =
       cause: 'sack' | 'siege';
       position: MapPoint;
     }
-  | { kind: 'peaceOffered'; from: FactionId; to: FactionId; terms: PeaceTerms }
+  | { kind: 'peaceOffered'; from: FactionId; to: FactionId; terms: PeaceTerms; change?: string }
   | { kind: 'peaceRefused'; by: FactionId; from: FactionId; terms: PeaceTerms; reason: string }
   | { kind: 'peaceOfferEnded'; from: FactionId; to: FactionId; reason: string }
   | { kind: 'peaceMade'; between: readonly [FactionId, FactionId]; terms: PeaceTerms };

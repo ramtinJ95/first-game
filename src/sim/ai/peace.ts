@@ -135,8 +135,8 @@ export function termsText(
  * other war against a great power, plus SHORTAGE_POINTS while it is short of gold or
  * food, less PEACE_RESOLVE. The visible restraint factor floors only a durable loser
  * (cities or significant battlefield losses), not a siege's provisional standing.
- * An unbloodied war waits EVEN_WAR_DAYS for free peace. It does not talk at all in a
- * war younger than MIN_WAR_DAYS.
+ * Before EVEN_WAR_DAYS a non-loser still asks a positive price, unless it is durably
+ * losing another great-power war. It does not talk in a war younger than MIN_WAR_DAYS.
  */
 export function peaceWish(
   state: State,
@@ -169,16 +169,23 @@ export function peaceWish(
       const other = sides[0] === faction ? sides[1] : sides[0];
       const rival = state.factions[other];
       return other !== enemy && rival?.kind === 'greatPower' && rival.defeatedOn === null
-        ? [rival.name]
+        ? [{ name: rival.name, standing: warStanding(state, faction, other) }]
         : [];
     });
-  add('otherWars', OTHER_WAR_POINTS * others.length, `${name} also fights ${listed(others)}`);
+  add(
+    'otherWars',
+    OTHER_WAR_POINTS * others.length,
+    `${name} is also at war with ${listed(others.map((other) => other.name))}`,
+  );
+  const losingElsewhere = others.filter(
+    (other) => other.standing && warDamage(state, other.standing).losing,
+  );
   const short = (['gold', 'food'] as const).filter((store) => record.stores[store] < 0);
   add('shortage', short.length > 0 ? SHORTAGE_POINTS : 0, `${name} is short of ${listed(short)}`);
   add('resolve', -PEACE_RESOLVE, `${name} does not end a war for nothing`);
   const reckoning = factors.reduce((sum, factor) => sum + factor.points, 0);
   const damage = warDamage(state, standing);
-  if (damage.even) {
+  if (damage.even && (standing.days >= EVEN_WAR_DAYS || losingElsewhere.length === 0)) {
     const mature = standing.days >= EVEN_WAR_DAYS;
     const target = mature
       ? Math.max(0, reckoning)
@@ -191,12 +198,16 @@ export function peaceWish(
   } else if (damage.losing) {
     add('restraint', Math.max(0, -reckoning), `${name} cannot demand payment while losing`);
   } else if (standing.days < EVEN_WAR_DAYS) {
-    // Losing some of the player's own men must not unlock a capital-siege shield, either.
-    add(
-      'restraint',
-      Math.min(0, standing.score - damage.durableScore),
-      'A siege is not a city or battlefield loss; it cannot by itself buy early peace',
-    );
+    const withoutSiege = reckoning + Math.min(0, standing.score - damage.durableScore);
+    const target = losingElsewhere.length ? withoutSiege : Math.min(-1, withoutSiege);
+    if (target !== reckoning || losingElsewhere.length > 0)
+      factors.push({
+        kind: 'restraint',
+        points: target - reckoning,
+        text: losingElsewhere.length
+          ? `${name} has real city or battlefield losses against ${listed(losingElsewhere.map((other) => other.name))}; it may end this war to face that defeat`
+          : `${name} is not losing this or another great-power war by real city or battlefield losses; peace before ${EVEN_WAR_DAYS} days still costs something`,
+      });
   }
   const talksFrom =
     standing.days < MIN_WAR_DAYS ? ((standing.since + MIN_WAR_DAYS) as Day) : undefined;
@@ -242,7 +253,7 @@ export function peaceAnswer(
       ? `${name} will not talk of peace before day ${wish.talksFrom}.`
       : accepts
         ? `${name} would accept.`
-        : `${name} would refuse. It wants terms worth ${short} points more, such as ${gold(short * GOLD_PER_POINT)} more.`;
+        : `${name} would refuse. It wants terms worth ${short} ${short === 1 ? 'point' : 'points'} more, such as ${gold(short * GOLD_PER_POINT)} more.`;
   return { accepts, problem, wish, terms: termsFactor, short, verdict };
 }
 

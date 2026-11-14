@@ -1,6 +1,7 @@
 import * as v from 'valibot';
 import { CityIdSchema, FactionIdSchema, type FactionId } from '../ids.ts';
 import { DaySchema, type Day } from './day.ts';
+import { PeaceOfferSchema } from './peace.ts';
 
 /** The two factions a war key names, or nothing for a key that names no valid pair. */
 export function warSides(key: string): [FactionId, FactionId] | undefined {
@@ -36,6 +37,8 @@ export const WarSideSchema = v.object({
   taken: v.array(CityIdSchema),
   /** The men this side has lost in battles against the other. */
   lost: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /** This side's latest offer, retained after a refusal or expiry, within this war only. */
+  lastOffer: v.nullable(PeaceOfferSchema),
 });
 export type WarSide = v.InferOutput<typeof WarSideSchema>;
 
@@ -55,7 +58,10 @@ export function newWar(by: FactionId, against: FactionId, since: Day): War {
   return {
     since,
     declaredBy: by,
-    sides: { [by]: { taken: [], lost: 0 }, [against]: { taken: [], lost: 0 } },
+    sides: {
+      [by]: { taken: [], lost: 0, lastOffer: null },
+      [against]: { taken: [], lost: 0, lastOffer: null },
+    },
     offeredOn: null,
   };
 }

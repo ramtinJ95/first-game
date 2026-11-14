@@ -23,6 +23,7 @@ import {
   dateText,
   factionName,
   placeName,
+  peaceFundsText,
   reasonText,
   TROOP_NAMES,
   whole,
@@ -720,10 +721,13 @@ function eventAlert(
     case 'peaceOffered': {
       const terms = peaceText(after, event.terms, player);
       if (event.to === player) {
+        const details = [peaceFundsText(after, event.terms), event.change]
+          .filter(Boolean)
+          .join(' ');
         return {
           kind: 'peaceOffered',
           tone: 'neutral',
-          text: `${factionName(after, event.from)} offers ${terms}`,
+          text: `${factionName(after, event.from)} offers ${terms}${details ? `. ${details}` : ''}`,
         };
       }
       if (event.from === player) {

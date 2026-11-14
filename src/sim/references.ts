@@ -202,6 +202,25 @@ export function findBrokenReferences(state: DeepReadonly<GameState>): string[] {
         );
       }
       unique(war.sides[faction]?.taken ?? [], `war ${key} side ${faction}`);
+      const last = war.sides[faction]?.lastOffer;
+      if (last) {
+        expect(last.from === faction, `war ${key} side ${faction} keeps another side's last offer`);
+        expect(
+          last.madeOn >= war.since && last.madeOn <= state.day,
+          `war ${key} side ${faction} keeps an offer outside this war's days`,
+        );
+        if (last.terms.kind === 'payment') {
+          expect(
+            sides.includes(last.terms.payer),
+            `war ${key} last offer has a payer outside the war`,
+          );
+          for (const id of last.terms.cities)
+            expect(
+              get(state.cities, id) !== undefined,
+              `war ${key} last offer names unknown city ${id}`,
+            );
+        }
+      }
     }
     expect(
       !Object.hasOwn(state.truces, key),

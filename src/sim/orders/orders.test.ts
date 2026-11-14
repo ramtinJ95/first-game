@@ -123,8 +123,8 @@ describe('declareWar', () => {
         since: 1,
         declaredBy: FIXTURE.rome,
         sides: {
-          [FIXTURE.rome]: { taken: [], lost: 0 },
-          [FIXTURE.carthage]: { taken: [], lost: 0 },
+          [FIXTURE.rome]: { taken: [], lost: 0, lastOffer: null },
+          [FIXTURE.carthage]: { taken: [], lost: 0, lastOffer: null },
         },
         offeredOn: null,
       },

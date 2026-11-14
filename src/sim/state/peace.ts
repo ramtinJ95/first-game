@@ -40,6 +40,12 @@ export const PeaceOfferSchema = v.object({
   terms: PeaceTermsSchema,
   madeOn: DaySchema,
   forecast: v.optional(PeaceForecastSchema),
+  /** The sender's own reckoning, kept to explain the price of a later offer. */
+  ownForecast: v.optional(PeaceForecastSchema),
+  /** The receiver's treasury at the offer, whose nonnegative part caps an AI's demand. */
+  receiverGold: v.optional(v.pipe(v.number(), v.integer())),
+  /** A measured increase from this side's preceding offer in this war. */
+  change: v.optional(v.string()),
 });
 export type PeaceOffer = v.InferOutput<typeof PeaceOfferSchema>;
 
