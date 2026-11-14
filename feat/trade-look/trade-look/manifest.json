@@ -1,0 +1,47 @@
+[
+  {
+    "file": "caravan-middle.png",
+    "title": "A merchant cart and two walkers; Roma’s selected routes and the provinces’ goods share the map’s ink",
+    "kind": "screenshot"
+  },
+  {
+    "file": "caravan-closest.png",
+    "title": "The caravan at closest zoom, drawn from the same crisp ink sheets as armies and refugee carts",
+    "kind": "screenshot"
+  },
+  {
+    "file": "caravan-moved.png",
+    "title": "Two days later the merchants have walked their road; movement follows the game clock",
+    "kind": "screenshot"
+  },
+  {
+    "file": "ship-middle.png",
+    "title": "A single merchant ship at middle zoom, with the transport fleet’s ink and its own wake",
+    "kind": "screenshot"
+  },
+  {
+    "file": "ship-closest.png",
+    "title": "The merchant ship at closest zoom",
+    "kind": "screenshot"
+  },
+  {
+    "file": "road-raid.png",
+    "title": "The raider stands by a damaged cart and settling dust at the recorded attack, not at the reset origin",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Merchant caravans and ships at middle and closest zoom, selected routes, province goods and a road raid",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Merchant caravans and ships at middle and closest zoom, selected routes, province goods and a road raid (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Merchant caravans and ships at middle and closest zoom, selected routes, province goods and a road raid (Playwright trace)",
+    "kind": "trace"
+  }
+]
