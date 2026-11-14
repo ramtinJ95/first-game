@@ -17,11 +17,27 @@ export const PeaceTermsSchema = v.variant('kind', [
 ]);
 export type PeaceTerms = v.InferOutput<typeof PeaceTermsSchema>;
 
+/** The facts behind the answer the player saw when sending the offer. */
+export const PeaceForecastSchema = v.object({
+  accepts: v.boolean(),
+  verdict: v.string(),
+  score: v.number(),
+  menLost: v.number(),
+  enemyMenLost: v.number(),
+  taken: v.array(CityIdSchema),
+  lost: v.array(CityIdSchema),
+  besieging: v.array(CityIdSchema),
+  besieged: v.array(CityIdSchema),
+  factors: v.array(v.object({ kind: v.string(), points: v.number(), text: v.string() })),
+});
+export type PeaceForecast = v.InferOutput<typeof PeaceForecastSchema>;
+
 /** An offer of peace that waits for the other side of the war to accept or refuse it. */
 export const PeaceOfferSchema = v.object({
   from: FactionIdSchema,
   terms: PeaceTermsSchema,
   madeOn: DaySchema,
+  forecast: v.optional(PeaceForecastSchema),
 });
 export type PeaceOffer = v.InferOutput<typeof PeaceOfferSchema>;
 

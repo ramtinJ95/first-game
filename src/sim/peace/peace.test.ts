@@ -273,6 +273,7 @@ describe('what the review found', () => {
     expect(
       run(state, { kind: 'offerPeace', faction: f.rome, to: f.carthage, terms: generous }),
     ).toBeUndefined();
+    state.day = (state.day + 1) as Day;
     expect(
       run(state, { kind: 'offerPeace', faction: f.rome, to: f.carthage, terms: greedy }),
     ).toBeUndefined();

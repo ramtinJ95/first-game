@@ -29,7 +29,7 @@ import {
 } from './thresholds.ts';
 
 export type PeaceFactorKind =
-  'standing' | 'weariness' | 'otherWars' | 'shortage' | 'resolve' | 'terms';
+  'standing' | 'weariness' | 'otherWars' | 'shortage' | 'resolve' | 'restraint' | 'terms';
 
 /** One reason that moves a faction toward peace, with positive points, or away from it. */
 export interface PeaceFactor {
@@ -106,7 +106,9 @@ export function termsText(
  * How much the faction wants peace with the enemy: minus how the war stands for it, plus a
  * point for every WEARY_DAYS of war up to MAX_WEARINESS, plus OTHER_WAR_POINTS for each
  * other war against a great power, plus SHORTAGE_POINTS while it is short of gold or
- * food, less PEACE_RESOLVE. It does not talk at all in a war younger than MIN_WAR_DAYS.
+ * food, less PEACE_RESOLVE. A losing side's wish is floored at zero, with a visible
+ * restraint factor: it cannot demand payment from its winner. It does not talk at all
+ * in a war younger than MIN_WAR_DAYS.
  */
 export function peaceWish(
   state: State,
@@ -146,6 +148,10 @@ export function peaceWish(
   const short = (['gold', 'food'] as const).filter((store) => record.stores[store] < 0);
   add('shortage', short.length > 0 ? SHORTAGE_POINTS : 0, `${name} is short of ${listed(short)}`);
   add('resolve', -PEACE_RESOLVE, `${name} does not end a war for nothing`);
+  const reckoning = factors.reduce((sum, factor) => sum + factor.points, 0);
+  if (standing.score < 0) {
+    add('restraint', Math.max(0, -reckoning), `${name} cannot demand payment while losing`);
+  }
   const talksFrom =
     standing.days < MIN_WAR_DAYS ? ((standing.since + MIN_WAR_DAYS) as Day) : undefined;
   return {
@@ -299,8 +305,8 @@ export function peaceOrders({ state, faction }: Context): Order[] {
     const answer = peaceAnswer(state, faction, enemy, offer.terms);
     orders.push(
       answer?.accepts
-        ? { kind: 'acceptPeace', faction, from: enemy, terms: copyTerms(offer.terms) }
-        : { kind: 'refusePeace', faction, from: enemy },
+        ? { kind: 'acceptPeace', faction, from: enemy, terms: copyTerms(offer.terms), reckon: true }
+        : { kind: 'refusePeace', faction, from: enemy, reckon: true },
     );
   }
   for (const key of Object.keys(state.wars).sort()) {

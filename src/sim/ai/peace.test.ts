@@ -10,7 +10,8 @@ import type { GameState } from '../state/game-state.ts';
 import type { PeaceTerms } from '../state/peace.ts';
 import { tick } from '../tick.ts';
 import { decideOrders } from './decide.ts';
-import { peaceAnswer, peaceOrders, proposal } from './peace.ts';
+import { peaceAnswer, peaceOrders, peaceWish, proposal } from './peace.ts';
+import { warKey } from '../state/war.ts';
 import { createRouter } from './routes.ts';
 import { enemiesOf } from './situation.ts';
 import {
@@ -56,6 +57,46 @@ const gold = (payer: FactionId, amount: number): PeaceTerms => ({
 });
 
 describe("the AI's answer", () => {
+  test.each([1, 2, 5, 15, 30])(
+    'a minor losing by %i never demands its winner pay gold or cities',
+    (score) => {
+      const state = warOn(65);
+      const minor = state.factions[f.carthage];
+      const war = state.wars[warKey(f.rome, f.carthage)];
+      const side = war?.sides[f.carthage];
+      if (!minor || !side) throw new Error('fixture');
+      minor.kind = 'minor';
+      side.lost = Math.round((score * 2000) / 30);
+      const answer = peaceAnswer(state, f.carthage, f.rome, AS_THINGS_STAND);
+      expect(answer?.accepts).toBe(true);
+      expect(answer?.short).toBe(0);
+      expect(peaceWish(state, f.carthage, f.rome)?.wish).toBeGreaterThanOrEqual(0);
+      expect(answer?.wish.factors.reduce((sum, factor) => sum + factor.points, 0)).toBe(
+        answer?.wish.wish,
+      );
+      if (score <= 5)
+        expect(answer?.wish.factors).toContainEqual({
+          kind: 'restraint',
+          points: 11 - score,
+          text: 'Carthage cannot demand payment while losing',
+        });
+      const terms = proposal(state, f.carthage, f.rome);
+      expect(terms?.kind === 'payment' && terms.payer === f.rome).toBe(false);
+      expectConsistent(state);
+    },
+  );
+
+  test('the losing-side floor never makes a winner give up a new conquest for free', () => {
+    const state = warOn(65);
+    changeCityOwner(state, f.capua, f.carthage);
+    expect(peaceAnswer(state, f.carthage, f.rome, AS_THINGS_STAND)).toMatchObject({
+      accepts: false,
+      short: 26,
+    });
+    expect(proposal(state, f.rome, f.carthage)).toBeUndefined();
+    expectConsistent(state);
+  });
+
   test('does not talk of peace in a war younger than MIN_WAR_DAYS', () => {
     const state = warOn(MIN_WAR_DAYS);
     const answer = peaceAnswer(state, f.carthage, f.rome, gold(f.rome, 3000));
@@ -211,6 +252,7 @@ describe("the AI's offers", () => {
       faction: f.carthage,
       from: f.rome,
       terms: AS_THINGS_STAND,
+      reckon: true,
     });
     const result = tick(state, answer, world);
     expect(result.rejected).toEqual([]);
@@ -229,6 +271,7 @@ describe("the AI's offers", () => {
       kind: 'refusePeace',
       faction: f.carthage,
       from: f.rome,
+      reckon: true,
     });
   });
 });
