@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   verify:
-    timeout-minutes: 10
+    timeout-minutes: 3
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -28,9 +28,47 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  browser-tests:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e -- --shard=${{ matrix.shard }}/8
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-${{ matrix.shard }}
+          path: playwright-report/
+
+  # A skipped or cancelled shard must never turn the stable merge check green.
   e2e:
-    timeout-minutes: 30
-    needs: verify
+    timeout-minutes: 1
+    needs: browser-tests
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every browser shard to pass
+        env:
+          RESULT: ${{ needs.browser-tests.result }}
+        run: test "$RESULT" = success
+
+  frame-benches:
+    timeout-minutes: 3
+    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -39,8 +77,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
-      - run: npm run e2e
+      - run: npm run build
       - name: Frame times in software
         run: node e2e/frame-bench.ts --rounds 1 --only full,draw=test >> "$GITHUB_STEP_SUMMARY"
       - name: Frame times with the GPU flags of headless Chromium
@@ -49,18 +91,13 @@ jobs:
           node e2e/frame-bench.ts --rounds 1 --only full
           --args="--enable-gpu --ignore-gpu-blocklist --use-angle=vulkan --enable-features=Vulkan"
           >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() }}
-        with:
-          name: playwright-report
-          path: playwright-report/
-
-  capture:
-    timeout-minutes: 45
-    needs: verify
+  capture-shards:
+    timeout-minutes: 15
     runs-on: ubuntu-latest
-    outputs:
-      captured: ${{ steps.made.outputs.captured }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -68,22 +105,34 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
-      - run: npm run capture
+      - run: npm run capture -- --shard=${{ matrix.shard }}/6
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
-          name: captures
+          name: captures-${{ matrix.shard }}
           path: captures/
-      - id: made
-        if: ${{ !cancelled() }}
-        run: echo "captured=${{ hashFiles('captures/**') != '' }}" >> "$GITHUB_OUTPUT"
+
+  capture:
+    timeout-minutes: 1
+    needs: capture-shards
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every capture shard to pass
+        env:
+          RESULT: ${{ needs.capture-shards.result }}
+        run: test "$RESULT" = success
 
   publish-media:
     timeout-minutes: 10
     needs: capture
     if: >-
-      !cancelled() && needs.capture.outputs.captured == 'true' &&
+      !cancelled() && needs.capture.result == 'success' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
@@ -96,7 +145,8 @@ jobs:
           node-version-file: .nvmrc
       - uses: actions/download-artifact@v8
         with:
-          name: captures
+          pattern: captures-*
+          merge-multiple: true
           path: captures
       - name: Publish captures to pr-assets
         env:

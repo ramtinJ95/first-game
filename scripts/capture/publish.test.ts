@@ -21,7 +21,7 @@ let root: string;
 let work: string;
 let bare: string;
 
-beforeEach(() => {
+function setupRepo() {
   root = mkdtempSync(join(tmpdir(), 'capture-publish-'));
   bare = join(root, 'remote.git');
   work = join(root, 'work');
@@ -37,9 +37,7 @@ beforeEach(() => {
   writeFileSync(join(work, 'game.txt'), 'edited, unstaged\n');
   writeFileSync(join(work, 'staged.txt'), 'staged\n');
   git(work, ['add', 'staged.txt']);
-});
-
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+}
 
 function writeCaptures(dir: string, scenarios: Record<string, Record<string, string>>): void {
   rmSync(dir, { recursive: true, force: true });
@@ -79,84 +77,117 @@ function workState() {
 }
 
 describe('publishCaptures and fetchCaptures', () => {
-  it('keeps each branch folder on pr-assets current without touching the work repo', () => {
-    const captures = join(root, 'captures');
-    const before = workState();
-    const publish = (branch: string) =>
-      publishCaptures({ cwd: work, capturesDir: captures, branch, remote: 'origin' });
+  beforeEach(setupRepo);
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-    writeCaptures(captures, {
-      placeholder: {
-        'start.png': 'start v1',
-        'later.png': 'later v1',
-        'clip.gif': 'gif v1',
-        'video.webm': 'webm',
-      },
+  const publish = (branch: string) =>
+    publishCaptures({ cwd: work, capturesDir: join(root, 'captures'), branch, remote: 'origin' });
+
+  // These are real git integration checks, not a wait on a timer. Keep one operation
+  // under test per case instead of charging five publishes and a fetch to one deadline.
+  describe('with a published branch', () => {
+    let first: ReturnType<typeof publishCaptures>;
+    let before: ReturnType<typeof workState>;
+    beforeEach(() => {
+      before = workState();
+      writeCaptures(join(root, 'captures'), {
+        placeholder: {
+          'start.png': 'start v1',
+          'later.png': 'later v1',
+          'clip.gif': 'gif v1',
+          'video.webm': 'webm',
+        },
+      });
+      first = publish('feat/map');
     });
-    const first = publish('feat/map');
-    expect(first.changed).toBe(true);
-    expect(assetsTree()).toEqual({
-      'feat/map/placeholder/start.png': 'start v1',
-      'feat/map/placeholder/later.png': 'later v1',
-      'feat/map/placeholder/clip.gif': 'gif v1',
-      'feat/map/placeholder/manifest.json': expect.stringContaining('video.webm'),
-    });
-    expect(first.markdown).toBe(
-      [
-        `![placeholder start.png](https://raw.githubusercontent.com/acme/strategy-game/${first.commit}/feat/map/placeholder/start.png)`,
-        `![placeholder later.png](https://raw.githubusercontent.com/acme/strategy-game/${first.commit}/feat/map/placeholder/later.png)`,
-        `![placeholder clip.gif](https://raw.githubusercontent.com/acme/strategy-game/${first.commit}/feat/map/placeholder/clip.gif)`,
-      ].join('\n\n') + '\n',
-    );
+    afterEach(() => expect(workState()).toEqual(before));
 
-    writeCaptures(captures, { placeholder: { 'start.png': 'start v2', 'clip.gif': 'gif v2' } });
-    const second = publish('feat/map');
-    expect(second.commit).not.toBe(first.commit);
-    expect(git(bare, ['rev-parse', 'pr-assets^'])).toBe(first.commit);
-    expect(Object.keys(assetsTree()).sort()).toEqual([
-      'feat/map/placeholder/clip.gif',
-      'feat/map/placeholder/manifest.json',
-      'feat/map/placeholder/start.png',
-    ]);
-
-    writeCaptures(captures, { armies: { 'march.png': 'march' } });
-    const other = publish('feat/armies');
-    expect(assetsTree()).toMatchObject({
-      'feat/map/placeholder/start.png': 'start v2',
-      'feat/map/placeholder/clip.gif': 'gif v2',
-      'feat/armies/armies/march.png': 'march',
+    it('publishes images and a manifest with immutable Markdown links', () => {
+      expect(first.changed).toBe(true);
+      expect(assetsTree()).toEqual({
+        'feat/map/placeholder/start.png': 'start v1',
+        'feat/map/placeholder/later.png': 'later v1',
+        'feat/map/placeholder/clip.gif': 'gif v1',
+        'feat/map/placeholder/manifest.json': expect.stringContaining('video.webm'),
+      });
+      expect(first.markdown).toBe(
+        [
+          `![placeholder start.png](https://raw.githubusercontent.com/acme/strategy-game/${first.commit}/feat/map/placeholder/start.png)`,
+          `![placeholder later.png](https://raw.githubusercontent.com/acme/strategy-game/${first.commit}/feat/map/placeholder/later.png)`,
+          `![placeholder clip.gif](https://raw.githubusercontent.com/acme/strategy-game/${first.commit}/feat/map/placeholder/clip.gif)`,
+        ].join('\n\n') + '\n',
+      );
     });
 
-    const commits = assetsCommitCount();
-    const rerun = publish('feat/armies');
-    expect(rerun).toMatchObject({ changed: false, commit: other.commit });
-    expect(assetsCommitCount()).toBe(commits);
-
-    const fetched = join(root, 'fetched');
-    mkdirSync(join(fetched, 'stale'), { recursive: true });
-    const result = fetchCaptures({
-      cwd: work,
-      capturesDir: fetched,
-      branch: 'feat/map',
-      remote: 'origin',
+    it('replaces changed files and removes stale files from only that branch', () => {
+      writeCaptures(join(root, 'captures'), {
+        placeholder: { 'start.png': 'start v2', 'clip.gif': 'gif v2' },
+      });
+      const second = publish('feat/map');
+      expect(second.commit).not.toBe(first.commit);
+      expect(git(bare, ['rev-parse', 'pr-assets^'])).toBe(first.commit);
+      expect(Object.keys(assetsTree()).sort()).toEqual([
+        'feat/map/placeholder/clip.gif',
+        'feat/map/placeholder/manifest.json',
+        'feat/map/placeholder/start.png',
+      ]);
     });
-    expect(result.commit).toBe(other.commit);
-    expect(readdirSync(fetched)).toEqual(['placeholder']);
-    expect(readFileSync(join(fetched, 'placeholder', 'start.png'), 'utf8')).toBe('start v2');
-    expect(result.captures).toEqual([
-      {
-        scenario: 'placeholder',
-        entries: [
-          { file: 'start.png', title: 'placeholder start.png', kind: 'screenshot' },
-          { file: 'clip.gif', title: 'placeholder clip.gif', kind: 'clip' },
-        ],
-      },
-    ]);
-    expect(result.markdown).toContain(
-      `https://raw.githubusercontent.com/acme/strategy-game/${other.commit}/feat/map/placeholder/clip.gif`,
-    );
 
-    expect(workState()).toEqual(before);
+    it('preserves another branch when publishing a new branch', () => {
+      writeCaptures(join(root, 'captures'), { armies: { 'march.png': 'march' } });
+      const other = publish('feat/armies');
+      expect(other.changed).toBe(true);
+      expect(assetsTree()).toMatchObject({
+        'feat/map/placeholder/start.png': 'start v1',
+        'feat/map/placeholder/clip.gif': 'gif v1',
+        'feat/armies/armies/march.png': 'march',
+      });
+    });
+
+    it('does not commit or push when the branch captures have not changed', () => {
+      const commits = assetsCommitCount();
+      const rerun = publish('feat/map');
+      expect(rerun).toMatchObject({ changed: false, commit: first.commit });
+      expect(assetsCommitCount()).toBe(commits);
+    });
+
+    describe('after updates and another branch advance the remote tip', () => {
+      let latest: ReturnType<typeof publishCaptures>;
+      beforeEach(() => {
+        writeCaptures(join(root, 'captures'), {
+          placeholder: { 'start.png': 'start v2', 'clip.gif': 'gif v2' },
+        });
+        publish('feat/map');
+        writeCaptures(join(root, 'captures'), { armies: { 'march.png': 'march' } });
+        latest = publish('feat/armies');
+      });
+
+      it('fetches the requested branch at the latest tip and removes stale local captures', () => {
+        const fetched = join(root, 'fetched');
+        mkdirSync(join(fetched, 'stale'), { recursive: true });
+        const result = fetchCaptures({
+          cwd: work,
+          capturesDir: fetched,
+          branch: 'feat/map',
+          remote: 'origin',
+        });
+        expect(result.commit).toBe(latest.commit);
+        expect(readdirSync(fetched)).toEqual(['placeholder']);
+        expect(readFileSync(join(fetched, 'placeholder', 'start.png'), 'utf8')).toBe('start v2');
+        expect(result.captures).toEqual([
+          {
+            scenario: 'placeholder',
+            entries: [
+              { file: 'start.png', title: 'placeholder start.png', kind: 'screenshot' },
+              { file: 'clip.gif', title: 'placeholder clip.gif', kind: 'clip' },
+            ],
+          },
+        ]);
+        expect(result.markdown).toContain(
+          `https://raw.githubusercontent.com/acme/strategy-game/${latest.commit}/feat/map/placeholder/clip.gif`,
+        );
+      });
+    });
   });
 
   it('rebuilds on the newer tip when another publisher pushes first', () => {

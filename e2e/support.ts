@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import {
   fitCamera,
   mapToScreen,
@@ -70,13 +70,8 @@ export async function openGame(
   }: { query?: string; power?: PowerId; base?: string; pauses?: boolean } = {},
 ) {
   const asked = [query, pauses ? '' : 'pauses=off'].filter(Boolean).join('&');
-  // Captures also call this helper outside Playwright's test runner.
-  const start = async () => {
-    await page.goto(`${base}/?play=${power}${asked ? `&${asked}` : ''}`);
-    await page.getByTestId('top-bar').waitFor({ state: 'visible' });
-  };
-  if (process.env['TEST_WORKER_INDEX'] !== undefined) await test.step('game start', start);
-  else await start();
+  await page.goto(`${base}/?play=${power}${asked ? `&${asked}` : ''}`);
+  await page.getByTestId('top-bar').waitFor({ state: 'visible' });
 }
 
 /**
