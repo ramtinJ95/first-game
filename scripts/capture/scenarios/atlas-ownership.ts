@@ -24,14 +24,14 @@ export default defineScenario({
     if (!observer) throw new Error('ten-year campaign has no surviving power');
     opening.player = observer.id;
     decade.player = observer.id;
-    const views = async (stage: string, base = '') => {
+    const views = async (stage: string, base = '', load = loadSave) => {
       await openGame(page, { base });
       await pause(page);
       for (const [name, state] of [
         ['opening', opening],
         ['ten-years', decade],
       ] as const) {
-        await loadSave(page, state);
+        await load(page, state);
         await untilDrawn(page);
         await page.locator('canvas[data-terrain="ready"]').waitFor();
         await shot(
@@ -40,7 +40,7 @@ export default defineScenario({
         );
       }
     };
-    await withBaseline(BEFORE, (base) => views('before', base));
+    await withBaseline(BEFORE, (base, load) => views('before', base, load));
     await views('after');
   },
 });

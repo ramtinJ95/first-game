@@ -4,6 +4,8 @@ Measured 2026-11-14 on the shared work Mac, Chromium 158.0.8127.18, 1280 × 720,
 
 ## Ten starts each
 
+These original samples compare `bfb5617` with `c9f9dd3`, before the balance/registration changes landed. They are retained as historical evidence, not relabelled as measurements of the rebased build. The PR records the new `a3ac1ba` validation, head, CI comparisons, and startup recheck.
+
 Boundary: navigation through visible top bar, as `openGame` measures. A fresh browser context per start; the browser stays running across each block. `draw=test` uses 0.5 resolution, no grain/swell/antialiasing; `draw=full` is the actual game drawing. Both before and after use the same flags and drawing. Test-mode series also record a CDP CPU profile; full-mode series use only the WebGL link counter.
 
 | Start       | Test before | Test after | Full before | Full after |
