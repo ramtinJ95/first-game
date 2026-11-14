@@ -1,0 +1,37 @@
+[
+  {
+    "file": "before-opening.png",
+    "title": "before: the widest zoom as carthage, day 1, seed 1 with every power under the AI; the player’s land outlined first",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-ten-years.png",
+    "title": "before: the widest zoom as carthage, ten years in, seed 1 with every power under the AI; the player’s land outlined first",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-opening.png",
+    "title": "after: the widest zoom as carthage, day 1, seed 1 with every power under the AI; the player’s land outlined first",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-ten-years.png",
+    "title": "after: the widest zoom as carthage, ten years in, seed 1 with every power under the AI; the player’s land outlined first",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The full atlas on day 1 and ten years in: the same seeded games before and after the ownership change",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The full atlas on day 1 and ten years in: the same seeded games before and after the ownership change (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The full atlas on day 1 and ten years in: the same seeded games before and after the ownership change (Playwright trace)",
+    "kind": "trace"
+  }
+]

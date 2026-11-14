@@ -1,0 +1,47 @@
+[
+  {
+    "file": "recruit-shortfall.png",
+    "title": "Before an order: upkeep, the final realm balances and how long current stores cover a food shortfall, with a deliberate Raise anyway choice",
+    "kind": "screenshot"
+  },
+  {
+    "file": "standing-desertion.png",
+    "title": "Hunger stays visible each day after its first notice; the Chronicle tracks start, a tenth lost and the final total instead of daily spam",
+    "kind": "screenshot"
+  },
+  {
+    "file": "own-siege-begins.png",
+    "title": "The siege of your own city pauses on its first day",
+    "kind": "screenshot"
+  },
+  {
+    "file": "own-city-danger.png",
+    "title": "Seven days of food left: a second pause says to relieve, sally or seek peace",
+    "kind": "screenshot"
+  },
+  {
+    "file": "quiet-sally.png",
+    "title": "A one-day 100-man sally does not pause a realm with a reserve: one quiet result in the corner, details in the Chronicle",
+    "kind": "screenshot"
+  },
+  {
+    "file": "defeat-dialog.png",
+    "title": "Defeat is a native modal dialog: focus stays inside it and the backdrop makes the game beneath inert",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A cautious player sees the cost of waiting: recruitment upkeep, continuing desertion, own-city siege pauses, quiet sallies and a modal defeat",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A cautious player sees the cost of waiting: recruitment upkeep, continuing desertion, own-city siege pauses, quiet sallies and a modal defeat (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A cautious player sees the cost of waiting: recruitment upkeep, continuing desertion, own-city siege pauses, quiet sallies and a modal defeat (Playwright trace)",
+    "kind": "trace"
+  }
+]
