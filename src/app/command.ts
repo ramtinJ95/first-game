@@ -451,13 +451,16 @@ export function planCommand(
   const byLand = sensible.some((way) => way.option.group === 'land');
   if (bySea && (portToPort || !byLand)) {
     const title = `Orders for ${city?.name ?? `the field ${placeName(state, to)}`}`;
+    const options = sensible.map((way) => ({ ...way.option, notice: siegeNotice(way.days) }));
+    const common = options[0]?.notice;
+    const shared = options.every((option) => option.notice === common);
     return {
       kind: 'menu',
       menu: {
         title,
-        options: sensible.map((way) => ({ ...way.option, notice: siegeNotice(way.days) })),
+        options: shared ? sensible.map((way) => way.option) : options,
       },
-      notice: sensible.length === 1 ? siegeNotice(quickest) : undefined,
+      notice: shared ? common : undefined,
     };
   }
   if (typeof found === 'string') {
