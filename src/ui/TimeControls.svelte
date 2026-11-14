@@ -85,6 +85,19 @@
     color: var(--bad);
   }
 
+  @media (min-width: 1024px) and (max-width: 1150px) {
+    .controls {
+      gap: 4px;
+    }
+    .controls button {
+      padding-inline: 6px;
+    }
+    [data-testid='time-controls-day'] {
+      min-width: 7em;
+      white-space: nowrap;
+    }
+  }
+
   button {
     min-width: 2em;
   }
