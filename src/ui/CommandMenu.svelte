@@ -80,7 +80,7 @@
         {#each options as option (option.label)}
           <button type="button" role="menuitem" onclick={() => choose(option)}>
             <span class="way"
-              ><span>{option.label}</span>{' '}<span class="days">{option.detail}</span></span
+              ><span>{option.label}</span> <span class="days">{option.detail}</span></span
             >
             {#if option.notice}<span class="warning">{option.notice}</span>{/if}
           </button>
