@@ -37,6 +37,10 @@
   /** The enemy whose offer waits for the player's answer. */
   const waiting = $derived(unansweredOffer(game, pending));
   const shown = $derived(room.wars.find((war) => war.enemy === (open ?? waiting)) ?? room.wars[0]);
+  // A new offer shows its own war, whichever war the player had open.
+  $effect(() => {
+    if (waiting) open = undefined;
+  });
 
   function payerOf(war: WarRow, who: Payer): FactionId | undefined {
     return who === 'us' ? game.player : who === 'them' ? war.enemy : undefined;

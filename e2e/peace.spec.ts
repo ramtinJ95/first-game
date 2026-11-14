@@ -74,7 +74,7 @@ test.describe('peace', () => {
     await panel.getByLabel('Carthage pays you').check();
     await panel.getByTestId('peace-gold').fill('3000');
     await expect(panel.getByTestId('peace-verdict')).toHaveText(
-      'Carthage would refuse. It wants terms worth 2 points more, such as 200 gold more.',
+      'Carthage would refuse. It would give terms worth 2 points less, such as 200 gold less.',
     );
     await expect(panel).toContainText('Carthage is losing the war +35');
     await expect(panel).toContainText('Carthage does not end a war for nothing -15');
@@ -88,11 +88,13 @@ test.describe('peace', () => {
     await resume(page);
     await expect(page.getByTestId('alerts')).toContainText('Carthage refused your offer of peace');
     await pause(page);
-    await expect(page.getByTestId('alerts')).toContainText(/It wants terms worth \d+ points more/);
+    await expect(page.getByTestId('alerts')).toContainText(
+      /It would give terms worth \d+ points less/,
+    );
     await panel.getByRole('button', { name: 'Close' }).click();
     await page.getByRole('button', { name: 'Chronicle' }).click();
     await expect(page.getByTestId('chronicle')).toContainText(
-      /Carthage refused your offer of peace.*It wants terms worth \d+ points more/,
+      /Carthage refused your offer of peace.*It would give terms worth \d+ points less/,
     );
     await page.getByRole('button', { name: 'Chronicle' }).click();
     await openWars(page);

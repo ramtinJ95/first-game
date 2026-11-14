@@ -136,8 +136,14 @@ describe("the AI's answer", () => {
     expect(peaceAnswer(early, f.carthage, f.rome, gold(f.carthage, 300))?.verdict).toBe(
       'Carthage would refuse. It would give nothing, and wants terms worth 5 points from Rome, such as 500 gold.',
     );
+    const even = warOn(1 + WEARY_DAYS * PEACE_RESOLVE);
+    expect(peaceAnswer(even, f.carthage, f.rome, AS_THINGS_STAND)?.accepts).toBe(true);
+    expect(peaceAnswer(even, f.carthage, f.rome, gold(f.carthage, 50))?.verdict).toMatch(
+      /^Carthage would (accept\.|refuse\. It would give terms worth 1 point less, such as 50 gold less\.)$/,
+    );
     expectConsistent(state);
     expectConsistent(early);
+    expectConsistent(even);
   });
 
   test('does not talk of peace in a war younger than MIN_WAR_DAYS', () => {

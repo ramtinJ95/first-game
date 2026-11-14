@@ -413,6 +413,9 @@ test.describe('the frame round the game', () => {
 
       await choice.click();
       await expect(prompt).toHaveCount(0);
+      // The fate stopped the game, and only the player runs it again.
+      await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
+      await resume(page);
       await untilDay(page, asked + 1);
       await pause(page);
       const now = await day(page);
@@ -447,6 +450,7 @@ test.describe('the frame round the game', () => {
 
     await dropSave(page, state);
     await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
+    await resume(page);
     await untilDay(page, 3);
     await expect(prompt).toHaveCount(0);
     await expect(page.getByTestId('time-controls-speed')).toHaveText('Speed 3');
