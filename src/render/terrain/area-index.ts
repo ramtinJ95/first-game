@@ -267,6 +267,20 @@ export class AreaIndex {
   spanInside(left: number, right: number, y: number, wanted = true): boolean {
     const from = Math.min(left, right),
       to = Math.max(left, right);
+    const first = this.#cell(from, y),
+      last = this.#cell(to, y);
+    if (first >= 0 && last >= first) {
+      const state = wanted ? INSIDE : OUTSIDE;
+      let uniform = true;
+      for (let k = first; k <= last; k++)
+        if (this.#cells[k] !== state) {
+          uniform = false;
+          break;
+        }
+      // Every boundary cell is EDGE, including subpixel holes. This proves the
+      // whole contact; mixed/edge cells still require the continuous query below.
+      if (uniform) return true;
+    }
     if (this.inside(from, y) !== wanted || this.inside(to, y) !== wanted) return false;
     const band = Math.floor(y / BAND) * BAND_ROW;
     const crossings: number[] = [];
