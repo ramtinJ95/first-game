@@ -172,7 +172,7 @@ export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
           enemy,
           name,
           daysLeft,
-          text: `Truce with ${name}: ${whole(daysLeft)} days left. Neither side may declare war before day ${state.day + daysLeft}.`,
+          text: `Truce with ${name}: ${whole(daysLeft)} days left. Neither side may declare war before ${dateText(state.day + daysLeft)}.`,
         },
       ];
     });

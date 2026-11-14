@@ -247,7 +247,7 @@ test.describe('the panels', () => {
     await war.getByRole('button', { name: 'Declare war on Carthage' }).click();
     await war.getByRole('button', { name: 'Confirm war' }).click();
     await resume(page);
-    await expect(war).toHaveText(/At war with Carthage since day \d+/);
+    await expect(war).toHaveText(/At war with Carthage since Year \d+, day \d+/);
   });
 
   test('a foreign city panel declares war on its owner with declareWar', async ({ page }) => {
@@ -261,7 +261,7 @@ test.describe('the panels', () => {
     await panel.getByRole('button', { name: 'Declare war on Mediolanum' }).click();
     await panel.getByRole('button', { name: 'Confirm war' }).click();
     await expect(panel.getByTestId('war-status')).toHaveText(
-      /At war with Mediolanum since day \d+/,
+      /At war with Mediolanum since Year \d+, day \d+/,
     );
   });
 
@@ -443,7 +443,9 @@ test.describe('the panels', () => {
     const view = camera(page);
     const capua = view.banner(cityPoint('capua'));
     await page.mouse.click(capua.x, capua.y);
-    await expect(page.getByTestId('war-status')).toHaveText(/At war with Carthage since day 1/);
+    await expect(page.getByTestId('war-status')).toHaveText(
+      /At war with Carthage since Year 1, day 1/,
+    );
   });
 });
 

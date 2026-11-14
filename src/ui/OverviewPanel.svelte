@@ -84,7 +84,7 @@
       {#each overview.wars as war (war.against)}
         <li>
           <button type="button" class="pick bad" onclick={openWars}
-            >At war with {war.name} since day {war.since}</button
+            >At war with {war.name} since {dateText(war.since)}</button
           >
         </li>
       {:else}

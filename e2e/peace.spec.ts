@@ -62,7 +62,7 @@ test.describe('peace', () => {
 
     await resume(page);
     await expect(page.getByTestId('alerts')).toContainText(
-      /Peace with Carthage as things stand\. The truce holds until day \d+/,
+      /Peace with Carthage as things stand\. The truce holds until Year \d+, day \d+/,
     );
     await pause(page);
     await expect(panel.getByTestId('truce-row')).toHaveText(
@@ -82,7 +82,7 @@ test.describe('peace', () => {
     await page.mouse.click(carthago.x, carthago.y);
     const city = page.getByTestId('city-panel');
     await expect(city.getByTestId('truce')).toHaveText(
-      /A truce with Carthage holds for \d+ more days\. Neither side may declare war until day \d+\./,
+      /A truce with Carthage holds for \d+ more days\. Neither side may declare war until Year \d+, day \d+\./,
     );
     await expect(city.getByRole('button', { name: /Declare war/ })).toHaveCount(0);
   });

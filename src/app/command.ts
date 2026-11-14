@@ -25,7 +25,7 @@ import { areAtWar } from '../sim/wars.ts';
 import { connected, distance, findPath, locate, surfaceAt } from '../sim/world/find-path.ts';
 import { nearestSea, type World } from '../sim/world/world.ts';
 import { movedArmy } from './clock.ts';
-import { factionName, placeName, refusalText, whole } from './names.ts';
+import { armyTitle, dateText, factionName, placeName, refusalText, whole } from './names.ts';
 
 type State = DeepReadonly<GameState>;
 
@@ -49,6 +49,7 @@ export interface MenuOption {
   readonly label: string;
   readonly detail: string;
   readonly order: Order;
+  readonly notice?: string;
 }
 
 export interface OrderMenu {
@@ -298,18 +299,88 @@ function seaOption(state: State, way: SeaWay): MenuOption {
  */
 function weakSiegeWarning(
   state: State,
+  world: World,
   army: DeepReadonly<Army>,
   city: DeepReadonly<City>,
+  days: number,
+  pending: readonly Order[],
 ): string | undefined {
-  const siege = Object.values(state.sieges).find((s) => s.city === city.id);
+  // Read the other armies after waiting orders: a halted or redirected reinforcement
+  // no longer counts, and a second order given while paused already does.
+  const trial = structuredClone(state) as GameState;
+  for (const order of pending) {
+    if (movedArmy(order) && movedArmy(order) !== army.id) executeOrder(trial, order, world);
+  }
+  const siege = Object.values(trial.sieges).find((s) => s.city === city.id);
   const others = (siege?.besiegers ?? []).flatMap((id) => {
-    const other = state.armies[id];
+    const other = trial.armies[id];
     return other && other.id !== army.id ? [other] : [];
   });
   const men = [army, ...others].reduce((sum, one) => sum + menOf(state, one), 0);
   const needed = Math.ceil(BLOCKADE_ODDS * city.garrison) - men;
-  if (needed <= 0) return undefined;
-  return `${city.name} holds a garrison of ${whole(city.garrison)}, more than the ${whole(men)} men who would besiege it. Its food would not fall, and sallies would cut the besiegers down. ${whole(needed)} more men would hold the siege.`;
+  const arrivals = [
+    { army, days },
+    ...Object.values(trial.armies).flatMap((other) => {
+      if (other.id === army.id || other.owner !== army.owner) return [];
+      const activity = other.activity;
+      if (activity.kind === 'marching') {
+        const end = activity.waypoints.at(-1);
+        return end && distance(end, city.position) <= SIEGE_DISTANCE
+          ? [
+              {
+                army: other,
+                days: travelDays(activity.position, activity.waypoints, MARCH_KM_PER_DAY),
+              },
+            ]
+          : [];
+      }
+      if (activity.kind === 'embarked') {
+        const convoy = trial.convoys[activity.convoy];
+        if (!convoy) return [];
+        const end = activity.march?.at(-1) ?? convoy.waypoints.at(-1);
+        const landing = convoy.waypoints.at(-1) ?? convoy.position;
+        return end && distance(end, city.position) <= SIEGE_DISTANCE
+          ? [
+              {
+                army: other,
+                days:
+                  Math.max(0, (convoy.departsOn ?? state.day) - state.day) +
+                  travelDays(convoy.position, convoy.waypoints, CONVOY_KM_PER_DAY) +
+                  (activity.march?.length
+                    ? travelDays(landing, activity.march, MARCH_KM_PER_DAY)
+                    : 0),
+              },
+            ]
+          : [];
+      }
+      return [];
+    }),
+  ].sort((a, b) => a.days - b.days || a.army.id.localeCompare(b.army.id));
+  const incoming = arrivals.filter((arrival) => arrival.army.id !== army.id);
+  if (incoming.length === 0) {
+    if (needed <= 0) return undefined;
+    return `${city.name} holds a garrison of ${whole(city.garrison)}, more than the ${whole(men)} men who would besiege it. Its food would not fall, and sallies would cut the besiegers down. ${whole(needed)} more men would hold the siege.`;
+  }
+  const total =
+    others.reduce((sum, other) => sum + menOf(state, other), 0) +
+    arrivals.reduce((sum, arrival) => sum + menOf(state, arrival.army), 0);
+  const first = arrivals[0];
+  const next = arrivals.find((arrival) => first && arrival.days > first.days);
+  const alone =
+    others.length === 0 &&
+    first &&
+    arrivals.filter((a) => a.days === first.days).length === 1 &&
+    next
+      ? `${armyTitle(state, first.army)} stands alone for ${daysText(next.days - first.days)}. `
+      : '';
+  const timings = arrivals
+    .map(
+      (arrival) =>
+        `${armyTitle(state, arrival.army)} (${whole(menOf(state, arrival.army))} men) arrives in ${daysText(arrival.days)}, ${dateText(state.day + arrival.days - 1)}`,
+    )
+    .join('. ');
+  const deficit = Math.max(0, Math.ceil(BLOCKADE_ODDS * city.garrison) - total);
+  return `${city.name}: garrison ${whole(city.garrison)}. ${timings}. ${alone}Together with ${whole(total - arrivals.reduce((sum, a) => sum + menOf(state, a.army), 0))} besiegers already there, ${whole(total)} men are committed${deficit > 0 ? `; ${whole(deficit)} more would hold the siege` : ', enough to hold the siege before losses'}. Sallies cut down any force below the blockade strength while it waits; arrivals and men assume no battles or losses on the way.`;
 }
 
 export function planCommand(
@@ -340,10 +411,10 @@ export function planCommand(
     Object.values(state.cities)
       .filter((c) => atWar(c.owner) && distance(c.position, to) <= SIEGE_DISTANCE)
       .sort((a, b) => distance(a.position, to) - distance(b.position, to))[0];
-  const notice =
+  const siegeNotice = (days: number) =>
     besieged && besieged.owner !== army.owner
       ? atWar(besieged.owner)
-        ? weakSiegeWarning(state, army, besieged)
+        ? weakSiegeWarning(state, world, army, besieged, days, pending)
         : `At peace with ${factionName(state, besieged.owner)}. Declare war to besiege it.`
       : undefined;
   const found = route(state, world, march);
@@ -380,7 +451,14 @@ export function planCommand(
   const byLand = sensible.some((way) => way.option.group === 'land');
   if (bySea && (portToPort || !byLand)) {
     const title = `Orders for ${city?.name ?? `the field ${placeName(state, to)}`}`;
-    return { kind: 'menu', menu: { title, options: sensible.map((way) => way.option) }, notice };
+    return {
+      kind: 'menu',
+      menu: {
+        title,
+        options: sensible.map((way) => ({ ...way.option, notice: siegeNotice(way.days) })),
+      },
+      notice: sensible.length === 1 ? siegeNotice(quickest) : undefined,
+    };
   }
   if (typeof found === 'string') {
     if (start && city && portToPort) {
@@ -398,6 +476,7 @@ export function planCommand(
   const where = placeName(state, to);
   const named = city?.name ?? (where.startsWith('at ') ? where.slice(3) : `a point ${where}`);
   const info = `March to ${named}: ${daysText(found.days)}.`;
+  const notice = siegeNotice(found.days);
   return { kind: 'issue', order: march, info, ...(notice && { notice }) };
 }
 

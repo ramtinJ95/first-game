@@ -334,8 +334,10 @@ describe('overviewOf', () => {
 
     const sight = sightOf(state, world, f.rome);
     const capuaRow = (s: typeof sight) => standing(state, s).cities.find((c) => c.city === f.capua);
-    expect(capuaRow(sight)?.status).toBe('Besieged by Carthage since day 3');
-    expect(capuaRow({ ...sight, armies: new Set<ArmyId>() })?.status).toBe('Besieged since day 3');
+    expect(capuaRow(sight)?.status).toBe('Besieged by Carthage since Year 1, day 3');
+    expect(capuaRow({ ...sight, armies: new Set<ArmyId>() })?.status).toBe(
+      'Besieged since Year 1, day 3',
+    );
     expect(standing(state, sight).armies[0]?.at).toEqual(sea);
   });
 
@@ -396,7 +398,9 @@ describe('sackText', () => {
     expect(sackText(state, roma)).toBeUndefined();
     roma.sackedOn = 1 as Day;
     state.day = 101 as Day;
-    expect(sackText(state, roma)).toBe('Sacked on day 1: yields half its gold for 995 more days');
+    expect(sackText(state, roma)).toBe(
+      'Sacked in Year 1, day 1: yields half its gold for 995 more days',
+    );
     state.day = (1 + 3 * 365) as Day;
     expect(sackText(state, roma)).toBeUndefined();
   });
@@ -428,7 +432,7 @@ describe('storeNote', () => {
       why: expect.stringMatching(/^Granaries full tomorrow\. /) as string,
     });
     expect(storeNote('manpower', 299, 4, 300)).toMatchObject({
-      text: 'At limit tomorrow',
+      text: 'At the call-up limit tomorrow',
       why: expect.stringMatching(/^At the call-up limit tomorrow\. /) as string,
     });
     expect(storeNote('manpower', 300, 1, 300)).toMatchObject({
@@ -672,7 +676,7 @@ describe('cityBalance and minorText', () => {
     const minor = state.factions[f.syracusaeFaction];
     if (!syracusae || !minor) throw new Error('fixture changed');
     const sight = () => sightOf(state, fixtureWorld(), f.rome);
-    expect(minorText(state, sight(), syracusae)).toBeUndefined();
+    expect(minorText(state, sight(), syracusae)).toBe('Unleagued city: standard walls');
     syracusae.fortified = 1.5;
     minor.league = f.syracusaeFaction;
     expect(minorText(state, sight(), syracusae)).toBe(

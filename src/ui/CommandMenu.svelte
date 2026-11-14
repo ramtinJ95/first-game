@@ -79,8 +79,10 @@
         <p class="heading" id="command-menu-{group}" role="presentation">{heading}</p>
         {#each options as option (option.label)}
           <button type="button" role="menuitem" onclick={() => choose(option)}>
-            <span>{option.label}</span>
-            <span class="days">{option.detail}</span>
+            <span class="way"
+              ><span>{option.label}</span><span class="days">{option.detail}</span></span
+            >
+            {#if option.notice}<span class="warning">{option.notice}</span>{/if}
           </button>
         {/each}
       </div>
@@ -100,6 +102,9 @@
     gap: 4px;
     min-width: 240px;
     padding: 8px 10px 10px;
+    max-width: min(560px, calc(100vw - 16px));
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
     background: var(--paper-solid);
     border: 2px solid var(--ink);
     box-shadow:
@@ -129,9 +134,20 @@
 
   .menu button {
     display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: left;
+  }
+
+  .way {
+    display: flex;
     gap: 16px;
     justify-content: space-between;
-    text-align: left;
+  }
+
+  .warning {
+    font-size: 12px;
+    color: var(--bad);
   }
 
   .menu button:focus-visible {

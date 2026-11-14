@@ -999,8 +999,8 @@ export async function createRenderer({
       if (event.pointerId !== drag?.pointer) return;
       if (!drag.moved) {
         const screen = local(event);
-        // Men and tents stand clear of a city's symbol, so a click on the symbol itself
-        // means the city, though a camp's edge reaches over it.
+        // City symbols win over figures and banners alike. Armies here in the city
+        // panel reaches an army whose banner or convoy covers the symbol.
         const onSymbol = drawnCities.some(
           ({ symbol }) =>
             screen.x >= symbol.left &&
@@ -1012,7 +1012,7 @@ export async function createRenderer({
           map,
           camera,
           viewport(),
-          bannersShown(),
+          onSymbol ? [] : bannersShown(),
           screen,
           battlesShown(),
           onSymbol ? [] : figuresShown(),

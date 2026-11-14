@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { factionName } from '../app/names.ts';
+  import { dateText, factionName } from '../app/names.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { FactionId } from '../sim/ids.ts';
   import type { Order } from '../sim/orders/orders.ts';
@@ -34,7 +34,7 @@
 
 <div class="war" data-testid="war-status">
   {#if war}
-    <p class="bad">At war with {name} since day {war.since}</p>
+    <p class="bad">At war with {name} since {dateText(war.since)}</p>
   {:else if declared}
     <p class="bad">War on {name} is declared and begins with the next day</p>
   {:else}
@@ -43,8 +43,9 @@
       <p class="muted">{name} is out of the game</p>
     {:else if truce > 0}
       <p class="muted" data-testid="truce">
-        A truce with {name} holds for {truce} more days. Neither side may declare war until day {game.day +
-          truce}.
+        A truce with {name} holds for {truce} more days. Neither side may declare war until {dateText(
+          game.day + truce,
+        )}.
       </p>
     {:else if confirming}
       <div class="row">
