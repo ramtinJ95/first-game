@@ -2,7 +2,7 @@
 
 Conquest should feel rewarding without being trivial. This records the original PR measurements and the revised rule after the outside review, rather than treating measurements from different bases as comparable.
 
-## Current rule
+## Rule after PR 48 (historical; follow-up below)
 
 - Keep the 60-day opening. The usual standing, weariness, other-war, shortage, and resolve factors remain visible and deterministic.
 - The losing-side floor uses **durable** city/battle points, not siege pressure. The durable score must be negative, and the side must have lost a city still held by its enemy or more than 10% of its soldiers. The share is recorded battle losses / (surviving soldiers + those losses).
@@ -117,3 +117,57 @@ That score alone is **no longer enough** to justify the floor. A small casualty 
 - A fresh reviewer approved the production fix with no findings and independently ran 139 relevant unit tests. The final added real-conquest cost test also passes in the full suite. Browser, campaign sweeps and captures are implementation-lane verification, not claimed as independently rerun.
 
 Decisions: use a 10% actual-loss boundary, preserve the 60-day opening and 225-day even-war end, close the capital/own-loss variant too, preserve only peace queues rather than expand all-order persistence, and follow independent registration files instead of numeric format 14. No merge is performed by this lane.
+
+## Follow-up after PR 48: second-front winner and clear offers
+
+Base: merged main `9ee0cb1`, rebased onto `24630b8` after renderer PR 49 landed. That renderer change modifies no simulation source or simulation script, so the measured baseline rules are identical. The earlier measurements above are historical, not results of this follow-up.
+
+### Rule and cheapest controlled truce
+
+Before 225 war-days a side not durably losing this war keeps a wish at most −1, unless it is durably losing another war against a great power. That exception uses exactly the same test: negative city/battle points, plus a city lost and still held or battle losses above 10% of surviving fielded soldiers plus those recorded losses. Siege pressure and equal substantial losses do not qualify. An actual defeat elsewhere removes the positive-price minimum, not the ordinary reckoning or the 60-day opening. Its factor names the other enemy; a routine second war still contributes its visible discount.
+
+The seed-30 casualty **record** is reconstructed, not claimed as a replay of the unavailable reviewer's full save. Initially 1,500 Romans face 3,000 equal enemy soldiers; the records and surviving formations then reflect 151 Roman and 72 enemy losses. With the enemy's second front undamaged, free peace now refuses; **100 gold accepts and 99 refuses**. The actual offer/next-day-answer test deducts 100 and starts the day-63 → 428 truce. With zero enemy losses the same minimum applies. The Roman 150/151 boundary no longer changes refusal into free acceptance.
+
+This is a minimum treaty price for the stated two-front state, **not** a universal cheapest campaign. The 151 casualties are already paid, and ordinary upkeep is not waived. The earlier unbloodied, single-front frontier remains 1,100 gold at first talks or zero after 225 war-days. A genuine defeat on the AI's other front can still make an earlier zero-gold exit legitimate. Tests cover 300/3,000 versus 301/3,000 casualties, held city losses, and equal losses on that front.
+
+### Before/after: seeds 1–20, ten years
+
+Both use `npm run sim -- peace --seeds 20 --years 10`, every faction under the AI. The before run uses isolated main `9ee0cb1`, not the older base of PR 48. The follow-up does not claim new world/AI target measurements. A machine sleep inflated the first after run's wall clock; elapsed time is not a performance comparison.
+
+| Measure                                            | Main 9ee0cb1             | Follow-up              |
+| -------------------------------------------------- | ------------------------ | ---------------------- |
+| All wars: begun / peace / defeat / running         | 1,856 / 1,029 / 771 / 56 | 1,812 / 923 / 830 / 59 |
+| All wars: median / longest duration                | 116 / 414 days           | 118 / 368 days         |
+| Great-power wars: begun / peace / defeat / running | 891 / 837 / 14 / 40      | 844 / 784 / 17 / 43    |
+| Great-power peace endings / begun                  | 93.9%                    | 92.9%                  |
+| Great-power wars: median / longest duration        | 145 / 414 days           | 143 / 368 days         |
+| Great-power peace: as things stand / gold / cities | 137 / 634 / 66           | 51 / 682 / 51          |
+| Great-power pairs at war all ten years             | 0                        | 0                      |
+| Peace-to-next-war gap: shortest / median           | 365 / 410 days           | 365 / 390 days         |
+| Most wars between a pair in one seed               | 7                        | 7                      |
+| Minor wars: begun / peace / defeat / running       | 965 / 192 / 757 / 16     | 968 / 139 / 813 / 16   |
+| Minor wars: median / longest duration              | 72 / 236 days            | 74 / 294 days          |
+
+| Power    | Main median days with no war (min–max) | Follow-up median (min–max) |
+| -------- | -------------------------------------- | -------------------------- |
+| Rome     | 598 (251–1,242)                        | 594 (309–1,263)            |
+| Carthage | 548 (252–972)                          | 573 (240–1,068)            |
+| Macedon  | 535 (249–1,213)                        | 576 (195–1,064)            |
+| Egypt    | 767 (382–2,041)                        | 696 (429–1,189)            |
+| Persia   | 806 (439–1,353)                        | 1,007 (508–1,496)          |
+
+The price safeguard reduces white peaces and increases gold settlements; this is not presented as a universal balance improvement. Most great-power wars still end in peace, no pair stays at war for ten years, and the shortest return respects the one-year truce. Minor cities still fall. The earlier Persia leadership-target miss was not retuned or remeasured here.
+
+### Panel, dates and saved price history
+
+- Decision: suggested terms **send with one click**, rather than fill a draft and require a second click. Their buttons say **Send offer**; the manual draft says **Send these terms**. A queued offer is confirmed and duplicate sends disabled. The browser test follows the suggested 2,800-gold payment through the next-day acceptance, not merely a changed input.
+- Incoming gold demands show the present treasury and affordability in both the panel and news. An offer no longer payable has an explicit shortfall and disabled Accept; Refuse remains available.
+- Each war side remembers just its own latest offer after refusal or expiry, including both reckonings and the receiver's treasury constraint. A higher demand names its preceding price and measured changes. The reviewer found that actual proposals can rise solely because the player can now afford more: the 2,000 → 3,000 case now names the increased treasury and previous cap, including through save/load. A manually increased demand with no measured explanation says so instead of inventing a cause. New registration: `peace-offer-price-history`; no older registration is edited.
+- The date reports were already fixed on main by the shared formatter and its use in peace verdicts, WarStatus, war facts, truces and peace alerts. No parallel formatter was added. New regressions cover the day-945 talks deadline and day-3914 truce deadline, plus the corresponding calendar facts and late-game alert.
+- New capture scenario `peace-followup` shows the second-front price, one-click ready/sent states, affordability and escalation, full offer news, and both date forms. Controlled offers stage readable treasury amounts and a conquest; they are UI evidence, not a claim that those prices came from the tester's actual campaign. Separate unit tests use actual AI proposals for the treasury-cap case.
+
+### Follow-up review and checks
+
+The fresh reviewer initially required two changes: the new other-front city test accidentally defeated its test faction, and treasury-only price increases lacked their real constraint. The test now keeps that faction alive; the saved treasury snapshot and an actual-proposal failing-before regression fix the second point. The reviewer subsequently approved with no further reachable findings, independently passing 137 focused tests and repeating the actual AI treasury escalation through save/load. It did not claim the full browser/build/campaign runs.
+
+Implementation-lane checks include all 897 unit tests, check/build, 19 peace browser cases and both affected capture scenarios. An initial browser run reached another builder's preview on shared port 4173 and could not load this branch's save format. It is not counted as product verification. The successful run used this checkout's own rebuilt preview on port 4185 with unchanged timeouts, retries and assertions. The temporary configuration is not committed. CI remains the full-suite check of record; the pull request records its final head, green checks and exact published media commit. The optional installed legacy Nexus CLI still lacks output registration, so no Nexus preview URL is claimed.

@@ -6,6 +6,9 @@ import type { FactionId } from '../src/sim/ids.ts';
 import { executeOrder } from '../src/sim/orders/orders.ts';
 import { fixtureWorld } from '../src/sim/fixture.ts';
 import { peaceStanding, stalePeaceForecast } from './peace-support.ts';
+import { risingPeacePrice, winningSecondFront } from './peace-support.ts';
+import { saveGame } from '../src/sim/save.ts';
+import type { Day } from '../src/sim/state/day.ts';
 import {
   camera,
   carthageOffersPeace,
@@ -94,9 +97,8 @@ test.describe('peace', () => {
     await page.getByRole('button', { name: 'Chronicle' }).click();
     await openWars(page);
 
-    await panel.getByRole('button', { name: 'Peace as things stand' }).click();
-    await expect(panel.getByTestId('peace-verdict')).toHaveText('Carthage would accept.');
-    await panel.getByTestId('offer-peace').click();
+    await panel.getByRole('button', { name: 'Send offer — Peace as things stand' }).click();
+    await expect(panel.getByTestId('offer-peace')).toBeDisabled();
     await expect(panel.getByTestId('our-offer')).toHaveText(
       'You offer Carthage peace as things stand. Carthage hears it with the next day.',
     );
@@ -126,6 +128,101 @@ test.describe('peace', () => {
       /A truce with Carthage holds for \d+ more days\. Neither side may declare war until Year \d+, day \d+\./,
     );
     await expect(city.getByRole('button', { name: /Declare war/ })).toHaveCount(0);
+  });
+
+  test('one click on the suggested payment really sends it, without a second Send click', async ({
+    page,
+  }) => {
+    await load(page, siegeToEndInPeace());
+    const panel = await openWars(page);
+    const choice = panel.getByRole('button', {
+      name: /Send offer — The most Carthage gives: Carthage gives you 2,800 gold/,
+    });
+    await choice.click();
+    await expect(panel.getByTestId('our-offer')).toHaveText(
+      'You offer Carthage peace: Carthage gives you 2,800 gold. Carthage hears it with the next day.',
+    );
+    await expect(choice).toBeDisabled();
+    await expect(panel.getByTestId('offer-peace')).toBeDisabled();
+    await resume(page);
+    await expect(page.getByTestId('alerts')).toContainText(
+      'Peace with Carthage: Carthage gives you 2,800 gold',
+    );
+  });
+
+  test('an incoming price shows the current treasury and its rise, with the conquest named in panel and news', async ({
+    page,
+  }) => {
+    const fixture = risingPeacePrice();
+    await pause(page);
+    await dropSave(page, fixture.save);
+    const panel = page.getByTestId('wars-panel');
+    await expect(panel.getByTestId('peace-funds')).toHaveText(
+      'You hold 8,940 gold. You can pay the 5,100 gold asked.',
+    );
+    await expect(panel.getByTestId('peace-price-rise')).toContainText(
+      'last time you give 4,500 gold; now you give 5,100 gold',
+    );
+    await expect(panel.getByTestId('peace-price-rise')).toContainText('it took Capua');
+    await expect(panel.getByTestId('accept-peace')).toBeEnabled();
+    await expect(panel).toContainText('Carthage declared it on Year 2, day 21');
+    await expect(page.getByTestId('alerts')).toContainText('You hold 8,940 gold');
+    await expect(page.getByTestId('alerts')).toContainText('The price rose');
+    await expect(page.getByTestId('alerts')).toContainText('it took Capua');
+  });
+
+  test('an offer no longer affordable says the shortfall and cannot be accepted', async ({
+    page,
+  }) => {
+    const fixture = risingPeacePrice(8900);
+    const treasury = fixture.state.factions[fixture.state.player];
+    if (!treasury) throw new Error('fixture');
+    treasury.stores.gold = 8800;
+    await load(page, fixture.state);
+    const panel = page.getByTestId('wars-panel');
+    await expect(panel.getByTestId('peace-funds')).toHaveText(
+      'You hold 8,800 gold. You need 100 gold more to pay the 8,900 asked.',
+    );
+    await expect(panel.getByTestId('accept-peace')).toBeDisabled();
+    await expect(panel.getByTestId('refuse-peace')).toBeEnabled();
+  });
+
+  test('a winning second-front AI explains its discount, but still refuses free early peace', async ({
+    page,
+  }) => {
+    await load(page, winningSecondFront());
+    const panel = await openWars(page);
+    await expect(panel).toContainText('Carthage is also at war with Egypt +15');
+    await expect(panel.getByTestId('peace-verdict')).toContainText('such as 100 gold more');
+  });
+
+  test('peace-talk and truce deadlines already use the shared year/day form', async ({ page }) => {
+    const state = winningSecondFront();
+    const carthage = 'carthage' as FactionId;
+    state.wars = { [warKey(state.player, carthage)]: newWar(carthage, state.player, 885 as Day) };
+    state.day = 900 as Day;
+    await load(page, state);
+    const panel = await openWars(page);
+    await expect(panel.getByTestId('peace-verdict')).toHaveText(
+      'Carthage will not talk of peace before Year 3, day 215.',
+    );
+    state.wars = {};
+    state.truces[warKey(state.player, carthage)] = { since: 3549 as Day, endsOn: 3914 as Day };
+    state.day = 3900 as Day;
+    await pause(page);
+    await dropSave(
+      page,
+      saveGame(state, {
+        paused: true,
+        panel: 'wars',
+        chronicle: [],
+        occupied: [],
+        told: [],
+        weakSieges: [],
+      }),
+    );
+    await expect(panel.getByTestId('truce-row')).toContainText('before Year 11, day 264.');
+    await expect(panel.getByTestId('truce-row')).not.toContainText('day 3914');
   });
 
   test("receives Carthage's offer, which pauses the game, and refuses it", async ({ page }) => {

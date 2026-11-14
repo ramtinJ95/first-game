@@ -7,6 +7,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import { warKey, newWar } from '../sim/state/war.ts';
 import { startMarch } from '../sim/march.ts';
 import { tick } from '../sim/tick.ts';
+import { advanceDay } from '../sim/systems/advance-day.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { ArmyId, ConvoyId, FormationId, SiegeId } from '../sim/ids.ts';
 import { sightOf } from '../sim/sight.ts';
@@ -968,6 +969,67 @@ describe('peace', () => {
         text: `Peace with Carthage as things stand. The truce holds until Year 2, day 4`,
       },
     ]);
+  });
+
+  it('tells what the player holds against an incoming price and why it rose', () => {
+    const state = buildFixture();
+    atWar(state);
+    const treasury = state.factions[f.rome];
+    if (!treasury) throw new Error('fixture');
+    treasury.stores.gold = 8940;
+    const offer = (gold: number): Order => ({
+      kind: 'offerPeace',
+      faction: f.carthage,
+      to: f.rome,
+      terms: { kind: 'payment', payer: f.rome, gold, cities: [] },
+    });
+    const first = tick(state, [offer(4500)], world, [advanceDay]);
+    expect(alertsOfDay(state, first.state, first.events)).toContainEqual(
+      expect.objectContaining({
+        kind: 'peaceOffered',
+        text: 'Carthage offers peace: you give 4,500 gold. You hold 8,940 gold. You can pay the 4,500 gold asked.',
+      }),
+    );
+    const refused = tick(
+      first.state,
+      [{ kind: 'refusePeace', faction: f.rome, from: f.carthage }],
+      world,
+      [advanceDay],
+    );
+    changeCityOwner(refused.state, f.capua, f.carthage);
+    const next = tick(refused.state, [offer(5100)], world, [advanceDay]);
+    const news = alertsOfDay(refused.state, next.state, next.events).find(
+      (alert) => alert.kind === 'peaceOffered',
+    );
+    expect(news?.text).toContain('You hold 8,940 gold. You can pay the 5,100 gold asked.');
+    expect(news?.text).toContain(
+      'The price rose: last time you give 4,500 gold; now you give 5,100 gold.',
+    );
+    expect(news?.text).toContain('it took Capua');
+  });
+
+  it('already uses calendar dates even for a late-game truce deadline', () => {
+    const state = buildFixture();
+    state.day = 3549 as Day;
+    atWar(state);
+    const sent = tick(
+      state,
+      [{ kind: 'offerPeace', faction: f.rome, to: f.carthage, terms: asThingsStand }],
+      world,
+      [advanceDay],
+    );
+    const made = tick(
+      sent.state,
+      [{ kind: 'acceptPeace', faction: f.carthage, from: f.rome, terms: asThingsStand }],
+      world,
+      [advanceDay],
+    );
+    const news = alertsOfDay(sent.state, made.state, made.events).find(
+      (alert) => alert.kind === 'peaceMade',
+    );
+    expect(news?.text).toBe(
+      'Peace with Carthage as things stand. The truce holds until Year 11, day 265',
+    );
   });
 
   it("tells when the enemy refuses the player's offer", () => {
