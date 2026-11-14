@@ -9,10 +9,13 @@ import { dailyBalances, economy, limitsOf } from '../sim/systems/economy.ts';
 import { tick } from '../sim/tick.ts';
 import { recruitForecast, RECRUIT_WARNING_DAYS } from './recruit-forecast.ts';
 import { TROOPS } from '../sim/troops.ts';
+import { executeOrder } from '../sim/orders/orders.ts';
+
+const world = fixtureWorld();
 
 it('warns for a gold-only shortfall even before the new formation musters', () => {
   const state = goldOnly();
-  const forecast = recruitForecast(state, [], 'spearmen');
+  const forecast = recruitForecast(state, [], world, 'spearmen');
   expect(forecast.after.food).toBeGreaterThan(0);
   expect(forecast.warning).not.toContain('Food shortfall');
   expect(forecast.warning).toContain('Gold shortfall');
@@ -23,10 +26,10 @@ it('warns for a gold-only shortfall even before the new formation musters', () =
 it.each([365, 366])('warns through the one-year boundary, not beyond it (%i days)', (days) => {
   const state = goldOnly();
   const current = required(dailyBalances(state).get(f.rome));
-  const final = recruitForecast(state, [], 'spearmen').after;
+  const final = recruitForecast(state, [], world, 'spearmen').after;
   required(state.factions[f.rome]).stores.gold =
     TROOPS.spearmen.recruit.gold - current.gold * 15 - final.gold * (days - 15 - 0.5);
-  const forecast = recruitForecast(state, [], 'spearmen');
+  const forecast = recruitForecast(state, [], world, 'spearmen');
   expect(RECRUIT_WARNING_DAYS).toBe(365);
   expect(forecast.lasts.gold).toBe(days);
   expect(forecast.runway.find((store) => store.key === 'gold')).toMatchObject({
@@ -43,11 +46,11 @@ it('gives the realm forecast without adding a hypothetical troop, and keeps card
   const state = buildFixture();
   const balance = required(dailyBalances(state).get(f.rome));
   const pending = [{ kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' }] as const;
-  const realm = recruitForecast(state, pending);
+  const realm = recruitForecast(state, pending, world);
   expect(realm.after.food).toBeCloseTo(balance.food - 6);
   expect(realm.after.gold).toBeCloseTo(balance.gold - 10);
   expect(realm.upkeep).toEqual({ food: 0, gold: 0 });
-  const card = recruitForecast(state, pending, 'archers');
+  const card = recruitForecast(state, pending, world, 'archers');
   expect(card.upkeepText).toBe('Upkeep −3.0 food, −5.0 gold/day');
   expect(card.upkeepText).not.toContain('Realm');
   expectConsistent(state);
@@ -60,10 +63,31 @@ it.each([false, true])(
     const city = required(state.cities[f.roma]);
     if (barracks) city.buildings.push('barracks');
     required(state.factions[f.rome]).stores.food = required(limitsOf(state).get(f.rome)).food - 1;
-    const forecast = recruitForecast(state, [], 'spearmen', trainingDaysAt(city, 15));
+    const forecast = recruitForecast(state, [], world, 'spearmen', trainingDaysAt(city, 15));
     expect(forecast.lasts.food).toBe(firstShortfall(state, 'food'));
   },
 );
+
+it('projects a queued trade with its world before quoting recruitment, without changing live state', () => {
+  const state = buildFixture();
+  required(state.factions[f.rome]).stores.gold = 10000;
+  const before = structuredClone(state);
+  const order = {
+    kind: 'openTrade',
+    faction: f.rome,
+    from: f.roma,
+    to: f.capua,
+    mode: 'land',
+  } as const;
+  const projected = structuredClone(state);
+  expect(executeOrder(projected, order, world)).toBeUndefined();
+  expect(recruitForecast(state, [order], world, 'spearmen')).toEqual(
+    recruitForecast(projected, [], world, 'spearmen'),
+  );
+  expect(state).toEqual(before);
+  expectConsistent(state);
+  expectConsistent(projected);
+});
 
 function firstShortfall(initial: GameState, store: 'food' | 'gold') {
   let state = initial;

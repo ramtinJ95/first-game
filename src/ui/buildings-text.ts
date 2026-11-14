@@ -1,5 +1,5 @@
 import { reasonText, whole } from '../app/names.ts';
-import { buildRefusal, build, cancelBuilding, cancelRefund } from '../sim/buildings/build.ts';
+import { buildRefusal, cancelRefund } from '../sim/buildings/build.ts';
 import {
   BUILDING_KINDS,
   BUILDINGS,
@@ -9,8 +9,8 @@ import {
 import { buildingGain, type BuildingGain } from '../sim/buildings/gains.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { CityId, FactionId } from '../sim/ids.ts';
-import type { Order } from '../sim/orders/orders.ts';
-import { recruit } from '../sim/orders/recruit.ts';
+import { executeOrder, type Order } from '../sim/orders/orders.ts';
+import type { World } from '../sim/world/world.ts';
 import type { City } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { workPause } from '../sim/systems/construction.ts';
@@ -58,22 +58,16 @@ export interface CityBuildings {
 }
 
 /**
- * The day as the next tick will start it: the player's waiting recruits, builds, and
- * cancels played through the rules' own handlers on a copy, so the gold they spend or
+ * The day as the next tick will start it: the player's waiting orders
+ * played through the rules' own handlers on a copy, so the gold they spend or
  * give back and the work they start are the rules' answer.
  */
-export function afterWaiting(state: State, pending: readonly Order[]): State {
-  const orders = pending.filter(
-    (order) =>
-      order.faction === state.player &&
-      (order.kind === 'recruit' || order.kind === 'build' || order.kind === 'cancelBuilding'),
-  );
+export function afterWaiting(state: State, pending: readonly Order[], world: World): State {
+  const orders = pending.filter((order) => order.faction === state.player);
   if (orders.length === 0) return state;
   const copy = structuredClone(state) as GameState;
   for (const order of orders) {
-    if (order.kind === 'recruit') recruit(copy, order);
-    else if (order.kind === 'build') build(copy, order);
-    else if (order.kind === 'cancelBuilding') cancelBuilding(copy, order);
+    executeOrder(copy, order, world);
   }
   return copy;
 }
@@ -83,8 +77,9 @@ export function cityBuildings(
   state: State,
   pending: readonly Order[],
   city: DeepReadonly<City>,
+  world: World,
 ): CityBuildings {
-  const waiting = afterWaiting(state, pending);
+  const waiting = afterWaiting(state, pending, world);
   const next = waiting.cities[city.id] ?? city;
   const built = city.buildings.map((kind) => line(state, city, kind));
   const atWork = [city.construction?.building, next.construction?.building];

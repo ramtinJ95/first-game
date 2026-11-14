@@ -1,5 +1,7 @@
 import type { FactionId } from '../ids.ts';
-import type { Order } from '../orders/orders.ts';
+import { executeOrder, type Order } from '../orders/orders.ts';
+import type { GameState } from '../state/game-state.ts';
+import type { World } from '../world/world.ts';
 import { UPKEEP_PER_MAN } from '../systems/economy.ts';
 import { TROOPS, type Troop } from '../troops.ts';
 import {
@@ -74,4 +76,24 @@ export function mostNeeded(state: State, faction: FactionId): Troop {
     }
   }
   return best;
+}
+
+/** Trade waits behind the military reserve and the next formation's purchase. */
+export function tradeReserve(state: State, faction: FactionId): number {
+  const next =
+    state.factions[faction]?.kind === 'greatPower'
+      ? TROOPS[mostNeeded(state, faction)].recruit.gold
+      : Math.min(...Object.values(TROOPS).map((troop) => troop.recruit.gold));
+  return Math.max(600, reserveOf(state, faction, 'gold')) + next;
+}
+
+/** The same day's already chosen spending must settle before a trade commitment. */
+export function afterSpending(state: State, orders: readonly Order[], world: World): State {
+  const spending = orders.filter((order) =>
+    ['recruit', 'build', 'cancelBuilding', 'sack', 'enslave', 'acceptPeace'].includes(order.kind),
+  );
+  if (!spending.length) return state;
+  const copy = JSON.parse(JSON.stringify(state)) as GameState;
+  for (const order of spending) executeOrder(copy, order, world);
+  return copy;
 }

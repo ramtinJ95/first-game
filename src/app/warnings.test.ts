@@ -39,6 +39,7 @@ describe('warnings before a cautious player loses men or cities', () => {
     const forecast = recruitForecast(
       state,
       [{ kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' }],
+      world,
       'spearmen',
     );
     expect(forecast.upkeep).toEqual({ food: 6, gold: 10 });
@@ -84,7 +85,7 @@ describe('warnings before a cautious player loses men or cities', () => {
     const state = buildFixture();
     for (const city of Object.values(state.cities))
       if (city.owner === f.rome) city.population *= 10;
-    expect(recruitForecast(state, [], 'spearmen').warning).toBeUndefined();
+    expect(recruitForecast(state, [], world, 'spearmen').warning).toBeUndefined();
     expectConsistent(state);
   });
 

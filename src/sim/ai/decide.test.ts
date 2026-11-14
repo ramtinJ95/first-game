@@ -180,6 +180,45 @@ describe('a great power', () => {
       expect(pressed(1500)).toEqual([]);
     });
 
+    test('does not count armies committed to an existing front again for pressure on a rival', () => {
+      const state = buildFixture();
+      setMen(state, f.hastati, 2000);
+      setMen(state, f.citizenSpears, 800);
+      const minorArmy = addSecondRomanArmy(state);
+      const minor = army(state, minorArmy);
+      minor.owner = f.syracusaeFaction;
+      declare(state, f.rome, f.syracusaeFaction);
+      expect(only(decide(state, f.rome), 'declareWar')).toEqual([]);
+      expectConsistent(state);
+    });
+
+    test.each(['absent', 'broken'])(
+      'keeps a blockade force on an existing front whose field army is %s',
+      (field) => {
+        const state = buildFixture();
+        setMen(state, f.hastati, 2000);
+        setMen(state, f.citizenSpears, 800);
+        declare(state, f.rome, f.syracusaeFaction);
+        if (field === 'broken') {
+          const minor = army(state, addSecondRomanArmy(state));
+          minor.owner = f.syracusaeFaction;
+          for (const id of minor.formations) {
+            const formation = state.formations[id];
+            if (!formation) throw new Error('no minor formation');
+            formation.morale = 0;
+          }
+        }
+        const undefended = structuredClone(state);
+        city(undefended, f.syracusae).garrison = 0;
+        expect(only(decide(state, f.rome), 'declareWar')).toEqual([]);
+        expect(only(decide(undefended, f.rome), 'declareWar')).toEqual([
+          { kind: 'declareWar', faction: f.rome, against: f.carthage },
+        ]);
+        expectConsistent(state);
+        expectConsistent(undefended);
+      },
+    );
+
     test('declares nothing against a neighbour stronger than the threshold allows', () => {
       const state = buildFixture();
       setMen(state, f.hastati, 200);

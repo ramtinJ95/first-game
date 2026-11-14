@@ -21,13 +21,21 @@
   import StartScreen from './StartScreen.svelte';
   import TopBar from './TopBar.svelte';
   import WarsPanel from './WarsPanel.svelte';
+  import type { World } from '../sim/world/world.ts';
 
   let {
     view,
     map,
+    world,
     actions,
     frame,
-  }: { view: View; map: DeepReadonly<GameMap>; actions: Actions; frame: FrameActions } = $props();
+  }: {
+    view: View;
+    map: DeepReadonly<GameMap>;
+    world: World;
+    actions: Actions;
+    frame: FrameActions;
+  } = $props();
 
   /** The latest alerts the corner shows. The chronicle keeps them all. */
   const ALERTS_SHOWN = 5;
@@ -96,6 +104,7 @@
           <CityPanel
             {game}
             {map}
+            {world}
             {city}
             {sight}
             pending={view.current.pending}

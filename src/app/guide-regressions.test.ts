@@ -117,7 +117,7 @@ describe('guide and text regressions', () => {
     required(state.factions[f.rome]).stores.gold = 30000;
     required(state.factions[f.rome]).stores.food = required(limitsOf(state).get(f.rome)).food;
     const city = required(state.cities[f.roma]);
-    const options = () => cityBuildings(state, [], city).options;
+    const options = () => cityBuildings(state, [], city, fixtureWorld()).options;
     expect(options().find((o) => o.kind === 'canals')).toMatchObject({
       caution: 'Food full: the extra daily gain would be lost now.',
       why: undefined,

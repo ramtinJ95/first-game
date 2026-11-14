@@ -1,7 +1,9 @@
 import type { FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import { truceBetween } from '../peace/truce.ts';
+import { BLOCKADE_ODDS } from '../systems/sieges.ts';
 import { distance } from '../world/find-path.ts';
+import { tradeIncome } from '../trade/routes.ts';
 import type { Context } from './armies.ts';
 import {
   canFight,
@@ -79,16 +81,22 @@ export function warDeclaration(context: Context): Order[] {
 
   const fighting = new Set(targetsOf(state, faction, enemies).map((city) => city.owner));
   let free = strength.get(faction) ?? 0;
+  let pressureFree = free;
   for (const enemy of [...fighting].sort()) {
     const front = frontOf(enemy);
-    if (front) free -= strength.get(enemy) ?? 0;
+    if (front) {
+      const field = strength.get(enemy) ?? 0;
+      free -= field;
+      // A broken field army does not release the troops needed to finish its city.
+      pressureFree -= Math.max(field, front.city.garrison * BLOCKADE_ODDS);
+    }
   }
   const rivals = new Set(
     sorted(state.factions)
       .filter((other) => other.kind === 'greatPower' && other.defeatedOn === null)
       .map((other) => other.id),
   );
-  if (free <= 0) return rivalPressure(context, strength, rivals, frontOf);
+  if (free <= 0) return [];
   const odds = enemies.size === 0 ? PEACE_WAR_ODDS : WAR_ODDS;
   const leader = leaderOf(citiesOf, rivals);
   const homeland = context.world.map.provinces.filter(
@@ -101,9 +109,21 @@ export function warDeclaration(context: Context): Order[] {
       : rivals.has(other)
         ? Math.min(odds, RIVAL_ODDS)
         : odds * sated;
+  const income = tradeIncome(state).get(faction) ?? 0;
+  const tradeCost = (other: FactionId) =>
+    Object.values(state.tradeRoutes)
+      .filter(
+        (r) =>
+          r.status === 'running' &&
+          r.blocked === null &&
+          ((r.owner === faction && r.partner === other) ||
+            (r.partner === faction && r.owner === other)),
+      )
+      .reduce((sum, r) => sum + r.daily, 0);
   const scoreOf = (other: FactionId, theirs: number, km: number) =>
     free /
     Math.max(1, theirs) /
+    (1 + Math.min(0.25, (tradeCost(other) / Math.max(1, income)) * 0.25)) /
     (needed(other) * (enemies.size === 0 ? 1 : 1 + km / WAR_DISTANCE_KM));
 
   // A neighbour scores at most its best city in reach would with no army near it, so
@@ -137,7 +157,7 @@ export function warDeclaration(context: Context): Order[] {
     if (score >= 1 && (!best || score > best.score)) best = { against: id, score };
   }
   if (best) return [{ kind: 'declareWar', faction, against: best.against }];
-  return rivalPressure(context, strength, rivals, frontOf);
+  return rivalPressure(context, strength, pressureFree, rivals, frontOf);
 }
 
 /** The great power that holds at least LEADER_SHARE of all cities and more than any other. */
@@ -157,18 +177,21 @@ function leaderOf(
 
 /**
  * A power at war with no great power declares on a great-power neighbour that has kept
- * to its homeland, holding no more cities than the map gave it, once its own armies
- * outweigh that neighbour's RIVAL_PRESSURE_ODDS times. It picks the one it outweighs
- * most. So a rival who stays at home is pressed while minor cities are still left.
+ * to its homeland, holding no more cities than the map gave it, once its uncommitted
+ * armies outweigh that neighbour's RIVAL_PRESSURE_ODDS times. Each existing front
+ * keeps back at least its field strength or its city's blockade requirement, whichever
+ * is greater, in the same strength points used for a garrison in normal war scoring.
+ * It picks the one it outweighs most. So a rival who stays at home is pressed while
+ * minor cities are still left.
  */
 function rivalPressure(
   { state, world, faction, enemies }: Context,
   strength: ReadonlyMap<FactionId, number>,
+  own: number,
   rivals: ReadonlySet<FactionId>,
   frontOf: (other: FactionId) => unknown,
 ): Order[] {
   if ([...enemies].some((enemy) => rivals.has(enemy))) return [];
-  const own = strength.get(faction) ?? 0;
   const homeland = (rival: FactionId) =>
     world.map.provinces.filter((province) => (province.owner as string) === rival).length;
   const held = (rival: FactionId) =>

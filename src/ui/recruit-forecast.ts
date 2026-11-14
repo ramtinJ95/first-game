@@ -6,6 +6,7 @@ import { TROOPS, type Troop } from '../sim/troops.ts';
 import { whole } from '../app/names.ts';
 import { afterWaiting } from './buildings-text.ts';
 import { signed } from './describe.ts';
+import type { World } from '../sim/world/world.ts';
 
 /** Today's yields justify a near-term decision, not a red alarm years ahead. */
 export const RECRUIT_WARNING_DAYS = 365;
@@ -13,10 +14,11 @@ export const RECRUIT_WARNING_DAYS = 365;
 export function recruitForecast(
   game: DeepReadonly<GameState>,
   pending: readonly Order[],
+  world: World,
   troop?: Troop,
   daysToMuster = troop ? TROOPS[troop].recruit.days : 0,
 ) {
-  const waiting = afterWaiting(game, pending);
+  const waiting = afterWaiting(game, pending, world);
   const balance = dailyBalances(waiting).get(game.player);
   const stores = waiting.factions[game.player]?.stores;
   if (!balance || !stores) throw new Error('Recruit forecast needs the player faction');

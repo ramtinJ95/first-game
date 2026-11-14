@@ -35,10 +35,13 @@
   } from './describe.ts';
   import WarStatus from './WarStatus.svelte';
   import { recruitForecast, RECRUIT_WARNING_DAYS } from './recruit-forecast.ts';
+  import CityTrade from './CityTrade.svelte';
+  import type { World } from '../sim/world/world.ts';
 
   let {
     game,
     map,
+    world,
     city,
     sight,
     pending,
@@ -47,6 +50,7 @@
   }: {
     game: DeepReadonly<GameState>;
     map: DeepReadonly<GameMap>;
+    world: World;
     city: DeepReadonly<City>;
     sight: Sight;
     pending: readonly Order[];
@@ -64,6 +68,7 @@
     recruitForecast(
       game,
       pending,
+      world,
       confirming,
       confirming ? trainingDaysAt(city, TROOPS[confirming].recruit.days) : 0,
     ),
@@ -71,7 +76,7 @@
 
   function raise(troop: Troop) {
     if (
-      recruitForecast(game, pending, troop, trainingDaysAt(city, TROOPS[troop].recruit.days))
+      recruitForecast(game, pending, world, troop, trainingDaysAt(city, TROOPS[troop].recruit.days))
         .warning
     )
       confirming = troop;
@@ -112,7 +117,7 @@
 
   /** What the player has left once the recruits and buildings waiting for the next day are paid. */
   const available = $derived(
-    afterWaiting(game, pending).factions[game.player]?.stores ?? { gold: 0, manpower: 0 },
+    afterWaiting(game, pending, world).factions[game.player]?.stores ?? { gold: 0, manpower: 0 },
   );
 
   function refusal(troop: Troop): string | undefined {
@@ -261,8 +266,9 @@
   {/if}
 
   {#if own}
-    <CityBuildings {game} {city} {pending} {actions} />
+    <CityBuildings {game} {world} {city} {pending} {actions} />
   {/if}
+  <CityTrade {game} {world} {city} {pending} {actions} />
 
   {#if raising.length > 0 || own}
     <h3>Raising</h3>
@@ -313,7 +319,13 @@
       {#each Object.keys(TROOPS) as Troop[] as troop (troop)}
         {@const why = refusal(troop)}
         {@const cost = TROOPS[troop].recruit}
-        {@const forecast = recruitForecast(game, pending, troop, trainingDaysAt(city, cost.days))}
+        {@const forecast = recruitForecast(
+          game,
+          pending,
+          world,
+          troop,
+          trainingDaysAt(city, cost.days),
+        )}
         <button type="button" disabled={why !== undefined} title={why} onclick={() => raise(troop)}>
           <span class="troop">{TROOP_NAMES[troop]}</span>
           <span class="cost"

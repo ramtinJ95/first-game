@@ -44,6 +44,7 @@ Read the guide for the area you change. Add area-specific detail there, not here
 - [Peace](docs/engineering/peace.md)
 - [Cities](docs/engineering/cities.md)
 - [Buildings](docs/engineering/buildings.md)
+- [Trade](docs/engineering/trade.md)
 - [Sieges](docs/engineering/sieges.md)
 - [The clock and the panels](docs/engineering/the-clock-and-the-panels.md)
 - [Faction AI](docs/engineering/faction-ai.md)

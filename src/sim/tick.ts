@@ -3,6 +3,7 @@ import { executeOrder, type Order, type RejectedOrder } from './orders/orders.ts
 import type { GameState } from './state/game-state.ts';
 import { SYSTEMS, type System } from './systems.ts';
 import type { World } from './world/world.ts';
+import { lapseInvitationsBeforeOrders } from './trade/orders.ts';
 
 export interface TickResult {
   state: GameState;
@@ -22,9 +23,18 @@ export function tick(
   world: World,
   systems: readonly System[] = SYSTEMS,
 ): TickResult {
-  const next = JSON.parse(JSON.stringify(state)) as GameState;
+  const { tradeRoutes, ...rest } = state;
+  const next: GameState = {
+    ...(JSON.parse(JSON.stringify(rest)) as Omit<GameState, 'tradeRoutes'>),
+    // A trade path is immutable, unlike an army's shrinking waypoints. Sharing it
+    // avoids serialising every bend of every road on every day; the moving record is copied.
+    tradeRoutes: Object.fromEntries(
+      Object.entries(tradeRoutes).map(([id, route]) => [id, { ...route }]),
+    ),
+  };
   const rejected: RejectedOrder[] = [];
   const events = recordEvents(next, () => {
+    lapseInvitationsBeforeOrders(next, orders, world);
     for (const order of orders) {
       const rejection = executeOrder(next, order, world);
       if (rejection) rejected.push(rejection);
