@@ -311,12 +311,13 @@ function weakSiegeWarning(
   for (const order of pending) {
     if (movedArmy(order) && movedArmy(order) !== army.id) executeOrder(trial, order, world);
   }
+  army = trial.armies[army.id] ?? army;
   const siege = Object.values(trial.sieges).find((s) => s.city === city.id);
   const others = (siege?.besiegers ?? []).flatMap((id) => {
     const other = trial.armies[id];
     return other && other.id !== army.id ? [other] : [];
   });
-  const men = [army, ...others].reduce((sum, one) => sum + menOf(state, one), 0);
+  const men = [army, ...others].reduce((sum, one) => sum + menOf(trial, one), 0);
   const needed = Math.ceil(BLOCKADE_ODDS * city.garrison) - men;
   const arrivals = [
     { army, days },
@@ -361,8 +362,8 @@ function weakSiegeWarning(
     if (needed <= 0) return undefined;
     return `${city.name} holds a garrison of ${whole(city.garrison)}, more than the ${whole(men)} men who would besiege it. Its food would not fall, and sallies would cut the besiegers down. ${whole(needed)} more men would hold the siege.`;
   }
-  const already = others.reduce((sum, other) => sum + menOf(state, other), 0);
-  const total = already + arrivals.reduce((sum, arrival) => sum + menOf(state, arrival.army), 0);
+  const already = others.reduce((sum, other) => sum + menOf(trial, other), 0);
+  const total = already + arrivals.reduce((sum, arrival) => sum + menOf(trial, arrival.army), 0);
   const first = arrivals[0];
   const next = arrivals.find((arrival) => first && arrival.days > first.days);
   const alone =
@@ -375,7 +376,7 @@ function weakSiegeWarning(
   const timings = arrivals
     .map(
       (arrival) =>
-        `${armyTitle(state, arrival.army)} (${whole(menOf(state, arrival.army))} men) arrives in ${daysText(arrival.days)}, ${dateText(state.day + arrival.days - 1)}`,
+        `${armyTitle(state, arrival.army)} (${whole(menOf(trial, arrival.army))} men) arrives in ${daysText(arrival.days)}, ${dateText(state.day + arrival.days - 1)}`,
     )
     .join('. ');
   const deficit = Math.max(0, Math.ceil(BLOCKADE_ODDS * city.garrison) - total);

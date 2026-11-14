@@ -59,7 +59,9 @@
       onclick={() => actions.issue({ kind: 'setStance', ...base, stance: option })}
     >
       <span>{STANCE_NAMES[option]}</span>
-      {#if choice.answers && option !== army.stance}<span class="mark">Beats theirs</span>{/if}
+      {#if choice.answers && option !== army.stance}<span class="mark"
+          >Beats their current stance once re-formed</span
+        >{/if}
       {#if choice.cost}<span class="cost">{choice.cost}</span>{/if}
     </button>
     <span class="effect" id="{uid}-{option}"
@@ -68,6 +70,10 @@
   {/each}
 </div>
 <p class="muted small" data-testid="stance-cost">{reformCostText()}</p>
+{#if enemy}<p class="muted small" data-testid="stance-ai-rule">
+    The enemy chooses freely once, then changes only when beaten and neither side re-forms. Matching
+    skirmish stances is not a counter. It may answer your change after you re-form.
+  </p>{/if}
 {#if army.activity.kind === 'inBattle'}
   <div class="row">
     {#if retreating}

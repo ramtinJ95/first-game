@@ -30,6 +30,7 @@ import {
   type WeakSiege,
 } from './alerts.ts';
 import { createClock } from './clock.ts';
+import { desertionNews, type Desertion } from './desertion.ts';
 import { planCommand, plannedRoutes, type CommandTarget, type Plan } from './command.ts';
 import { fateChoices, type FateChoice } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
@@ -81,7 +82,12 @@ const entry = playQuery();
  * Browser tests and capture scenarios that play through battles open the game this way.
  */
 const newsPauses = new URLSearchParams(location.search).get('pauses') !== 'off';
-const NO_PAUSES: PauseSettings = { battle: false, weakSiege: false, sighted: false };
+const NO_PAUSES: PauseSettings = {
+  battle: false,
+  weakSiege: false,
+  sighted: false,
+  ownCity: false,
+};
 
 const host = document.getElementById('app');
 if (!host) throw new Error('#app element missing from index.html');
@@ -157,6 +163,7 @@ function readPauseOnFate(): boolean {
 let occupied = new Map<CityId, Day>();
 /** The player's sieges too weak to cut the food that the player has been told of. */
 let weakSieges = new Map<SiegeId, WeakSiege>();
+let desertion: Desertion | undefined;
 
 function fateOpen(state: DeepReadonly<GameState>, id: CityId): boolean {
   const city = state.cities[id];
@@ -228,11 +235,14 @@ const clock = createClock({
     const sees = sightFor(after);
     const weak = weakSiegeNews(before, after, weakSieges);
     weakSieges = weak.watched;
+    const shortage = desertionNews(before, after, events, desertion);
+    desertion = shortage.watched;
     const stops = stopsOfDay(
       groupAlerts([
-        ...alertsInSight(alertsOfDay(before, after, events, occupied), saw, sees),
+        ...alertsInSight(alertsOfDay(before, after, events, occupied, toldOnce), saw, sees),
         ...sightingsOfDay(before, after, saw, sees, world, toldOnce),
         ...weak.alerts,
+        ...shortage.alerts,
         // The world's news reaches every power, whether it sees the place or not.
         ...worldNewsOfDay(before, after, events, world),
       ]),
@@ -441,6 +451,7 @@ function pageNow(): Page {
     occupied,
     told: toldOnce,
     weakSieges,
+    desertion,
   };
 }
 
@@ -466,6 +477,7 @@ function enter(
       page.selection && seesPick(sightFor(state), page.selection) ? page.selection : undefined;
   }
   weakSieges = new Map(page?.weakSieges);
+  desertion = page?.desertion;
   menu = undefined;
   stopAsked = false;
   const outcome = outcomeOf(state, world, state.player);

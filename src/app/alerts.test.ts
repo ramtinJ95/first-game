@@ -19,6 +19,7 @@ import {
   type WeakSiege,
 } from './alerts.ts';
 import { alertsInSight } from './sighted.ts';
+import { desertionNews, type Desertion } from './desertion.ts';
 
 const world = fixtureWorld();
 const f = FIXTURE;
@@ -27,9 +28,13 @@ const f = FIXTURE;
 function play(state: GameState, orders: Order[], done: (state: GameState) => boolean, days = 60) {
   const alerts: Alert[] = [];
   let current = state;
+  let desertion: Desertion | undefined;
   for (let i = 0; i < days; i++) {
     const { state: next, events } = tick(current, i === 0 ? orders : [], world);
     alerts.push(...alertsOfDay(current, next, events));
+    const shortage = desertionNews(current, next, events, desertion);
+    desertion = shortage.watched;
+    alerts.push(...shortage.alerts);
     current = next;
     if (done(current)) break;
   }
@@ -287,11 +292,10 @@ describe('alertsOfDay', () => {
     stores.gold = 0;
     hastati.men = 50_000;
     const { alerts } = play(state, [], () => false, 5);
-    const deserted = ofKind(alerts, 'armyDeserted');
-    expect(deserted.map((a) => [a.day, a.focus?.select])).toEqual([
-      [1, { kind: 'army', army: f.romanArmy }],
-    ]);
-    expect(deserted[0]?.text).toMatch(/^\d+ men deserted First Legion at Roma$/);
+    const deserted = ofKind(alerts, 'desertionBegan');
+    expect(deserted.map((a) => a.day)).toEqual([1]);
+    expect(deserted[0]?.text).toMatch(/^Desertion has begun: [\d,]+ men lost\. Short of gold/);
+    expect(ofKind(alerts, 'armyDeserted')).toEqual([]);
   });
 
   it('tells of an arrival from a march shorter than a day, which is never seen marching', () => {
@@ -488,6 +492,7 @@ describe('alertsOfDay', () => {
         day: 1,
         tone: 'bad',
         text: 'Capua fell to Carthage',
+        pause: { kind: 'ownCity' },
         focus: { at: capua.position, select: { kind: 'province', province: f.campania } },
       },
     ]);
