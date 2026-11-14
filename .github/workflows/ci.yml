@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   verify:
-    timeout-minutes: 3
+    timeout-minutes: 4
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -24,6 +24,15 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Cache pinned map source bytes
+        uses: actions/cache@v5
+        with:
+          path: .cache/map
+          key: map-sources-${{ hashFiles('scripts/map/sources.ts') }}
+      # The unchanged map tests still hash every input and rebuild/compare the map.
+      # Fetching outside their 60s hook separates network delays from rule checks.
+      - name: Fetch and validate pinned map inputs
+        run: node --input-type=module -e "import { loadSources } from './scripts/map/sources.ts'; await loadSources();"
       - run: npm run check
       - run: npm test
       - run: npm run build
