@@ -68,6 +68,7 @@
     recruitForecast(
       game,
       pending,
+      world,
       confirming,
       confirming ? trainingDaysAt(city, TROOPS[confirming].recruit.days) : 0,
     ),
@@ -75,7 +76,7 @@
 
   function raise(troop: Troop) {
     if (
-      recruitForecast(game, pending, troop, trainingDaysAt(city, TROOPS[troop].recruit.days))
+      recruitForecast(game, pending, world, troop, trainingDaysAt(city, TROOPS[troop].recruit.days))
         .warning
     )
       confirming = troop;
@@ -318,7 +319,13 @@
       {#each Object.keys(TROOPS) as Troop[] as troop (troop)}
         {@const why = refusal(troop)}
         {@const cost = TROOPS[troop].recruit}
-        {@const forecast = recruitForecast(game, pending, troop, trainingDaysAt(city, cost.days))}
+        {@const forecast = recruitForecast(
+          game,
+          pending,
+          world,
+          troop,
+          trainingDaysAt(city, cost.days),
+        )}
         <button type="button" disabled={why !== undefined} title={why} onclick={() => raise(troop)}>
           <span class="troop">{TROOP_NAMES[troop]}</span>
           <span class="cost"
