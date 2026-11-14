@@ -27,7 +27,8 @@ function behindAnotherWar(): GameState {
   const state = carthageDemandsPeace();
   const carthageWar = state.wars[warKey(rome, carthage)];
   if (!carthageWar) throw new Error('no war with Carthage');
-  const war = newWar(macedon, rome, (carthageWar.since - 1) as Day);
+  const war = newWar(macedon, rome, carthageWar.since);
+  carthageWar.since = (carthageWar.since + 1) as Day;
   war.offeredOn = state.day;
   state.wars[warKey(rome, macedon)] = war;
   return state;
