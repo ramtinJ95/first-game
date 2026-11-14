@@ -23,14 +23,28 @@ function insideRing([x, y]: Point, ring: readonly Point[]): boolean {
 
 /**
  * The land as one outline: the province edges that no other province shares, chained
- * into rings, each outer ring with the rings of the water it encloses. Every edge of a province is shared by exactly one other or lies on the coast
- * or the map's edge, so this is the coast and the frame, without the province borders.
+ * into rings, each outer ring with the rings of the water it encloses. Every edge of a
+ * province is shared by exactly one other or lies on the coast or the map's edge, so this is the coast and the frame, without the province borders.
  * A fill or a mask of it costs a fraction of one of every province, whose borders follow
  * the land and so hold three times the points of the coast.
  */
-export function landOutline(map: {
-  readonly provinces: readonly { readonly outline: MultiPolygon }[];
-}): MultiPolygon {
+export function landOutline(map: Provinces): MultiPolygon {
+  const known = outlines.get(map.provinces);
+  if (known) return known;
+  const outline = traceLand(map);
+  outlines.set(map.provinces, outline);
+  return outline;
+}
+
+type Provinces = { readonly provinces: readonly { readonly outline: MultiPolygon }[] };
+
+/**
+ * Keyed by the provinces, because the washes get a copy of the map with the terrain's own
+ * areas. The terrain and the washes both mask by it, and tracing it takes 50 ms.
+ */
+const outlines = new WeakMap<Provinces['provinces'], MultiPolygon>();
+
+function traceLand(map: Provinces): MultiPolygon {
   const uses = new Map<string, number>();
   const edges: [Point, Point][] = [];
   for (const province of map.provinces) {
