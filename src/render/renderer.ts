@@ -31,7 +31,9 @@ import {
 } from './camera.ts';
 import { BORDER_WEIGHTS, borderRuns, sharedBorders } from './borders.ts';
 import type { DrawOptions } from './draw-options.ts';
-import { coversView, fitTexture } from './cached-texture.ts';
+import { cacheDrawing, coversView, fitTexture } from './cached-texture.ts';
+import { naturalCoast } from './coast.ts';
+import { landOutline } from './land-outline.ts';
 import { drawColumnMark, drawnColumns, type DrawnColumn } from './columns.ts';
 import { createFog, fogCircles } from './fog.ts';
 import { LABEL_PRIORITY, placeLabels, type Box, type LabelRequest } from './labels.ts';
@@ -408,8 +410,9 @@ export async function createRenderer({
   // The map build clips rivers and the coastline to the extent, so they need no mask.
   // A stencil mask here cost over a third of each frame drawn without a graphics card.
   const inkLines = new Graphics();
+  const ink = cacheDrawing(inkLines, app.renderer, SEA_MARGIN);
   const frame = new Graphics();
-  layers.riversAndCoast.addChild(terrain.lakes, inkLines, frame);
+  layers.riversAndCoast.addChild(terrain.lakes, ink.sprite, frame);
 
   const fog = startupStep('fog', () => createFog(app.renderer, map));
   layers.fog.addChild(fog.root);
@@ -463,6 +466,7 @@ export async function createRenderer({
   let camera: Camera = fitCamera(viewport(), map);
   let cameraMoved = true;
   let strokedAt = 0;
+  let coastOutline = landOutline(map);
   let shown: DeepReadonly<GameState> | undefined;
   let laidOut: DeepReadonly<GameState> | undefined;
   // Each game state the page hands over gets a number, and the canvas says the latest it
@@ -545,15 +549,22 @@ export async function createRenderer({
     strokedAt = scale;
     const round = { cap: 'round', join: 'round' } as const;
     const flat = { cap: 'butt', join: 'bevel' } as const;
+    const coast = scale >= 1.75 ? naturalCoast(map) : undefined;
+    const coastline = coast?.lines ?? map.coastline;
+    const outline = coast?.land ?? landOutline(map);
+    if (outline !== coastOutline) {
+      wash.clip(outline);
+      coastOutline = outline;
+    }
     waterLines.clear();
     for (const { distance, strength } of WATER_LINES) {
       const step = Math.max(1, distance / 4);
-      traceLines(waterLines, map.coastline, scale, step).stroke({
+      traceLines(waterLines, coastline, scale, step).stroke({
         width: 2 * distance + WATER_LINE_WIDTH,
         color: mix(SEA, WATER_LINE, strength),
         ...flat,
       });
-      traceLines(waterLines, map.coastline, scale, step).stroke({
+      traceLines(waterLines, coastline, scale, step).stroke({
         width: 2 * distance - WATER_LINE_WIDTH,
         color: SEA,
         ...flat,
@@ -572,8 +583,8 @@ export async function createRenderer({
       scale,
       0.75,
     ).stroke({ width: 1.1, color: RIVER, alpha: 0.9, ...round });
-    traceLines(inkLines, map.coastline, scale, 0.75).stroke({ width: 1.5, color: INK, ...round });
-    terrain.restroke(scale);
+    traceLines(inkLines, coastline, scale, 0.75).stroke({ width: 1.5, color: INK, ...round });
+    terrain.restroke(scale, outline);
     frame.clear();
     frame.poly(toPixels(map.extent, scale, 0)).stroke({ width: 2.5, color: INK, join: 'round' });
     for (const line of [waterLines, borders, inkLines, frame]) line.scale.set(1 / scale);
@@ -964,6 +975,7 @@ export async function createRenderer({
       seaDrawn = { x, y, scale: camera.scale };
     }
     seaSprite.position.set(x - seaDrawn.x - SEA_MARGIN, y - seaDrawn.y - SEA_MARGIN);
+    ink.render(camera, { width, height });
   }
 
   function moveSwell(nowMs: number) {
@@ -1133,6 +1145,15 @@ export async function createRenderer({
     cameraMoved = true;
   };
   app.renderer.on('resize', onResize);
+  canvas.addEventListener(
+    'webglcontextrestored',
+    () => {
+      // Restored render textures are empty, even when their view still fits.
+      ink.invalidate();
+      cameraMoved = true;
+    },
+    { signal: listening.signal },
+  );
 
   return {
     draw({ previous, current, progress, selection, planned, replaced, previousSight, sight }) {
@@ -1362,6 +1383,7 @@ export async function createRenderer({
     },
     destroy() {
       terrain.destroy();
+      ink.destroy();
       listening.abort();
       app.renderer.off('resize', onResize);
       seaRoot.destroy({ children: true });

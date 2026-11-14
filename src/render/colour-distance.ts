@@ -24,3 +24,17 @@ export function washTint(ground: number, wash: number, alpha: number): number {
     return out | (Math.round(a + (b - a) * alpha) << shift);
   }, 0);
 }
+
+/** WCAG relative-luminance contrast of opaque sRGB colours (solid glyph cores). */
+export function contrastRatio(a: number, b: number): number {
+  const luminance = (colour: number) => {
+    const channels = [16, 8, 0].map((shift) => {
+      const value = ((colour >> shift) & 255) / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    }) as [number, number, number];
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  };
+  const x = luminance(a),
+    y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}

@@ -70,6 +70,11 @@ const ZOOMS: Record<string, { at: MapPoint; scale: number } | undefined> = {
   closest: { at: { x: 2420, y: 1880 }, scale: 4.2 },
   'plateau-middle': { at: { x: 6000, y: 3150 }, scale: 1.6 },
   'plateau-closest': { at: { x: 6080, y: 3330 }, scale: 4.2 },
+  'delta-closest': { at: { x: 4053, y: 3616 }, scale: 4 },
+  'azov-closest': { at: { x: 4423, y: 1890 }, scale: 4 },
+  'aegean-closest': { at: { x: 3540, y: 2989 }, scale: 4 },
+  'bosporus-closest': { at: { x: 3850, y: 2526 }, scale: 4 },
+  'atlantic-closest': { at: { x: 684, y: 2171 }, scale: 4 },
 };
 const zooms = values.zooms.split(',');
 for (const zoom of zooms) if (!(zoom in ZOOMS)) throw new Error(`unknown zoom ${zoom}`);

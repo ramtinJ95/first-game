@@ -1,0 +1,11 @@
+{
+  "coastlines": 131,
+  "controlPoints": 5638,
+  "detailedPoints": 192457,
+  "maxDeviationKm": 0.43667244294762925,
+  "longestStraightBeforeKm": 108.09662344402795,
+  "longestStraightAfterKm": 3.172440293210576,
+  "longestStraightDrawnAfterKm": 3.172440293210576,
+  "chordToleranceKm": 0.02,
+  "closestScale": 4
+}
