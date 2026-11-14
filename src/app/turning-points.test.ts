@@ -5,7 +5,7 @@ import type { CityId } from '../sim/ids.ts';
 import { newGame } from '../sim/new-game.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { warKey } from '../sim/state/war.ts';
+import { warKey, newWar } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import { fateChoices } from './fates.ts';
 import { turningPoints } from './turning-points.ts';
@@ -16,7 +16,7 @@ const f = FIXTURE;
 /** Rome's army stands at Syracusae, at war with it, and the city has no garrison left. */
 function syracusaeFalls(): GameState {
   const state = buildFixture();
-  state.wars[warKey(f.rome, f.syracusaeFaction)] = { since: state.day };
+  state.wars[warKey(f.rome, f.syracusaeFaction)] = newWar(f.rome, f.syracusaeFaction, state.day);
   const roman = state.armies[f.romanArmy];
   const syracusae = state.cities[f.syracusae];
   if (!roman || !syracusae) throw new Error('fixture changed');
@@ -117,4 +117,23 @@ describe('fateChoices', () => {
     expect(sack?.refusal).toMatch(/no army of rome stands at syracusae/);
     expect(enslave?.refusal).toMatch(/no army of rome stands at syracusae/);
   });
+});
+
+it('an offer of peace to the player stops the game once, on the day it is made', () => {
+  const state = buildFixture();
+  state.wars[warKey(f.rome, f.carthage)] = newWar(f.carthage, f.rome, state.day);
+  const terms = { kind: 'asThingsStand' } as const;
+  const offered = tick(
+    state,
+    [{ kind: 'offerPeace', faction: f.carthage, to: f.rome, terms }],
+    world,
+  ).state;
+  expect(turningPoints(state, offered, world)).toEqual([{ kind: 'peaceOffer', from: f.carthage }]);
+  expect(turningPoints(offered, tick(offered, [], world).state, world)).toEqual([]);
+  const own = tick(
+    state,
+    [{ kind: 'offerPeace', faction: f.rome, to: f.carthage, terms }],
+    world,
+  ).state;
+  expect(turningPoints(state, own, world)).toEqual([]);
 });

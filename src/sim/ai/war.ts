@@ -1,5 +1,6 @@
 import type { FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
+import { truceBetween } from '../peace/truce.ts';
 import { distance } from '../world/find-path.ts';
 import type { Context } from './armies.ts';
 import {
@@ -97,7 +98,13 @@ export function warDeclaration(context: Context): Order[] {
   // A neighbour scores at most its best city in reach would with no army near it, so
   // most are ruled out before a route to their front is looked for.
   const candidates = sorted(state.factions)
-    .filter((other) => other.id !== faction && other.defeatedOn === null && !enemies.has(other.id))
+    .filter(
+      (other) =>
+        other.id !== faction &&
+        other.defeatedOn === null &&
+        !enemies.has(other.id) &&
+        !truceBetween(state, faction, other.id),
+    )
     .flatMap((other) => {
       let bound = 0;
       for (const theirs of citiesOf.get(other.id) ?? []) {
@@ -158,6 +165,7 @@ function rivalPressure(
   let best: { against: FactionId; odds: number } | undefined;
   for (const rival of [...rivals].sort()) {
     if (rival === faction || held(rival) > homeland(rival)) continue;
+    if (truceBetween(state, faction, rival)) continue;
     const odds = own / Math.max(1, strength.get(rival) ?? 0);
     if (odds < RIVAL_PRESSURE_ODDS || (best && odds <= best.odds)) continue;
     if (frontOf(rival)) best = { against: rival, odds };

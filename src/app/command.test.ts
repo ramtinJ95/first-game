@@ -11,7 +11,7 @@ import { removeRecord } from '../sim/records.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
-import { warKey } from '../sim/state/war.ts';
+import { warKey, newWar } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import type { World } from '../sim/world/world.ts';
 import { FAR_LONGER, planCommand, plannedRoutes, route, type CommandTarget } from './command.ts';
@@ -66,7 +66,7 @@ describe('a right click on a city', () => {
   it('marches to an enemy city with no notice, and the army besieges it on arrival', () => {
     const state = buildFixture();
     changeCityOwner(state, f.capua, f.carthage);
-    state.wars[warKey(f.rome, f.carthage)] = { since: state.day };
+    state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);
     const capua = cityOf(state, f.capua);
 
     const planned = plan(state, atCity(state, f.capua));
@@ -248,7 +248,7 @@ describe('a right click on a point', () => {
     if (!romans || !punic || romans.activity.kind !== 'idle') throw new Error('no armies');
     const { x, y } = romans.activity.position;
     punic.activity = { kind: 'idle', position: { x: x + 5, y } };
-    state.wars[warKey(f.rome, f.carthage)] = { since: state.day };
+    state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);
     state = tick(state, [], world).state;
     expect(armyOf(state, romans.id).activity.kind).toBe('inBattle');
 
@@ -364,7 +364,7 @@ describe('a way home from overseas', () => {
   it('Rome beaten at Carthago falls back into the field near Hadrumetum, and a right click on Roma sails it home', () => {
     let state = newGame(world.map, { seed: 1, player: 'rome' });
     const carthage = 'carthage' as FactionId;
-    state.wars[warKey(f.rome, carthage)] = { since: state.day };
+    state.wars[warKey(f.rome, carthage)] = newWar(f.rome, carthage, state.day);
     const romans = Object.values(state.armies).find((army) => army.owner === f.rome);
     if (!romans) throw new Error('no Roman army');
     romans.activity = {
@@ -441,7 +441,7 @@ describe('what an order says at once', () => {
 
   it('a landing too weak to cut the food says so at the order, with the garrison, the army, and the men it lacks, and is still offered', () => {
     const state = buildFixture();
-    state.wars[warKey(f.rome, f.carthage)] = { since: state.day };
+    state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);
     const planned = plan(state, atCity(state, f.carthago));
     if (planned.kind !== 'menu') throw new Error(`expected a menu, got ${planned.kind}`);
     const men = armyOf(state).formations.reduce(
@@ -461,7 +461,7 @@ describe('what an order says at once', () => {
   it('a march to a point beside an enemy city warns as a march to the city does', () => {
     const state = buildFixture();
     changeCityOwner(state, f.capua, f.carthage);
-    state.wars[warKey(f.rome, f.carthage)] = { since: state.day };
+    state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);
     const [first] = armyOf(state).formations;
     const formation = first && state.formations[first];
     if (!formation) throw new Error('fixture changed');
@@ -481,8 +481,12 @@ describe('what an order says at once', () => {
 
   it('a march that joins a siege another faction already holds with enough men gives no warning', () => {
     const state = buildFixture();
-    state.wars[warKey(f.rome, f.syracusaeFaction)] = { since: state.day };
-    state.wars[warKey(f.carthage, f.syracusaeFaction)] = { since: state.day };
+    state.wars[warKey(f.rome, f.syracusaeFaction)] = newWar(f.rome, f.syracusaeFaction, state.day);
+    state.wars[warKey(f.carthage, f.syracusaeFaction)] = newWar(
+      f.carthage,
+      f.syracusaeFaction,
+      state.day,
+    );
     const syracusae = cityOf(state, f.syracusae);
     const [first] = armyOf(state).formations;
     const formation = first && state.formations[first];

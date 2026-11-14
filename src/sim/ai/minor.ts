@@ -4,6 +4,7 @@ import { TROOPS, type Troop } from '../troops.ts';
 import { distance } from '../world/find-path.ts';
 import { endOverlongMarches, retreats, type Context } from './armies.ts';
 import type { FactionId } from '../ids.ts';
+import { truceBetween } from '../peace/truce.ts';
 import { balanceOf, besieged, enemiesOf, meanMorale, menInTraining, sorted } from './situation.ts';
 import { MARCH_MORALE, MINOR_DEFICIT_DAYS } from './thresholds.ts';
 
@@ -23,7 +24,9 @@ function leagueWar(context: Context): Order[] {
   const partner = partnerOf(context);
   if (!partner) return [];
   const [against] = [...enemiesOf(state, partner)]
-    .filter((enemy) => enemy !== faction && !enemies.has(enemy))
+    .filter(
+      (enemy) => enemy !== faction && !enemies.has(enemy) && !truceBetween(state, faction, enemy),
+    )
     .sort();
   return against ? [{ kind: 'declareWar', faction, against }] : [];
 }

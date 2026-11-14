@@ -3,6 +3,7 @@ import { advanceDay } from './systems/advance-day.ts';
 import { battles } from './systems/battles.ts';
 import { construction } from './systems/construction.ts';
 import { economy } from './systems/economy.ts';
+import { homecoming } from './systems/homecoming.ts';
 import { population } from './systems/population.ts';
 import { movement } from './systems/movement.ts';
 import type { World } from './world/world.ts';
@@ -12,11 +13,12 @@ import { sieges } from './systems/sieges.ts';
 export type System = (state: GameState, world: World) => void;
 
 /**
- * The systems of one day, in the order they run, after the orders: movement,
- * battles, sieges, economy, construction, population. The day counter stays last, so every
+ * The systems of one day, in the order they run, after the orders: the homecoming of a
+ * peace made today, movement, battles, sieges, economy, construction, population. The day counter stays last, so every
  * system before it sees the day that is being played.
  */
 export const SYSTEMS: readonly System[] = [
+  homecoming,
   movement,
   battles,
   sieges,

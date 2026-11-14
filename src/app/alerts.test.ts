@@ -4,7 +4,7 @@ import { defeatFaction } from '../sim/defeat.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { warKey } from '../sim/state/war.ts';
+import { warKey, newWar } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { ArmyId, ConvoyId, FormationId, SiegeId } from '../sim/ids.ts';
@@ -36,7 +36,7 @@ function play(state: GameState, orders: Order[], done: (state: GameState) => boo
 }
 
 function atWar(state: GameState, a = f.rome, b = f.carthage) {
-  state.wars[warKey(a, b)] = { since: state.day };
+  state.wars[warKey(a, b)] = newWar(a, b, state.day);
 }
 
 /** Puts Carthage's army 5 km west of Rome's, at war, with the given strength on each side. */
@@ -759,5 +759,77 @@ describe('weakSiegeNews', () => {
     const next = tick(state, [], world).state;
     expect(Object.keys(next.sieges)).toHaveLength(1);
     expect(weakSiegeNews(state, next, new Map()).alerts).toEqual([]);
+  });
+});
+
+describe('peace', () => {
+  const asThingsStand = { kind: 'asThingsStand' } as const;
+  function day(state: GameState, orders: Order[]) {
+    const { state: next, events, rejected } = tick(state, orders, world);
+    expect(rejected).toEqual([]);
+    return {
+      next,
+      texts: alertsOfDay(state, next, events).map(({ kind, text, tone }) => ({ kind, text, tone })),
+    };
+  }
+
+  it('tells of an offer to the player, a refusal, and a peace with its truce', () => {
+    const state = buildFixture();
+    atWar(state);
+    const offered = day(state, [
+      {
+        kind: 'offerPeace',
+        faction: f.carthage,
+        to: f.rome,
+        terms: { kind: 'payment', payer: f.carthage, gold: 500, cities: [] },
+      },
+    ]);
+    expect(offered.texts).toEqual([
+      {
+        kind: 'peaceOffered',
+        tone: 'neutral',
+        text: 'Carthage offers peace: Carthage gives you 500 gold',
+      },
+    ]);
+    const refused = day(offered.next, [{ kind: 'refusePeace', faction: f.rome, from: f.carthage }]);
+    expect(refused.texts).toEqual([
+      {
+        kind: 'peaceRefused',
+        tone: 'neutral',
+        text: 'You refused peace with Carthage, and the war goes on',
+      },
+    ]);
+    const sent = day(refused.next, [
+      { kind: 'offerPeace', faction: f.rome, to: f.carthage, terms: asThingsStand },
+    ]);
+    expect(sent.texts).toEqual([
+      { kind: 'peaceOffered', tone: 'neutral', text: 'You offered Carthage peace as things stand' },
+    ]);
+    const made = day(sent.next, [
+      { kind: 'acceptPeace', faction: f.carthage, from: f.rome, terms: asThingsStand },
+    ]);
+    expect(made.texts).toEqual([
+      {
+        kind: 'peaceMade',
+        tone: 'good',
+        text: `Peace with Carthage as things stand. The truce holds until day ${4 + 365}`,
+      },
+    ]);
+  });
+
+  it("tells when the enemy refuses the player's offer", () => {
+    const state = buildFixture();
+    atWar(state);
+    const sent = day(state, [
+      { kind: 'offerPeace', faction: f.rome, to: f.carthage, terms: asThingsStand },
+    ]);
+    const refused = day(sent.next, [{ kind: 'refusePeace', faction: f.carthage, from: f.rome }]);
+    expect(refused.texts).toEqual([
+      {
+        kind: 'peaceRefused',
+        tone: 'bad',
+        text: 'Carthage refused your offer of peace, and the war goes on',
+      },
+    ]);
   });
 });

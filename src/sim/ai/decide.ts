@@ -7,6 +7,7 @@ import { endOverlongMarches, fates, movements, retreats, storms, type Context } 
 import { recruitment } from './budget.ts';
 import { construction } from './build.ts';
 import { minorOrders } from './minor.ts';
+import { peaceOrders } from './peace.ts';
 import { createRouter } from './routes.ts';
 import { stances } from './stance.ts';
 import {
@@ -36,10 +37,13 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
     enemies: enemiesOf(state, faction),
     router: createRouter(state, world, faction),
   };
-  if (record.kind === 'minor') return [...stances(context), ...minorOrders(context)];
+  if (record.kind === 'minor') {
+    return [...peaceOrders(context), ...stances(context), ...minorOrders(context)];
+  }
   const muster = musterCity(context);
   const recruits = recruitment(state, faction, muster);
   return [
+    ...peaceOrders(context),
     ...stances(context),
     ...endOverlongMarches(context),
     ...retreats(context),

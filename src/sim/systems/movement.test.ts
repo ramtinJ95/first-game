@@ -22,6 +22,7 @@ import { SYSTEMS } from '../systems.ts';
 import { tick } from '../tick.ts';
 import { distance } from '../world/find-path.ts';
 import { movement } from './movement.ts';
+import { homecoming } from './homecoming.ts';
 
 const world = fixtureWorld();
 const oracle = new LandOracle(world.map);
@@ -516,7 +517,7 @@ describe('the whole game', () => {
     expectConsistent(resumed);
   });
 
-  test('movement is the first system of the day', () => {
-    expect(SYSTEMS[0]).toBe(movement);
+  test('movement is the first system of the day after the homecoming of a peace', () => {
+    expect(SYSTEMS.slice(0, 2)).toEqual([homecoming, movement]);
   });
 });

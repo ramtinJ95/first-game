@@ -6,8 +6,9 @@ import { GameStateSchema, type GameState } from './state/game-state.ts';
 /**
  * Raise this when a change to the state makes older saves unreadable. Format 12 added
  * each army's name, the faction's count of armies raised, and the page beside the state.
+ * Format 13 added what a war remembers, the offers of peace, and the truces.
  */
-export const SAVE_FORMAT = 12;
+export const SAVE_FORMAT = 13;
 
 /**
  * `page` is what the page kept beside the game, such as its chronicle and where the

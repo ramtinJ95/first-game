@@ -188,5 +188,7 @@ export function buildFixture(seed = 1): GameState {
     battles: {},
     sieges: {},
     wars: {},
+    peaceOffers: {},
+    truces: {},
   };
 }

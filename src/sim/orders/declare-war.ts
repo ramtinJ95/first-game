@@ -1,7 +1,9 @@
 import { emit } from '../events.ts';
+import { removeRecord } from '../records.ts';
 import type { FactionId } from '../ids.ts';
 import type { GameState } from '../state/game-state.ts';
-import { warKey } from '../state/war.ts';
+import { warKey, newWar } from '../state/war.ts';
+import { truceBetween } from '../peace/truce.ts';
 import { areAtWar } from '../wars.ts';
 
 export interface DeclareWarOrder {
@@ -21,7 +23,16 @@ export function declareWar(state: GameState, order: DeclareWarOrder): string | u
   if (areAtWar(state, order.faction, order.against)) {
     return `${order.faction} is already at war with ${order.against}`;
   }
-  state.wars[warKey(order.faction, order.against)] = { since: state.day };
+  const truce = truceBetween(state, order.faction, order.against);
+  if (truce) {
+    return `${order.faction} keeps a truce with ${order.against} until day ${truce.endsOn}`;
+  }
+  removeRecord(state.truces, warKey(order.faction, order.against));
+  state.wars[warKey(order.faction, order.against)] = newWar(
+    order.faction,
+    order.against,
+    state.day,
+  );
   emit(state, { kind: 'warDeclared', by: order.faction, against: order.against });
   return undefined;
 }

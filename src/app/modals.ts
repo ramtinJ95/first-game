@@ -1,4 +1,4 @@
-import type { CityId } from '../sim/ids.ts';
+import type { CityId, FactionId } from '../sim/ids.ts';
 import type { TurningPoint } from './turning-points.ts';
 
 /**
@@ -9,7 +9,7 @@ import type { TurningPoint } from './turning-points.ts';
 export type Modal =
   | { readonly kind: 'start' }
   | { readonly kind: 'leave' }
-  | Extract<TurningPoint, { kind: 'lost' | 'won' | 'fate' }>
+  | Extract<TurningPoint, { kind: 'lost' | 'won' | 'fate' | 'peaceOffer' }>
   | { readonly kind: 'guide' };
 
 const RANK: Record<Modal['kind'], number> = {
@@ -18,7 +18,8 @@ const RANK: Record<Modal['kind'], number> = {
   lost: 1,
   won: 2,
   fate: 3,
-  guide: 4,
+  peaceOffer: 4,
+  guide: 5,
 };
 
 export function enqueue(queue: readonly Modal[], modal: Modal): Modal[] {
@@ -30,10 +31,19 @@ export function enqueue(queue: readonly Modal[], modal: Modal): Modal[] {
 
 function same(a: Modal, b: Modal): boolean {
   if (a.kind === 'fate' && b.kind === 'fate') return a.city === b.city;
+  if (a.kind === 'peaceOffer' && b.kind === 'peaceOffer') return a.from === b.from;
   return a.kind === b.kind;
 }
 
-/** A fate prompt waits only while its city's fate is open. */
-export function keepOpen(queue: readonly Modal[], open: (city: CityId) => boolean): Modal[] {
-  return queue.filter((modal) => modal.kind !== 'fate' || open(modal.city));
+/** A fate prompt waits only while its city's fate is open, and an offer of peace while it stands. */
+export function keepOpen(
+  queue: readonly Modal[],
+  open: (city: CityId) => boolean,
+  offers: (from: FactionId) => boolean = () => true,
+): Modal[] {
+  return queue.filter(
+    (modal) =>
+      (modal.kind !== 'fate' || open(modal.city)) &&
+      (modal.kind !== 'peaceOffer' || offers(modal.from)),
+  );
 }

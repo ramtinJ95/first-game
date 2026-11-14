@@ -49,6 +49,7 @@ import {
   type Slot,
 } from './saves.ts';
 import { turningPoints } from './turning-points.ts';
+import { standingOffer } from '../sim/peace/offer.ts';
 import {
   createView,
   type CommandMenu,
@@ -246,7 +247,11 @@ const clock = createClock({
       modals = enqueue(modals, point);
       stopAsked = true;
     }
-    modals = keepOpen(modals, (city) => fateOpen(after, city));
+    modals = keepOpen(
+      modals,
+      (city) => fateOpen(after, city),
+      (from) => standingOffer(after, after.player, from)?.from === from,
+    );
     if (startsMonth(after.day) && after.factions[after.player]?.defeatedOn === null) {
       save('auto', after);
     }

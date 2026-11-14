@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { Day } from '../sim/state/day.ts';
-import { warKey } from '../sim/state/war.ts';
+import { newWar, warKey } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import { alertsOfDay, type Alert } from './alerts.ts';
 import { ALL_PAUSES, readPauses, stopsOfDay, writePauses } from './pauses.ts';
@@ -13,7 +13,7 @@ const f = FIXTURE;
 function battleDay(withPlayer: boolean) {
   const state = buildFixture();
   const a = withPlayer ? f.rome : f.syracusaeFaction;
-  state.wars[warKey(a, f.carthage)] = { since: state.day };
+  state.wars[warKey(a, f.carthage)] = newWar(a, f.carthage, state.day);
   const punic = state.armies[f.punicArmy];
   const roman = state.armies[f.romanArmy];
   if (!punic || !roman || roman.activity.kind !== 'idle') throw new Error('fixture changed');
