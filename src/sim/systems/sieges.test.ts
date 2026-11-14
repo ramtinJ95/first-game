@@ -16,6 +16,7 @@ import {
   OCCUPATION_SHARE,
   RECOVERY_DAYS,
   SALLY_SHARE,
+  TAKEN_FOOD_SHARE,
   WALL_DEFENCE,
 } from './sieges.ts';
 
@@ -539,6 +540,38 @@ describe('after a siege', () => {
     state = play(state, RECOVERY_DAYS);
     expect(cityOf(state, FIXTURE.capua)).toMatchObject(full);
     expectConsistent(state);
+  });
+});
+
+describe('a city that changes hands', () => {
+  test('a city starved out holds half its full food on the day it falls, so the next siege cannot starve it within days', () => {
+    const state = besiegingCapua();
+    const capua = cityOf(state, FIXTURE.capua);
+    capua.foodDays = 0;
+    capua.garrison = HUNGER;
+    const fallen = tick(state, [], world).state;
+    const city = cityOf(fallen, FIXTURE.capua);
+    expect(city.owner).toBe(FIXTURE.carthage);
+    expect(city.foodDays).toBeGreaterThanOrEqual(
+      CITY_DEFENCES.greatPowerCity.foodDays * TAKEN_FOOD_SHARE,
+    );
+    expect(city.foodDays).toBeLessThan(CITY_DEFENCES.greatPowerCity.foodDays * 0.6);
+    expectConsistent(fallen);
+  });
+
+  test('a city that gives up with fuller stores keeps them', () => {
+    const state = besiegingCapua();
+    const capua = cityOf(state, FIXTURE.capua);
+    capua.foodDays = CITY_DEFENCES.greatPowerCity.foodDays * 0.8;
+    capua.walls = 0;
+    let current = state;
+    while (cityOf(current, FIXTURE.capua).owner === FIXTURE.rome) {
+      current = tick(current, [], world).state;
+    }
+    expect(cityOf(current, FIXTURE.capua).foodDays).toBeGreaterThan(
+      CITY_DEFENCES.greatPowerCity.foodDays * 0.7,
+    );
+    expectConsistent(current);
   });
 });
 

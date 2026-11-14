@@ -13,7 +13,8 @@ import { newWar, warKey } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import { buildWorld } from '../sim/world/world.ts';
 import { cityBalance } from '../ui/describe.ts';
-import { dailyText, fateChoices, type FateChoice } from './fates.ts';
+import { fullDefences } from '../sim/systems/sieges.ts';
+import { dailyText, fateChoices, holdText, type FateChoice } from './fates.ts';
 
 const map = parseMap(mapData);
 const world = buildWorld(map);
@@ -158,5 +159,17 @@ describe('fateChoices and a temple', () => {
     const carthago = fallen.cities[f.carthago];
     if (carthago)
       expect(unrestText(unrestDaysLeft(fallen, carthago))).toBe(`${occupy.unrestDays} days left`);
+  });
+});
+
+describe('the stores of a fallen city', () => {
+  it('tells the player the food, walls, and garrison the city holds, and how to keep it', () => {
+    const state = mediolanumFalls();
+    const city = state.cities[mediolanum];
+    if (!city) throw new Error('no Mediolanum');
+    const full = fullDefences(city);
+    expect(holdText(city)).toBe(
+      `It holds ${Math.floor(full.foodDays / 2)} of ${full.foodDays} days of food, walls of ${Math.round(city.walls)} of ${full.walls}, and a garrison of ${city.garrison} of ${full.garrison.toLocaleString('en')}. A siege cannot take it while an army of yours stands at it.`,
+    );
   });
 });
