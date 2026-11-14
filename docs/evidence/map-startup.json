@@ -1,0 +1,69 @@
+{
+  "baseline": "bfb56179a57b5878f26bd297cc0420a30e2e889c",
+  "browser": "Chromium 158.0.8127.18",
+  "args": ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "series": {
+    "testBefore": {
+      "starts": [6614, 4485, 6106, 5797, 5628, 4468, 3972, 3391, 3354, 3909],
+      "shaderLinkMs": [4171, 2605, 3834, 3529, 3466, 2764, 2430, 2471, 2431, 2419],
+      "mean": 4772.4537666999995,
+      "median": 4476.595729500001
+    },
+    "testAfter": {
+      "starts": [3341, 2367, 2343, 2348, 2353, 2093, 2364, 2357, 2332, 2107],
+      "shaderLinkMs": [1618, 1196, 1194, 1191, 1194, 1190, 1192, 1189, 1164, 1194],
+      "mean": 2400.3295374,
+      "median": 2350.374583
+    },
+    "fullBefore": {
+      "starts": [11796, 5980, 5098, 5132, 4746, 4795, 5048, 4095, 4243, 4166],
+      "shaderLinkMs": [8766, 4328, 3533, 3487, 3234, 3694, 3420, 3097, 2882, 2832],
+      "mean": 5509.9603042,
+      "median": 4921.643229000001
+    },
+    "fullAfter": {
+      "starts": [3661, 2288, 2490, 2313, 2597, 2843, 2851, 3062, 3373, 2928],
+      "shaderLinkMs": [2007, 1392, 1394, 1379, 1410, 1586, 1843, 1755, 2061, 1001],
+      "mean": 2840.6604333000005,
+      "median": 2846.8859999999995
+    }
+  },
+  "cpuStepMedianMs": {
+    "before": {
+      "startup:pixi-init": 31.05000001192093,
+      "startup:water-texture": 6.600000023841858,
+      "startup:terrain": 375.9000000357628,
+      "startup:land": 286.60000002384186,
+      "startup:ground-tint": 16.900000035762787,
+      "startup:wash-create": 46.000000059604645,
+      "startup:wash-rasterise": 45.14999997615814,
+      "startup:borders": 19.149999916553497,
+      "startup:fog": 2.1499999165534973,
+      "startup:paper-texture": 4.750000059604645,
+      "startup:wash-paint": 50.30000001192093
+    },
+    "after": {
+      "startup:pixi-init": 27.44999998807907,
+      "startup:water-texture": 6.5,
+      "startup:terrain": 372.5,
+      "startup:land": 285,
+      "startup:ground-tint": 16.44999998807907,
+      "startup:wash-create": 44.8999999165535,
+      "startup:wash-rasterise": 44.14999997615814,
+      "startup:borders": 18.300000071525574,
+      "startup:fog": 2,
+      "startup:paper-texture": 4.699999988079071,
+      "startup:wash-paint": 48.60000002384186
+    }
+  },
+  "raster": {
+    "columns": 1908,
+    "rows": 1138,
+    "raw": 13027824,
+    "gzip": 602511
+  }
+}
