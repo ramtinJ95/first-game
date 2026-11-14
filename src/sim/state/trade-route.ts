@@ -23,5 +23,11 @@ export const TradeRouteSchema = v.object({
   openedOn: DaySchema,
   departsOn: DaySchema,
   blocked: v.nullable(v.picklist(['siege', 'raid'])),
+  raid: v.nullable(
+    v.pipe(
+      v.object({ on: DaySchema, position: v.pipe(MapPointSchema, v.readonly()) }),
+      v.readonly(),
+    ),
+  ),
 });
 export type TradeRoute = v.InferOutput<typeof TradeRouteSchema>;

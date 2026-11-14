@@ -50,6 +50,7 @@ export function openTrade(state: GameState, order: OpenTrade, world: World): str
     openedOn: state.day,
     departsOn: state.day,
     blocked: null,
+    raid: null,
   };
   state.tradeRoutes[id] = route;
   if (!offered) payer.stores.gold -= forecast.cost;

@@ -248,6 +248,8 @@ describe('caravans, interruption, and saves', () => {
     const gold = state.factions[f.carthage]?.stores.gold ?? 0;
     const events = recordEvents(state, () => trade(state));
     expect(route.blocked).toBe('raid');
+    expect(route.raid).toEqual({ on: state.day, position: army.activity.position });
+    expect(loadGame(saveGame(state))).toEqual({ ok: true, state });
     expect(events).toContainEqual(expect.objectContaining({ kind: 'tradeRaided' }));
     expect(state.factions[f.carthage]?.stores.gold).toBeCloseTo(gold + route.daily * route.days);
     expect(recordEvents(state, () => trade(state))).toEqual([]);

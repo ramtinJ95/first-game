@@ -71,6 +71,15 @@
         enemies at the walls stop work. Full stores waste further gains. Watch the daily balances:
         short gold or food costs men.
       </dd>
+      <dt>Goods and trade</dt>
+      <dd data-testid="guide-trade">
+        Trade: select your city, choose a partner and land or sea. The forecast gives the goods,
+        opening cost, both incomes and payback before you spend. Both cities use a route slot; size,
+        a Forum and a port add slots. Incoming invitations need your consent. Caravans and ships pay
+        on arrival. Select a city to trace its routes; zoom in to see its good and merchants. War
+        closes a partner's routes; protect roads from raiders and relieve endpoint sieges. Ships
+        face endpoint sieges, not offshore war fleets yet.
+      </dd>
       <dt>Wars and peace</dt>
       <dd>
         Wars in the top bar lists your wars and waiting offers. Offer peace as things stand, or with

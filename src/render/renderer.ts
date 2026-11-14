@@ -16,7 +16,8 @@ import type { Sight } from '../sim/sight.ts';
 import type { Battle } from '../sim/state/battle.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
-import { routePoint } from '../sim/trade/routes.ts';
+import { routesAt } from '../sim/trade/routes.ts';
+import { tradeCityLabel, tradePose } from './trade.ts';
 import {
   clampCamera,
   fitCamera,
@@ -452,6 +453,7 @@ export async function createRenderer({
   let cameraMoved = true;
   let strokedAt = 0;
   let shown: DeepReadonly<GameState> | undefined;
+  let tradeShown: { state: DeepReadonly<GameState>; progress: number } | undefined;
   let laidOut: DeepReadonly<GameState> | undefined;
   // Each game state the page hands over gets a number, and the canvas says the latest it
   // was given and the latest it has drawn, so a test or a capture can wait until the
@@ -584,8 +586,8 @@ export async function createRenderer({
     terrain.repaint();
   }
 
-  function labelText(city: DeepReadonly<City>): string {
-    return city.rank === 'capital' ? city.name.toUpperCase() : city.name;
+  function labelText(city: DeepReadonly<City>, state: DeepReadonly<GameState>): string {
+    return tradeCityLabel(state, city, camera.scale);
   }
 
   function syncSettlements(state: DeepReadonly<GameState>) {
@@ -594,7 +596,7 @@ export async function createRenderer({
         const { rank } = city;
         const capital = rank === 'capital';
         const label = new Text({
-          text: labelText(city),
+          text: labelText(city, state),
           style: {
             fontFamily: SERIF,
             fontSize: capital ? 14 : 12,
@@ -616,7 +618,7 @@ export async function createRenderer({
           drawn.symbol.context = symbols[rank];
           drawn.rank = rank;
         }
-        const text = labelText(city);
+        const text = labelText(city, state);
         if (drawn.label.text !== text) drawn.label.text = text;
       },
       remove({ symbol, label }) {
@@ -668,6 +670,8 @@ export async function createRenderer({
       const drawn = cities.get(city.id);
       if (!drawn) continue;
       const { symbol, label, rank } = drawn;
+      const text = labelText(city, state);
+      if (label.text !== text) label.text = text;
       const grow = symbolGrowth(camera.scale);
       const halfWidth = extents[rank].halfWidth * grow;
       const halfHeight = extents[rank].halfHeight * grow;
@@ -882,6 +886,12 @@ export async function createRenderer({
       stroke([army.position, ...ahead].map(toScreen), selected ? 2.4 : 1.6, selected ? 0.95 : 0.7);
     }
     for (const path of planned ?? []) stroke(path.map(toScreen), 1.6, 0.45);
+    const city =
+      selection?.kind === 'province' ? state.provinces[selection.province]?.city : undefined;
+    const tradeRoutes = city ? routesAt(state, city).filter((r) => r.status === 'running') : [];
+    for (const route of tradeRoutes)
+      stroke(route.path.map(toScreen), 1.4, route.blocked ? 0.35 : 0.75);
+    canvas.dataset['tradePaths'] = String(tradeRoutes.length);
   }
 
   function applyCamera() {
@@ -1214,6 +1224,7 @@ export async function createRenderer({
           keepClear: drawnPlaces,
         });
         drawnFigures = armyLayer.draw(scene);
+        canvas.dataset['figureSheets'] = armyLayer.ready ? 'ready' : 'busy';
         canvas.dataset['figures'] = String(drawnFigures.filter((sprite) => sprite.army).length);
         built = {
           previous,
@@ -1238,6 +1249,14 @@ export async function createRenderer({
           dirty = true;
         }
       }
+      if (
+        (tradeShown?.state !== current || tradeShown.progress !== progress) &&
+        Object.values(current.tradeRoutes).some(
+          (route) => route.status === 'running' && !route.blocked,
+        )
+      )
+        dirty = true;
+      tradeShown = { state: current, progress };
       if (!dirty) return false;
       life.update(camera, viewport(), now, sight);
       moveSwell(now);
@@ -1247,26 +1266,52 @@ export async function createRenderer({
       placeBanners(current, selection);
       placeColumns(current);
       tradeMarks.clear();
+      let raids = 0;
       for (const route of Object.values(current.tradeRoutes)) {
         if (route.status !== 'running') continue;
-        const before = previous.tradeRoutes[route.id];
-        const p =
-          before && before.returning === route.returning
-            ? before.progress + (route.progress - before.progress) * progress
-            : route.progress;
-        const point = routePoint(route, p);
+        const own = route.owner === current.player || route.partner === current.player;
         if (
-          route.owner !== current.player &&
-          route.partner !== current.player &&
-          !sight.sees(point)
+          route.raid &&
+          current.day + progress - route.raid.on < 6 &&
+          (own || sight.sees(route.raid.position))
+        ) {
+          const at = mapToScreen(camera, viewport(), route.raid.position);
+          if (at.x >= 0 && at.y >= 0 && at.x <= viewport().width && at.y <= viewport().height)
+            raids++;
+          tradeMarks
+            .circle(at.x, at.y, 10)
+            .fill({ color: LABEL_HALO, alpha: 0.9 })
+            .stroke({ color: 0x9b3e2d, width: 1.4 });
+          tradeMarks
+            .moveTo(at.x - 5, at.y - 5)
+            .lineTo(at.x + 5, at.y + 5)
+            .moveTo(at.x + 5, at.y - 5)
+            .lineTo(at.x - 5, at.y + 5)
+            .stroke({ color: 0x9b3e2d, width: 2 });
+        }
+        const pose = tradePose(previous.tradeRoutes[route.id], route, progress);
+        if (
+          !pose ||
+          (!own && !sight.sees(pose.point)) ||
+          drawnFigures.some((sprite) => sprite.trade === route.id)
         )
           continue;
-        const at = mapToScreen(camera, viewport(), point);
-        tradeMarks
-          .circle(at.x, at.y, 3)
-          .fill(route.blocked ? 0x9b3e2d : 0x8b6a33)
-          .stroke({ color: INK, width: 1 });
+        const at = mapToScreen(camera, viewport(), pose.point);
+        tradeMarks.circle(at.x, at.y, 3).fill(0x8b6a33).stroke({ color: INK, width: 1 });
       }
+      const traders = drawnFigures.filter((sprite) => sprite.trade);
+      canvas.dataset['raids'] = String(raids);
+      canvas.dataset['tradeFigures'] = String(traders.length);
+      canvas.dataset['tradeShips'] = String(
+        traders.filter((sprite) => sprite.key.startsWith('ship.')).length,
+      );
+      canvas.dataset['tradeCaravans'] = String(
+        traders.filter((sprite) => sprite.key.startsWith('cart.')).length,
+      );
+      canvas.dataset['goods'] = String(
+        [...cities.values()].filter(({ label }) => label.visible && label.text.includes(' · '))
+          .length,
+      );
       placeBattles(selection);
       if (scene && scene.height > 0 && selection?.kind === 'army') {
         const box = scene.armyBoxes.get(selection.army);
