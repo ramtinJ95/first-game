@@ -275,7 +275,9 @@ function wantedText(
     return `It wants terms worth ${points(short)} more, such as ${gold(short * GOLD_PER_POINT)} more.`;
   const given = -termsPoints(state, terms, faction);
   if (needed <= given)
-    return `It would give terms worth ${points(short)} less, such as ${gold(Math.min(terms.gold, short * GOLD_PER_POINT))} less.`;
+    return short * GOLD_PER_POINT <= terms.gold
+      ? `It would give terms worth ${points(short)} less, such as ${gold(short * GOLD_PER_POINT)} less.`
+      : `It would give terms worth ${points(short)} less.`;
   const rest = Math.ceil(needed - given);
   return `It would give nothing, and wants terms worth ${points(rest)} from ${nameOf(state, enemy)}, such as ${gold(rest * GOLD_PER_POINT)}.`;
 }

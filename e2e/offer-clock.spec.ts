@@ -2,6 +2,9 @@ import { expect, test, type Page } from '@playwright/test';
 import { paymentBetween, peaceWish } from '../src/sim/ai/peace.ts';
 import type { FactionId } from '../src/sim/ids.ts';
 import { standingOffer } from '../src/sim/peace/offer.ts';
+import type { Day } from '../src/sim/state/day.ts';
+import type { GameState } from '../src/sim/state/game-state.ts';
+import { newWar, warKey } from '../src/sim/state/war.ts';
 import {
   carthageDemandsPeace,
   dropSave,
@@ -14,10 +17,24 @@ import {
 
 const rome = 'rome' as FactionId;
 const carthage = 'carthage' as FactionId;
+const macedon = 'macedon' as FactionId;
+
+/**
+ * Carthage's demand, with an older war on Macedon listed first in the panel. Macedon
+ * offered lately, so it makes no offer of its own.
+ */
+function behindAnotherWar(): GameState {
+  const state = carthageDemandsPeace();
+  const carthageWar = state.wars[warKey(rome, carthage)];
+  if (!carthageWar) throw new Error('no war with Carthage');
+  const war = newWar(macedon, rome, (carthageWar.since - 1) as Day);
+  war.offeredOn = state.day;
+  state.wars[warKey(rome, macedon)] = war;
+  return state;
+}
 
 /** Loads the demand's eve, resumes, and waits for the offer that stops the game. */
-async function offerWaits(page: Page) {
-  const state = carthageDemandsPeace();
+async function offerWaits(page: Page, state = carthageDemandsPeace()) {
   await pause(page);
   await dropSave(page, state);
   await expect(page.getByTestId('time-controls-day')).toHaveAttribute(
@@ -102,4 +119,24 @@ test.describe('the clock waits for the player while an offer of peace waits', ()
     await resume(page);
     await expect(page.getByTestId('alerts')).toContainText('Peace with Carthage');
   });
+
+  for (const answer of ['refuse', 'counter'] as const) {
+    test(`with an older war listed first, the ${answer} stays on Carthage's war`, async ({
+      page,
+    }) => {
+      const { panel, day } = await offerWaits(page, behindAnotherWar());
+      const war = panel.getByTestId('war-row');
+      await expect(panel.getByTestId('war-tab').first()).toHaveText('Macedon');
+      await expect(war).toHaveAttribute('data-enemy', 'carthage');
+      if (answer === 'refuse') {
+        await panel.getByTestId('refuse-peace').click();
+        await expect(panel.getByTestId('peace-answered')).toBeVisible();
+      } else {
+        await panel.getByTestId('send-counter').click();
+        await expect(panel.getByTestId('our-offer')).toBeVisible();
+      }
+      await expect(war).toHaveAttribute('data-enemy', 'carthage');
+      await stillPaused(page, day);
+    });
+  }
 });
