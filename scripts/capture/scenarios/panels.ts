@@ -1,4 +1,3 @@
-import type { Page } from '@playwright/test';
 import {
   armyOf,
   battleAt,
@@ -6,7 +5,6 @@ import {
   carthage,
   cityPoint,
   declareWar,
-  dropSave,
   fallenTo,
   openGame,
   pause,
@@ -16,18 +14,9 @@ import {
   setRich,
   startGame,
 } from '../../../e2e/support.ts';
+import { loadSave as load } from '../../../e2e/watch.ts';
 import type { FactionId } from '../../../src/sim/ids.ts';
-import type { GameState } from '../../../src/sim/state/game-state.ts';
 import { defineScenario } from '../scenario.ts';
-
-async function load(page: Page, state: GameState) {
-  await dropSave(page, state);
-  await page
-    .getByTestId('time-controls-day')
-    .and(page.locator(`[data-day="${state.day}"]`))
-    .waitFor();
-  await page.waitForTimeout(250);
-}
 
 function percentile(sorted: number[], p: number): number {
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? NaN;

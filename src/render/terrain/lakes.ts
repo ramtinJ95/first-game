@@ -1,9 +1,11 @@
 import { Container, Graphics, RenderTexture, Sprite, type Renderer } from 'pixi.js';
 import type { GameMap, MultiPolygon } from '../../sim/map.ts';
 import { toPixels } from '../lines.ts';
+import { fillLand } from '../land-outline.ts';
 import { INK, SEA, WATER_LINE } from '../palette.ts';
 import { mix } from './draw.ts';
 import type { Rect } from './scatter.ts';
+import { naturalLakeOutline } from './lake-shore.ts';
 
 /** Lake water lines in screen pixels from the shore, like the sea's but closer. */
 const LAKE_LINES = [
@@ -37,7 +39,8 @@ export interface Lakes {
   render(x: number, y: number, scale: number, near: Rect): void;
 }
 
-function lakeOf(outline: MultiPolygon): Lake {
+function lakeOf(source: MultiPolygon): Lake {
+  const outline = naturalLakeOutline(source);
   const points = outline.flat(2);
   const xs = points.map(([px]) => px);
   const ys = points.map(([, py]) => py);
@@ -47,13 +50,8 @@ function lakeOf(outline: MultiPolygon): Lake {
     right: Math.max(...xs),
     bottom: Math.max(...ys),
   };
-  const fill = new Graphics();
-  const mask = new Graphics();
-  for (const [outer] of outline) {
-    if (!outer) continue;
-    fill.poly(outer.flat()).fill(SEA);
-    mask.poly(outer.flat()).fill(0xffffff);
-  }
+  const fill = fillLand(new Graphics(), outline, SEA);
+  const mask = fillLand(new Graphics(), outline, 0xffffff);
   const lines = new Graphics();
   lines.mask = mask;
   const shore = new Graphics();

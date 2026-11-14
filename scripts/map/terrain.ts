@@ -32,6 +32,8 @@ import {
 } from './sources.ts';
 
 export const SIMPLIFY_KM = 2;
+/** Lakes are seen whole at the closest zoom; the relief's 2 km tolerance erased their bays. */
+export const LAKE_SIMPLIFY_KM = 0.1;
 export const MIN_AREA_KM2 = 50;
 const GRID_MARGIN_DEG = 1;
 /** Relief spans the nodes with dr² + dc² up to this, a radius of 2 nodes or about 37 km. */
@@ -103,11 +105,14 @@ export function terrainAreas(
   land: MultiPolygon,
   rivers: River[],
 ): TerrainArea[] {
-  const toPlane = (polygons: LonLatPolygon[]): MultiPolygon =>
-    simplify(
-      polygons
-        .filter(([outer = []]) => touchesExtent(outer))
-        .map((polygon) => polygon.map((ring) => ring.map(plane.toPlane))),
+  const toPlane = (polygons: LonLatPolygon[], tolerance = SIMPLIFY_KM): MultiPolygon =>
+    snap(
+      exactSimplify(
+        polygons
+          .filter(([outer = []]) => touchesExtent(outer))
+          .map((polygon) => polygon.map((ring) => ring.map(plane.toPlane))),
+        tolerance,
+      ),
     );
   const regions = (featurecla: string): Claim[] =>
     sources.regions
@@ -131,7 +136,7 @@ export function terrainAreas(
     .filter(
       (lake) => LAKE_CLASSES.includes(lake.featurecla) && !NOT_LAKES.includes(lake.name ?? ''),
     )
-    .map((lake) => ({ name: lake.name ?? '', outline: toPlane(lake.polygons) }));
+    .map((lake) => ({ name: lake.name ?? '', outline: toPlane(lake.polygons, LAKE_SIMPLIFY_KM) }));
 
   const deserts = regions(DESERT_CLASS);
   const claims: Record<TerrainKind, Claim[]> = {

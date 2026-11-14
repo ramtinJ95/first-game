@@ -18,13 +18,30 @@ beforeAll(() => {
 function extent(m: Mark): Rect {
   switch (m.kind) {
     case 'mountain':
-    case 'hill':
       return {
         left: m.x - m.width / 2,
         top: m.y - m.height * 1.4,
         right: m.x + m.width / 2,
         bottom: m.y,
       };
+    case 'hill': {
+      const corners = [
+        [-m.width / 2, 0],
+        [m.width / 2, 0],
+        [-m.width / 2, -m.height * 1.4],
+        [m.width / 2, -m.height * 1.4],
+      ];
+      const points = corners.map(([x = 0, y = 0]) => [
+        m.x + Math.cos(m.angle) * x - Math.sin(m.angle) * y,
+        m.y + Math.sin(m.angle) * x + Math.cos(m.angle) * y,
+      ]);
+      return {
+        left: Math.min(...points.map(([x]) => x as number)),
+        right: Math.max(...points.map(([x]) => x as number)),
+        top: Math.min(...points.map(([, y]) => y as number)),
+        bottom: Math.max(...points.map(([, y]) => y as number)),
+      };
+    }
     case 'fold': {
       const r = m.length / 2 + m.width;
       return { left: m.x - r, top: m.y - r, right: m.x + r, bottom: m.y + r };
@@ -37,6 +54,13 @@ function extent(m: Mark): Rect {
       return { left: m.x - m.size, top: m.y - m.size, right: m.x + m.size, bottom: m.y + m.size };
     case 'hamlet':
       return { left: m.x - 2.5, top: m.y - 2.5, right: m.x + 2.5, bottom: m.y + 1.5 };
+    case 'wetland':
+    case 'grassland': {
+      const r = m.size * 1.5;
+      return { left: m.x - r, top: m.y - r, right: m.x + r, bottom: m.y + r };
+    }
+    case 'pastoralCamp':
+      return { left: m.x - 7, top: m.y - 7, right: m.x + 7, bottom: m.y + 7 };
     case 'tree':
       return { left: m.x - m.size, top: m.y - m.size * 1.3, right: m.x + m.size, bottom: m.y };
     case 'dune':
@@ -60,7 +84,8 @@ function extent(m: Mark): Rect {
     }
     case 'track':
     case 'qanat':
-    case 'stream': {
+    case 'stream':
+    case 'channel': {
       const xs = m.points.map(([x]) => x);
       const ys = m.points.map(([, y]) => y);
       return {
@@ -115,6 +140,24 @@ describe('chunks and their overhang', () => {
       name: 'fields',
       size: TIERS.close.chunk,
       key: 39 * 4096 + 36,
+      place: (r: Rect) => placeFields(land, r),
+    },
+    {
+      name: 'close',
+      size: TIERS.close.chunk,
+      key: 95 * 4096 + 52,
+      place: (r: Rect) => placeRelief(land, r, 'close'),
+    },
+    {
+      name: 'fields',
+      size: TIERS.close.chunk,
+      key: 63 * 4096 + 56,
+      place: (r: Rect) => placeFields(land, r),
+    },
+    {
+      name: 'fields',
+      size: TIERS.close.chunk,
+      key: 68 * 4096 + 27,
       place: (r: Rect) => placeFields(land, r),
     },
   ] as const;

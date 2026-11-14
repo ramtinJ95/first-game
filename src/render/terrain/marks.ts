@@ -1,8 +1,9 @@
-import type { GameMap, Peak, TerrainArea } from '../../sim/map.ts';
+import type { GameMap, Peak, Point, TerrainArea } from '../../sim/map.ts';
 import { AreaIndex, DISTANCE_ERROR } from './area-index.ts';
 import { hash01, stream, valueNoise } from './random.ts';
 import { scatter, type Rect } from './scatter.ts';
 import { drawnTerrain } from './waver.ts';
+import { ruralMarks } from './rural.ts';
 
 export type TreeShape = 'broadleaf' | 'conifer' | 'cypress';
 export type PlaceRank = 'capital' | 'city' | 'town' | 'village' | 'hamlet';
@@ -31,7 +32,15 @@ export type Mark =
       high: number;
       seed: number;
     }
-  | { kind: 'hill'; x: number; y: number; width: number; height: number; seed: number }
+  | {
+      kind: 'hill';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      angle: number;
+      seed: number;
+    }
   | { kind: 'tree'; x: number; y: number; size: number; shape: TreeShape; seed: number }
   | { kind: 'dune'; x: number; y: number; length: number; angle: number; seed: number }
   | { kind: 'stipple'; x: number; y: number; spread: number; seed: number }
@@ -57,7 +66,11 @@ export type Mark =
   | { kind: 'tumulus'; x: number; y: number; size: number; seed: number }
   | { kind: 'scrub'; x: number; y: number; size: number; seed: number }
   | { kind: 'rock'; x: number; y: number; size: number; seed: number }
-  | { kind: 'stream'; points: readonly (readonly [number, number])[] };
+  | { kind: 'stream'; points: readonly (readonly [number, number])[] }
+  | { kind: 'channel'; points: readonly Point[] }
+  | { kind: 'wetland'; x: number; y: number; size: number; angle: number; seed: number }
+  | { kind: 'grassland'; x: number; y: number; size: number; angle: number; seed: number }
+  | { kind: 'pastoralCamp'; x: number; y: number; angle: number; seed: number };
 
 /** A wood: overlapping round patches of forest ground that trees stand in. */
 export interface Wood {
@@ -122,7 +135,7 @@ export const TIERS = {
 /** A named peak raises the land this much or more where a dry range still stands as peaks. */
 const FOLD_PEAK_LIFT = 0.8;
 /** A fold's spacing and width, each as a share of its length. */
-const FOLD = { spacing: 0.6, width: 0.26 } as const;
+const FOLD = { spacing: 0.6, width: 0.16 } as const;
 
 /**
  * A great power's capital, a city, a town, a village, and a hamlet keep this much land
@@ -231,7 +244,7 @@ export const PAN_RIM = 1.15;
  * lattice of `step` km, `reach` steps to each side of a spot.
  */
 const STRIKE_REACH = 160;
-const STRIKE = { step: 45, reach: 2 } as const;
+const STRIKE = { step: 45, reach: 2, hillStep: 12, hillReach: 36 } as const;
 const MEDITERRANEAN = /mediterranean|appenine|crimean|caspian|euxine|anatolian deciduous/i;
 const CONIFER = /conifer|montane|caledon|alps|pyrenees|carpathian|rodope|dinaric/i;
 
@@ -356,7 +369,7 @@ export class Land {
     const terrain = (this.terrain = drawnTerrain(map.terrain, this.coast));
     this.lakes = new AreaIndex(kindOutlines(terrain, 'lake'));
     this.mountains = new AreaIndex(kindOutlines(terrain, 'mountains'), STRIKE_REACH);
-    this.hills = new AreaIndex(kindOutlines(terrain, 'hills'));
+    this.hills = new AreaIndex(kindOutlines(terrain, 'hills'), STRIKE.hillReach);
     // The wavered edges are many short ones, and testing each for a seam with the desert
     // beside it cost a tenth of a second. Nothing reads a desert's depth, and the map keeps
     // every desert river within an outer edge, so a seam may count as an edge.
@@ -462,16 +475,18 @@ export class Land {
    * across its width and do not curl round each basin inside it. Rising depth on the two
    * flanks points opposite ways, so each is counted by its doubled angle.
    */
-  strike(x: number, y: number): number {
-    const d = STRIKE.step / 2;
+  strike(x: number, y: number, kind: 'mountains' | 'hills' = 'mountains'): number {
+    const step = kind === 'hills' ? STRIKE.hillStep : STRIKE.step;
+    const index = this[kind];
+    const d = step / 2;
     let c = 0;
     let s = 0;
     for (let j = -STRIKE.reach; j <= STRIKE.reach; j++) {
       for (let i = -STRIKE.reach; i <= STRIKE.reach; i++) {
-        const px = x + i * STRIKE.step;
-        const py = y + j * STRIKE.step;
-        const gx = this.mountains.smoothDepth(px + d, py) - this.mountains.smoothDepth(px - d, py);
-        const gy = this.mountains.smoothDepth(px, py + d) - this.mountains.smoothDepth(px, py - d);
+        const px = x + i * step;
+        const py = y + j * step;
+        const gx = index.smoothDepth(px + d, py) - index.smoothDepth(px - d, py);
+        const gy = index.smoothDepth(px, py + d) - index.smoothDepth(px, py - d);
         c += gx * gx - gy * gy;
         s += 2 * gx * gy;
       }
@@ -480,7 +495,11 @@ export class Land {
   }
 
   /** The nearest river within `reach` km: how far, and which way it runs. */
-  riverAt(x: number, y: number, reach: number): { distance: number; angle: number } | undefined {
+  riverAt(
+    x: number,
+    y: number,
+    reach: number,
+  ): { distance: number; angle: number; at: Point } | undefined {
     return nearestSegment(this.#riverGrid, x, y, reach);
   }
 
@@ -768,8 +787,8 @@ function nearestSegment(
   x: number,
   y: number,
   reach: number,
-): { distance: number; angle: number } | undefined {
-  let best: { distance: number; angle: number } | undefined;
+): { distance: number; angle: number; at: Point } | undefined {
+  let best: { distance: number; angle: number; at: Point } | undefined;
   const cx = Math.floor(x / GRID);
   const cy = Math.floor(y / GRID);
   for (let j = cy - 1; j <= cy + 1; j++) {
@@ -783,7 +802,7 @@ function nearestSegment(
         );
         const distance = Math.hypot(ax + t * dx - x, ay + t * dy - y);
         if (distance < reach && (!best || distance < best.distance)) {
-          best = { distance, angle: Math.atan2(dy, dx) };
+          best = { distance, angle: Math.atan2(dy, dx), at: [ax + t * dx, ay + t * dy] };
         }
       }
     }
@@ -864,15 +883,22 @@ function folds(
       if (!folded(land, x, y, tier) || nearPeak(x, y)) return undefined;
       if (tier === 'close' && land.hamletsNear(x, y, length * 0.6).length > 0) return undefined;
       if (land.rivers.distance(x, y) < mountain * 0.9) return undefined;
-      return spacing * (1.15 - 0.3 * land.height(x, y));
+      return (
+        spacing *
+        (1.15 - 0.3 * land.height(x, y)) *
+        (0.7 + 0.8 * hash01(Math.floor(x * 3), Math.floor(y * 3), salt + 52))
+      );
     },
-    spacing * 1.15,
+    spacing * 1.75,
   ).flatMap(({ x, y, seed }): Mark[] => {
     const random = stream(seed);
     const high = land.height(x, y);
-    const size = length * (0.75 + 0.5 * random()) * (0.85 + 0.3 * high);
-    const angle = land.strike(x, y) + (random() - 0.5) * 0.22;
-    const width = size * (FOLD.width + 0.08 * random());
+    const size = length * (0.45 + 0.78 * random()) * (0.85 + 0.3 * high);
+    const angle =
+      land.strike(x, y) +
+      (valueNoise(x, y, length * 3, salt + 54) - 0.5) * 0.55 +
+      (random() - 0.5) * 0.9;
+    const width = size * (FOLD.width + 0.15 * random());
     const fold = { kind: 'fold', x, y, length: size, width, angle, high, seed } as const;
     return foldOutline(fold).every(([px, py]) => land.open(px, py)) ? [fold] : [];
   });
@@ -956,8 +982,15 @@ function relief(land: Land, rect: Rect, tier: Tier, salt: number): Mark[] {
     },
     spacing.hill * 1.4,
   )) {
-    const width = radius * (0.75 + 0.35 * stream(seed)());
-    marks.push({ kind: 'hill', x, y, width, height: width * 0.26, seed });
+    const random = stream(seed);
+    const width = radius * (0.6 + 0.6 * random());
+    const height = width * (0.18 + 0.25 * random());
+    const strike = land.strike(x, y, 'hills');
+    // Unlike top-down folds, pictorial hill caps must not turn upside down. Project
+    // the axial strike into a readable inclination, then vary each seeded cap.
+    const inclination = Math.atan2(Math.sin(2 * strike), Math.cos(2 * strike)) * 0.175;
+    const angle = inclination + (random() - 0.5);
+    marks.push({ kind: 'hill', x, y, width, height, angle, seed });
   }
   return marks;
 }
@@ -1083,7 +1116,11 @@ function valleyFields(land: Land, rect: Rect): Mark[] {
   )) {
     const random = stream(seed);
     const valley = land.valleyAt(x, y);
-    const angle = (valley?.angle ?? 0.4) + Math.PI / 2 + (random() - 0.5) * 0.2;
+    const angle =
+      (valley?.angle ?? land.riverAt(x, y, 24)?.angle ?? 0.4) +
+      Math.PI / 2 +
+      (valueNoise(x, y, 24, 719) - 0.5) * 1.1 +
+      (random() - 0.5) * 0.35;
     const width = 1.5 + random() * 1.0;
     const depth = 0.8 + random() * 0.4;
     if (random() < 0.16) marks.push({ kind: 'orchard', x, y, width, depth: depth * 1.4, angle });
@@ -1563,7 +1600,7 @@ export function placeTexture(land: Land, rect: Rect): Mark[] {
 
 /** The fields, orchards, and tracks of the places that stand in `rect`. */
 export function placeFields(land: Land, rect: Rect): Mark[] {
-  return fields(land, rect).sort((a, b) => footOf(a) - footOf(b));
+  return [...fields(land, rect), ...ruralMarks(land, rect)].sort((a, b) => footOf(a) - footOf(b));
 }
 
 function footOf(mark: Mark): number {
