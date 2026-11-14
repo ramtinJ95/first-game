@@ -60,3 +60,34 @@ export function routeDashes(
   }
   return dashes;
 }
+
+/** Conservative ink bounds, including the round halo and antialiasing fringe. */
+export function routeInkBounds(
+  paths: readonly (readonly MapPoint[])[],
+  bounds: RouteBounds,
+): RouteBounds | undefined {
+  const pad = 4;
+  const clip = {
+    left: bounds.left - pad,
+    top: bounds.top - pad,
+    right: bounds.right + pad,
+    bottom: bounds.bottom + pad,
+  };
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const path of paths)
+    for (const dash of routeDashes(path, clip))
+      for (const point of dash) {
+        left = Math.min(left, point.x - pad);
+        top = Math.min(top, point.y - pad);
+        right = Math.max(right, point.x + pad);
+        bottom = Math.max(bottom, point.y + pad);
+      }
+  left = Math.max(bounds.left, Math.floor(left));
+  top = Math.max(bounds.top, Math.floor(top));
+  right = Math.min(bounds.right, Math.ceil(right));
+  bottom = Math.min(bounds.bottom, Math.ceil(bottom));
+  return right > left && bottom > top ? { left, top, right, bottom } : undefined;
+}

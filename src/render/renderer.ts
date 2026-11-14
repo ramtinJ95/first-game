@@ -3,9 +3,11 @@ import {
   Container,
   DisplacementFilter,
   Graphics,
+  Rectangle,
   RenderTexture,
   Sprite,
   Text,
+  Texture,
   TilingSprite,
 } from 'pixi.js';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
@@ -70,7 +72,7 @@ import { toPixels } from './lines.ts';
 import { FramePacer } from './frame-pacer.ts';
 import { cityAt, commandIslet, pickAt, type DrawnCity, type FigureHit, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
-import { routeDashes, type RouteBounds } from './route-dashes.ts';
+import { routeDashes, routeInkBounds, type RouteBounds } from './route-dashes.ts';
 import { cityDrawingView, citySymbols, fitCitySymbol } from './symbols.ts';
 import { createLife } from './terrain/life.ts';
 import { createPlaces } from './terrain/places-layer.ts';
@@ -465,6 +467,8 @@ export async function createRenderer({
   const routes = new Graphics();
   const tradePaths = new Graphics();
   const tradeInk = cacheDrawing(tradePaths, app.renderer, SEA_MARGIN);
+  let tradeFrame: Texture | undefined;
+  let tradeHasInk = false;
   const tradePathLayer = new Container({ label: 'trade-paths' });
   tradePathLayer.addChild(tradeInk.sprite);
   worldLayers.push(tradePathLayer);
@@ -1150,8 +1154,37 @@ export async function createRenderer({
       tradeDrawn = { scale: camera.scale, paths: tradeRoutes };
       tradeInk.invalidate();
     }
-    tradeInk.sprite.visible = tradeRoutes.length > 0;
-    if (tradeRoutes.length > 0) tradeInk.render(camera, view);
+    if (tradeRoutes.length > 0) {
+      tradeInk.render(camera, view);
+      // The cache assigns its full texture only on repaint. Keep its coverage,
+      // but omit transparent texels outside the ink when compositing the sprite.
+      if (tradeInk.sprite.texture !== tradeFrame) {
+        const full = tradeInk.sprite.texture;
+        tradeFrame?.destroy(false);
+        const origin = tradeInk.sprite.position;
+        const crop = routeInkBounds(
+          tradeRoutes.map((route) =>
+            route.path.map((p) => ({
+              x: (p.x - origin.x) * camera.scale,
+              y: (p.y - origin.y) * camera.scale,
+            })),
+          ),
+          { left: 0, top: 0, right: full.width, bottom: full.height },
+        );
+        tradeHasInk = crop !== undefined;
+        const frame = crop
+          ? new Rectangle(crop.left, crop.top, crop.right - crop.left, crop.bottom - crop.top)
+          : new Rectangle(0, 0, 1, 1);
+        tradeFrame = new Texture({
+          source: full.source,
+          frame,
+          orig: new Rectangle(0, 0, full.width, full.height),
+          trim: frame,
+        });
+        tradeInk.sprite.texture = tradeFrame;
+      }
+    }
+    tradeInk.sprite.visible = tradeRoutes.length > 0 && tradeHasInk;
     canvas.dataset['tradePaths'] = String(tradeRoutes.length);
   }
 
@@ -1727,6 +1760,8 @@ export async function createRenderer({
     destroy() {
       terrain.destroy();
       ink.destroy();
+      tradeInk.sprite.texture = Texture.EMPTY;
+      tradeFrame?.destroy(false);
       tradeInk.destroy();
       listening.abort();
       app.renderer.off('resize', onResize);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { routeDashes } from './route-dashes.ts';
+import { routeDashes, routeInkBounds } from './route-dashes.ts';
 
 const bounds = { left: 0, top: 0, right: 100, bottom: 100 };
 const p = (x: number, y = 0) => ({ x, y });
@@ -58,5 +58,36 @@ describe('visible route dashes', () => {
     const zoomed = routeDashes([p(0), p(40)], bounds);
     expect(zoomed[0]).toEqual([p(0), p(7)]);
     expect(zoomed[1]).toEqual([p(12), p(19)]);
+  });
+});
+
+describe('cached route ink bounds', () => {
+  it('includes the halo around actual dashes, not the unused whole texture', () => {
+    expect(routeInkBounds([[p(20, 30), p(40, 30)]], bounds)).toEqual({
+      left: 16,
+      top: 26,
+      right: 43,
+      bottom: 34,
+    });
+  });
+
+  it('clips long crossings and retains fringe entering from outside the texture', () => {
+    expect(routeInkBounds([[p(-10000, 50), p(10000, 50)]], bounds)).toEqual({
+      left: 0,
+      top: 46,
+      right: 100,
+      bottom: 54,
+    });
+    expect(routeInkBounds([[p(20, -2), p(40, -2)]], bounds)).toEqual({
+      left: 16,
+      top: 0,
+      right: 43,
+      bottom: 2,
+    });
+  });
+
+  it('has no quad for empty paths or ink wholly outside the cache', () => {
+    expect(routeInkBounds([[], [p(20)]], bounds)).toBeUndefined();
+    expect(routeInkBounds([[p(20, -5), p(40, -5)]], bounds)).toBeUndefined();
   });
 });
