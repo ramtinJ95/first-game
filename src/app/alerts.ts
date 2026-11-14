@@ -140,27 +140,24 @@ export function alertsOfDay(
     if (alert) add(seenAs ? { ...alert, seenAs } : alert);
   }
 
-  for (const { was, army, joined } of armiesAcrossDay(before, after, player)) {
-    const here = army.activity.kind === 'embarked' ? undefined : army.activity.position;
-    // An army that joined another is gone, so it is told where its own march ended.
-    const end = joined && isOnTheMove(was.activity) ? was.activity.waypoints.at(-1) : undefined;
-    const at = end ?? here;
-    if (!at) continue;
+  for (const army of Object.values(after.armies)) {
+    if (army.owner !== player) continue;
+    const was = before.armies[army.id];
+    const at = army.activity.kind === 'embarked' ? undefined : army.activity.position;
+    if (!was || !at) continue;
     const select = { kind: 'army', army: army.id } as const;
     if (was.activity.kind === 'embarked') {
       add({
         kind: 'armyArrived',
         tone: 'neutral',
-        text: `${was.name} landed ${placeName(after, at)}`,
+        text: `${army.name} landed ${placeName(after, at)}`,
         focus: { at, select },
       });
-    } else if (
-      joined ? isOnTheMove(was.activity) : !isOnTheMove(army.activity) && arrived(was.activity, at)
-    ) {
+    } else if (!isOnTheMove(army.activity) && arrived(was.activity, at)) {
       add({
         kind: 'armyArrived',
         tone: 'neutral',
-        text: `${was.name} arrived ${placeName(after, at)}`,
+        text: `${army.name} arrived ${placeName(after, at)}`,
         focus: { at, select },
       });
     }
@@ -810,32 +807,6 @@ function positionOf(state: State, army: DeepReadonly<Army>): MapPoint | undefine
   return activity.kind === 'embarked'
     ? state.convoys[activity.convoy]?.position
     : activity.position;
-}
-
-interface AcrossDay {
-  was: DeepReadonly<Army>;
-  army: DeepReadonly<Army>;
-  joined: boolean;
-}
-
-/**
- * Each army of the player on the day before with the army that holds its formations
- * after, so an army that arrived and joined the army standing there is seen arriving.
- */
-function armiesAcrossDay(
-  before: DeepReadonly<GameState>,
-  after: DeepReadonly<GameState>,
-  player: FactionId,
-): AcrossDay[] {
-  return Object.values(before.armies).flatMap((was): AcrossDay[] => {
-    if (was.owner !== player) return [];
-    const kept = after.armies[was.id];
-    if (kept) return [{ was, army: kept, joined: false }];
-    const army = was.formations
-      .map((id) => after.armies[after.formations[id]?.army ?? ('' as ArmyId)])
-      .find((into) => into !== undefined);
-    return army && army.owner === player ? [{ was, army, joined: true }] : [];
-  });
 }
 
 /**

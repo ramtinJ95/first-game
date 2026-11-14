@@ -526,6 +526,57 @@ describe('remnants and prey', () => {
   });
 });
 
+describe('the guard of the capital', () => {
+  /** Rome at war, its men at Roma as one army, and an enemy army idle on the road out of Roma. */
+  function raid(men: number, raiders: number, km = 80) {
+    const { state, target } = war();
+    const roma = state.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    const army = addArmy(state, rome, men, roma.position);
+    const raider = addArmy(
+      state,
+      target.owner,
+      raiders,
+      alongRoad(roma.position, target.position, km),
+    );
+    return { state, roma, army, raider, target };
+  }
+  const huntOf = (state: GameState, army: ArmyId, raider: ArmyId) => {
+    const at = state.armies[raider]?.activity;
+    return decideOrders(state, world, rome).find(
+      (order) =>
+        order.kind === 'moveArmy' &&
+        order.army === army &&
+        at?.kind === 'idle' &&
+        distance(order.to, at.position) < 1,
+    );
+  };
+
+  test('is not held at the capital by a raid too small to blockade its garrison, and hunts it', () => {
+    const { state, roma, army, raider } = raid(4500, 200);
+    expect(200).toBeLessThan(roma.garrison);
+    expect(huntOf(state, army, raider)).toBeDefined();
+    expectConsistent(state);
+  });
+
+  test('hunts a raid with the men to blockade the capital when it outweighs the raid', () => {
+    const { state, roma, army, raider } = raid(4500, 3500);
+    expect(3500).toBeGreaterThanOrEqual(roma.garrison);
+    expect(huntOf(state, army, raider)).toBeDefined();
+    expectConsistent(state);
+  });
+
+  test('stays at the capital while a raid with the men to blockade it is near, and hunts nothing farther', () => {
+    const { state, roma, army, target } = raid(4000, 3500);
+    const far = addArmy(state, target.owner, 200, alongRoad(roma.position, target.position, 250));
+    expect(huntOf(state, army, far)).toBeUndefined();
+    expect(
+      decideOrders(state, world, rome).filter((order) => 'army' in order && order.army === army),
+    ).toEqual([]);
+    expectConsistent(state);
+  });
+});
+
 describe('a realm that has grown', () => {
   /** Rome at peace, with one army at Roma, every minor's army gone and every minor garrison alike. */
   function atPeace(men: number, taken: number) {

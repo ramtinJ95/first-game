@@ -10,7 +10,6 @@ import type { City } from '../state/city.ts';
 import type { Stores } from '../state/faction.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
-import { removeRecord } from '../records.ts';
 import { TROOPS } from '../troops.ts';
 
 /** What one person of a calm city adds to the owner's stores each day. */
@@ -57,12 +56,11 @@ export const ADMIN_EXPONENT = 0.75;
 export const RALLY_DISTANCE = 10;
 
 /**
- * Gathers the idle armies that stand together at a city of their owner into one, musters the formations whose training ends today, adds each city's output to its
+ * Musters the formations whose training ends today, adds each city's output to its
  * owner less the food its people eat, takes each army's upkeep, and makes armies desert
  * while their owner is in debt. Food and manpower grow only up to the faction's limits.
  */
 export function economy(state: GameState): void {
-  gather(state);
   muster(state);
   const limits = limitsOf(state);
   for (const [id, balance] of dailyBalances(state)) {
@@ -180,35 +178,6 @@ function outputShare(city: DeepReadonly<City>): number {
 
 export function menOf(state: DeepReadonly<GameState>, army: DeepReadonly<Army>): number {
   return army.formations.reduce((sum, id) => sum + (state.formations[id]?.men ?? 0), 0);
-}
-
-/**
- * Idle armies of one owner that stand within RALLY_DISTANCE of one of its cities form one
- * army, the one with the lowest id, under the best of their generals. So a power that
- * gathers at its muster city marches and sails as one army, and a remnant that comes home
- * joins the army there.
- */
-function gather(state: GameState) {
-  for (const city of Object.values(state.cities)) {
-    const [base, ...rest] = Object.values(state.armies)
-      .filter(
-        (army) =>
-          army.owner === city.owner &&
-          army.activity.kind === 'idle' &&
-          distance(army.activity.position, city.position) <= RALLY_DISTANCE,
-      )
-      .sort((a, b) => (a.id < b.id ? -1 : 1));
-    if (!base) continue;
-    for (const army of rest) {
-      for (const id of army.formations) {
-        const formation = state.formations[id];
-        if (formation) formation.army = base.id;
-      }
-      base.formations.push(...army.formations);
-      base.generalSkill = Math.max(base.generalSkill, army.generalSkill);
-      removeRecord(state.armies, army.id);
-    }
-  }
 }
 
 function muster(state: GameState) {

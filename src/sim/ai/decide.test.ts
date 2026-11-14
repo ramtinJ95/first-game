@@ -202,7 +202,7 @@ describe('a great power', () => {
       });
     });
 
-    test('sends two armies together at a target that neither beats alone', () => {
+    test('sends two armies at Roma that neither beats a target alone at it as one army', () => {
       const state = buildFixture();
       declare(state, f.rome, f.carthage);
       city(state, f.capua).owner = f.carthage;
@@ -220,7 +220,17 @@ describe('a great power', () => {
         army: f.romanArmy,
         to: CAPUA,
       });
-      expect(orders).toContainEqual({ kind: 'moveArmy', faction: f.rome, army: second, to: CAPUA });
+      expect(orders).toContainEqual({
+        kind: 'joinArmy',
+        faction: f.rome,
+        army: second,
+        into: f.romanArmy,
+      });
+      const after = tick(state, orders, world);
+      expect(after.rejected).toEqual([]);
+      expect(after.state.armies[second as never]).toBeUndefined();
+      expect(army(after.state, f.romanArmy).activity.kind).toBe('marching');
+      expectConsistent(after.state);
     });
 
     test('takes two armies that win only together, as one army, from inland to their port, across the sea, and on to the target', () => {
@@ -338,8 +348,9 @@ describe('a great power', () => {
       });
     });
 
-    test('turns back to guard its capital an army marching to a port that is not on the way', () => {
+    test('turns back to guard its capital, from an enemy with the men to blockade it, an army marching to a port that is not on the way', () => {
       const state = newGame(world.map, { seed: 1, player: 'carthage' });
+      city(state, f.roma).garrison = 100;
       const romans = Object.values(state.armies).find((a) => a.owner === f.rome);
       const punic = Object.values(state.armies).find((a) => a.owner === f.carthage);
       if (!romans || !punic) throw new Error('no armies');
@@ -487,8 +498,9 @@ describe('a great power', () => {
       expect(kinds(decide(state, f.rome))).not.toContain('moveArmy');
     });
 
-    test('sends an army home to the capital when an enemy army comes near it', () => {
+    test('sends an army home to the capital when an enemy army with the men to blockade it comes near it', () => {
       const state = buildFixture();
+      city(state, f.roma).garrison = 100;
       declare(state, f.rome, f.carthage);
       place(state, f.romanArmy, BETWEEN);
       army(state, f.punicArmy).activity = {

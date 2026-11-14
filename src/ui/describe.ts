@@ -4,6 +4,7 @@ import {
   factionName,
   nearestCity,
   placeName,
+  reasonText,
   STANCE_NAMES,
   TROOP_NAMES,
   whole,
@@ -21,6 +22,7 @@ import type {
 } from '../sim/ids.ts';
 import type { GameMap } from '../sim/map.ts';
 import { CONVOY_KM_PER_DAY, MARCH_KM_PER_DAY } from '../sim/march.ts';
+import { joinRefusal, type JoinArmyOrder } from '../sim/orders/join-army.ts';
 import type { MoveArmyOrder } from '../sim/orders/move-army.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { Sight } from '../sim/sight.ts';
@@ -219,6 +221,39 @@ export function armiesAt(
       return at !== undefined && distance(at, point) <= AT_CITY_KM;
     })
     .sort((a, b) => ours(b) - ours(a) || byId(a, b));
+}
+
+export interface JoinChoice {
+  into: DeepReadonly<Army>;
+  order: JoinArmyOrder;
+  /** Why the rules refuse the join now, in words, or undefined when they allow it. */
+  refusal: string | undefined;
+}
+
+/**
+ * The player's other armies that stand at the player's army, each with the order that
+ * has the army join it and why the rules refuse that order now, if they do. A player's
+ * armies become one only by this order, so two armies may stand apart at one city.
+ */
+export function joinChoices(state: State, sight: Sight, army: DeepReadonly<Army>): JoinChoice[] {
+  const at = armyPosition(state, army);
+  if (army.owner !== state.player || army.activity.kind !== 'idle' || !at) return [];
+  return armiesAt(state, sight, at, army.id)
+    .filter((other) => other.owner === state.player)
+    .map((into) => {
+      const order: JoinArmyOrder = {
+        kind: 'joinArmy',
+        faction: state.player,
+        army: army.id,
+        into: into.id,
+      };
+      const reason = joinRefusal(state, order)?.replace(
+        /\barmy ([a-z0-9-]+)/g,
+        (words, id: string) =>
+          (Object.hasOwn(state.armies, id) ? state.armies[id as ArmyId]?.name : undefined) ?? words,
+      );
+      return { into, order, refusal: reason && reasonText(state, reason) };
+    });
 }
 
 function blows(factor: number): string {

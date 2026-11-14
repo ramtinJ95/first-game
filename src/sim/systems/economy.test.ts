@@ -376,7 +376,7 @@ describe('the treasury', () => {
 });
 
 describe('armies that stand together', () => {
-  test('idle armies of one owner at one of its cities form one army under the best general', () => {
+  test("the player's idle armies at one of its cities stay two armies without an order", () => {
     const state = buildFixture();
     const roma = state.cities[FIXTURE.roma];
     const first = state.armies[FIXTURE.romanArmy];
@@ -404,10 +404,10 @@ describe('armies that stand together', () => {
       Object.values(s.armies)
         .filter((army) => army.owner === FIXTURE.rome)
         .reduce((sum, army) => sum + menOf(s, army), 0);
-    const next = tick(state, [], world).state;
+    let next = state;
+    for (let day = 0; day < 30; day++) next = tick(next, [], world).state;
     const romans = Object.values(next.armies).filter((army) => army.owner === FIXTURE.rome);
-    expect(romans.map((army) => army.id)).toEqual([FIXTURE.romanArmy]);
-    expect(romans[0]?.generalSkill).toBe(7);
+    expect(romans.map((army) => army.id).sort()).toEqual([FIXTURE.romanArmy, id].sort());
     expect(men(next)).toBe(men(state));
     expectConsistent(next);
   });
