@@ -186,7 +186,7 @@ export function menOf(state: DeepReadonly<GameState>, army: DeepReadonly<Army>):
   return army.formations.reduce((sum, id) => sum + (state.formations[id]?.men ?? 0), 0);
 }
 
-function muster(state: GameState) {
+export function muster(state: GameState): void {
   for (const city of Object.values(state.cities)) musterReady(state, city, state.day);
 }
 

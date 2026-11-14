@@ -9,6 +9,7 @@ import { createRouter } from './routes.ts';
 import { enemiesOf } from './situation.ts';
 import { warDeclaration } from './war.ts';
 import { minorOrders } from './minor.ts';
+import { muster } from '../systems/economy.ts';
 
 /** An invitation is not a commitment to spend tomorrow's military reserve. */
 export function invitationProblem(
@@ -31,9 +32,21 @@ export function invitationProblem(
       router: createRouter(current, world, route.owner),
     }).some((order) => order.kind === 'declareWar' && order.against === route.partner);
   if (declares(state)) return 'the inviter intends war with its partner';
-  // A truce ending tomorrow is already known, unlike tomorrow's battles or captures.
   const truce = truceBetween(state, route.owner, route.partner);
-  if (truce?.endsOn === state.day + 1 && declares({ ...state, day: (state.day + 1) as Day }))
-    return 'the inviter intends war when the truce ends tomorrow';
+  const endingTruce = truce?.endsOn === state.day + 1;
+  const readyRecruits = Object.values(state.cities).some(
+    (city) =>
+      city.owner === route.owner && city.recruits.some((recruit) => recruit.readyOn <= state.day),
+  );
+  if (endingTruce || readyRecruits) {
+    // These facts are already scheduled. Never simulate or foresee battle rolls.
+    const tomorrow = JSON.parse(JSON.stringify(state)) as GameState;
+    muster(tomorrow);
+    tomorrow.day = (state.day + 1) as Day;
+    if (declares(tomorrow))
+      return endingTruce
+        ? 'the inviter intends war when the truce ends tomorrow'
+        : 'the inviter intends war with known reinforcements tomorrow';
+  }
   return undefined;
 }

@@ -29,8 +29,10 @@ It also rechecks the inviter's military reserve and next recruit, after projecti
 the day's queued spending. If that budget no longer holds, the invitation lapses
 without payment and the trade-closed news explains why. Valid queued declarations
 withdraw invitations before any acceptance, whichever order they have in the queue.
-The inviter's actual war policy (great power or minor league) must still favour peace;
-a known truce expiry tomorrow is checked too. No attempt predicts tomorrow's battles.
+The inviter's actual war policy (great power or minor league) must still favour peace.
+The next-day check includes a known truce expiry and recruits already due to muster
+today, using the ordinary muster rule on a private snapshot. It never predicts battle
+rolls or captures.
 
 AI factions and minors consider trade monthly, staggered by faction id. They choose
 the highest return per gold, then the greater income, then city id and land before

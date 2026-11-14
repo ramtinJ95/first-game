@@ -358,6 +358,31 @@ describe('trade orders and consent', () => {
     );
     expectConsistent(state);
   });
+
+  test('consent does not buy a one-day route when already trained reinforcements enable tomorrow attack', () => {
+    const { state, payer, route, accept } = invited();
+    const minor = state.cities[f.syracusae];
+    const home = state.cities[f.carthago];
+    if (!minor || !home) throw new Error('missing cities');
+    minor.owner = f.carthage;
+    payer.stores.gold = 100000;
+    home.recruits.push(
+      { troop: 'swordsmen', readyOn: state.day },
+      { troop: 'swordsmen', readyOn: state.day },
+    );
+    expect(
+      decideOrders(state, world, f.carthage).filter((order) => order.kind === 'declareWar'),
+    ).toEqual([]);
+    const result = tick(state, [accept], world);
+    expect(decideOrders(result.state, world, f.carthage)).toContainEqual({
+      kind: 'declareWar',
+      faction: f.carthage,
+      against: f.rome,
+    });
+    expect(result.state.tradeRoutes[route.id]).toBeUndefined();
+    expect(result.events).not.toContainEqual(expect.objectContaining({ kind: 'tradeOpened' }));
+    expectConsistent(result.state);
+  });
 });
 
 describe('caravans, interruption, and saves', () => {
