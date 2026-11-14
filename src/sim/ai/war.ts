@@ -17,6 +17,7 @@ import {
   PEACE_WAR_ODDS,
   RIVAL_ODDS,
   RIVAL_PRESSURE_ODDS,
+  SATED_EXPONENT,
   WAR_DISTANCE_KM,
   WAR_FRONT_KM,
   WAR_ODDS,
@@ -34,7 +35,9 @@ import {
  * at peace with everyone needs only PEACE_WAR_ODDS, whatever the distance. Against a
  * rival great power it needs no more than RIVAL_ODDS in either case, and against the
  * leader, a great power with LEADER_SHARE of all cities and more than any other, no more
- * than COALITION_ODDS.
+ * than COALITION_ODDS. Against a minor the odds it needs grow with its cities over those
+ * the map gave it, raised to SATED_EXPONENT, so a realm that has grown is slower to start
+ * a new war on a minor.
  */
 export function warDeclaration(context: Context): Order[] {
   const { state, faction, enemies, router } = context;
@@ -88,12 +91,20 @@ export function warDeclaration(context: Context): Order[] {
   if (free <= 0) return rivalPressure(context, strength, rivals, frontOf);
   const odds = enemies.size === 0 ? PEACE_WAR_ODDS : WAR_ODDS;
   const leader = leaderOf(citiesOf, rivals);
-  const oddsAgainst = (other: FactionId) =>
-    other === leader ? COALITION_ODDS : rivals.has(other) ? RIVAL_ODDS : odds;
+  const homeland = context.world.map.provinces.filter(
+    (province) => (province.owner as string) === faction,
+  ).length;
+  const sated = Math.max(1, ownCities.length / Math.max(1, homeland)) ** SATED_EXPONENT;
+  const needed = (other: FactionId) =>
+    other === leader
+      ? Math.min(odds, COALITION_ODDS)
+      : rivals.has(other)
+        ? Math.min(odds, RIVAL_ODDS)
+        : odds * sated;
   const scoreOf = (other: FactionId, theirs: number, km: number) =>
     free /
     Math.max(1, theirs) /
-    (Math.min(odds, oddsAgainst(other)) * (enemies.size === 0 ? 1 : 1 + km / WAR_DISTANCE_KM));
+    (needed(other) * (enemies.size === 0 ? 1 : 1 + km / WAR_DISTANCE_KM));
 
   // A neighbour scores at most its best city in reach would with no army near it, so
   // most are ruled out before a route to their front is looked for.

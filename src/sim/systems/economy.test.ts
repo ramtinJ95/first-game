@@ -1,7 +1,7 @@
 import { newGame, STARTING_GENERAL_SKILL } from '../new-game.ts';
 import { describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
-import type { FormationId } from '../ids.ts';
+import type { ArmyId, FormationId } from '../ids.ts';
 import { executeOrder } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
 import { loadGame, saveGame } from '../save.ts';
@@ -80,19 +80,20 @@ describe('food', () => {
     expect(after?.gold).toBeCloseTo(before.gold - 1000 * UPKEEP_PER_MAN.gold, 9);
   });
 
-  test('a city eats by its people, and in unrest it eats as much while it grows less', () => {
+  test('a city in unrest still feeds itself, while its gold falls', () => {
     const state = buildFixture();
     const syracusae = state.cities[FIXTURE.syracusae];
     if (!syracusae) throw new Error('the fixture lacks Syracusae');
-    const calm = dailyBalances(state).get(FIXTURE.syracusaeFaction)?.food ?? 0;
-    expect(calm).toBeCloseTo(syracusae.population * (OUTPUT_PER_PERSON.food - FOOD_PER_PERSON), 9);
-    syracusae.unrestDays = 200;
-    const restless = dailyBalances(state).get(FIXTURE.syracusaeFaction)?.food ?? 0;
-    expect(restless).toBeLessThan(0);
-    expect(restless).toBeCloseTo(
-      syracusae.population * (0.25 * OUTPUT_PER_PERSON.food - FOOD_PER_PERSON),
+    const calm = dailyBalances(state).get(FIXTURE.syracusaeFaction);
+    expect(calm?.food).toBeCloseTo(
+      syracusae.population * (OUTPUT_PER_PERSON.food - FOOD_PER_PERSON),
       9,
     );
+    syracusae.unrestDays = 200;
+    const restless = dailyBalances(state).get(FIXTURE.syracusaeFaction);
+    expect(restless?.food).toBeCloseTo(calm?.food ?? 0, 9);
+    expect(restless?.food).toBeGreaterThan(0);
+    expect(restless?.gold ?? 0).toBeLessThan((calm?.gold ?? 0) * 0.5);
   });
 
   test('a running deficit drains the granary day by day, so the shortage shows before it bites', () => {
@@ -371,5 +372,43 @@ describe('the treasury', () => {
     const poorer = tick(next, [], world).state;
     expect(poorer.factions[FIXTURE.rome]?.stores.gold).toBeLessThan(limit);
     expectConsistent(poorer);
+  });
+});
+
+describe('armies that stand together', () => {
+  test("the player's idle armies at one of its cities stay two armies without an order", () => {
+    const state = buildFixture();
+    const roma = state.cities[FIXTURE.roma];
+    const first = state.armies[FIXTURE.romanArmy];
+    if (!roma || !first) throw new Error('the fixture has changed');
+    first.activity = { kind: 'idle', position: { ...roma.position } };
+    const id = 'army-roman-2' as ArmyId;
+    const formation = 'formation-roman-2' as FormationId;
+    state.formations[formation] = {
+      id: formation,
+      army: id,
+      troop: 'archers',
+      men: 300,
+      morale: 1,
+    };
+    state.armies[id] = {
+      id,
+      owner: FIXTURE.rome,
+      formations: [formation],
+      stance: 'holdTheLine',
+      name: 'Second Legion',
+      generalSkill: 7,
+      activity: { kind: 'idle', position: { x: roma.position.x + 5, y: roma.position.y } },
+    };
+    const men = (s: GameState) =>
+      Object.values(s.armies)
+        .filter((army) => army.owner === FIXTURE.rome)
+        .reduce((sum, army) => sum + menOf(s, army), 0);
+    let next = state;
+    for (let day = 0; day < 30; day++) next = tick(next, [], world).state;
+    const romans = Object.values(next.armies).filter((army) => army.owner === FIXTURE.rome);
+    expect(romans.map((army) => army.id).sort()).toEqual([FIXTURE.romanArmy, id].sort());
+    expect(men(next)).toBe(men(state));
+    expectConsistent(next);
   });
 });

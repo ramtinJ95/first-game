@@ -170,7 +170,9 @@ test.describe('the panels after the playtest', () => {
     ).toHaveAccessibleDescription(/Deals and takes 25% more$/);
     await expect(
       stances.getByRole('button', { name: 'Skirmish and withdraw' }),
-    ).toHaveAccessibleDescription(/Deals and takes 25% less$/);
+    ).toHaveAccessibleDescription(
+      /Deals and takes 25% less, normal blows against an enemy that skirmishes too$/,
+    );
     await expect(stances).toContainText('Deals and takes 25% more');
 
     const army = page.getByTestId('army-panel');

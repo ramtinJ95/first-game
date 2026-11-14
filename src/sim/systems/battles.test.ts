@@ -692,10 +692,17 @@ describe('stances', () => {
     expect(assault.keptB).toBeLessThan(hold.keptB);
   });
 
-  test('skirmishAndWithdraw on both sides costs both fewer men', () => {
-    const skirmish = averages('skirmishAndWithdraw', 'skirmishAndWithdraw');
+  test('skirmishAndWithdraw against a line costs both fewer men than two lines that hold', () => {
+    const skirmish = averages('skirmishAndWithdraw', 'holdTheLine');
     expect(skirmish.keptA).toBeGreaterThan(hold.keptA);
     expect(skirmish.keptB).toBeGreaterThan(hold.keptB);
+  });
+
+  test('two armies that both skirmish fight as long as two lines that hold, 6 to 12 days', () => {
+    const skirmish = averages('skirmishAndWithdraw', 'skirmishAndWithdraw');
+    expect(skirmish.days).toBeGreaterThanOrEqual(6);
+    expect(skirmish.days).toBeLessThanOrEqual(12);
+    expect(Math.abs(skirmish.days - hold.days)).toBeLessThan(2);
   });
 
   test.each([

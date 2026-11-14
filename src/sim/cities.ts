@@ -16,10 +16,10 @@ export const FATE_DAYS = 10;
  * Sacking takes gold worth `wealthYears` of the city's gold output at full at once,
  * kills `populationShare` of its people, and sets `unrestDays` of unrest. For
  * `poorDays` after the sack the city yields only `poorOutput` of its gold. An occupied
- * city out-earns a sacked one within a year.
+ * city out-earns a sacked one within about eight months.
  */
 export const SACK = {
-  wealthYears: 0.75,
+  wealthYears: 0.5,
   populationShare: 0.4,
   unrestDays: 365,
   poorDays: 3 * 365,

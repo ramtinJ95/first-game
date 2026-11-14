@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { changeCityOwner } from '../src/sim/cities.ts';
-import type { CityId, FactionId } from '../src/sim/ids.ts';
+import { allocateId, type CityId, type FactionId } from '../src/sim/ids.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import {
   armyOf,
@@ -18,6 +18,7 @@ import {
   rome,
   setRich,
   startGame,
+  untilDay,
   untilDrawn,
 } from './support.ts';
 
@@ -122,6 +123,48 @@ test.describe('the panels', () => {
       'aria-pressed',
       'true',
     );
+  });
+
+  test('two of your armies at Roma stand apart until Join puts one into the other with joinArmy', async ({
+    page,
+  }) => {
+    const state = startGame();
+    const first = armyOf(state, rome);
+    const roma = cityPoint('roma');
+    first.activity = { kind: 'idle', position: { ...roma } };
+    const id = allocateId(state, 'army');
+    const formation = allocateId(state, 'formation');
+    state.formations[formation] = {
+      id: formation,
+      army: id,
+      troop: 'archers',
+      men: 300,
+      morale: 1,
+    };
+    state.armies[id] = {
+      ...first,
+      id,
+      name: 'Second Legion',
+      formations: [formation],
+      activity: { kind: 'idle', position: { x: roma.x + 4, y: roma.y } },
+    };
+    const men = (army: typeof first) =>
+      army.formations.reduce((sum, f) => sum + (state.formations[f]?.men ?? 0), 0);
+    const together = men(first) + 300;
+    await load(page, state);
+    await untilDay(page, state.day + 3);
+
+    await page.getByRole('button', { name: 'Overview' }).click();
+    const armies = page.getByTestId('overview-armies').getByRole('listitem');
+    await expect(armies).toHaveCount(2);
+    await armies.filter({ hasText: 'Second Legion' }).getByRole('button').click();
+    const panel = page.getByTestId('army-panel');
+    await expect(panel.getByTestId('army-name')).toHaveText('Second Legion');
+    await panel.getByRole('button', { name: 'Join First Legion' }).click();
+    await expect(panel.getByTestId('army-name')).toHaveText('First Legion');
+    await expect(armies).toHaveCount(1);
+    await expect(armies).toContainText('First Legion');
+    await expect(armies).toContainText(`${together.toLocaleString('en')} men`);
   });
 
   test('a right click on a port city, from your port, offers the crossing by sea with embark', async ({

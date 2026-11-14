@@ -79,12 +79,11 @@ describe('what each building does', () => {
     expectConsistent(state);
   });
 
-  test('canals grow less in a city in unrest', () => {
+  test('canals grow their full food in a city in unrest, as its people do', () => {
     const state = rich();
     need(state.cities[FIXTURE.capua]).unrestDays = 90;
     const food = buildingGain(state, need(state.cities[FIXTURE.capua]), 'canals').daily.food;
-    expect(food).toBeLessThan(BUILDINGS.canals.food);
-    expect(food).toBeGreaterThan(0);
+    expect(food).toBeCloseTo(BUILDINGS.canals.food, 9);
     expectConsistent(state);
   });
 

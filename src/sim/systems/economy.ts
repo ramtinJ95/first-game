@@ -35,7 +35,7 @@ export const GRANARY_DAYS = 90;
  */
 export const MANPOWER_SHARE = 0.05;
 /**
- * The share of its output that a city produces while more than UNREST_DAYS of unrest
+ * The share of its gold and manpower that a city yields while more than UNREST_DAYS of unrest
  * are left. It rises evenly to 1 over the last UNREST_DAYS.
  */
 export const UNREST_OUTPUT = 0.25;
@@ -129,9 +129,9 @@ export function dailyBalances(state: DeepReadonly<GameState>): Map<FactionId, St
     const balance = of(city.owner);
     const people = city.population * outputShare(city);
     const admin = governed.get(city.owner) ?? 1;
-    const grown = people * OUTPUT_PER_PERSON.food + extraFoodOf(city) * outputShare(city);
     balance.gold += people * OUTPUT_PER_PERSON.gold * goldShare(state, city) * admin;
-    balance.food += grown - city.population * FOOD_PER_PERSON;
+    balance.food +=
+      city.population * (OUTPUT_PER_PERSON.food - FOOD_PER_PERSON) + extraFoodOf(city);
     balance.manpower += people * OUTPUT_PER_PERSON.manpower * levyShareOf(city) * admin;
   }
   for (const army of Object.values(state.armies)) {

@@ -5,14 +5,16 @@ import { changeCityOwner } from '../cities.ts';
 import { landPath } from '../march.ts';
 import { newGame } from '../new-game.ts';
 import { SIEGE_DISTANCE } from '../systems/sieges.ts';
-import { LEADER_SHARE } from './thresholds.ts';
+import { LEADER_SHARE, REMNANT_MEN } from './thresholds.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
 import { removeRecord } from '../records.ts';
 import { expectConsistent } from '../references.ts';
 import type { City } from '../state/city.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
+import { menOf } from '../systems/economy.ts';
 import { tick } from '../tick.ts';
+import type { Troop } from '../troops.ts';
 import { distance } from '../world/find-path.ts';
 import { decideOrders } from './decide.ts';
 import { createRouter } from './routes.ts';
@@ -21,10 +23,16 @@ import { byLand } from './situation.ts';
 const world = fixtureWorld();
 const rome = 'rome' as FactionId;
 
-function addArmy(state: GameState, owner: FactionId, men: number, at: MapPoint): ArmyId {
+function addArmy(
+  state: GameState,
+  owner: FactionId,
+  men: number,
+  at: MapPoint,
+  troop: Troop = 'spearmen',
+): ArmyId {
   const id = allocateId(state, 'army');
   const formation = allocateId(state, 'formation');
-  state.formations[formation] = { id: formation, army: id, troop: 'spearmen', men, morale: 1 };
+  state.formations[formation] = { id: formation, army: id, troop, men, morale: 1 };
   state.armies[id] = {
     id,
     owner,
@@ -418,5 +426,267 @@ describe('the leader', () => {
     const total = Object.keys(carthageFacing(0).cities).length;
     expect(declaredOnRome(carthageFacing(Math.ceil(LEADER_SHARE * total)))).toBe(true);
     expect(declaredOnRome(carthageFacing(2))).toBe(false);
+  });
+});
+
+/** The point `km` along the land path from one point to another. */
+function alongRoad(from: MapPoint, to: MapPoint, km: number): MapPoint {
+  const path = landPath(world, from, to);
+  if (typeof path === 'string') throw new Error(path);
+  let walked = 0;
+  let at = from;
+  for (const point of path) {
+    const leg = distance(at, point);
+    if (walked + leg >= km) {
+      const t = (km - walked) / leg;
+      return {
+        x: Math.round((at.x + t * (point.x - at.x)) * 10) / 10,
+        y: Math.round((at.y + t * (point.y - at.y)) * 10) / 10,
+      };
+    }
+    walked += leg;
+    at = point;
+  }
+  throw new Error(`the road is shorter than ${km} km`);
+}
+
+describe('remnants and prey', () => {
+  test('a remnant is not sent at a city, even when it would make a stronger army enough', () => {
+    const { state, target } = war();
+    const near = { x: target.position.x + 30, y: target.position.y };
+    const strong = addArmy(state, rome, 1500, near);
+    const remnant = addArmy(state, rome, REMNANT_MEN - 1, near);
+    const orders = decideOrders(state, world, rome);
+    for (const army of [strong, remnant]) {
+      expect(orders).not.toContainEqual(
+        expect.objectContaining({ kind: 'moveArmy', army, to: target.position }),
+      );
+    }
+    expectConsistent(state);
+  });
+
+  test('an idle army marches on a weak enemy army that stands in the field', () => {
+    const { state, target } = war();
+    const roma = cityOf(state, rome);
+    const hunter = addArmy(state, rome, 1500, roma.position);
+    const field = alongRoad(roma.position, target.position, 120);
+    if (distance(field, target.position) < 60) throw new Error('the target is too near Roma');
+    const prey = addArmy(state, target.owner, 300, field);
+    expect(decideOrders(state, world, rome)).toContainEqual(
+      expect.objectContaining({ kind: 'moveArmy', army: hunter, to: field }),
+    );
+    let next = state;
+    let met = false;
+    for (let day = 0; day < 10 && !met; day++) {
+      const result = tick(next, decideOrders(next, world, rome), world);
+      next = result.state;
+      met = result.events.some(
+        (event) =>
+          event.kind === 'battleBegan' &&
+          [...event.attackers, ...event.defenders].includes(rome) &&
+          [...event.attackers, ...event.defenders].includes(target.owner),
+      );
+    }
+    expect(met).toBe(true);
+    expect(next.armies[prey]?.activity.kind ?? 'destroyed').not.toBe('idle');
+    expectConsistent(next);
+  });
+
+  test('a remnant at the muster city that marches away from it halts there', () => {
+    const { state, target } = war();
+    const [muster] = Object.values(state.cities)
+      .filter((city) => city.owner === rome)
+      .sort(
+        (a, b) => distance(a.position, target.position) - distance(b.position, target.position),
+      );
+    if (!muster) throw new Error('Rome holds no city');
+    const remnant = addArmy(state, rome, REMNANT_MEN - 1, muster.position);
+    const army = state.armies[remnant];
+    if (!army) throw new Error('no remnant');
+    army.activity = {
+      kind: 'marching',
+      position: { ...muster.position },
+      waypoints: [alongRoad(muster.position, target.position, 40)],
+    };
+    expect(decideOrders(state, world, rome)).toContainEqual({
+      kind: 'halt',
+      faction: rome,
+      army: remnant,
+    });
+    expectConsistent(state);
+  });
+
+  test('a remnant near the capital gets one order, not one to guard the capital and one to the muster city', () => {
+    const { state, target } = war();
+    const roma = cityOf(state, rome);
+    const remnant = addArmy(
+      state,
+      rome,
+      REMNANT_MEN - 1,
+      alongRoad(roma.position, target.position, 30),
+    );
+    addArmy(state, target.owner, 2000, alongRoad(roma.position, target.position, 80));
+    const orders = decideOrders(state, world, rome);
+    expect(
+      orders.filter((order) => 'army' in order && order.army === remnant).length,
+    ).toBeLessThanOrEqual(1);
+    expectConsistent(state);
+  });
+});
+
+describe('the guard of the capital', () => {
+  /** Rome at war, its men at Roma as one army, and an enemy army idle on the road out of Roma. */
+  function raid(men: number, raiders: number, km = 80) {
+    const { state, target } = war();
+    const roma = state.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    const army = addArmy(state, rome, men, roma.position);
+    const raider = addArmy(
+      state,
+      target.owner,
+      raiders,
+      alongRoad(roma.position, target.position, km),
+    );
+    if (raiders === 0) {
+      removeRecord(state.formations, state.armies[raider]?.formations[0] ?? ('' as never));
+      removeRecord(state.armies, raider);
+    }
+    return { state, roma, army, raider, target };
+  }
+  const huntOf = (state: GameState, army: ArmyId, raider: ArmyId) => {
+    const at = state.armies[raider]?.activity;
+    return decideOrders(state, world, rome).find(
+      (order) =>
+        order.kind === 'moveArmy' &&
+        order.army === army &&
+        at?.kind === 'idle' &&
+        distance(order.to, at.position) < 1,
+    );
+  };
+
+  test('is not held at the capital by a raid too small to blockade its garrison, and hunts it', () => {
+    const { state, roma, army, raider } = raid(4500, 200);
+    expect(200).toBeLessThan(roma.garrison);
+    expect(huntOf(state, army, raider)).toBeDefined();
+    expectConsistent(state);
+  });
+
+  test('hunts a raid with the men to blockade the capital when it outweighs the raid', () => {
+    const { state, roma, army, raider } = raid(4500, 3500);
+    expect(3500).toBeGreaterThanOrEqual(roma.garrison);
+    expect(huntOf(state, army, raider)).toBeDefined();
+    expectConsistent(state);
+  });
+
+  test('stays at the capital while a raid with the men to blockade it is near, and hunts nothing farther', () => {
+    const { state, roma, army, target } = raid(4000, 3500);
+    const far = addArmy(state, target.owner, 200, alongRoad(roma.position, target.position, 250));
+    expect(huntOf(state, army, far)).toBeUndefined();
+    expect(
+      decideOrders(state, world, rome).filter((order) => 'army' in order && order.army === army),
+    ).toEqual([]);
+    expectConsistent(state);
+  });
+
+  test('a guard that hunts a raid near the capital keeps after it, day after day, until they fight', () => {
+    const start = raid(4500, 3500);
+    const { army } = start;
+    let { state } = start;
+    let fought = false;
+    for (let day = 0; day < 30 && !fought; day++) {
+      const result = tick(state, decideOrders(state, world, rome), world);
+      expect(result.rejected).toEqual([]);
+      state = result.state;
+      fought = state.armies[army]?.activity.kind === 'inBattle';
+    }
+    expect(fought).toBe(true);
+    expectConsistent(state);
+  });
+
+  test('holds the capital against a raid too few to blockade it that could storm its fallen walls', () => {
+    const { state, roma, target } = raid(3500, 0);
+    roma.walls = 0;
+    addArmy(
+      state,
+      target.owner,
+      2500,
+      alongRoad(roma.position, target.position, 80),
+      'heavyCavalry',
+    );
+    expect(2500).toBeLessThan(roma.garrison);
+    const romans = Object.values(state.armies).filter((army) => army.owner === rome);
+    expect(
+      decideOrders(state, world, rome).filter(
+        (order) => 'army' in order && romans.some((army) => army.id === order.army),
+      ),
+    ).toEqual([]);
+    expectConsistent(state);
+  });
+
+  test('never joins the guard into an army that leaves the capital, so the guard stays', () => {
+    const { state, roma, target } = raid(10_000, 0);
+    addArmy(state, rome, 3000, { x: roma.position.x + 3, y: roma.position.y });
+    const marching = addArmy(
+      state,
+      target.owner,
+      11_000,
+      alongRoad(roma.position, target.position, 80),
+    );
+    const raider = state.armies[marching];
+    if (!raider) throw new Error('no raider');
+    raider.activity = {
+      kind: 'marching',
+      position: { ...alongRoad(roma.position, target.position, 80) },
+      waypoints: [{ ...roma.position }],
+    };
+    const orders = decideOrders(state, world, rome);
+    const after = tick(state, orders, world);
+    expect(after.rejected).toEqual([]);
+    const staying = Object.values(after.state.armies)
+      .filter(
+        (army) =>
+          army.owner === rome &&
+          army.activity.kind === 'idle' &&
+          distance(army.activity.position, roma.position) <= 10,
+      )
+      .reduce((sum, army) => sum + menOf(after.state, army), 0);
+    expect(staying).toBeGreaterThanOrEqual(3000);
+    expectConsistent(after.state);
+  });
+});
+
+describe('a realm that has grown', () => {
+  /** Rome at peace, with one army at Roma, every minor's army gone and every minor garrison alike. */
+  function atPeace(men: number, taken: number) {
+    const state = newGame(world.map, { seed: 1, player: 'rome' });
+    for (const army of Object.values(state.armies)) {
+      if (army.owner !== rome && state.factions[army.owner]?.kind !== 'minor') continue;
+      for (const id of army.formations) removeRecord(state.formations, id);
+      removeRecord(state.armies, army.id);
+    }
+    const roma = cityOf(state, rome);
+    const minors = Object.values(state.cities)
+      .filter((city) => state.factions[city.owner]?.kind === 'minor')
+      .sort((a, b) => distance(a.position, roma.position) - distance(b.position, roma.position));
+    for (const city of minors) Object.assign(city, { garrison: 1200 });
+    for (const city of minors.slice(0, taken)) changeCityOwner(state, city.id, rome);
+    for (const city of Object.values(state.cities)) city.unrestDays = 0;
+    addArmy(state, rome, men, roma.position);
+    return state;
+  }
+  const onAMinor = (state: GameState) =>
+    decideOrders(state, world, rome).some(
+      (order) => order.kind === 'declareWar' && state.factions[order.against]?.kind === 'minor',
+    );
+
+  test('needs better odds to start a war on a minor than the realm it started with', () => {
+    let men = 500;
+    while (!onAMinor(atPeace(men, 0))) {
+      men += 100;
+      if (men > 20_000) throw new Error('Rome never declares on a minor');
+    }
+    const grown = atPeace(men, 4);
+    expect(onAMinor(grown)).toBe(false);
+    expectConsistent(grown);
   });
 });

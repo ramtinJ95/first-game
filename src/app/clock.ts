@@ -24,6 +24,7 @@ const SLOTS: {
   moveArmy: 'movement',
   halt: 'movement',
   embark: 'movement',
+  joinArmy: 'movement',
   retreat: 'movement',
   setStance: 'stance',
   recruit: undefined,

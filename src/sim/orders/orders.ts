@@ -7,6 +7,7 @@ import { enslave } from './enslave.ts';
 import { evacuate } from './evacuate.ts';
 import { embark } from './embark.ts';
 import { halt } from './halt.ts';
+import { joinArmy } from './join-army.ts';
 import { moveArmy } from './move-army.ts';
 import { offerPeace } from './offer-peace.ts';
 import { recruit } from './recruit.ts';
@@ -24,6 +25,7 @@ const ORDER_HANDLERS = {
   moveArmy,
   halt,
   embark,
+  joinArmy,
   setStance,
   declareWar,
   retreat,

@@ -1,9 +1,20 @@
-import type { FactionId } from '../ids.ts';
+import type { ArmyId, FactionId } from '../ids.ts';
+import { joinRefusal } from '../orders/join-army.ts';
 import type { Order } from '../orders/orders.ts';
+import { reforming } from '../systems/battles.ts';
+import { RALLY_DISTANCE } from '../systems/economy.ts';
 import { SIEGE_DISTANCE } from '../systems/sieges.ts';
 import { distance } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
-import { endOverlongMarches, fates, movements, retreats, storms, type Context } from './armies.ts';
+import {
+  endOverlongMarches,
+  fates,
+  guardOfCapital,
+  movements,
+  retreats,
+  storms,
+  type Context,
+} from './armies.ts';
 import { recruitment } from './budget.ts';
 import { construction } from './build.ts';
 import { minorOrders } from './minor.ts';
@@ -38,11 +49,15 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
     router: createRouter(state, world, faction),
   };
   if (record.kind === 'minor') {
-    return [...peaceOrders(context), ...stances(context), ...minorOrders(context)];
+    return withJoins(context, [
+      ...peaceOrders(context),
+      ...stances(context),
+      ...minorOrders(context),
+    ]);
   }
   const muster = musterCity(context);
   const recruits = recruitment(state, faction, muster);
-  return [
+  return withJoins(context, [
     ...peaceOrders(context),
     ...stances(context),
     ...endOverlongMarches(context),
@@ -53,7 +68,63 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
     ...recruits,
     ...construction(state, faction, recruits.length > 0),
     ...warDeclaration(context),
-  ];
+  ]);
+}
+
+/**
+ * The day's orders, with the joins that make one army of the faction's idle armies that
+ * stand together at one of its cities first: the lowest id, under the best general. An
+ * army joins when it was given no order today or the same orders as the army it joins,
+ * which then carries them out for both. The guard of the capital joins only an army that
+ * stays, so the army that takes it in stays as well. Each join is weighed against the
+ * joins before it: an army that a join of another stance sets re-forming takes no more
+ * that day, and an army whose join cannot run keeps its own orders. So a power that
+ * gathers at its muster city marches and sails as one army, and a remnant that comes
+ * home joins the army there.
+ */
+function withJoins(context: Context, orders: Order[]): Order[] {
+  const { state, faction } = context;
+  const guard =
+    context.state.factions[faction]?.kind === 'greatPower'
+      ? guardOfCapital(context).guard?.id
+      : undefined;
+  const ordersOf = (id: ArmyId) => orders.filter((order) => 'army' in order && order.army === id);
+  const asOrdersOf = (mine: Order[], theirs: Order[], into: ArmyId) =>
+    mine.length === theirs.length &&
+    mine.every(
+      (order, i) => JSON.stringify({ ...order, army: into }) === JSON.stringify(theirs[i]),
+    );
+  const placed = new Set<ArmyId>();
+  const joining = new Set<ArmyId>();
+  const reformed = new Set<ArmyId>();
+  const joins: Order[] = [];
+  for (const city of sorted(state.cities)) {
+    if (city.owner !== faction) continue;
+    const [into, ...rest] = sorted(state.armies).filter(
+      (army) =>
+        army.owner === faction &&
+        army.activity.kind === 'idle' &&
+        !placed.has(army.id) &&
+        !reforming(state, army) &&
+        distance(army.activity.position, city.position) <= RALLY_DISTANCE,
+    );
+    if (into?.activity.kind !== 'idle') continue;
+    placed.add(into.id);
+    for (const army of rest) {
+      if (reformed.has(into.id) || joinRefusal(state, { faction, army: army.id, into: into.id })) {
+        continue;
+      }
+      const own = ordersOf(army.id);
+      const theirs = ordersOf(into.id);
+      if (own.length > 0 && !asOrdersOf(own, theirs, into.id)) continue;
+      if (army.id === guard && theirs.length > 0) continue;
+      placed.add(army.id);
+      joining.add(army.id);
+      joins.push({ kind: 'joinArmy', faction, army: army.id, into: into.id });
+      if (army.stance !== into.stance) reformed.add(into.id);
+    }
+  }
+  return [...joins, ...orders.filter((order) => !('army' in order && joining.has(order.army)))];
 }
 
 /** The orders of every faction the AI runs, in faction id order: all but those it skips and the defeated. */

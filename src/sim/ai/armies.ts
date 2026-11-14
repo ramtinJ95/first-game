@@ -3,6 +3,7 @@ import type { ArmyId, CityId, FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import type { MapPoint } from '../state/map-point.ts';
 import { RALLY_DISTANCE } from '../systems/economy.ts';
+import { ENGAGEMENT_DISTANCE } from '../systems/battles.ts';
 import { BLOCKADE_ODDS, defendersAt, SALLY_SHARE, SIEGE_DISTANCE } from '../systems/sieges.ts';
 import { MARCH_KM_PER_DAY, marchDays, MAX_MARCH_DAYS } from '../march.ts';
 import { embarkationAt } from '../orders/embark.ts';
@@ -34,7 +35,9 @@ import {
   ENSLAVE_BELOW_MANPOWER,
   GARRISON_ODDS,
   MARCH_MORALE,
+  PREY_KM,
   RALLY_WAIT_DAYS,
+  REMNANT_MEN,
   RELIEF_KM,
   RELIEF_ODDS,
   RETREAT_ODDS,
@@ -161,9 +164,62 @@ function menOfArmy(state: State, army: ArmyView): number {
 }
 
 /**
- * Moves the faction's armies. First its weakest army at the capital stays there, or the
- * nearest army returns to it, while an enemy army that is not standing at one of its own
- * cities is within CAPITAL_GUARD_KM of it. Then armies relieve each besieged city
+ * Whether the enemy armies within CAPITAL_GUARD_KM of the faction's capital, outside their
+ * own cities, could take it: with the men to blockade its garrison, or with any chance to
+ * storm it as the storm rules count it, walls and troops included. While they could, the
+ * guard holds the capital: an army that hunts an enemy army standing idle within
+ * CAPITAL_GUARD_KM of the capital, or else the weakest army at the capital.
+ */
+export function guardOfCapital({ state, world, faction, enemies }: Context): {
+  capital: CityView | undefined;
+  threatened: boolean;
+  guard: ArmyView | undefined;
+} {
+  const capital = homeCapital(state, world, faction);
+  if (!capital) return { capital, threatened: false, guard: undefined };
+  const near = (at: MapPoint | undefined) =>
+    !!at && distance(at, capital.position) <= CAPITAL_GUARD_KM;
+  const raiders = enemyArmies(state, faction, enemies).filter(
+    (army) => !atOwnCity(state, army) && near(positionOf(army)),
+  );
+  const men = raiders.reduce((sum, army) => sum + menOfArmy(state, army), 0);
+  const threatened =
+    men > 0 &&
+    (men >= BLOCKADE_ODDS * capital.garrison || stormOdds(state, capital, raiders).chance > 0);
+  if (!threatened) return { capital, threatened, guard: undefined };
+  const own = sorted(state.armies).filter((army) => army.owner === faction);
+  const prey = raiders.filter((army) => army.activity.kind === 'idle');
+  const [hunting] = own.filter((army) => {
+    const heading = destinationOf(army);
+    return (
+      army.activity.kind === 'marching' &&
+      near(positionOf(army)) &&
+      !!heading &&
+      prey.some((enemy) => {
+        const at = positionOf(enemy);
+        return !!at && distance(at, heading) <= ENGAGEMENT_DISTANCE;
+      })
+    );
+  });
+  const [atCapital] = own
+    .filter((army) => {
+      const at = positionOf(army);
+      return (
+        !!at &&
+        army.activity.kind !== 'marching' &&
+        distance(at, capital.position) <= RALLY_DISTANCE
+      );
+    })
+    .sort((a, b) => strengthOf(state, a) - strengthOf(state, b));
+  return { capital, threatened, guard: hunting ?? atCapital };
+}
+
+/**
+ * Moves the faction's armies. First the guard of the capital (`guardOfCapital`) holds it, or
+ * the nearest army returns to it, while the enemy armies near it could take it. A raid
+ * the walls hold alone pins no army, and the guard may still hunt an enemy army within
+ * CAPITAL_GUARD_KM of the capital, which guards it as well, and stays the guard on the
+ * way. Then armies relieve each besieged city
  * they are strong enough to relieve, and armies leave for the muster city from each
  * siege whose besiegers are too few to hold the blockade, before the garrison's sallies
  * wear them down, unless armies marching there bring it up to the blockade in time. With
@@ -227,25 +283,23 @@ export function movements(context: Context, muster: CityView | undefined): Order
     return true;
   };
 
-  const capital = homeCapital(state, world, faction);
-  const raiders = hostile.filter((army) => !atOwnCity(state, army));
-  if (capital && strengthNear(state, raiders, capital.position, CAPITAL_GUARD_KM) > 0) {
-    const [atCapital] = own
-      .filter((army) => {
-        const at = positionOf(army);
-        return (
-          at &&
-          army.activity.kind !== 'marching' &&
-          distance(at, capital.position) <= RALLY_DISTANCE
-        );
-      })
-      .sort((a, b) => strengthOf(state, a) - strengthOf(state, b));
-    if (atCapital) used.add(atCapital.id);
-    else {
-      const guards = movers
-        .filter((m) => context.router.reaches(m.at, capital))
-        .sort((a, b) => distance(a.at, capital.position) - distance(b.at, capital.position));
-      guards.some((guard) => headFor(guard, capital));
+  const { capital, threatened, guard: held } = guardOfCapital(context);
+  const guard = held?.id;
+  if (guard) used.add(guard);
+  else if (capital && threatened) {
+    const guards = movers
+      .filter((m) => context.router.reaches(m.at, capital))
+      .sort((a, b) => distance(a.at, capital.position) - distance(b.at, capital.position));
+    guards.some((guard) => headFor(guard, capital));
+  }
+
+  for (const mover of movers) {
+    if (mover.men >= REMNANT_MEN || used.has(mover.army.id)) continue;
+    used.add(mover.army.id);
+    if (!muster) continue;
+    if (distance(mover.at, muster.position) > RALLY_DISTANCE) headFor(mover, muster);
+    else if (mover.army.activity.kind === 'marching' && !marchingTo(mover.army, muster.position)) {
+      orders.push({ kind: 'halt', faction, army: mover.army.id });
     }
   }
 
@@ -273,6 +327,54 @@ export function movements(context: Context, muster: CityView | undefined): Order
     }
     if (gathered < needed) continue;
     for (const mover of relief) send(mover, { kind: 'march', to: city.position });
+  }
+
+  // An enemy army that stands idle in the field, away from its own cities, is prey for an
+  // idle army near it that outweighs it and every enemy army beside it ATTACK_ODDS times.
+  // An army already marching on prey keeps after it.
+  const prey = hostile.filter((army) => army.activity.kind === 'idle' && !atOwnCity(state, army));
+  const taken = new Set<ArmyId>();
+  const onTheHunt = (m: Mover) => {
+    const heading = destinationOf(m.army);
+    return (
+      !!heading &&
+      prey.some((army) => {
+        const at = positionOf(army);
+        return !!at && distance(at, heading) <= ENGAGEMENT_DISTANCE;
+      })
+    );
+  };
+  const hunters = movers
+    .filter(
+      (m) =>
+        (!used.has(m.army.id) || m.army.id === guard) &&
+        (m.army.activity.kind === 'idle' || onTheHunt(m)),
+    )
+    .filter((m) => meanMorale(state, m.army) >= MARCH_MORALE)
+    .sort((a, b) => b.strength - a.strength || (a.army.id < b.army.id ? -1 : 1));
+  for (const hunter of hunters) {
+    let best: { army: ArmyView; at: MapPoint; km: number } | undefined;
+    for (const army of prey) {
+      const at = positionOf(army);
+      if (!at || taken.has(army.id)) continue;
+      if (
+        hunter.army.id === guard &&
+        capital &&
+        distance(at, capital.position) > CAPITAL_GUARD_KM
+      ) {
+        continue;
+      }
+      const km = distance(hunter.at, at);
+      if (km > PREY_KM || (best && km >= best.km)) continue;
+      if (hunter.strength < ATTACK_ODDS * strengthNear(state, hostile, at, ENGAGEMENT_DISTANCE)) {
+        continue;
+      }
+      if (!context.router.marches(hunter.at, at)) continue;
+      best = { army, at, km };
+    }
+    if (!best) continue;
+    taken.add(best.army.id);
+    send(hunter, { kind: 'march', to: { x: best.at.x, y: best.at.y } });
   }
 
   for (const siege of sorted(state.sieges)) {

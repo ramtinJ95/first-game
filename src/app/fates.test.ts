@@ -54,7 +54,8 @@ describe('fateChoices', () => {
 
     expect(occupy.unrestDays).toBe(fallen.cities[mediolanum]?.unrestDays);
     expect(occupy.calm.gold).toBeGreaterThan(occupy.unrest.gold * 2);
-    expect(occupy.calm.food).toBeGreaterThan(occupy.unrest.food);
+    // Unrest cuts only gold and manpower: the people grow their own food from the first day.
+    expect(occupy.calm.food).toBeCloseTo(occupy.unrest.food, 6);
 
     // A day of unrest passes before the next day's yield, which raises it a little.
     for (const choice of [occupy, sack, enslave]) {

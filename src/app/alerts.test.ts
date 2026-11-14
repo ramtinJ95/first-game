@@ -5,6 +5,7 @@ import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { warKey, newWar } from '../sim/state/war.ts';
+import { startMarch } from '../sim/march.ts';
 import { tick } from '../sim/tick.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { ArmyId, ConvoyId, FormationId, SiegeId } from '../sim/ids.ts';
@@ -305,6 +306,65 @@ describe('alertsOfDay', () => {
     ).state;
     expect(after.armies[f.romanArmy]?.activity.kind).toBe('idle');
     expect(ofKind(alertsOfDay(before, after, []), 'armyArrived')).toHaveLength(1);
+  });
+
+  /** The First Legion idle at Roma and a Second Legion idle `km` east of it. */
+  function secondLegionNearRoma(km: number) {
+    const state = buildFixture();
+    const roma = state.cities[f.roma];
+    const first = state.armies[f.romanArmy];
+    if (!roma || !first) throw new Error('fixture changed');
+    first.activity = { kind: 'idle', position: { ...roma.position } };
+    const id = 'army-roman-2' as ArmyId;
+    const formation = 'formation-roman-2' as FormationId;
+    state.formations[formation] = {
+      id: formation,
+      army: id,
+      troop: 'archers',
+      men: 300,
+      morale: 1,
+    };
+    const army = {
+      id,
+      owner: f.rome,
+      formations: [formation],
+      stance: 'holdTheLine' as const,
+      name: 'Second Legion',
+      generalSkill: 0,
+      activity: {
+        kind: 'idle' as const,
+        position: { x: roma.position.x + km, y: roma.position.y },
+      },
+    };
+    state.armies[id] = army;
+    return { state, roma, army: state.armies[id] ?? army };
+  }
+
+  it('tells an army turned back to Roma that it arrived at Roma, where another army stands', () => {
+    const { state, roma, army } = secondLegionNearRoma(30);
+    const capua = state.cities[f.capua];
+    if (!capua) throw new Error('fixture changed');
+    const from = { x: roma.position.x + 30, y: roma.position.y };
+    expect(startMarch(world, army, from, capua.position)).toBeUndefined();
+    const back: Order = { kind: 'moveArmy', faction: f.rome, army: army.id, to: roma.position };
+    const { state: after, alerts } = play(
+      state,
+      [back],
+      (s) => s.armies[army.id]?.activity.kind === 'idle',
+    );
+    expect(Object.keys(after.armies)).toContain(army.id);
+    const arrivals = ofKind(alerts, 'armyArrived');
+    expect(arrivals.map((a) => a.text)).toEqual(['Second Legion arrived at Roma']);
+    expect(arrivals[0]?.focus?.at).toEqual(roma.position);
+  });
+
+  it('tells an army that marched into Roma in one day, where another army stands, that it arrived', () => {
+    const { state, roma, army } = secondLegionNearRoma(20);
+    const into: Order = { kind: 'moveArmy', faction: f.rome, army: army.id, to: roma.position };
+    const { state: after, events } = tick(state, [into], world);
+    expect(after.armies[army.id]?.activity.kind).toBe('idle');
+    const arrivals = ofKind(alertsOfDay(state, after, events), 'armyArrived');
+    expect(arrivals.map((a) => a.text)).toEqual(['Second Legion arrived at Roma']);
   });
 
   it('tells that a raised formation mustered, at its city', () => {

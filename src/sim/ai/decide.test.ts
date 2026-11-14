@@ -202,7 +202,7 @@ describe('a great power', () => {
       });
     });
 
-    test('sends two armies together at a target that neither beats alone', () => {
+    test('sends two armies at Roma that neither beats a target alone at it as one army', () => {
       const state = buildFixture();
       declare(state, f.rome, f.carthage);
       city(state, f.capua).owner = f.carthage;
@@ -220,10 +220,55 @@ describe('a great power', () => {
         army: f.romanArmy,
         to: CAPUA,
       });
-      expect(orders).toContainEqual({ kind: 'moveArmy', faction: f.rome, army: second, to: CAPUA });
+      expect(orders).toContainEqual({
+        kind: 'joinArmy',
+        faction: f.rome,
+        army: second,
+        into: f.romanArmy,
+      });
+      const after = tick(state, orders, world);
+      expect(after.rejected).toEqual([]);
+      expect(after.state.armies[second as never]).toBeUndefined();
+      expect(army(after.state, f.romanArmy).activity.kind).toBe('marching');
+      expectConsistent(after.state);
     });
 
-    test('takes two armies that win only together from inland to their port, across the sea, and on to the target', () => {
+    test('keeps the march of an army whose join a join of another stance before it makes impossible', () => {
+      const state = buildFixture();
+      declare(state, f.rome, f.carthage);
+      city(state, f.capua).owner = f.carthage;
+      city(state, f.capua).garrison = 4300;
+      city(state, f.carthago).owner = f.syracusaeFaction;
+      place(state, f.punicArmy, city(state, f.carthago).position);
+      setMen(state, f.hastati, 1700);
+      const rome = state.factions[f.rome];
+      if (!rome) throw new Error('no Rome');
+      rome.stores.gold = 0;
+      for (const [n, stance] of [
+        [2, 'skirmishAndWithdraw'],
+        [3, 'holdTheLine'],
+      ] as const) {
+        const id = `army-roman-${n}` as never;
+        const spears = `formation-roman-${n}` as FormationId;
+        state.formations[spears] = {
+          id: spears,
+          army: id,
+          troop: 'spearmen',
+          men: 2000,
+          morale: 1,
+        };
+        state.armies[id] = { ...army(state, f.romanArmy), id, stance, formations: [spears] };
+      }
+      const orders = decide(state, f.rome);
+      expect(orders.filter((order) => order.kind === 'joinArmy')).toHaveLength(1);
+      const after = tick(state, orders, world);
+      expect(after.rejected).toEqual([]);
+      const romans = Object.values(after.state.armies).filter((a) => a.owner === f.rome);
+      expect(romans.map((a) => a.activity.kind)).toEqual(['marching', 'marching']);
+      expectConsistent(after.state);
+    });
+
+    test('takes two armies that win only together, as one army, from inland to their port, across the sea, and on to the target', () => {
       let state = buildFixture();
       declare(state, f.rome, f.syracusaeFaction);
       setMen(state, f.citizenSpears, 50_000);
@@ -252,7 +297,11 @@ describe('a great power', () => {
         activity: { kind: 'idle', position: city(state, f.syracusae).position },
       };
 
-      const romans = [f.romanArmy, second];
+      const romans: string[] = [f.romanArmy];
+      const formations = [
+        ...army(state, f.romanArmy).formations,
+        ...army(state, second).formations,
+      ];
       const embarked = new Set<string>();
       const reachedSyracusae = new Set<string>();
       for (let day = 0; day < 90 && reachedSyracusae.size < 2; day++) {
@@ -271,6 +320,8 @@ describe('a great power', () => {
       expectConsistent(state);
       expect([...embarked].sort()).toEqual([...romans].sort());
       expect([...reachedSyracusae].sort()).toEqual([...romans].sort());
+      expect(state.armies[second as never]).toBeUndefined();
+      expect([...army(state, f.romanArmy).formations].sort()).toEqual(formations.sort());
     });
 
     test('embarks at its port for an enemy city across the sea', () => {
@@ -332,8 +383,9 @@ describe('a great power', () => {
       });
     });
 
-    test('turns back to guard its capital an army marching to a port that is not on the way', () => {
+    test('turns back to guard its capital, from an enemy with the men to blockade it, an army marching to a port that is not on the way', () => {
       const state = newGame(world.map, { seed: 1, player: 'carthage' });
+      city(state, f.roma).garrison = 100;
       const romans = Object.values(state.armies).find((a) => a.owner === f.rome);
       const punic = Object.values(state.armies).find((a) => a.owner === f.carthage);
       if (!romans || !punic) throw new Error('no armies');
@@ -481,8 +533,9 @@ describe('a great power', () => {
       expect(kinds(decide(state, f.rome))).not.toContain('moveArmy');
     });
 
-    test('sends an army home to the capital when an enemy army comes near it', () => {
+    test('sends an army home to the capital when an enemy army with the men to blockade it comes near it', () => {
       const state = buildFixture();
+      city(state, f.roma).garrison = 100;
       declare(state, f.rome, f.carthage);
       place(state, f.romanArmy, BETWEEN);
       army(state, f.punicArmy).activity = {

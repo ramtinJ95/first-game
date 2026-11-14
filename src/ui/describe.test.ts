@@ -27,6 +27,7 @@ import {
   leavingText,
   stormText,
   weakSiegeText,
+  joinChoices,
   ordersWaitingText,
   overviewOf,
   rankText,
@@ -101,7 +102,9 @@ describe('stanceEffectText', () => {
   it('says what each stance does to the blows and the morale', () => {
     expect(stanceEffectText('holdTheLine')).toBe('Deals and takes normal blows');
     expect(stanceEffectText('allOutAssault')).toBe('Deals and takes 25% more');
-    expect(stanceEffectText('skirmishAndWithdraw')).toBe('Deals and takes 25% less');
+    expect(stanceEffectText('skirmishAndWithdraw')).toBe(
+      'Deals and takes 25% less, normal blows against an enemy that skirmishes too',
+    );
   });
 });
 
@@ -375,13 +378,13 @@ describe('cityFoodText', () => {
     expect(cityFoodText(state, roma)).toBe('Grows 6.0, eats 4.0 a day · +2.0');
   });
 
-  it('grows less in unrest but eats as much', () => {
+  it('in unrest still grows what its people eat and more', () => {
     const state = buildFixture();
     const roma = state.cities[f.roma];
     if (!roma) throw new Error('fixture changed');
     roma.population = 10_000;
     roma.unrestDays = 365;
-    expect(cityFoodText(state, roma)).toBe('Grows 1.5, eats 4.0 a day · −2.5');
+    expect(cityFoodText(state, roma)).toBe('Grows 6.0, eats 4.0 a day · +2.0');
   });
 });
 
@@ -677,5 +680,61 @@ describe('cityBalance and minorText', () => {
     );
     const roma = state.cities[f.roma];
     if (roma) expect(minorText(state, sight(), roma)).toBeUndefined();
+  });
+});
+
+describe('joinChoices', () => {
+  /** The First Legion and a Second Legion idle at Roma. */
+  function twoAtRoma(): GameState {
+    const state = buildFixture();
+    const roma = state.cities[f.roma];
+    const first = state.armies[f.romanArmy];
+    if (!roma || !first) throw new Error('fixture changed');
+    first.activity = { kind: 'idle', position: { ...roma.position } };
+    const id = 'army-roman-2' as ArmyId;
+    state.formations['formation-roman-2' as never] = {
+      id: 'formation-roman-2' as never,
+      army: id,
+      troop: 'archers',
+      men: 300,
+      morale: 1,
+    };
+    state.armies[id] = {
+      ...first,
+      id,
+      name: 'Second Legion',
+      formations: ['formation-roman-2' as never],
+      activity: { kind: 'idle', position: { x: roma.position.x + 5, y: roma.position.y } },
+    };
+    return state;
+  }
+
+  it("offers to join each of the player's armies at the army, as the rules allow it", () => {
+    const state = twoAtRoma();
+    const second = state.armies['army-roman-2' as ArmyId];
+    if (!second) throw new Error('no Second Legion');
+    const choices = joinChoices(state, sightOf(state, world, f.rome), second);
+    expect(choices.map((choice) => [choice.into.name, choice.refusal])).toEqual([
+      ['First Legion', undefined],
+    ]);
+    const [choice] = choices;
+    if (!choice) throw new Error('no choice');
+    expect(executeOrder(state, choice.order, world)).toBeUndefined();
+    expect(state.armies['army-roman-2' as ArmyId]).toBeUndefined();
+  });
+
+  it('says that an army that re-forms cannot join yet', () => {
+    let state = twoAtRoma();
+    const stance: Order = {
+      kind: 'setStance',
+      faction: f.rome,
+      army: f.romanArmy,
+      stance: 'allOutAssault',
+    };
+    state = tick(state, [stance], world).state;
+    const second = state.armies['army-roman-2' as ArmyId];
+    if (!second) throw new Error('no Second Legion');
+    const choices = joinChoices(state, sightOf(state, world, f.rome), second);
+    expect(choices.map((choice) => choice.refusal)).toEqual(['First Legion is re-forming']);
   });
 });

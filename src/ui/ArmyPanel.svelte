@@ -13,6 +13,7 @@
     armiesAt,
     armyPosition,
     cssColour,
+    joinChoices,
     weakSiegeText,
     whyNotBesieging,
   } from './describe.ts';
@@ -42,6 +43,7 @@
     const at = armyPosition(game, army);
     return at ? armiesAt(game, sight, at, army.id) : [];
   });
+  const joins = $derived(joinChoices(game, sight, army));
   const blocked = $derived(own ? whyNotBesieging(game, army, pending) : undefined);
   const weak = $derived.by(() => {
     const siege = army.activity.kind === 'besieging' ? game.sieges[army.activity.siege] : undefined;
@@ -90,6 +92,25 @@
         <button type="button" onclick={() => actions.issue({ kind: 'halt', ...base })}>Halt</button>
       </div>
     {/if}
+    {#if joins.length > 0}
+      <h3>Join</h3>
+      <ul class="joins" data-testid="army-joins">
+        {#each joins as join (join.into.id)}
+          <li>
+            <button
+              type="button"
+              disabled={join.refusal !== undefined}
+              title={join.refusal}
+              onclick={() => actions.issue(join.order)}
+            >
+              Join {armyTitle(game, join.into)}
+            </button>
+            {#if join.refusal}<span class="muted">{join.refusal}</span>{/if}
+          </li>
+        {/each}
+      </ul>
+      <p class="muted hint">Armies at one place stay apart until one joins the other.</p>
+    {/if}
     {#if army.activity.kind !== 'inBattle' && army.activity.kind !== 'embarked'}
       <p class="muted hint">
         Right-click the land to march there, or a port to sail there from a port or the shore.
@@ -106,6 +127,13 @@
 </section>
 
 <style>
+  .joins {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 4px;
+  }
   .hint {
     margin-top: 6px;
     font-size: 12px;
