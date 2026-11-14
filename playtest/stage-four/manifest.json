@@ -1,11 +1,122 @@
 [
- {"file":"01-borders-follow-land.png","title":"Round four, day 1: borders follow the land, lighter washes","kind":"screenshot"},
- {"file":"02-wars-panel.png","title":"Wars panel on day 20: a losing Mediolanum asks for Ariminum","kind":"screenshot"},
- {"file":"03-fate-table.png","title":"The fate table, Mediolanum day 59","kind":"screenshot"},
- {"file":"04-ai-offers-peace.png","title":"Lugdunum offers peace, game paused for the answer, day 200","kind":"screenshot"},
- {"file":"05-convoy-covers-roma.png","title":"Carthage's convoy flag sits on Roma; a click on Roma selects it","kind":"screenshot"},
- {"file":"06-chronicle.png","title":"The Chronicle after a reload, day 258","kind":"screenshot"},
- {"file":"07-widest-year3-egypt-vs-desert.png","title":"Widest zoom year 3: Egypt's wash is hard to tell from the desert fill","kind":"screenshot"},
- {"file":"08-anatolia-close-polygon-lake.png","title":"Anatolia close: filled ground, angular lake, sack dated 'day 1242'","kind":"screenshot"},
- {"file":"09-persian-plateau-close.png","title":"Persian plateau: filled, hills in one combed direction","kind":"screenshot"}
+ {
+  "file": "01-borders-follow-land.png",
+  "title": "Round four, day 1: borders follow the land, lighter washes",
+  "kind": "screenshot"
+ },
+ {
+  "file": "02-wars-panel.png",
+  "title": "Wars panel on day 20: a losing Mediolanum asks for Ariminum",
+  "kind": "screenshot"
+ },
+ {
+  "file": "03-fate-table.png",
+  "title": "The fate table, Mediolanum day 59",
+  "kind": "screenshot"
+ },
+ {
+  "file": "04-ai-offers-peace.png",
+  "title": "Lugdunum offers peace, game paused for the answer, day 200",
+  "kind": "screenshot"
+ },
+ {
+  "file": "05-convoy-covers-roma.png",
+  "title": "Carthage's convoy flag sits on Roma; a click on Roma selects it",
+  "kind": "screenshot"
+ },
+ {
+  "file": "06-chronicle.png",
+  "title": "The Chronicle after a reload, day 258",
+  "kind": "screenshot"
+ },
+ {
+  "file": "07-widest-year3-egypt-vs-desert.png",
+  "title": "Widest zoom year 3: Egypt's wash is hard to tell from the desert fill",
+  "kind": "screenshot"
+ },
+ {
+  "file": "08-anatolia-close-polygon-lake.png",
+  "title": "Anatolia close: filled ground, angular lake, sack dated 'day 1242'",
+  "kind": "screenshot"
+ },
+ {
+  "file": "09-persian-plateau-close.png",
+  "title": "Persian plateau: filled, hills in one combed direction",
+  "kind": "screenshot"
+ },
+ {
+  "file": "10-idle-rome-falls-y4d8.png",
+  "title": "Idle Rome falls to Carthage on Year 4, day 8",
+  "kind": "screenshot"
+ },
+ {
+  "file": "11-cautious-rome-y10-roma-panel.png",
+  "title": "Cautious Rome in year 10: 11 spearmen raised, First Legion 2,662 men",
+  "kind": "screenshot"
+ },
+ {
+  "file": "12-join-section.png",
+  "title": "The army panel Join section at Massalia",
+  "kind": "screenshot"
+ },
+ {
+  "file": "13-wars-offer-sent.png",
+  "title": "Wars panel after an offer is sent",
+  "kind": "screenshot"
+ },
+ {
+  "file": "14-macedon-holds-mediolanum-y2d143.png",
+  "title": "Year 2: Mediolanum lost to Macedon inside Rome's land",
+  "kind": "screenshot"
+ },
+ {
+  "file": "15-conquering-rome-15-cities-y4.png",
+  "title": "Conquering Rome with 15 cities on Year 4, day 3",
+  "kind": "screenshot"
+ },
+ {
+  "file": "16-gaul-widest.png",
+  "title": "Gaul, widest",
+  "kind": "screenshot"
+ },
+ {
+  "file": "17-gaul-middle.png",
+  "title": "Gaul, middle zoom",
+  "kind": "screenshot"
+ },
+ {
+  "file": "18-gaul-closest-pale-village-names.png",
+  "title": "Gaul, closest: pale village names",
+  "kind": "screenshot"
+ },
+ {
+  "file": "19-italy-widest.png",
+  "title": "Italy, widest",
+  "kind": "screenshot"
+ },
+ {
+  "file": "20-italy-middle.png",
+  "title": "Italy, middle zoom",
+  "kind": "screenshot"
+ },
+ {
+  "file": "21-italy-closest.png",
+  "title": "Italy, closest",
+  "kind": "screenshot"
+ },
+ {
+  "file": "22-nile-widest.png",
+  "title": "Nile delta, widest",
+  "kind": "screenshot"
+ },
+ {
+  "file": "23-nile-middle.png",
+  "title": "Nile delta, middle zoom",
+  "kind": "screenshot"
+ },
+ {
+  "file": "24-nile-closest.png",
+  "title": "Nile delta, closest",
+  "kind": "screenshot"
+ }
 ]
