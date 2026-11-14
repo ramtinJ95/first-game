@@ -33,15 +33,44 @@ test('recruitment forecasts upkeep and demands confirmation before a food shortf
   await showOwnCity(page, 'Roma');
   const spears = page.getByTestId('city-panel').getByRole('button', { name: /^Spearmen/ });
   await expect(spears).toContainText('Upkeep −6.0 food, −10.0 gold/day');
-  await expect(spears).toContainText('Realm after all recruits muster');
+  await expect(page.getByTestId('recruit-forecast')).toHaveCount(1);
+  await expect(page.getByTestId('recruit-cards')).not.toContainText('Realm');
+  await expect(page.getByTestId('recruit-cards')).not.toContainText('Shortfall');
+  await expect(page.getByTestId('recruit-cards').getByRole('button')).toHaveCount(6);
   await spears.click();
   const warning = page.getByTestId('recruit-warning');
   await expect(warning).toContainText(/Food shortfall.*run short in about \d+ days/);
+  await expect(warning).not.toContainText('Gold shortfall');
+  await expect(page.getByTestId('recruit-runway-food')).toHaveClass('bad');
+  await expect(page.getByTestId('recruit-runway-gold')).toHaveText('Gold: about 821 days left');
+  await expect(page.getByTestId('recruit-runway-gold')).not.toHaveClass('bad');
   await expect(page.getByTestId('city-raising')).not.toContainText('ordered');
   await warning.getByRole('button', { name: 'Raise anyway' }).click();
   await expect(page.getByTestId('city-raising')).toContainText(
     'Spearmen · ordered for the next day',
   );
+});
+
+test('a gold shortfall beyond one year stays plain and does not require confirmation', async ({
+  page,
+}) => {
+  await openGame(page);
+  const state = foodShortfall();
+  for (const city of Object.values(state.cities))
+    if (city.owner === rome) city.buildings.push('canals');
+  await loadWarnings(page, state);
+  await showOwnCity(page, 'Roma');
+  await page
+    .getByTestId('recruit-cards')
+    .getByRole('button', { name: /^Spearmen/ })
+    .click();
+  await expect(page.getByTestId('recruit-warning')).toHaveCount(0);
+  await expect(page.getByTestId('city-raising')).toContainText(
+    'Spearmen · ordered for the next day',
+  );
+  await expect(page.getByTestId('recruit-runway-gold')).toHaveText('Gold: about 821 days left');
+  await expect(page.getByTestId('recruit-runway-gold')).not.toHaveClass('bad');
+  await expect(page.getByTestId('recruit-forecast')).toContainText('−21.6 gold/day');
 });
 
 test('hunger keeps a standing desertion line after its first alert', async ({ page }) => {
@@ -154,6 +183,9 @@ test('a one-day small sally stays in the Chronicle with one quiet result, withou
   await expect(page.getByTestId('time-controls-speed')).not.toHaveText('Paused');
   await pause(page);
   await expect(page.getByTestId('alerts')).toContainText('after 1 day');
+  await expect(page.getByTestId('alerts')).toContainText(
+    'The men of Mediolanum held the field at their city',
+  );
   await expect(page.getByTestId('alert-paused')).toHaveCount(0);
   await page.getByRole('button', { name: 'Chronicle', exact: true }).click();
   await expect(page.getByTestId('chronicle')).toContainText('Battle');

@@ -608,7 +608,7 @@ function eventAlert(
         return {
           kind: 'battleBegan',
           tone: 'neutral',
-          text: `Battle ${where} against ${namesOf(after, enemies)}`,
+          text: `Battle ${where} against ${battleNames(after, enemies)}`,
           focus,
           ...(importantBattle(before, event)
             ? { pause: { kind: 'battle' as const } }
@@ -618,7 +618,7 @@ function eventAlert(
       return {
         kind: 'battleBegan',
         tone: 'neutral',
-        text: `Battle ${where}: ${namesOf(after, event.attackers)} against ${namesOf(after, event.defenders)}`,
+        text: `Battle ${where}: ${battleNames(after, event.attackers)} against ${battleNames(after, event.defenders)}`,
         focus,
       };
     }
@@ -630,7 +630,7 @@ function eventAlert(
           ? 'defenders'
           : undefined;
       if (!side) {
-        const losses = `${sideLosses(after, event.attackers)}, ${sideLosses(after, event.defenders)}.`;
+        const losses = `${sideLosses(after, event.attackers, true)}, ${sideLosses(after, event.defenders)}.`;
         if (event.winner === 'none') {
           return {
             kind: 'battleEnded',
@@ -643,7 +643,7 @@ function eventAlert(
         return {
           kind: 'battleEnded',
           tone: 'neutral',
-          text: `${namesOf(after, event[event.winner].factions)} beat ${namesOf(after, beaten.factions)} ${where} after ${daysText(event.days)}. ${sideLosses(after, event[event.winner])}, ${sideLosses(after, beaten)}.`,
+          text: `${battleNames(after, event[event.winner].factions, true)} beat ${battleNames(after, beaten.factions)} ${where} after ${daysText(event.days)}. ${sideLosses(after, event[event.winner], true)}, ${sideLosses(after, beaten)}.`,
           focus: { at: event.position },
         };
       }
@@ -673,7 +673,7 @@ function eventAlert(
       return {
         kind: 'battleEnded',
         tone: 'bad',
-        text: `${namesOf(after, theirs.factions)} held the field ${where} after ${daysText(event.days)}. ${losses}`,
+        text: `${battleNames(after, theirs.factions, true)} held the field ${battlePlace(after, theirs.factions, where)} after ${daysText(event.days)}. ${losses}`,
         focus: { at: event.position },
       };
     }
@@ -855,11 +855,11 @@ function lossesText(
   ours: DeepReadonly<BattleSideOutcome>,
   theirs: DeepReadonly<BattleSideOutcome>,
 ): string {
-  return `You lost ${ours.lost} men, ${namesOf(state, theirs.factions)} lost ${theirs.lost}.`;
+  return `You lost ${ours.lost} men, ${battleNames(state, theirs.factions)} lost ${theirs.lost}.`;
 }
 
-function sideLosses(state: State, side: DeepReadonly<BattleSideOutcome>): string {
-  return `${namesOf(state, side.factions)} lost ${side.lost}`;
+function sideLosses(state: State, side: DeepReadonly<BattleSideOutcome>, sentence = false): string {
+  return `${battleNames(state, side.factions, sentence)} lost ${side.lost}`;
 }
 
 function daysText(days: number): string {
@@ -938,6 +938,28 @@ function warOnce(state: State, faction: FactionId): string {
 function namesOf(state: State, factions: readonly FactionId[]): string {
   const names = factions.map((faction) => factionName(state, faction));
   return names.length > 0 ? names.join(' and ') : 'an enemy';
+}
+
+function battleNames(state: State, factions: readonly FactionId[], sentence = false): string {
+  const text =
+    factions
+      .map((id) =>
+        state.factions[id]?.kind === 'minor'
+          ? `the men of ${factionName(state, id)}`
+          : factionName(state, id),
+      )
+      .join(' and ') || 'an enemy';
+  return sentence ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+}
+
+function battlePlace(state: State, factions: readonly FactionId[], where: string): string {
+  const [only] = factions;
+  return factions.length === 1 &&
+    only &&
+    state.factions[only]?.kind === 'minor' &&
+    Object.values(state.cities).some((city) => city.owner === only && where === `at ${city.name}`)
+    ? 'at their city'
+    : where;
 }
 
 function ownersOf(state: State, armies: readonly ArmyId[]): string {
