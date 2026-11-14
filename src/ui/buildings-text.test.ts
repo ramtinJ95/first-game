@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildFixture, FIXTURE as f } from '../sim/fixture.ts';
+import { buildFixture, FIXTURE as f, fixtureWorld } from '../sim/fixture.ts';
 import { BUILDINGS, CANCEL_REFUND } from '../sim/buildings/buildings.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
@@ -22,7 +22,9 @@ function roma(state: GameState) {
 }
 
 function option(state: GameState, kind: string, pending: Order[] = [], city = roma(state)) {
-  const found = cityBuildings(state, pending, city).options.find((o) => o.kind === kind);
+  const found = cityBuildings(state, pending, city, fixtureWorld()).options.find(
+    (o) => o.kind === kind,
+  );
   if (!found) throw new Error(`no option ${kind}`);
   return found;
 }
@@ -83,18 +85,31 @@ describe('cityBuildings', () => {
   it('shows a build waiting for the next day as ordered, and says once that the city builds one at a time', () => {
     const state = rich();
     const order: Order = { kind: 'build', faction: f.rome, city: f.roma, building: 'canals' };
-    const shown = cityBuildings(state, [order], roma(state));
+    const shown = cityBuildings(state, [order], roma(state), fixtureWorld());
     expect(shown.work).toEqual({ kind: 'ordered', building: 'canals', name: 'Canals' });
     expect(shown.blocked).toBe('Roma is building Canals');
     expect(shown.options.map((o) => o.kind)).toEqual(['forum', 'barracks', 'towers', 'temple']);
     expect(shown.options.every((o) => o.why === undefined)).toBe(true);
   });
 
+  it('budgets a waiting trade investment before offering a building with the same gold', () => {
+    const state = rich(7000);
+    expect(option(state, 'forum').why).toBeUndefined();
+    const trade: Order = {
+      kind: 'openTrade',
+      faction: f.rome,
+      from: f.roma,
+      to: f.capua,
+      mode: 'land',
+    };
+    expect(option(state, 'forum', [trade]).why).toContain('gold');
+  });
+
   it('shows the building under way with its days, what a cancel gives back, and a waiting cancel', () => {
     const state = rich();
     roma(state).construction = { building: 'forum', daysLeft: 12 };
     const cancel: Order = { kind: 'cancelBuilding', faction: f.rome, city: f.roma };
-    expect(cityBuildings(state, [], roma(state)).work).toEqual({
+    expect(cityBuildings(state, [], roma(state), fixtureWorld()).work).toEqual({
       kind: 'working',
       building: 'forum',
       name: 'Forum',
@@ -103,7 +118,7 @@ describe('cityBuildings', () => {
       refund: BUILDINGS.forum.gold * CANCEL_REFUND,
       cancelOrdered: false,
     });
-    expect(cityBuildings(state, [cancel], roma(state)).work).toMatchObject({
+    expect(cityBuildings(state, [cancel], roma(state), fixtureWorld()).work).toMatchObject({
       cancelOrdered: true,
     });
   });
@@ -111,11 +126,11 @@ describe('cityBuildings', () => {
   it('says the work stands still while the city is in unrest, and that nothing starts then', () => {
     const state = rich();
     roma(state).unrestDays = 30;
-    expect(cityBuildings(state, [], roma(state)).blocked).toBe(
+    expect(cityBuildings(state, [], roma(state), fixtureWorld()).blocked).toBe(
       'Roma is in unrest for 30 more days',
     );
     roma(state).construction = { building: 'forum', daysLeft: 12 };
-    expect(cityBuildings(state, [], roma(state)).work).toMatchObject({
+    expect(cityBuildings(state, [], roma(state), fixtureWorld()).work).toMatchObject({
       paused: 'paused while the city is in unrest',
     });
   });
@@ -123,7 +138,7 @@ describe('cityBuildings', () => {
   it('lists what stands with its effect and offers only the rest', () => {
     const state = rich();
     roma(state).buildings = ['forum'];
-    const shown = cityBuildings(state, [], roma(state));
+    const shown = cityBuildings(state, [], roma(state), fixtureWorld());
     expect(shown.built.map((b) => b.name)).toEqual(['Forum']);
     expect(shown.built[0]?.effect).toMatch(/^\+\d+\.\d gold a day$/);
     expect(shown.options.map((o) => o.kind)).toEqual(['canals', 'barracks', 'towers', 'temple']);
