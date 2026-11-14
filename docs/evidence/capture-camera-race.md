@@ -17,6 +17,7 @@ Review also identified a completion-polling gap: the GPU can finish a submitted 
 ## Contract and scope
 
 - Camera mutations have a revision. `untilDrawn` waits for both the requested state and view revision in a GPU-completed frame whose visible scene sprites have been painted. `loadSave`, zoom, pan, close-up and jump use that one acknowledgment.
+- Multi-notch zoom sends its inputs as a batch, then acknowledges the requested final view. Waiting for every intermediate notch needlessly paints transient terrain and figure-sheet sizes: the first integration run timed out the long atlas tour at the existing 12-minute job limit. Batching preserves every input and the final readiness check without increasing that limit.
 - The renderer snapshots camera, viewport and all pick geometry together at frame completion. Left clicks and right-click orders use that snapshot while another view is pending.
 - `openGame` also waits for its first completed map: the top bar alone does not mean a pickable frame exists. The first PR run exposed two immediate post-open clicks that previously relied on the live-camera fallback; its trace showed no completed-frame metadata at the city click. Both now use the same readiness contract rather than picking unseen land.
 - Flags remain visible and pickable during cold sheet painting, then give way to the ready figures. No simulation rule, sprite painter, or route drawing changed.

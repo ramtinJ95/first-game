@@ -316,8 +316,8 @@ export function camera(page: Page) {
         const deltaY = notches > 0 ? -100 : 100;
         await page.mouse.wheel(0, deltaY);
         at = zoomAt(at, screen, wheelFactor(deltaY), viewport, map);
-        await untilDrawn(page);
       }
+      await untilDrawn(page);
     },
     async drag(from: MapPoint, to: MapPoint, steps = 12) {
       await page.mouse.move(from.x, from.y);
