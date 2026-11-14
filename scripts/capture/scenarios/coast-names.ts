@@ -1,6 +1,5 @@
-import { camera, openGame, pause, startGame } from '../../../e2e/support.ts';
-import { loadSave } from '../../../e2e/watch.ts';
-import { withBaseline } from '../baseline.ts';
+import { pause, startGame } from '../../../e2e/support.ts';
+import { currentHelpers, withBaseline } from '../baseline.ts';
 import { defineScenario, type CaptureContext } from '../scenario.ts';
 
 const BEFORE = '24630b8d14926a302800b50b25491d56630ee83c';
@@ -15,11 +14,16 @@ export const COAST_NAME_VIEWS = [
   { name: 'farmland', title: 'Village names in Italy', at: { x: 2545, y: 2360 } },
 ] as const;
 
-async function views({ page, shot }: CaptureContext, stage: string, base = '', load = loadSave) {
-  await openGame(page, { base });
+async function views(
+  { page, shot }: CaptureContext,
+  stage: string,
+  base = '',
+  helpers = currentHelpers,
+) {
+  await helpers.openGame(page, { base });
   await pause(page);
-  await load(page, startGame());
-  const view = camera(page);
+  await helpers.loadSave(page, startGame());
+  const view = helpers.camera(page);
   for (const { name, title, at } of COAST_NAME_VIEWS) {
     await view.jumpTo(at, 4);
     await page.waitForFunction(
@@ -39,7 +43,7 @@ export default defineScenario({
   name: 'coast-names',
   title: 'Natural sea shores and readable village names, before and after',
   async run(context) {
-    await withBaseline(BEFORE, (base, load) => views(context, 'before', base, load));
+    await withBaseline(BEFORE, (base, helpers) => views(context, 'before', base, helpers));
     await views(context, 'after');
   },
 });
