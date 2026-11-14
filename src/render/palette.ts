@@ -16,11 +16,11 @@ export const POWER_COLOURS: Record<PowerId, number> = {
   rome: 0xb3352a,
   carthage: 0x6b3aa3,
   macedon: 0x2448c0,
-  egypt: 0xcf9a28,
+  egypt: 0xc56b12,
   persia: 0x3c7d4a,
 };
 
-export const MINOR_COLOUR = 0x8f8872;
+export const MINOR_COLOUR = 0x667c94;
 
 /**
  * How much of an owner's colour its wash lays over the ground: the paper, the desert, or
@@ -30,6 +30,18 @@ export const MINOR_COLOUR = 0x8f8872;
  * lighter still, so the many small realms do not grey the map.
  */
 export const WASH_STRENGTH = { greatPower: 0.34, minor: 0.14 } as const;
+
+/** At atlas scale ownership wins; close in, the original light washes win. */
+export const WIDE_WASH_STRENGTH = { greatPower: 0.6, minor: 0.3 } as const;
+
+export function washStrength(scale: number): { greatPower: number; minor: number } {
+  const t = Math.round(Math.max(0, Math.min(1, (0.9 - scale) / 0.5)) * 16) / 16;
+  return {
+    greatPower:
+      WASH_STRENGTH.greatPower + t * (WIDE_WASH_STRENGTH.greatPower - WASH_STRENGTH.greatPower),
+    minor: WASH_STRENGTH.minor + t * (WIDE_WASH_STRENGTH.minor - WASH_STRENGTH.minor),
+  };
+}
 
 export function factionColour(state: DeepReadonly<GameState>, faction: FactionId): number {
   if (state.factions[faction]?.kind !== 'greatPower') return MINOR_COLOUR;

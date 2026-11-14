@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import { fillLand, landOutline } from './land-outline.ts';
 import type { MultiPolygon } from '../sim/map.ts';
+import { startupStep } from './startup.ts';
 
 /** The side of a cell of the wash in km. */
 export const WASH_CELL_KM = 4;
@@ -241,7 +242,7 @@ export interface WashLayer {
 }
 
 export function createWash(map: WashedMap): WashLayer {
-  const raster = rasterise(map);
+  const raster = startupStep('wash-rasterise', () => rasterise(map));
   const canvas = document.createElement('canvas');
   canvas.width = raster.columns;
   canvas.height = raster.rows;
@@ -264,7 +265,7 @@ export function createWash(map: WashedMap): WashLayer {
         .join('|');
       if (key === painted) return false;
       painted = key;
-      paintWash(raster, washes, image.data);
+      startupStep('wash-paint', () => paintWash(raster, washes, image.data));
       context.putImageData(image, 0, 0);
       texture.source.update();
       return true;

@@ -16,8 +16,6 @@ test.describe('the wheel', () => {
   test('quick notches over Persia reach the zoom that as many notches one frame apart reach', async ({
     page,
   }) => {
-    // It opens the game twice, and a start in software takes 5 s or more of the 30 s.
-    test.slow();
     const viewport = page.viewportSize();
     if (!viewport) throw new Error('no viewport');
     await openGame(page);
