@@ -13,6 +13,7 @@ import {
   pause,
   resume,
   startGame,
+  untilDrawn,
 } from './support.ts';
 
 const FOREIGN_POWERS = ['Carthage', 'Macedon', 'Egypt', 'Persia'];
@@ -83,6 +84,7 @@ test('at the highest speed the page plays on until a foreign army has marched an
   await pause(page);
 
   const view = camera(page);
+  const wideZoom = await page.locator('canvas').getAttribute('data-zoom');
   const panel = page.getByTestId('city-panel');
   const owners: string[] = [];
   for (const province of map.provinces.filter((p) => p.owner === 'independent')) {
@@ -90,6 +92,13 @@ test('at the highest speed the page plays on until a foreign army has marched an
     await page.keyboard.press('Escape');
     await expect(panel).toHaveCount(0);
     const at = view.city(province.id);
+    // Trade invitations now give a quiet world news. A covered city is not a map
+    // click: clicking its alert would focus the camera and invalidate this view.
+    const onMap = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y) instanceof HTMLCanvasElement,
+      at,
+    );
+    if (!onMap) continue;
     await page.mouse.click(at.x, at.y);
     const name = panel.getByTestId('city-name');
     await name.waitFor({ timeout: 1000 }).catch(() => undefined);
@@ -97,12 +106,23 @@ test('at the highest speed the page plays on until a foreign army has marched an
     owners.push((await panel.getByTestId('city-owner').textContent())?.trim() ?? '');
   }
   expect(owners.length).toBeGreaterThan(20);
+  await expect(page.locator('canvas')).toHaveAttribute('data-zoom', wideZoom ?? '');
   // On this small page the open panel and the alerts cover much of the map, so the panel
   // is closed and each taken city is brought to the open top left before it is clicked.
   const conquerors: string[] = [];
   for (const id of conquest.taken) {
     await page.keyboard.press('Escape');
-    await view.drag(view.screen(cityPoint(id)), { x: 120, y: 100 });
+    const from = view.screen(cityPoint(id));
+    // Pan from clear canvas, not from a city that a corner invitation may cover.
+    const anchor = { x: 480, y: 180 };
+    expect(
+      await page.evaluate(
+        ({ x, y }) => document.elementFromPoint(x, y) instanceof HTMLCanvasElement,
+        anchor,
+      ),
+    ).toBe(true);
+    await view.drag(anchor, { x: anchor.x + 120 - from.x, y: anchor.y + 100 - from.y });
+    await untilDrawn(page);
     const at = view.city(id);
     await page.mouse.click(at.x, at.y);
     await expect(panel.getByTestId('city-name')).toBeVisible();

@@ -102,9 +102,9 @@
 </ul>
 {#if own && to}
   <label
-    >Trade destination
+    >Trade partner
     <select
-      aria-label="Trade destination"
+      aria-label="Trade partner"
       value={to.id}
       onchange={(e) => (chosen = e.currentTarget.value as CityId)}
     >
