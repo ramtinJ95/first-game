@@ -20,6 +20,13 @@ export const DIFFERENT_GOODS = 1.8;
 export const TRADE_PAYBACK_DAYS = 740;
 export const RAID_KM = 20;
 
+/** Distance is the path length, or a lower bound when screening unaffordable pairs. */
+export function routeOpeningCost(km: number, domestic: boolean): number {
+  return Math.ceil(
+    TRADE_BASE * (1 + Math.min(km, 1000) / 1000) * TRADE_PAYBACK_DAYS * (domestic ? 2 : 1),
+  );
+}
+
 export function closeRoutesAt(state: GameState, city: CityId): void {
   for (const route of routesAt(state, city)) {
     emit(state, {
@@ -116,12 +123,7 @@ export function tradeForecast(
     TRADE_BASE * (different ? DIFFERENT_GOODS : 1) * (1 + Math.min(way.km, 1000) / 1000);
   const fromDaily = daily * adminShareOf(state, from.owner);
   const toDaily = daily * adminShareOf(state, to.owner);
-  const cost = Math.ceil(
-    TRADE_BASE *
-      (1 + Math.min(way.km, 1000) / 1000) *
-      TRADE_PAYBACK_DAYS *
-      (from.owner === to.owner ? 2 : 1),
-  );
+  const cost = routeOpeningCost(way.km, from.owner === to.owner);
   return {
     ...way,
     mode,

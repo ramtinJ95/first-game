@@ -5,6 +5,7 @@ import type { GameState } from '../state/game-state.ts';
 import { warKey, newWar } from '../state/war.ts';
 import { truceBetween } from '../peace/truce.ts';
 import { areAtWar } from '../wars.ts';
+import type { DeepReadonly } from '../deep-readonly.ts';
 
 export interface DeclareWarOrder {
   kind: 'declareWar';
@@ -12,7 +13,10 @@ export interface DeclareWarOrder {
   against: FactionId;
 }
 
-export function declareWar(state: GameState, order: DeclareWarOrder): string | undefined {
+export function warRefusal(
+  state: DeepReadonly<GameState>,
+  order: DeclareWarOrder,
+): string | undefined {
   const against = Object.hasOwn(state.factions, order.against)
     ? state.factions[order.against]
     : undefined;
@@ -27,6 +31,12 @@ export function declareWar(state: GameState, order: DeclareWarOrder): string | u
   if (truce) {
     return `${order.faction} keeps a truce with ${order.against} until day ${truce.endsOn}`;
   }
+  return undefined;
+}
+
+export function declareWar(state: GameState, order: DeclareWarOrder): string | undefined {
+  const problem = warRefusal(state, order);
+  if (problem) return problem;
   removeRecord(state.truces, warKey(order.faction, order.against));
   state.wars[warKey(order.faction, order.against)] = newWar(
     order.faction,

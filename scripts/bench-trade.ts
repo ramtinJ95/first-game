@@ -11,12 +11,20 @@ const map = parseMap(
 );
 const world = buildWorld(map);
 const times: number[] = [];
+let slowest = { seed: 0, day: 0, ms: 0, ai: 0, tick: 0 };
 for (const seed of [21, 1, 2, 3]) {
   let state = newGame(map, { seed, player: 'rome' });
   for (let day = 1; day <= (seed === 21 ? 365 : 5 * 365); day++) {
     const start = performance.now();
-    state = tick(state, decideAll(state, world, []), world).state;
-    if (seed !== 21) times.push(performance.now() - start);
+    const orders = decideAll(state, world, []);
+    const decided = performance.now();
+    state = tick(state, orders, world).state;
+    const end = performance.now();
+    if (seed !== 21) {
+      const ms = end - start;
+      times.push(ms);
+      if (ms > slowest.ms) slowest = { seed, day, ms, ai: decided - start, tick: end - decided };
+    }
   }
 }
 times.sort((a, b) => a - b);
@@ -25,3 +33,6 @@ const quantile = (share: number) =>
 console.log('| days | median ms | p95 ms | slowest ms |');
 console.log('| --- | --- | --- | --- |');
 console.log(`| ${times.length} | ${quantile(0.5)} | ${quantile(0.95)} | ${quantile(1)} |`);
+console.log(
+  `Slowest: seed ${slowest.seed}, day ${slowest.day}; AI ${slowest.ai.toFixed(3)} ms, tick ${slowest.tick.toFixed(3)} ms.`,
+);

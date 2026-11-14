@@ -25,11 +25,20 @@ grandfather existing investments; no new route can exceed the current capacity.
 The player may close or refuse a route without refund. Incoming invitations reserve
 neither slots nor gold. Acceptance rechecks peace, ownership, unrest, sieges, slots,
 duplicates, path and the inviter's gold before changing anything.
+It also rechecks the inviter's military reserve and next recruit, after projecting
+the day's queued spending. If that budget no longer holds, the invitation lapses
+without payment and the trade-closed news explains why. Valid queued declarations
+withdraw invitations before any acceptance, whichever order they have in the queue.
+The inviter's actual war policy (great power or minor league) must still favour peace;
+a known truce expiry tomorrow is checked too. No attempt predicts tomorrow's battles.
 
 AI factions and minors consider trade monthly, staggered by faction id. They choose
 the highest return per gold, then the greater income, then city id and land before
 sea. They retain at least 600 gold or their army reserve, plus the next recruit's price, and project their
 earlier orders before spending. They make no investment on a declaration-of-war day.
+Incoming invitations are accepted or refused by explicit orders whenever that faction
+is under AI control, including the player faction in an all-AI simulation. A human
+player skipped by `decideAll` is never consented automatically.
 
 An enemy anywhere within 20 km of a land route can raid it. A raid pays one shipment
 to the raider and resets the caravan; replacement takes a crossing's days. The road
@@ -54,10 +63,10 @@ The trade share is gross expected receipts divided by taxes plus receipts on day
 1,095. The war experiment declares on the most valuable trading partner and measures
 the loss of net income. It does not claim every possible partner costs a tenth.
 
-The decision-interval target is **not met**: the median across seeds is 88 days, not 60. The tested affordable policy makes 23 investments in five years. I did not lower
-the existing building prices, loosen city slots, or raise trade above the 40% share
-target to hide this gap. Keeping the world open takes priority; more peacetime
-decisions remain follow-up work, not a completed claim.
+The measured median decision interval is 88 days, not the original 60-day target.
+**The owner accepted 88 for this PR**: the next slice makes goods requirements for
+troops and buildings, adding decisions. The tested affordable policy makes 23 investments
+in five years. Building prices, route slots and trade's 40% share ceiling are unchanged.
 
 Trade counts toward treasury capacity because a realm must be able to retain an
 ordinary shipment instead of losing it to a tax-only ceiling. It shares the large-

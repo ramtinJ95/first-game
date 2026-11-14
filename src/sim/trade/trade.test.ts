@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { bestTrade, trading } from '../ai/trade.ts';
+import { tradeReserve } from '../ai/budget.ts';
+import { decideAll, decideOrders } from '../ai/decide.ts';
 import { changeCityOwner } from '../cities.ts';
 import { recordEvents } from '../events.ts';
 import { buildFixture, fixtureWorld, FIXTURE as f } from '../fixture.ts';
@@ -156,6 +158,9 @@ describe('trade orders and consent', () => {
 
   test('AI offers reserve neither gold nor slots and require the player to accept', () => {
     const state = buildFixture();
+    const payer = state.factions[f.carthage];
+    if (!payer) throw new Error('missing trader');
+    payer.stores.gold = 10000;
     const foreign = {
       ...order,
       faction: f.carthage,
@@ -167,7 +172,7 @@ describe('trade orders and consent', () => {
     const route = Object.values(state.tradeRoutes)[0];
     if (!route) throw new Error('missing invitation');
     expect(route.status).toBe('offered');
-    expect(state.factions[f.carthage]?.stores.gold).toBe(3000);
+    expect(state.factions[f.carthage]?.stores.gold).toBe(10000);
     expect(tradeIncome(state).size).toBe(0);
     expect(
       acceptTrade(state, { kind: 'acceptTrade', faction: f.carthage, route: route.id }, world),
@@ -175,8 +180,182 @@ describe('trade orders and consent', () => {
     expect(
       acceptTrade(state, { kind: 'acceptTrade', faction: f.rome, route: route.id }, world),
     ).toBeUndefined();
-    expect(state.factions[f.carthage]?.stores.gold).toBe(3000 - route.cost);
+    expect(state.factions[f.carthage]?.stores.gold).toBe(10000 - route.cost);
     expect(route.status).toBe('running');
+    expectConsistent(state);
+  });
+
+  function invited() {
+    const state = buildFixture();
+    const payer = state.factions[f.carthage];
+    if (!payer) throw new Error('missing trader');
+    payer.stores.gold = 10000;
+    expect(
+      openTrade(
+        state,
+        {
+          kind: 'openTrade',
+          faction: f.carthage,
+          from: f.carthago,
+          to: f.roma,
+          mode: 'sea',
+        },
+        world,
+      ),
+    ).toBeUndefined();
+    const route = Object.values(state.tradeRoutes)[0];
+    if (!route) throw new Error('missing invitation');
+    return {
+      state,
+      payer,
+      route,
+      accept: { kind: 'acceptTrade', faction: f.rome, route: route.id } as const,
+    };
+  }
+
+  test('consent lapses visibly without spending if recruitment has consumed the inviter reserve', () => {
+    const { state, payer, route, accept } = invited();
+    const city = state.cities[f.carthago];
+    if (!city) throw new Error('missing city');
+    city.recruits.push({ troop: 'swordsmen', readyOn: (state.day + 10) as Day });
+    payer.stores.gold = route.cost + tradeReserve(state, f.carthage) - 1;
+    const gold = payer.stores.gold;
+    const events = recordEvents(state, () =>
+      expect(acceptTrade(state, accept, world)).toBeUndefined(),
+    );
+    expect(payer.stores.gold).toBe(gold);
+    expect(state.tradeRoutes[route.id]).toBeUndefined();
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        kind: 'tradeClosed',
+        cause: 'the inviter must keep its military reserve',
+      }),
+    );
+    expectConsistent(state);
+  });
+
+  test('AI-controlled player gives explicit consent, but a passive human gives no consent', () => {
+    const { state, route, accept } = invited();
+    expect(decideAll(state, world).filter((order) => order.kind === 'acceptTrade')).toEqual([]);
+    expect(
+      decideAll(state, world, []).filter((order) => order.kind === 'acceptTrade'),
+    ).toContainEqual(accept);
+    expect(state.tradeRoutes[route.id]?.status).toBe('offered');
+    expectConsistent(state);
+  });
+
+  test('a strong peaceful minor does not acquire a great power war wish at acceptance', () => {
+    const state = buildFixture();
+    const payer = state.factions[f.syracusaeFaction];
+    const army = state.armies[f.punicArmy];
+    const formation = state.formations[f.citizenSpears];
+    if (!payer || !army || !formation) throw new Error('missing minor fixture');
+    payer.stores.gold = 100000;
+    army.owner = f.syracusaeFaction;
+    formation.men = 10000;
+    changeCityOwner(state, f.carthago, f.rome);
+    expect(
+      openTrade(
+        state,
+        {
+          kind: 'openTrade',
+          faction: f.syracusaeFaction,
+          from: f.syracusae,
+          to: f.roma,
+          mode: 'sea',
+        },
+        world,
+      ),
+    ).toBeUndefined();
+    const route = Object.values(state.tradeRoutes)[0];
+    if (!route) throw new Error('missing minor invitation');
+    expect(decideOrders(state, world, f.syracusaeFaction)).toEqual([]);
+    expect(
+      acceptTrade(state, { kind: 'acceptTrade', faction: f.rome, route: route.id }, world),
+    ).toBeUndefined();
+    expect(state.tradeRoutes[route.id]?.status).toBe('running');
+    expect(payer.stores.gold).toBe(100000 - route.cost);
+    expectConsistent(state);
+  });
+
+  test.each([false, true])(
+    'same-day recruitment keeps its reserve even if consent is first: %s',
+    (acceptFirst) => {
+      const { state, payer, route, accept } = invited();
+      payer.stores.gold = route.cost + tradeReserve(state, f.carthage);
+      const gold = payer.stores.gold;
+      const recruit = {
+        kind: 'recruit',
+        faction: f.carthage,
+        city: f.carthago,
+        troop: 'skirmishers',
+      } as const;
+      const result = tick(state, acceptFirst ? [accept, recruit] : [recruit, accept], world, []);
+      expect(result.state.tradeRoutes[route.id]).toBeUndefined();
+      expect(result.state.factions[f.carthage]?.stores.gold).toBe(gold - 900);
+      expect(result.state.cities[f.carthago]?.recruits).toHaveLength(1);
+      expect(result.events).toContainEqual(
+        expect.objectContaining({
+          kind: 'tradeClosed',
+          cause: 'the inviter must keep its military reserve',
+        }),
+      );
+      expectConsistent(result.state);
+    },
+  );
+
+  test.each([false, true])(
+    'a decided war lapses consent before spending, war first: %s',
+    (warFirst) => {
+      const { state, payer, route, accept } = invited();
+      const war = { kind: 'declareWar', faction: f.carthage, against: f.rome } as const;
+      const result = tick(state, warFirst ? [war, accept] : [accept, war], world, []);
+      expect(result.state.factions[f.carthage]?.stores.gold).toBe(payer.stores.gold);
+      expect(result.state.tradeRoutes[route.id]).toBeUndefined();
+      expect(result.events.map((e) => e.kind)).toEqual(['tradeClosed', 'warDeclared']);
+      expect(result.rejected).toHaveLength(1);
+      expectConsistent(result.state);
+    },
+  );
+
+  test('an invalid declaration does not cancel a peaceful invitation', () => {
+    const { state, route, accept } = invited();
+    state.truces[warKey(f.carthage, f.rome)] = {
+      since: state.day,
+      endsOn: (state.day + 30) as Day,
+    };
+    const result = tick(
+      state,
+      [accept, { kind: 'declareWar', faction: f.carthage, against: f.rome }],
+      world,
+      [],
+    );
+    expect(result.state.tradeRoutes[route.id]?.status).toBe('running');
+    expect(result.events.map((e) => e.kind)).toEqual(['tradeOpened']);
+    expectConsistent(result.state);
+  });
+
+  test('consent does not buy a one-day route when a known truce expiry enables the inviter attack', () => {
+    const { state, payer, route, accept } = invited();
+    const formation = state.formations[f.citizenSpears];
+    if (!formation) throw new Error('missing formation');
+    formation.men = 10000;
+    const minor = state.cities[f.syracusae];
+    if (!minor) throw new Error('missing minor city');
+    minor.owner = f.carthage;
+    state.truces[warKey(f.carthage, f.rome)] = { since: state.day, endsOn: (state.day + 1) as Day };
+    payer.stores.gold = 100000;
+    const events = recordEvents(state, () =>
+      expect(acceptTrade(state, accept, world)).toBeUndefined(),
+    );
+    expect(state.tradeRoutes[route.id]).toBeUndefined();
+    expect(payer.stores.gold).toBe(100000);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        kind: 'tradeClosed',
+        cause: 'the inviter intends war when the truce ends tomorrow',
+      }),
+    );
     expectConsistent(state);
   });
 });
@@ -363,4 +542,24 @@ describe('caravans, interruption, and saves', () => {
       expectConsistent(state);
     },
   );
+
+  test('AI keeps its reserve and still buys the best route at the exact affordable boundary', () => {
+    const state = buildFixture();
+    const payer = state.factions[f.rome];
+    if (!payer) throw new Error('missing trader');
+    const reserve = 1500;
+    payer.stores.gold = 10000;
+    const choice = bestTrade(state, world, f.rome, reserve);
+    if (!choice || choice.kind !== 'openTrade') throw new Error('missing affordable route');
+    const from = state.cities[choice.from];
+    const to = state.cities[choice.to];
+    if (!from || !to) throw new Error('missing route ends');
+    const forecast = tradeForecast(state, world, from, to, choice.mode);
+    if (!forecast) throw new Error('missing forecast');
+    payer.stores.gold = reserve + forecast.cost;
+    expect(bestTrade(state, world, f.rome, reserve)).toEqual(choice);
+    payer.stores.gold = reserve;
+    expect(bestTrade(state, world, f.rome, reserve)).toBeUndefined();
+    expectConsistent(state);
+  });
 });

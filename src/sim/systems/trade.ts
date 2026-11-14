@@ -4,7 +4,7 @@ import type { GameState } from '../state/game-state.ts';
 import type { Day } from '../state/day.ts';
 import type { FactionId } from '../ids.ts';
 import { adminShareOf, limitsOf, menOf } from './economy.ts';
-import { areAtWar } from '../wars.ts';
+import { warSides } from '../state/war.ts';
 import { distanceToRoute, RAID_KM, routePoint } from '../trade/routes.ts';
 
 /** Sieges stand in for a sea blockade until war fleets exist; ships cannot be raided offshore. */
@@ -14,18 +14,23 @@ export function trade(state: GameState): void {
   const armies = Object.values(state.armies);
   const routes = Object.values(state.tradeRoutes);
   const ends = new Set(routes.flatMap((r) => [r.owner, r.partner]));
-  const armyOwners = new Set(armies.map((army) => army.owner));
-  // Ask the canonical war rule once per pair, not once per road and army.
+  // Read the few actual wars, not the Cartesian product of endpoints and army owners.
   const threats = new Map<FactionId, Set<FactionId>>();
-  for (const end of ends)
-    threats.set(end, new Set([...armyOwners].filter((owner) => areAtWar(state, end, owner))));
+  for (const end of ends) threats.set(end, new Set());
+  for (const key of Object.keys(state.wars)) {
+    const pair = warSides(key);
+    if (!pair) throw new Error(`trade encountered invalid war key ${key}`);
+    const [a, b] = pair;
+    threats.get(a)?.add(b);
+    threats.get(b)?.add(a);
+  }
   for (const route of routes) {
     const from = state.cities[route.from];
     const to = state.cities[route.to];
     const cause =
       !from || !to || from.owner !== route.owner || to.owner !== route.partner
         ? 'a city changed owner'
-        : areAtWar(state, route.owner, route.partner)
+        : threats.get(route.owner)?.has(route.partner)
           ? 'war between the partners'
           : route.status === 'offered' && state.day - route.openedOn >= 90
             ? 'the invitation expired'

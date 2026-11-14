@@ -4,7 +4,52 @@ import { removeRecord } from '../records.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { TradeRoute } from '../state/trade-route.ts';
 import type { World } from '../world/world.ts';
-import { tradeForecast, tradeProblem, type TradeMode } from './routes.ts';
+import { routePoint, tradeForecast, tradeProblem, type TradeMode } from './routes.ts';
+import { invitationProblem } from '../ai/trade-consent.ts';
+import { warRefusal } from '../orders/declare-war.ts';
+import type { Order } from '../orders/orders.ts';
+import { afterSpending } from '../ai/budget.ts';
+
+function lapseInvitation(state: GameState, route: TradeRoute, cause: string): void {
+  emit(state, {
+    kind: 'tradeClosed',
+    route: route.id,
+    from: route.from,
+    to: route.to,
+    owners: [route.owner, route.partner],
+    cause,
+    position: routePoint(route),
+  });
+  removeRecord(state.tradeRoutes, route.id);
+}
+
+/** Known war and spending commitments settle before consent, whatever the queue order. */
+export function lapseInvitationsBeforeOrders(
+  state: GameState,
+  orders: readonly Order[],
+  world: World,
+): void {
+  for (const order of orders) {
+    if (order.kind !== 'declareWar' || warRefusal(state, order)) continue;
+    for (const route of Object.values(state.tradeRoutes)) {
+      if (
+        route.status === 'offered' &&
+        ((route.owner === order.faction && route.partner === order.against) ||
+          (route.partner === order.faction && route.owner === order.against))
+      )
+        lapseInvitation(state, route, 'war with the partner was ordered');
+    }
+  }
+  for (const order of orders) {
+    if (order.kind !== 'acceptTrade') continue;
+    const route = state.tradeRoutes[order.route];
+    if (!route || route.status !== 'offered' || route.partner !== order.faction) continue;
+    const projected = afterSpending(state, orders, world);
+    if (projected === state) continue;
+    const problem = invitationProblem(projected, world, route);
+    if (problem) lapseInvitation(state, route, problem);
+  }
+}
 
 interface OpenTrade {
   kind: 'openTrade';
@@ -77,6 +122,11 @@ export function acceptTrade(
   const route = state.tradeRoutes[order.route];
   if (!route || route.status !== 'offered') return 'that trade invitation no longer waits';
   if (route.partner !== order.faction) return 'this invitation is not yours';
+  const lapse = invitationProblem(state, world, route);
+  if (lapse) {
+    lapseInvitation(state, route, lapse);
+    return undefined;
+  }
   const problem = tradeProblem(state, world, route.owner, route.from, route.to, route.mode);
   if (problem) return problem;
   const destination = state.cities[route.to];

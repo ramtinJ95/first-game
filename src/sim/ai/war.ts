@@ -89,7 +89,7 @@ export function warDeclaration(context: Context): Order[] {
       .filter((other) => other.kind === 'greatPower' && other.defeatedOn === null)
       .map((other) => other.id),
   );
-  if (free <= 0) return rivalPressure(context, strength, rivals, frontOf);
+  if (free <= 0) return [];
   const odds = enemies.size === 0 ? PEACE_WAR_ODDS : WAR_ODDS;
   const leader = leaderOf(citiesOf, rivals);
   const homeland = context.world.map.provinces.filter(
@@ -150,7 +150,7 @@ export function warDeclaration(context: Context): Order[] {
     if (score >= 1 && (!best || score > best.score)) best = { against: id, score };
   }
   if (best) return [{ kind: 'declareWar', faction, against: best.against }];
-  return rivalPressure(context, strength, rivals, frontOf);
+  return rivalPressure(context, strength, free, rivals, frontOf);
 }
 
 /** The great power that holds at least LEADER_SHARE of all cities and more than any other. */
@@ -170,18 +170,19 @@ function leaderOf(
 
 /**
  * A power at war with no great power declares on a great-power neighbour that has kept
- * to its homeland, holding no more cities than the map gave it, once its own armies
- * outweigh that neighbour's RIVAL_PRESSURE_ODDS times. It picks the one it outweighs
+ * to its homeland, holding no more cities than the map gave it, once its uncommitted
+ * armies outweigh that neighbour's RIVAL_PRESSURE_ODDS times. Existing fronts keep
+ * the same strength back as in normal war selection. It picks the one it outweighs
  * most. So a rival who stays at home is pressed while minor cities are still left.
  */
 function rivalPressure(
   { state, world, faction, enemies }: Context,
   strength: ReadonlyMap<FactionId, number>,
+  own: number,
   rivals: ReadonlySet<FactionId>,
   frontOf: (other: FactionId) => unknown,
 ): Order[] {
   if ([...enemies].some((enemy) => rivals.has(enemy))) return [];
-  const own = strength.get(faction) ?? 0;
   const homeland = (rival: FactionId) =>
     world.map.provinces.filter((province) => (province.owner as string) === rival).length;
   const held = (rival: FactionId) =>

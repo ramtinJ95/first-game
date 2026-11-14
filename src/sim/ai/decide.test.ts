@@ -180,6 +180,18 @@ describe('a great power', () => {
       expect(pressed(1500)).toEqual([]);
     });
 
+    test('does not count armies committed to an existing front again for pressure on a rival', () => {
+      const state = buildFixture();
+      setMen(state, f.hastati, 2000);
+      setMen(state, f.citizenSpears, 800);
+      const minorArmy = addSecondRomanArmy(state);
+      const minor = army(state, minorArmy);
+      minor.owner = f.syracusaeFaction;
+      declare(state, f.rome, f.syracusaeFaction);
+      expect(only(decide(state, f.rome), 'declareWar')).toEqual([]);
+      expectConsistent(state);
+    });
+
     test('declares nothing against a neighbour stronger than the threshold allows', () => {
       const state = buildFixture();
       setMen(state, f.hastati, 200);

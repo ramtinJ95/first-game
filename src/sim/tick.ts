@@ -3,6 +3,7 @@ import { executeOrder, type Order, type RejectedOrder } from './orders/orders.ts
 import type { GameState } from './state/game-state.ts';
 import { SYSTEMS, type System } from './systems.ts';
 import type { World } from './world/world.ts';
+import { lapseInvitationsBeforeOrders } from './trade/orders.ts';
 
 export interface TickResult {
   state: GameState;
@@ -33,6 +34,7 @@ export function tick(
   };
   const rejected: RejectedOrder[] = [];
   const events = recordEvents(next, () => {
+    lapseInvitationsBeforeOrders(next, orders, world);
     for (const order of orders) {
       const rejection = executeOrder(next, order, world);
       if (rejection) rejected.push(rejection);

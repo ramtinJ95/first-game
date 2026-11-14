@@ -1,11 +1,17 @@
 import type { DeepReadonly } from '../deep-readonly.ts';
 import type { FactionId } from '../ids.ts';
-import { executeOrder, type Order } from '../orders/orders.ts';
+import type { Order } from '../orders/orders.ts';
 import type { GameState } from '../state/game-state.ts';
-import { mostNeeded } from './budget.ts';
-import { reserveOf, sorted } from './situation.ts';
-import { TROOPS } from '../troops.ts';
-import { routeSlots, tradeForecast, tradeProblem, type TradeMode } from '../trade/routes.ts';
+import { afterSpending, tradeReserve } from './budget.ts';
+import { sorted } from './situation.ts';
+import {
+  routeSlots,
+  routeOpeningCost,
+  TRADE_RANGE,
+  tradeForecast,
+  tradeProblem,
+  type TradeMode,
+} from '../trade/routes.ts';
 import { distance } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 
@@ -16,6 +22,12 @@ export function bestTrade(
   faction: FactionId,
   reserve = 0,
 ): Order | undefined {
+  const payer = state.factions[faction];
+  const budget = (payer?.stores.gold ?? 0) - reserve;
+  // Even a zero-length foreign route costs this much. Do not search roads a
+  // faction cannot buy after keeping its military reserve.
+  const minimumCost = routeOpeningCost(0, false);
+  if (!payer || budget < minimumCost) return undefined;
   const cities = Object.values(state.cities).sort((a, b) => a.id.localeCompare(b.id));
   const slots = new Map(cities.map((city) => [city.id, routeSlots(city, world)]));
   for (const route of Object.values(state.tradeRoutes)) {
@@ -28,15 +40,21 @@ export function bestTrade(
     for (const to of cities) {
       if (
         from.id === to.id ||
+        budget < routeOpeningCost(0, to.owner === faction) ||
         distance(from.position, to.position) > 1800 ||
         (slots.get(to.id) ?? 0) <= 0
       )
         continue;
       for (const mode of ['land', 'sea'] as TradeMode[]) {
+        const start = mode === 'land' ? from.position : world.harbours.get(from.id);
+        const end = mode === 'land' ? to.position : world.harbours.get(to.id);
+        if (!start || !end) continue;
+        const direct = distance(start, end);
+        if (direct > TRADE_RANGE[mode] || routeOpeningCost(direct, to.owner === faction) > budget)
+          continue;
         if (tradeProblem(state, world, faction, from.id, to.id, mode)) continue;
         const f = tradeForecast(state, world, from, to, mode);
-        const payer = state.factions[faction];
-        if (!f || !payer || payer.stores.gold - f.cost < reserve) continue;
+        if (!f || f.cost > budget) continue;
         const income = f.fromDaily + (to.owner === faction ? f.toDaily : 0);
         const worth = Math.round((income / f.cost) * 1000000) / 1000000;
         if (!best || worth > best.worth || (worth === best.worth && income > best.income))
@@ -59,28 +77,28 @@ export function trading(
   prior: readonly Order[] = [],
 ): Order[] {
   let state = current;
+  // This runs only for factions decideAll controls. A passive human is skipped,
+  // while the all-AI control must give its player faction consent explicitly too.
+  const invitation = Object.values(state.tradeRoutes)
+    .filter((route) => route.status === 'offered' && route.partner === faction)
+    .sort((a, b) => a.id.localeCompare(b.id))[0];
+  if (invitation) {
+    const problem = tradeProblem(
+      state,
+      world,
+      invitation.owner,
+      invitation.from,
+      invitation.to,
+      invitation.mode,
+    );
+    return [{ kind: problem ? 'closeTrade' : 'acceptTrade', faction, route: invitation.id }];
+  }
   const index = sorted(state.factions).findIndex((record) => record.id === faction);
   if (state.day % 30 !== index % 30) return [];
   if (prior.some((order) => order.kind === 'declareWar')) return [];
-  const spending = prior.filter((order) =>
-    ['recruit', 'build', 'cancelBuilding', 'sack', 'enslave', 'acceptPeace'].includes(order.kind),
-  );
-  if (spending.length) {
-    const copy = JSON.parse(JSON.stringify(current)) as GameState;
-    for (const order of spending) executeOrder(copy, order, world);
-    state = copy;
-  }
+  state = afterSpending(current, prior, world);
   if (Object.values(state.tradeRoutes).some((r) => r.owner === faction && r.status === 'offered'))
     return [];
-  const next =
-    state.factions[faction]?.kind === 'greatPower'
-      ? TROOPS[mostNeeded(state, faction)].recruit.gold
-      : Math.min(...Object.values(TROOPS).map((troop) => troop.recruit.gold));
-  const order = bestTrade(
-    state,
-    world,
-    faction,
-    Math.max(600, reserveOf(state, faction, 'gold')) + next,
-  );
+  const order = bestTrade(state, world, faction, tradeReserve(state, faction));
   return order ? [order] : [];
 }
