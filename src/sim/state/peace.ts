@@ -24,6 +24,8 @@ export const PeaceForecastSchema = v.object({
   score: v.number(),
   menLost: v.number(),
   enemyMenLost: v.number(),
+  ownLossShare: v.number(),
+  enemyLossShare: v.number(),
   taken: v.array(CityIdSchema),
   lost: v.array(CityIdSchema),
   besieging: v.array(CityIdSchema),

@@ -3,7 +3,12 @@ import type { TurningPoint } from './turning-points.ts';
 import type { Page } from './page.ts';
 
 /** Loading a saved automatic stop must not turn it into a player-owned pause. */
-export function restoreModalResume({ saved, hasModal, paused, forcePause }: {
+export function restoreModalResume({
+  saved,
+  hasModal,
+  paused,
+  forcePause,
+}: {
   saved: Pick<Page, 'paused' | 'resumeOnClose'> | undefined;
   hasModal: boolean;
   paused: boolean;

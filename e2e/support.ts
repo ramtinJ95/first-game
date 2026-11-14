@@ -206,11 +206,14 @@ export function fallenTo(state: GameState, id: string) {
 }
 
 export async function dropSave(page: Page, state: GameState | string) {
-  const dataTransfer = await page.evaluateHandle((save) => {
-    const transfer = new DataTransfer();
-    transfer.items.add(new File([save], 'save.json', { type: 'application/json' }));
-    return transfer;
-  }, typeof state === 'string' ? state : saveGame(state));
+  const dataTransfer = await page.evaluateHandle(
+    (save) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([save], 'save.json', { type: 'application/json' }));
+      return transfer;
+    },
+    typeof state === 'string' ? state : saveGame(state),
+  );
   await page.dispatchEvent('canvas', 'drop', { dataTransfer });
 }
 
@@ -820,6 +823,9 @@ export function siegeToEndInPeace(): GameState {
   if (!losses) throw new Error('the peace fixture needs a war');
   // Earlier fighting, not the current siege alone, makes this a defeated side.
   losses.lost = 1000;
+  const payer = state.factions[carthage];
+  if (!payer) throw new Error('the peace fixture needs Carthage');
+  payer.stores.gold = 5000;
   return state;
 }
 

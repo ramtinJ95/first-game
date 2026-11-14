@@ -1,4 +1,4 @@
-import { armyOf, cityPoint, startGame } from './support.ts';
+import { armyOf, cityPoint, playDays, startGame, withFormations } from './support.ts';
 import type { FactionId } from '../src/sim/ids.ts';
 import { newWar, warKey } from '../src/sim/state/war.ts';
 import type { Day } from '../src/sim/state/day.ts';
@@ -20,12 +20,29 @@ export function peaceStanding(enemy: 'mediolanum' | 'macedon', score: -2 | 0 | 2
   if (!loser) throw new Error('missing war side');
   loser.lost = Math.round((Math.abs(score) * 2000) / 30);
   // These captures show a real defeat, rather than a token clash against a full realm.
-  if (score !== 0) for (const formation of Object.values(state.formations)) {
-    if (state.armies[formation.army]?.owner === (score > 0 ? against : rome)) formation.men = Math.min(formation.men, 100);
-  }
+  if (score !== 0)
+    for (const formation of Object.values(state.formations)) {
+      if (state.armies[formation.army]?.owner === (score > 0 ? against : rome))
+        formation.men = Math.min(formation.men, 100);
+    }
   state.wars[warKey(rome, against)] = war;
   expectConsistent(state);
   return state;
+}
+
+/** The outside review's exposed-city attack, with twice the strength still elsewhere. */
+export function siegeWithoutDefeat() {
+  const state = startGame();
+  const macedon = 'macedon' as FactionId;
+  const roman = withFormations(state, armyOf(state, state.player), [['spearmen', 1500]]);
+  const enemy = withFormations(state, armyOf(state, macedon), [['spearmen', 3000]]);
+  enemy.activity = { kind: 'idle', position: cityPoint('pella') };
+  roman.activity = { kind: 'idle', position: cityPoint('amphipolis') };
+  state.wars[warKey(state.player, macedon)] = newWar(state.player, macedon, 1 as Day);
+  state.day = 66 as Day;
+  const after = playDays(state, 3);
+  expectConsistent(after);
+  return after;
 }
 
 /** The displayed price is paid in full, but the battle fought that day raises it. */

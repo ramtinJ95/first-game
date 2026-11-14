@@ -49,13 +49,16 @@ function keptPage(): Page {
 }
 
 describe('the page a save keeps', () => {
-  it.each([true, false])('keeps the paused clock owner, automatic-resume=%s, through a save and load', (resumeOnClose) => {
-    const page = { ...keptPage(), paused: true, resumeOnClose };
-    const loaded = loadGame(saveGame(buildFixture(), pageData(page)));
-    if (!loaded.ok) throw new Error(loaded.error);
-    const parsed = parsePage(loaded.page);
-    expect(parsed).toMatchObject({ ok: true, page: { paused: true, resumeOnClose } });
-  });
+  it.each([true, false])(
+    'keeps the paused clock owner, automatic-resume=%s, through a save and load',
+    (resumeOnClose) => {
+      const page = { ...keptPage(), paused: true, resumeOnClose };
+      const loaded = loadGame(saveGame(buildFixture(), pageData(page)));
+      if (!loaded.ok) throw new Error(loaded.error);
+      const parsed = parsePage(loaded.page);
+      expect(parsed).toMatchObject({ ok: true, page: { paused: true, resumeOnClose } });
+    },
+  );
 
   it.each([true, false])(
     'restores an offer queued while paused=%s and plays it exactly once',

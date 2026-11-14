@@ -1,4 +1,5 @@
-import { peaceAnswer } from '../ai/peace.ts';
+import { peaceAnswer, warDamage } from '../ai/peace.ts';
+import { SMALL_LOSS_SHARE } from '../ai/thresholds.ts';
 import type { DeepReadonly } from '../deep-readonly.ts';
 import type { FactionId } from '../ids.ts';
 import type { GameState } from '../state/game-state.ts';
@@ -17,12 +18,15 @@ export function peaceForecast(
   const answer = peaceAnswer(state, faction, enemy, terms);
   const standing = warStanding(state, faction, enemy);
   if (!answer || !standing) return undefined;
+  const damage = warDamage(state, standing);
   return {
     accepts: answer.accepts,
     verdict: answer.verdict,
     score: standing.score,
     menLost: standing.menLost,
     enemyMenLost: standing.enemyMenLost,
+    ownLossShare: damage.ownShare,
+    enemyLossShare: damage.enemyShare,
     taken: [...standing.taken],
     lost: [...standing.lost],
     besieging: [...standing.besieging],
@@ -44,6 +48,17 @@ export function forecastChanges(
   const lost = after.lost.filter((id) => !before.lost.includes(id));
   if (taken.length) changes.push(`it took ${names(taken)}`);
   if (lost.length) changes.push(`it lost ${names(lost)}`);
+  if (before.menLost === after.menLost && before.ownLossShare !== after.ownLossShare) {
+    changes.push(
+      `its surviving forces changed; its recorded losses ${after.ownLossShare > SMALL_LOSS_SHARE ? 'now exceed' : 'no longer exceed'} ${SMALL_LOSS_SHARE * 100}% of its forces`,
+    );
+  }
+  if (
+    before.enemyMenLost === after.enemyMenLost &&
+    before.enemyLossShare !== after.enemyLossShare
+  ) {
+    changes.push(`your surviving forces changed the share lost in this war`);
+  }
   if (before.menLost !== after.menLost || before.enemyMenLost !== after.enemyMenLost) {
     changes.push(
       `battle losses changed (it lost ${after.menLost - before.menLost} more men; you lost ${after.enemyMenLost - before.enemyMenLost} more)`,

@@ -149,8 +149,18 @@ export function parsePage(
       error: `The save's page is malformed at ${path ? `page.${path}` : 'page'}: ${first.message}`,
     };
   }
-  const { chronicle, camera, selection, panel, occupied, told, weakSieges, paused, pendingPeace, resumeOnClose } =
-    parsed.output;
+  const {
+    chronicle,
+    camera,
+    selection,
+    panel,
+    occupied,
+    told,
+    weakSieges,
+    paused,
+    pendingPeace,
+    resumeOnClose,
+  } = parsed.output;
   return {
     ok: true,
     page: {

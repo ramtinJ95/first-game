@@ -981,7 +981,7 @@ describe('peace', () => {
       {
         kind: 'peaceRefused',
         tone: 'bad',
-        text: 'Carthage refused your offer of peace. Carthage will not talk of peace before day 61.',
+        text: 'Carthage refused your offer of peace. Carthage will not talk of peace before Year 1, day 61.',
       },
     ]);
   });

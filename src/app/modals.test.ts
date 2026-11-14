@@ -14,10 +14,27 @@ const lost: Modal = {
 };
 
 describe('the modal queue', () => {
-  it.each([true, false])('restores saved automatic-resume ownership=%s independently of paused and the load screen', (resumeOnClose) => {
-    expect(restoreModalResume({ saved: { paused: true, resumeOnClose }, hasModal: true, paused: true, forcePause: true })).toBe(resumeOnClose);
-    expect(restoreModalResume({ saved: { paused: true, resumeOnClose }, hasModal: false, paused: true, forcePause: false })).toBe(false);
-  });
+  it.each([true, false])(
+    'restores saved automatic-resume ownership=%s independently of paused and the load screen',
+    (resumeOnClose) => {
+      expect(
+        restoreModalResume({
+          saved: { paused: true, resumeOnClose },
+          hasModal: true,
+          paused: true,
+          forcePause: true,
+        }),
+      ).toBe(resumeOnClose);
+      expect(
+        restoreModalResume({
+          saved: { paused: true, resumeOnClose },
+          hasModal: false,
+          paused: true,
+          forcePause: false,
+        }),
+      ).toBe(false);
+    },
+  );
 
   it('puts the win before the fates and the fates before the guide, each once', () => {
     let queue: Modal[] = [guide];

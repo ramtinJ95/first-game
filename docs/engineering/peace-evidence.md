@@ -1,97 +1,119 @@
-# Peace follows the war
+# Peace rules and evidence
 
-Conquest should feel rewarding without being trivial. A beaten side must not demand the winner's land or gold just because its fixed resolve outweighs a small defeat.
+Conquest should feel rewarding without being trivial. This records the original PR measurements and the revised rule after the outside review, rather than treating measurements from different bases as comparable.
 
-## The rule
+## Current rule
 
-1. Keep the existing standing, weariness, other-war, shortage, and resolve factors. A losing side's wish is at least zero; the panel shows the added restraint as “cannot demand payment while losing.”
-2. After the 60-day opening, a losing side accepts peace as things stand. A sufficiently beaten or weary side pays; a winning side may demand payment. An otherwise even war accepts peace as things stand after 225 days.
-3. AI proposals still need terms **both** sides accept. The losing-side floor does not force a winning AI to abandon a conquest for nothing. No answer draws a random number.
+- Keep the 60-day opening. The usual standing, weariness, other-war, shortage, and resolve factors remain visible and deterministic.
+- The losing-side floor uses **durable** city/battle points, not siege pressure. The durable score must be negative, and the side must have lost a city still held by its enemy or more than 10% of its soldiers. The share is recorded battle losses / (surviving soldiers + those losses).
+- With no city transfer and neither side above that loss threshold, the war is even. Other pressures and a provisional siege cannot obtain free peace before 225 war-days; afterward both accept peace as things stand.
+- A non-loser cannot obtain an early free peace merely from siege pressure, even after the player sacrifices their own men. This closes the capital-siege variant as well as the reviewer's exposed-city example. A true loser can accept white peace or pay. AI proposals still need both sides' consent.
+- The next-day answer rechecks current facts. Forecasts record loss shares too: recruitment that changes the threshold gets an actual explanation rather than a misleading generic fallback.
 
-The 60-day opening is retained, not shortened: the measurements below preserve every previously met target, including independent minors at year 5. Minors are neither protected forever nor forced to fight until destruction: of 2,194 wars involving minors, 1,040 end in peace and 1,126 in defeat. Only a siege, never a treaty ceding the last city, eliminates a minor.
+## Cheapest controlled truce cases
 
-## The tester's two reckonings
+`src/sim/peace/truce-shield.test.ts` checks a 1,500-man Roman army against 3,000 equal troops, equal morale and generals: the AI's estimated strength is twice Rome's. The exposed-city siege produces standing −7 for the enemy without losing a man or city.
 
-These are reconstructions from the reported standings, not the tester's unavailable save. Both use day 65, a war begun on day 1, sound stores, and no other war. The before rule was executed from `bfb56179a57b5878f26bd297cc0420a30e2e889c` in a detached worktree. Battle losses of 67 and 133 produce the reported rounded standings of +1 and +2 for Rome.
+| Controlled case                             | Earliest offer / direct cost                                                            | Evidence                                                                                                                  |
+| ------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| No actual losses, talks first open          | Day 61 (60 war-days), 1,100 gold                                                        | 1,099 fails; the next-day acceptance actually deducts 1,100 and starts a truce on day 62 through day 427                  |
+| Same undamaged war, one day before maturity | Day 225 (224 war-days), 100 gold                                                        | Enumerated daily price frontier                                                                                           |
+| Same undamaged war, free exit               | Day 226 (225 war-days), zero treaty gold                                                | First zero in the enumerated frontier; mature even proposals are white peace                                              |
+| Enemy battle losses                         | 300/3,000 is exactly 10%, so it does not qualify; 301/3,000 does                        | A real durable loss is required; this is a rule boundary, not a claim those casualties can be inflicted for no Roman cost |
+| Real city gain, early zero-gold exit        | A 1,500-man army storms an already undefended minor city and leaves 300 men as garrison | Actual storm/offer/accept orders; the army has 1,200 men left, keeps the city, and pays no treaty gold                    |
 
-| Panel factor / answer              | Mediolanum before         | Mediolanum after | Lugdunum before         | Lugdunum after |
-| ---------------------------------- | ------------------------- | ---------------- | ----------------------- | -------------- |
-| Is losing the war                  | +1                        | +1               | +2                      | +2             |
-| The war has lasted 64 days         | +4                        | +4               | +4                      | +4             |
-| Does not end a war for nothing     | −15                       | −15              | −15                     | −15            |
-| Cannot demand payment while losing | —                         | +10              | —                       | +9             |
-| Wish before terms                  | −10                       | 0                | −9                      | 0              |
-| Peace as things stand              | Refuses; wants 1,000 gold | Accepts          | Refuses; wants 900 gold | Accepts        |
+The minimum is measured over offer dates/payments in this controlled no-damage stand-off, not asserted as a globally optimal campaign across every map, detached force, or pre-damaged city. The city case makes the alternative cost concrete: an actual conquest and garrison commitment, not a siege marker. Ordinary upkeep and the risk of remaining at war are not waived or counted as new treaty charges.
 
-With Rome's purse set to zero, the old `paymentBetween` supplies Ariminum as Mediolanum's least acceptable city payment instead. With a purse of 900, it supplies Lugdunum's 900-gold demand. The new panel offers neither backwards demand.
+## Outside-review fixes
 
-## Before and after: peace
+1. Persist `resumeOnClose` separately from `paused`. Export/load restores an offer-owned stop, and accepting/refusing resumes the clock and applies the answer. A player-owned stop stays paused. Four browser cases cover owner × answer; unit round-trips and `restoreModalResume` cover the policy.
+2. Reject the siege-only/tiny-clash shield, including empty stores, other wars, equal bloody losses, capital pressure after sacrificing Roman troops, and force growth crossing the threshold. Every adjustment is a visible reckoning factor.
+3. Tell the refusal once: who refused, what it wants, and changed facts. The repeated “Carthage refuses” clause is removed.
+4. `termsProblem` now derives payer names from records at the source, so even direct `peaceAnswer` verdicts do not expose lowercase ids. Both minor and great-power verdicts also have browser coverage; `peaceVerdict` still applies the shared name/date presentation helper.
 
-`npm run sim:peace -- --seeds 20 --years 10`, seeds 1–20, every faction under the AI. Before is `bfb56179`; after is this change, without balance PR #43.
+The saved shape uses the immutable `peace-forecasts-and-pending-answers.json` registration. `peace-offer-ended.json` independently registers its alert. There is no new numeric format and no edit to another feature's change file. Ordinary queued movement/recruit orders remain outside this feature's persistence scope.
 
-| Measure                                      | Before                   | After                      |
-| -------------------------------------------- | ------------------------ | -------------------------- |
-| Great-power wars begun                       | 793                      | 832                        |
-| Great-power wars ended in peace / begun      | 744 / 793 (93.8%)        | 789 / 832 (94.8%)          |
-| Great-power wars ended by destruction        | 3                        | 0                          |
-| Great-power wars still running at the end    | 46                       | 43                         |
-| Longest great-power war                      | 1,299 days               | 760 days                   |
-| Great-power pairs at war for all ten years   | 0                        | 0                          |
-| Shortest peace-to-next-war gap               | 365 days                 | 365 days                   |
-| Median peace-to-next-war gap                 | 432 days                 | 448 days                   |
-| Minor wars: begun / peace / defeat / running | 2,173 / 964 / 1,174 / 35 | 2,194 / 1,040 / 1,126 / 28 |
+## Measurement sources
 
-Days at peace mean days with **no** war, not merely no war against a great power. More treaties do not necessarily increase this number when a power has overlapping wars.
+All runs use seeds 1–20. Peace/world run ten years; AI runs five years, both all-AI and passive-Rome modes. The columns preserve the old numbers beside the new ones:
 
-| Power    | Median days at peace before → after | Fewest before → after | Most before → after |
-| -------- | ----------------------------------- | --------------------- | ------------------- |
-| Rome     | 274 → 285                           | 192 → 186             | 986 → 1,035         |
-| Carthage | 336 → 246                           | 184 → 182             | 826 → 752           |
-| Macedon  | 371 → 356                           | 184 → 214             | 924 → 609           |
-| Egypt    | 384 → 367                           | 183 → 191             | 1,451 → 854         |
-| Persia   | 358 → 350                           | 188 → 189             | 1,125 → 825         |
+- Original main: `bfb56179`, before balance #43.
+- First PR head: `2c42dfe`, the version the outside reviewer examined.
+- Current-rule baseline: main `a3ac1ba`, including #43/#47. Main `a98a2de` then added #50; its diff changes no `src/sim` file or simulation script, so this is also the simulation-rule baseline for that rebase.
+- Revised PR: the reviewed rule on `a98a2de`, using `npm run sim -- peace`, `world`, and `ai` with the arguments above.
 
-## Before and after: the world still holds
+### Peace
 
-`npm run sim:world -- --seeds 20 --years 10` and `npm run sim:ai -- --seeds 20 --years 5`. Every target marked met before remains met after. The world script's separate “no power leads more than eight seeds” target was **not met before or after**: Persia leads 12/20 in each. This change does not retune that pre-existing imbalance.
+| Measure                                      | Original main            | First PR                   | Current main rules    | Revised PR           |
+| -------------------------------------------- | ------------------------ | -------------------------- | --------------------- | -------------------- |
+| Great-power wars begun                       | 793                      | 832                        | 864                   | 891                  |
+| Great-power peace endings                    | 744 (93.8%)              | 789 (94.8%)                | 813 (94.1%)           | 837 (93.9%)          |
+| Great-power destruction endings              | 3                        | 0                          | 12                    | 14                   |
+| Great-power wars still running at year 10    | 46                       | 43                         | 39                    | 40                   |
+| Great-power median / longest duration        | 129 / 1,299 days         | 131 / 760 days             | 121 / 316 days        | 145 / 414 days       |
+| Great-power wars lasting all ten years       | 0                        | 0                          | 0                     | 0                    |
+| Shortest peace-to-next-war gap               | 365 days                 | 365 days                   | 365 days              | 365 days             |
+| Median peace-to-next-war gap                 | 432 days                 | 448 days                   | 388 days              | 410 days             |
+| Minor wars: begun / peace / defeat / running | 2,173 / 964 / 1,174 / 35 | 2,194 / 1,040 / 1,126 / 28 | 1,005 / 159 / 839 / 7 | 965 / 192 / 757 / 16 |
 
-| World target / observation, year 10                          | Before             | After              |
-| ------------------------------------------------------------ | ------------------ | ------------------ |
-| Largest power has at most 40 of 80 cities                    | 20/20; maximum 29  | 20/20; maximum 29  |
-| At least three powers survive                                | 20/20              | 20/20              |
-| Leadership seeds: Rome / Carthage / Macedon / Egypt / Persia | 1 / 5 / 0 / 2 / 12 | 3 / 4 / 0 / 1 / 12 |
-| Armies idle beside an enemy over 30 days                     | 0                  | 0                  |
-| Armies idle overseas over 30 days / with no menu route home  | 1 / 0              | 0 / 0              |
-| Armies lost to sallies                                       | 4                  | 2                  |
+Days at peace mean days with **no** war, including no overlapping minor war. A higher treaty count does not promise more such days for every faction.
 
-The following AI targets all remain met. “Independent” gives median, minimum, and seeds reaching the printed threshold. Growth is eligible power-years that grew; war contact must meet 90% of seeds.
+| Power    | Original median | First-PR median | Current-main median (min–max) | Revised median (min–max) |
+| -------- | --------------- | --------------- | ----------------------------- | ------------------------ |
+| Rome     | 274             | 285             | 619 (341–896)                 | 598 (251–1,242)          |
+| Carthage | 336             | 246             | 720 (284–1,203)               | 548 (252–972)            |
+| Macedon  | 371             | 356             | 680 (311–1,166)               | 535 (249–1,213)          |
+| Egypt    | 384             | 367             | 673 (414–1,245)               | 767 (382–2,041)          |
+| Persia   | 358             | 350             | 998 (648–1,514)               | 806 (439–1,353)          |
 
-| AI target                                         | All AI before     | All AI after      | Passive Rome before | Passive Rome after |
-| ------------------------------------------------- | ----------------- | ----------------- | ------------------- | ------------------ |
-| Independent minors at year 2, threshold 30/60     | 41; min 36; 20/20 | 42; min 36; 20/20 | 42; min 39; 20/20   | 42; min 39; 20/20  |
-| Independent minors at year 5, threshold 12/60     | 18; min 9; 18/20  | 20; min 10; 18/20 | 21; min 15; 20/20   | 22; min 14; 20/20  |
-| Unopposed growth                                  | 98/107 (91.6%)    | 100/108 (92.6%)   | 126/135 (93.3%)     | 132/138 (95.7%)    |
-| Power-versus-power contact every year from year 2 | 20/20             | 20/20             | 20/20               | 19/20              |
-| A power destroyed before year 3                   | 0/20              | 0/20              | 0/20                | 0/20               |
+### World and AI
 
-Both AI modes also retain 20/20 seeds with three powers growing, 0/20 with a power holding over half the cities, and 20/20 with four powers alive after two years. Seed 1 repeated gives the same final state.
+Every previously met printed target remains met. The leadership-distribution target was already **not met**: Persia leads 12/20 in the two old runs and 13/20 in both current-rule runs. This feature does not retune that imbalance.
 
-## Offers, forecasts, and the clock
+| World measure                                          | Original main → first PR | Current main → revised PR |
+| ------------------------------------------------------ | ------------------------ | ------------------------- |
+| Largest power ≤40/80 cities                            | 20/20 → 20/20            | 20/20 → 20/20             |
+| At least three powers survive year 10                  | 20/20 → 20/20            | 20/20 → 20/20             |
+| Leadership: Rome / Carthage / Macedon / Egypt / Persia | 1/5/0/2/12 → 3/4/0/1/12  | 3/3/0/1/13 → 1/4/0/2/13   |
+| Armies idle beside an enemy over 30 days               | 0 → 0                    | 1 → 0                     |
+| Armies idle overseas over 30 days                      | 1 → 0                    | 1 → 0                     |
+| Armies with no menu route home                         | 0 → 0                    | 0 → 0                     |
+| Wars without an act within a year / before ending      | Not printed on old base  | 130 → 93                  |
+| Repeated nearby losing attacks                         | Not printed on old base  | 181 → 149                 |
+| Longest quiet-war stretch, median / maximum            | 32/200 → 25/175 days     | 51/180 → 66/224 days      |
 
-- An offer records the forecast shown when it was queued, including standing, battle losses, captures, sieges, and the rule's factors. The next day uses current facts. AI answer orders recheck at execution too, after any earlier orders of that day.
-- A refusal emits a required reason from `peaceAnswer`. Alerts and the Chronicle keep it. If an acceptance forecast turned into a refusal, it also names the changed facts; it does not claim a battle ended merely because its losses changed. An underway battle or siege in that war produces a warning in the panel.
-- Duplicate same-day offers retain the first and explicitly reject the second; the panel disables sending while an own offer waits. An invalidated city payment is refused without charging gold. Expiration and a recipient's destruction emit explicit offer-ended news.
-- Format **14** saves pending peace commands and the paused flag beside the page, and the forecast in each sent offer. Browser slots and file export use the same path. Loading restores unanswered incoming offers too. Unrelated queued movement/recruitment orders are not newly persisted by this change.
-- Closing an offer resumes only a clock stopped automatically for it. A deliberate clock action clears automatic-resume ownership; a player pause stays paused, including while another war continues. Accept/refuse commands queued while paused apply when the player next runs a day.
+The last row is a deliberate tradeoff, not hidden improvement: an unbloodied stand-off may now remain open until its 225-day settlement limit rather than buying an early truce with a token siege.
+
+Independent-minor figures are median, minimum, and seeds reaching the printed threshold. All growth rates remain above 90%; annual inter-power contact remains at least 90% of seeds.
+
+| AI target                                    | Original main → first PR        | Current main → revised PR       |
+| -------------------------------------------- | ------------------------------- | ------------------------------- |
+| All AI: minors at year 2 (threshold 30)      | 41,min36,20/20 → 42,min36,20/20 | 43,min38,20/20 → 44,min39,20/20 |
+| All AI: minors at year 5 (threshold 12)      | 18,min9,18/20 → 20,min10,18/20  | 30,min18,20/20 → 33,min21,20/20 |
+| All AI: eligible unopposed growth            | 98/107 → 100/108                | 101/105 → 84/88                 |
+| All AI: contact every year from year 2       | 20/20 → 20/20                   | 20/20 → 20/20                   |
+| Passive Rome: minors at year 2               | 42,min39,20/20 → 42,min39,20/20 | 45,min42,20/20 → 46,min42,20/20 |
+| Passive Rome: minors at year 5               | 21,min15,20/20 → 22,min14,20/20 | 32,min27,20/20 → 34,min26,20/20 |
+| Passive Rome: eligible unopposed growth      | 126/135 → 132/138               | 126/130 → 139/143               |
+| Passive Rome: contact every year from year 2 | 20/20 → 19/20                   | 20/20 → 19/20                   |
+| A power destroyed before year 3, both modes  | 0/20 → 0/20                     | 0/20 → 0/20                     |
+
+Seed 1 repeated ends byte-identically in the AI script's state check. Minors are not made immune: the revised ten-year run includes 757 minor-war defeats and 192 peaces.
+
+## Historical tester reconstruction
+
+The unavailable tester save was not claimed as reproduced exactly. With a day-1 war on day 65, sound stores and no other war, the old `bfb56179` rule gave Mediolanum losing by 1: `+1 +4 −15 = −10` (wants 1,000 gold, or Ariminum when Rome has no gold). Lugdunum losing by 2 gave `+2 +4 −15 = −9` (wants 900 gold). The first head blindly floored both to zero.
+
+That score alone is **no longer enough** to justify the floor. A small casualty count can be an even, unbloodied war for a large realm. The current tests make the actual loss share explicit, and the revised screenshots use genuinely depleted forces. This is the intentional correction to the first head, not a claim that every reported +1 now forces free peace.
 
 ## Verification
 
+- `npm ci` after each rebase: generated save/order/slot/alert tables; no generated module committed.
 - `npm run check`: passed.
-- `npm test`: 801/801 passed. An earlier run during simultaneous simulation sweeps timed out in the unchanged terrain-layer test (5.328 seconds against its 5-second limit). No timeout, retry, or assertion was changed; the full suite passed once those sweeps finished. A bounded two-worker run also passed all 799 tests present before the final two panel regressions.
+- `npm test -- --maxWorkers=2`: all 868 tests passed; no timeout/retry/assertion weakened.
 - `npm run build`: passed; existing large-chunk warning only.
-- `npm run e2e -- e2e/peace.spec.ts --workers=1`: 8/8 passed. It plays a refusal with its reason in alerts and Chronicle, a peace through truce and homecoming, paused save/reload, accepting and refusing with another war open, taking manual ownership of an automatic offer pause, and a real battle changing a saved forecast (800 gold accepted in the forecast, then refused after the battle).
-- Unit coverage includes both reconstructed losing standings, a winning side's demand, weary even wars, changed capture/loss facts, both directions of execution-time answer changes, a city payment invalidated on its offer day, duplicate offers, defeat, expiration, pending-order validation, and paused/running save round-trips. Existing siege/battle peace and homecoming tests remain intact.
-- Capture scenario `peace-follows-war`: winning, even, and losing wars against a minor and great power; the live-forecast warning; an actual refusal; and a changed-forecast refusal. Screenshots are published by CI, never committed with the game.
-- Independent reviewer: approved, no actionable findings; independently ran 121 relevant tests on the final diff. Browser checks, simulations, and captures were verified by the implementation lane rather than claimed as reviewer coverage.
+- `npm run e2e -- e2e/peace.spec.ts --workers=1`: 14/14 passed, including all four export/load ownership/answer combinations, minor/great-power names, actual refusal/Chronicle reason, and truce/homecoming.
+- Capture scenarios `peace-follows-war` and `peace`: ten revised/new peace screenshots (including the truce shield) and five existing peace screenshots. CI publishes exact-commit media; no capture is committed with the game.
+- A fresh reviewer approved the production fix with no findings and independently ran 139 relevant unit tests. The final added real-conquest cost test also passes in the full suite. Browser, campaign sweeps and captures are implementation-lane verification, not claimed as independently rerun.
 
-Decisions taken without waiting for the owner: keep the 60-day opening; floor only a losing side's demand rather than weakening winning AI resolve; reject a duplicate rather than silently replace the first; persist only peace commands in this scoped change; and advance format 13 to 14 under the workflow present on the base (tooling PR #47 was still open).
+Decisions: use a 10% actual-loss boundary, preserve the 60-day opening and 225-day even-war end, close the capital/own-loss variant too, preserve only peace queues rather than expand all-order persistence, and follow independent registration files instead of numeric format 14. No merge is performed by this lane.

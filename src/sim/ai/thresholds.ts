@@ -121,6 +121,10 @@ export const OTHER_WAR_POINTS = 15;
 export const SHORTAGE_POINTS = 20;
 /** A faction does not end a war for nothing: the wish starts this far below 0. */
 export const PEACE_RESOLVE = 15;
+/** A token clash is not a defeat: losses must exceed this share of survivors plus losses. */
+export const SMALL_LOSS_SHARE = 0.1;
+/** An even war can end as things stand once weariness has matched the fixed resolve. */
+export const EVEN_WAR_DAYS = PEACE_RESOLVE * WEARY_DAYS;
 /** After an offer in a war, an AI offers again in it only after this many days. */
 export const OFFER_GAP_DAYS = 90;
 /** Gold in the terms the AI writes is a multiple of this. */

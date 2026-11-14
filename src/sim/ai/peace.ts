@@ -2,7 +2,7 @@ import type { DeepReadonly } from '../deep-readonly.ts';
 import type { CityId, FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import { standingOffer } from '../peace/offer.ts';
-import { warStanding, type WarStanding } from '../peace/standing.ts';
+import { MAX_STANDING, warStanding, type WarStanding } from '../peace/standing.ts';
 import {
   AS_THINGS_STAND,
   copyTerms,
@@ -18,6 +18,7 @@ import { distance } from '../world/find-path.ts';
 import type { Context } from './armies.ts';
 import { sorted, type State } from './situation.ts';
 import {
+  EVEN_WAR_DAYS,
   GOLD_STEP,
   MAX_WEARINESS,
   MIN_WAR_DAYS,
@@ -25,30 +26,35 @@ import {
   OTHER_WAR_POINTS,
   PEACE_RESOLVE,
   SHORTAGE_POINTS,
+  SMALL_LOSS_SHARE,
   WEARY_DAYS,
 } from './thresholds.ts';
 
 export type PeaceFactorKind =
   'standing' | 'weariness' | 'otherWars' | 'shortage' | 'resolve' | 'restraint' | 'terms';
 
-/** A token clash is not a defeat. Count actual losses against survivors plus those losses. */
-export const SMALL_LOSS_SHARE = 0.1;
-export const EVEN_WAR_DAYS = PEACE_RESOLVE * WEARY_DAYS;
-
 /** Sieges affect the bargaining score, but cannot manufacture a defeat for the floor. */
 export function warDamage(state: State, standing: WarStanding) {
-  const living = (faction: FactionId) => Object.values(state.formations).reduce(
-    (men, formation) => men + (state.armies[formation.army]?.owner === faction ? formation.men : 0), 0,
-  );
+  const living = (faction: FactionId) =>
+    Object.values(state.formations).reduce(
+      (men, formation) =>
+        men + (state.armies[formation.army]?.owner === faction ? formation.men : 0),
+      0,
+    );
   const ownShare = standing.menLost / Math.max(1, standing.menLost + living(standing.faction));
-  const enemyShare = standing.enemyMenLost / Math.max(1, standing.enemyMenLost + living(standing.enemy));
+  const enemyShare =
+    standing.enemyMenLost / Math.max(1, standing.enemyMenLost + living(standing.enemy));
   const citiesChanged = standing.taken.length + standing.lost.length > 0;
+  const durableScore = Math.max(
+    -MAX_STANDING,
+    Math.min(MAX_STANDING, standing.points.cities + standing.points.battles),
+  );
   return {
+    durableScore,
     ownShare,
     enemyShare,
     even: !citiesChanged && ownShare <= SMALL_LOSS_SHARE && enemyShare <= SMALL_LOSS_SHARE,
-    losing: standing.points.cities + standing.points.battles < 0 &&
-      (standing.lost.length > 0 || ownShare > SMALL_LOSS_SHARE),
+    losing: durableScore < 0 && (standing.lost.length > 0 || ownShare > SMALL_LOSS_SHARE),
   };
 }
 
@@ -127,9 +133,10 @@ export function termsText(
  * How much the faction wants peace with the enemy: minus how the war stands for it, plus a
  * point for every WEARY_DAYS of war up to MAX_WEARINESS, plus OTHER_WAR_POINTS for each
  * other war against a great power, plus SHORTAGE_POINTS while it is short of gold or
- * food, less PEACE_RESOLVE. A losing side's wish is floored at zero, with a visible
- * restraint factor: it cannot demand payment from its winner. It does not talk at all
- * in a war younger than MIN_WAR_DAYS.
+ * food, less PEACE_RESOLVE. The visible restraint factor floors only a durable loser
+ * (cities or significant battlefield losses), not a siege's provisional standing.
+ * An unbloodied war waits EVEN_WAR_DAYS for free peace. It does not talk at all in a
+ * war younger than MIN_WAR_DAYS.
  */
 export function peaceWish(
   state: State,
@@ -173,11 +180,23 @@ export function peaceWish(
   const damage = warDamage(state, standing);
   if (damage.even) {
     const mature = standing.days >= EVEN_WAR_DAYS;
-    const target = mature ? Math.max(0, reckoning) : Math.min(reckoning, -Math.max(1, PEACE_RESOLVE - Math.floor(standing.days / WEARY_DAYS)));
-    factors.push({ kind: 'restraint', points: target - reckoning,
-      text: `Neither side lost a city or more than ${SMALL_LOSS_SHARE * 100}% of its soldiers; ${mature ? `the even war has lasted ${EVEN_WAR_DAYS} days` : `peace as things stand waits ${EVEN_WAR_DAYS} days`}` });
+    const target = mature
+      ? Math.max(0, reckoning)
+      : Math.min(reckoning, -Math.max(1, PEACE_RESOLVE - Math.floor(standing.days / WEARY_DAYS)));
+    factors.push({
+      kind: 'restraint',
+      points: target - reckoning,
+      text: `Neither side lost a city or more than ${SMALL_LOSS_SHARE * 100}% of its soldiers; ${mature ? `the even war has lasted ${EVEN_WAR_DAYS} days` : `peace as things stand waits ${EVEN_WAR_DAYS} days`}`,
+    });
   } else if (damage.losing) {
     add('restraint', Math.max(0, -reckoning), `${name} cannot demand payment while losing`);
+  } else if (standing.days < EVEN_WAR_DAYS) {
+    // Losing some of the player's own men must not unlock a capital-siege shield, either.
+    add(
+      'restraint',
+      Math.min(0, standing.score - damage.durableScore),
+      'A siege is not a city or battlefield loss; it cannot by itself buy early peace',
+    );
   }
   const talksFrom =
     standing.days < MIN_WAR_DAYS ? ((standing.since + MIN_WAR_DAYS) as Day) : undefined;
@@ -304,9 +323,10 @@ export function proposal(
   const theirNeed = -theirs.wish;
   if (need + theirNeed > 0) return undefined;
   const most = -theirNeed;
-  const winning = (warStanding(state, faction, enemy)?.score ?? 0) > 0;
   const standing = warStanding(state, faction, enemy);
-  if (standing && warDamage(state, standing).even && standing.days >= EVEN_WAR_DAYS) return AS_THINGS_STAND;
+  const winning = (standing?.score ?? 0) > 0;
+  if (standing && warDamage(state, standing).even && standing.days >= EVEN_WAR_DAYS)
+    return AS_THINGS_STAND;
   if (winning && most > 0) {
     const asked = paymentBetween(state, enemy, faction, Math.max(need, 0), most, 'most');
     if (asked) return asked;

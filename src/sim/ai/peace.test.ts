@@ -57,6 +57,26 @@ const gold = (payer: FactionId, amount: number): PeaceTerms => ({
 });
 
 describe("the AI's answer", () => {
+  test('unpayable and invalid-city verdicts name the faction, not its lowercase id', () => {
+    const state = warOn(226);
+    const faction = state.factions[f.carthage];
+    if (!faction) throw new Error('fixture');
+    faction.name = 'Lugdunum';
+    faction.stores.gold = 416;
+    expect(peaceAnswer(state, f.carthage, f.rome, gold(f.carthage, 900))?.verdict).toBe(
+      'These terms cannot be met: Lugdunum has 416 gold, not the 900 the terms ask.',
+    );
+    expect(
+      peaceAnswer(state, f.carthage, f.rome, {
+        kind: 'payment',
+        payer: f.carthage,
+        gold: 0,
+        cities: [f.capua],
+      })?.verdict,
+    ).toBe('These terms cannot be met: Lugdunum does not hold Capua.');
+    expectConsistent(state);
+  });
+
   test.each([1, 2, 5, 15, 30])(
     'a minor losing by %i never demands its winner pay gold or cities',
     (score) => {

@@ -5,12 +5,28 @@ import { MAX_UNREST_DAYS } from './cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from './fixture.ts';
 import { loadGame, SAVE_FORMAT, saveGame } from './save.ts';
 import baseline from './save-changes/baseline-format-12.json' with { type: 'json' };
+import peaceForecasts from './save-changes/peace-forecasts-and-pending-answers.json' with { type: 'json' };
 import { warKey, newWar } from './state/war.ts';
 import { tick } from './tick.ts';
 
 const world = fixtureWorld();
 
 describe('save and load', () => {
+  test('names the independently registered peace forecast and pause-ownership change when absent', () => {
+    const name = 'peace-forecasts-and-pending-answers';
+    expect(SAVE_FORMAT).toContain(name);
+    const loaded = loadGame(
+      JSON.stringify({
+        format: SAVE_FORMAT.filter((change) => change !== name),
+        state: buildFixture(),
+      }),
+    );
+    expect(loaded).toEqual({
+      ok: false,
+      error: `The save lacks changes: ${name} (${peaceForecasts.adds}).`,
+    });
+  });
+
   test('a state survives save and load unchanged', () => {
     const state = tick(
       buildFixture(42),

@@ -489,7 +489,12 @@ function enter(
       if (!answered) modals = enqueue(modals, { kind: 'peaceOffer', from: offer.from });
     }
   }
-  resumeOnClose = restoreModalResume({ saved: page, hasModal: modals.length > 0, paused: clock.paused, forcePause: pause });
+  resumeOnClose = restoreModalResume({
+    saved: page,
+    hasModal: modals.length > 0,
+    paused: clock.paused,
+    forcePause: pause,
+  });
   if (pause || page?.paused || modals.length > 0) clock.pause();
   else if (page?.paused === false) clock.resume();
   const home = focus && !page?.camera ? homeOf(state) : undefined;

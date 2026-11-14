@@ -7,7 +7,11 @@ import {
   siegeToEndInPeace,
   untilDrawn,
 } from '../../../e2e/support.ts';
-import { peaceStanding, stalePeaceForecast } from '../../../e2e/peace-support.ts';
+import {
+  peaceStanding,
+  siegeWithoutDefeat,
+  stalePeaceForecast,
+} from '../../../e2e/peace-support.ts';
 import { warKey } from '../../../src/sim/state/war.ts';
 import type { FactionId } from '../../../src/sim/ids.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
@@ -53,6 +57,14 @@ export default defineScenario({
         );
       }
     }
+
+    const shield = await showWar(page, siegeWithoutDefeat());
+    await expect(shield.getByTestId('peace-verdict')).toContainText('Macedon would refuse');
+    await expect(shield).toContainText('peace as things stand waits 225 days');
+    await shot(
+      'truce-shield',
+      'Day 69: 1,500 Romans besiege an exposed city while Macedon has 3,000 men elsewhere. No actual war losses: the provisional siege cannot buy a free year of safety',
+    );
 
     const panel = await showWar(page, siegeToEndInPeace());
     await expect(panel.getByTestId('peace-forecast-warning')).toBeVisible();

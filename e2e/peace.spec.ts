@@ -5,7 +5,7 @@ import { newWar, warKey } from '../src/sim/state/war.ts';
 import type { FactionId } from '../src/sim/ids.ts';
 import { executeOrder } from '../src/sim/orders/orders.ts';
 import { fixtureWorld } from '../src/sim/fixture.ts';
-import { stalePeaceForecast } from './peace-support.ts';
+import { peaceStanding, stalePeaceForecast } from './peace-support.ts';
 import {
   camera,
   carthageOffersPeace,
@@ -40,6 +40,23 @@ test.describe('peace', () => {
   test.beforeEach(async ({ page }) => {
     await openGame(page);
   });
+
+  for (const enemy of ['mediolanum', 'macedon'] as const) {
+    test(`an unaffordable ${enemy} verdict uses a readable capitalized name`, async ({ page }) => {
+      const state = peaceStanding(enemy, 2);
+      const faction = state.factions[enemy as FactionId];
+      if (!faction) throw new Error('fixture');
+      faction.stores.gold = 416;
+      await load(page, state);
+      await page.getByTestId('wars-button').click();
+      const panel = page.getByTestId('wars-panel');
+      await panel.getByLabel(`${faction.name} pays you`).check();
+      await panel.getByTestId('peace-gold').fill('900');
+      await expect(panel.getByTestId('peace-verdict')).toHaveText(
+        `These terms cannot be met: ${faction.name} has 416 gold, not the 900 the terms ask.`,
+      );
+    });
+  }
 
   test('makes peace through the wars panel: a refusal explained, an accepted offer, the siege lifted, and a truce', async ({
     page,
@@ -155,7 +172,9 @@ test.describe('peace', () => {
 
   for (const accept of [true, false]) {
     for (const manual of [false, true]) {
-      test(`export/load preserves ${manual ? 'manual' : 'offer-owned'} pause before ${accept ? 'accepting' : 'refusing'}`, async ({ page }) => {
+      test(`export/load preserves ${manual ? 'manual' : 'offer-owned'} pause before ${accept ? 'accepting' : 'refusing'}`, async ({
+        page,
+      }) => {
         await load(page, carthageOffersPeace());
         await resume(page);
         const panel = page.getByTestId('wars-panel');
@@ -180,7 +199,9 @@ test.describe('peace', () => {
         } else {
           await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
         }
-        await expect(page.getByTestId('alerts')).toContainText(accept ? 'Peace with Carthage' : 'You refused peace with Carthage');
+        await expect(page.getByTestId('alerts')).toContainText(
+          accept ? 'Peace with Carthage' : 'You refused peace with Carthage',
+        );
       });
     }
 
