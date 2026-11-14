@@ -1,0 +1,9 @@
+[
+  "formationMustered",
+  "musteredEarly",
+  "cityChangedOwner",
+  "storeRanOut",
+  "fateLapsed",
+  "buildingFinished",
+  "buildingsLost"
+]
