@@ -8,6 +8,12 @@ Land, coastlines, and rivers come from [Natural Earth](https://www.naturalearthd
 
 Natural Earth is in the public domain. Made with Natural Earth. Free vector and raster map data @ naturalearthdata.com.
 
+`drawing-coast.json` is a renderer-only outline from the same commit's 1:10m `land`
+layer, simplified to 0.1 km and packed in 25 m units. `node scripts/map/build-coast.ts`
+regenerates it, verifies the pinned source checksum, and retains the physical coast at
+inhabited shores and constrained crossings. Offshore islands without physical land are
+uninhabited scenery, never new provinces. The rules continue to use `map.json` unchanged.
+
 ## ETOPO1 elevation
 
 The outlines of mountains and hills come from ETOPO1, NOAA National Centers for Environmental Information, which is in the public domain. Cite it as: Amante, C. and B.W. Eakins, 2009. ETOPO1 1 Arc-Minute Global Relief Model. NOAA Technical Memorandum NESDIS NGDC-24, doi:10.7289/V5C8276M.
