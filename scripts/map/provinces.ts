@@ -1,5 +1,6 @@
 import { Delaunay } from 'd3-delaunay';
 import type { MultiPolygon, Point, Polygon, Ring } from '../../src/sim/map.ts';
+import { recut, type BorderTerrain } from './borders.ts';
 import {
   area,
   borderLengths,
@@ -36,8 +37,15 @@ export interface IslandJoin {
 }
 
 export interface Partition {
+  /**
+   * The land, with a vertex on the coast wherever a re-cut border meets it, so the
+   * provinces' coasts and the coastline drawn from this land are one line.
+   */
+  land: MultiPolygon;
   /** One area per seed, in seed order. */
   territories: MultiPolygon[];
+  /** The areas the straight borders between the seeds' Voronoi cells give, which `territories` re-cuts along the land. */
+  straight: MultiPolygon[];
   /** Seeds alone on their land component. */
   island: boolean[];
   merges: OrphanMerge[];
@@ -50,7 +58,13 @@ interface Piece {
   cell: number;
 }
 
-export function partition(land: MultiPolygon, seeds: Point[]): Partition {
+/**
+ * Cuts the land among the seeds by their Voronoi cells. With `terrain`, the borders
+ * between seeds on one land are then re-cut to follow the rivers, the ridges, and the
+ * coast, and to wander where none is near. Land that holds no seed joins the nearest
+ * province as the straight cut has it, so an island keeps its owner.
+ */
+export function partition(land: MultiPolygon, seeds: Point[], terrain?: BorderTerrain): Partition {
   const seedsOf: number[][] = land.map(() => []);
   for (const [seed, point] of seeds.entries()) {
     const component = land.findIndex((polygon) => polygonContains(polygon, point));
@@ -59,33 +73,79 @@ export function partition(land: MultiPolygon, seeds: Point[]): Partition {
     members.push(seed);
   }
 
-  const territories: Polygon[][] = seeds.map(() => []);
+  const straight: Polygon[][] = seeds.map(() => []);
+  const bent: Polygon[][] = seeds.map(() => []);
   const merges: OrphanMerge[] = [];
   const unclaimed: Polygon[] = [];
+  const stitched: Polygon[] = [];
   for (const [component, polygon] of land.entries()) {
+    stitched.push(polygon);
     const members = seedsOf[component] ?? [];
     const [only] = members;
     if (only === undefined) unclaimed.push(polygon);
-    else if (members.length === 1) territories[only]?.push(polygon);
-    else {
+    else if (members.length === 1) {
+      straight[only]?.push(polygon);
+      bent[only]?.push(polygon);
+    } else {
+      const straightMerges: OrphanMerge[] = [];
       const pieces = cutByVoronoi(polygon, members, seeds);
-      const stranded = mergeOrphans(pieces, merges);
+      const stranded = mergeOrphans(pieces, straightMerges);
       unclaimed.push(...stranded.map((piece) => piece.polygon));
-      for (const piece of pieces) {
-        if (piece.owner !== undefined) territories[piece.owner]?.push(piece.polygon);
+      const owned = pieces.flatMap((piece) =>
+        piece.owner === undefined ? [] : [{ owner: piece.owner, polygon: piece.polygon }],
+      );
+      for (const { owner, polygon: part } of owned) straight[owner]?.push(part);
+      if (!terrain || stranded.length > 0) {
+        merges.push(...straightMerges);
+        for (const { owner, polygon: part } of owned) bent[owner]?.push(part);
+        continue;
+      }
+      const recut = cutAlongLand(polygon, members, seeds, owned, terrain);
+      stitched[component] = recut.land;
+      if (mergeOrphans(recut.pieces, merges).length > 0) {
+        throw new Error('a piece of the re-cut land touches no province');
+      }
+      for (const piece of recut.pieces) {
+        if (piece.owner !== undefined) bent[piece.owner]?.push(piece.polygon);
       }
     }
   }
 
-  const joins = joinNearest(unclaimed, territories);
+  const joins = joinNearest(unclaimed, straight);
+  for (const join of joins) bent[join.seed]?.push(join.polygon);
+  const unite = (polygons: Polygon[]) => union(...polygons.map((polygon) => [polygon]));
   return {
-    territories: territories.map((polygons) => union(...polygons.map((polygon) => [polygon]))),
+    land: stitched,
+    territories: bent.map(unite),
+    straight: straight.map(unite),
     island: seeds.map((_, seed) =>
       seedsOf.some((members) => members.length === 1 && members[0] === seed),
     ),
     merges,
-    joins,
+    joins: joins.map(({ seed, area, distance, at }) => ({ seed, area, distance, at })),
   };
+}
+
+function cutAlongLand(
+  component: Polygon,
+  members: number[],
+  seeds: Point[],
+  territories: { owner: number; polygon: Polygon }[],
+  terrain: BorderTerrain,
+): { land: Polygon; pieces: Piece[] } {
+  const cities = new Map(members.map((seed) => [seed, seeds[seed] as Point]));
+  const { land, regions } = recut(component, territories, cities, terrain);
+  const pieces = members.flatMap((seed) => {
+    const parts = intersection([land], regions.get(seed) ?? []);
+    const core = parts.findIndex((part) => polygonContains(part, seeds[seed] as Point));
+    if (core < 0) throw new Error(`seed ${seed} lies outside its own re-cut province`);
+    return parts.map((part, i) => ({
+      polygon: part,
+      owner: i === core ? seed : undefined,
+      cell: seed,
+    }));
+  });
+  return { land, pieces };
 }
 
 function cutByVoronoi(component: Polygon, members: number[], seeds: Point[]): Piece[] {
@@ -151,7 +211,10 @@ function longest(lengths: Map<number, number>): [key: number, length: number] | 
   return best;
 }
 
-function joinNearest(unclaimed: Polygon[], territories: Polygon[][]): IslandJoin[] {
+function joinNearest(
+  unclaimed: Polygon[],
+  territories: Polygon[][],
+): (IslandJoin & { polygon: Polygon })[] {
   const targets = territories.flatMap((polygons, seed) =>
     polygons.map((polygon) => ({ seed, polygon, box: boxOf([polygon]) })),
   );
@@ -170,7 +233,7 @@ function joinNearest(unclaimed: Polygon[], territories: Polygon[][]): IslandJoin
     }
     if (!best) throw new Error('no territory to join');
     territories[best.seed]?.push(polygon);
-    return { ...best, area: area([polygon]), at: polygon[0]?.[0] ?? [0, 0] };
+    return { ...best, area: area([polygon]), at: polygon[0]?.[0] ?? [0, 0], polygon };
   });
 }
 

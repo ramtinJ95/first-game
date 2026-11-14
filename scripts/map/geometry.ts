@@ -406,3 +406,53 @@ function measure(intervals: [number, number][]): number {
   }
   return total;
 }
+
+const CONFORM_BUCKET_KM = 8;
+
+/**
+ * Puts into each edge every vertex of the outlines that lies on it, so outlines on the
+ * 0.1 km lattice that touch share their vertices: a clip drops a vertex where its edges
+ * run straight on, which left a neighbour's corner in the middle of an edge.
+ */
+export function conform(outlines: MultiPolygon[]): MultiPolygon[] {
+  const lattice = (value: number) => Math.round(value * 10);
+  const bucketOf = (x: number, y: number) =>
+    `${Math.floor(x / CONFORM_BUCKET_KM)} ${Math.floor(y / CONFORM_BUCKET_KM)}`;
+  const buckets = new Map<string, Point[]>();
+  for (const outline of outlines) {
+    for (const point of outline.flat(2)) {
+      const key = bucketOf(point[0], point[1]);
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(point);
+      else buckets.set(key, [point]);
+    }
+  }
+  const onEdge = (a: Point, b: Point): Point[] => {
+    const [ax, ay, bx, by] = [lattice(a[0]), lattice(a[1]), lattice(b[0]), lattice(b[1])];
+    const length = (bx - ax) ** 2 + (by - ay) ** 2;
+    const found = new Map<string, { along: number; point: Point }>();
+    const i0 = Math.floor(Math.min(a[0], b[0]) / CONFORM_BUCKET_KM);
+    const i1 = Math.floor(Math.max(a[0], b[0]) / CONFORM_BUCKET_KM);
+    const j0 = Math.floor(Math.min(a[1], b[1]) / CONFORM_BUCKET_KM);
+    const j1 = Math.floor(Math.max(a[1], b[1]) / CONFORM_BUCKET_KM);
+    for (let i = i0; i <= i1; i++) {
+      for (let j = j0; j <= j1; j++) {
+        for (const point of buckets.get(`${i} ${j}`) ?? []) {
+          const px = lattice(point[0]);
+          const py = lattice(point[1]);
+          if ((bx - ax) * (py - ay) !== (by - ay) * (px - ax)) continue;
+          const along = (px - ax) * (bx - ax) + (py - ay) * (by - ay);
+          if (along > 0 && along < length) found.set(`${px} ${py}`, { along, point });
+        }
+      }
+    }
+    return [...found.values()].sort((p, q) => p.along - q.along).map(({ point }) => point);
+  };
+  return outlines.map((outline) =>
+    outline.map((polygon) =>
+      polygon.map((ring) =>
+        ring.flatMap((a, k) => [a, ...onEdge(a, ring[(k + 1) % ring.length] as Point)]),
+      ),
+    ),
+  );
+}

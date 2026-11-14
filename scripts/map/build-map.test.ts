@@ -6,9 +6,18 @@ import {
   TERRAIN_KINDS,
   type GameMap,
   type MultiPolygon,
+  type Point,
 } from '../../src/sim/map.ts';
 import type { ProvinceId } from '../../src/sim/ids.ts';
-import { buildMap, landInExtent, MAP_FILE, MAX_CITY_MOVE_KM, serializeMap } from './build-map.ts';
+import { BORDER_CELL_KM, MAX_BORDER_MOVE_KM, TREMOR_KM } from './borders.ts';
+import {
+  buildMap,
+  landInExtent,
+  MAP_FILE,
+  MAX_CITY_MOVE_KM,
+  serializeMap,
+  type MapBuild,
+} from './build-map.ts';
 import { readCities, type City } from './cities.ts';
 import { COASTAL_MIN_SEA_KM, NEIGHBOUR_MIN_BORDER_KM } from './provinces.ts';
 import {
@@ -37,6 +46,7 @@ let committedText: string;
 let map: GameMap;
 let land: MultiPolygon;
 let landArea: number;
+let build: MapBuild;
 
 beforeAll(async () => {
   sources = await loadSources();
@@ -44,14 +54,14 @@ beforeAll(async () => {
   map = parseMap(JSON.parse(committedText));
   land = landInExtent(sources.land);
   landArea = area(land);
+  build = buildMap(readCities(), sources);
 }, BUILD_TIMEOUT_MS);
 
 test(
   'two builds serialize byte for byte the same, and match the committed data/map/map.json',
   () => {
-    const cities = readCities();
-    const first = serializeMap(buildMap(cities, sources).map);
-    const second = serializeMap(buildMap(cities, sources).map);
+    const first = serializeMap(build.map);
+    const second = serializeMap(buildMap(readCities(), sources).map);
     expect(second === first, 'second build differs from the first').toBe(true);
     expect(
       first === committedText,
@@ -116,6 +126,55 @@ test('neighbouring outlines touch: they share at least one vertex on the 0.1 km 
       .map((other) => `${province.id} / ${other}`),
   );
   expect(apart).toEqual([]);
+});
+
+test('every edge of a province is an edge of exactly one other province, of the coastline, or of the map', () => {
+  const coast = new Set(
+    map.coastline.flatMap((line) => line.slice(1).map((b, k) => edgeKey(line[k] as Point, b))),
+  );
+  const uses = new Map<string, ProvinceId[]>();
+  for (const province of map.provinces) {
+    for (const [a, b] of outlineEdges(province.outline)) {
+      const key = edgeKey(a, b);
+      uses.set(key, [...(uses.get(key) ?? []), province.id]);
+    }
+  }
+  const stray = [...uses].flatMap(([key, ids]) => {
+    if (ids.length === 2 || (ids.length === 1 && coast.has(key))) return [];
+    const [a, b] = key.split(' ').map((end) => end.split(',').map(Number)) as [Point, Point];
+    const middle: Point = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    if (ids.length === 1 && distanceToBoundary([[map.extent]], middle) <= 2 * ROUNDING_KM)
+      return [];
+    return [`${ids.join(' and ')}: ${key}`];
+  });
+  expect(stray).toEqual([]);
+});
+
+const BEND_WINDOW_KM = 40;
+const MIN_BEND_KM = 0.4;
+
+test(`every ${BEND_WINDOW_KM} km of a border between two provinces bends at least ${MIN_BEND_KM} km off a straight line, where the straight cut ran ruled lines`, () => {
+  const ruled = (outlines: MultiPolygon[]) =>
+    ruledStretches(sharedLines(outlines), BEND_WINDOW_KM, MIN_BEND_KM).map(
+      ([from, to]) => `${from} to ${to}`,
+    );
+  expect(ruled(map.provinces.map((province) => province.outline))).toEqual([]);
+  expect(ruled([...build.straight.values()]).length).toBeGreaterThan(100);
+});
+
+test(`a re-cut border lies within ${MAX_BORDER_MOVE_KM} km of the straight border it replaces, and under 4 % of the land changes province`, () => {
+  const slack = (BORDER_CELL_KM + TREMOR_KM) * Math.SQRT2;
+  const far = map.provinces.flatMap((province) => {
+    const straight = build.straight.get(province.id) ?? [];
+    let worst = 0;
+    for (const point of province.outline.flat(2)) {
+      worst = Math.max(worst, distanceToBoundary(straight, point));
+    }
+    return worst > MAX_BORDER_MOVE_KM + slack ? [`${province.id}: ${worst.toFixed(1)} km`] : [];
+  });
+  expect(far).toEqual([]);
+  const moved = build.borders.reduce((sum, change) => sum + change.lost, 0);
+  expect(moved / landArea).toBeLessThan(0.04);
 });
 
 test(
@@ -325,3 +384,85 @@ test('no province holds more settlements than its quota, and no city is also a s
   const cityIds = new Set(map.provinces.map((province) => province.pleiadesId));
   expect(map.settlements.filter((s) => cityIds.has(s.pleiadesId)).map((s) => s.id)).toEqual([]);
 });
+
+function edgeKey([ax, ay]: Point, [bx, by]: Point): string {
+  const a = `${ax},${ay}`;
+  const b = `${bx},${by}`;
+  return a < b ? `${a} ${b}` : `${b} ${a}`;
+}
+
+function* outlineEdges(outline: MultiPolygon): Generator<[Point, Point]> {
+  for (const polygon of outline) {
+    for (const ring of polygon) {
+      for (const [k, a] of ring.entries()) yield [a, ring[(k + 1) % ring.length] as Point];
+    }
+  }
+}
+
+/** The edges two outlines share, joined into lines that end where three outlines or the coast meet. */
+function sharedLines(outlines: MultiPolygon[]): Point[][] {
+  const uses = new Map<string, number>();
+  for (const outline of outlines) {
+    for (const [a, b] of outlineEdges(outline)) {
+      const key = edgeKey(a, b);
+      uses.set(key, (uses.get(key) ?? 0) + 1);
+    }
+  }
+  const next = new Map<string, Point[]>();
+  for (const [key, count] of uses) {
+    if (count !== 2) continue;
+    const [a, b] = key.split(' ').map((end) => end.split(',').map(Number)) as [Point, Point];
+    next.set(`${a}`, [...(next.get(`${a}`) ?? []), b]);
+    next.set(`${b}`, [...(next.get(`${b}`) ?? []), a]);
+  }
+  const walked = new Set<string>();
+  const lines: Point[][] = [];
+  for (const [start, ends] of next) {
+    if (ends.length === 2) continue;
+    for (const first of ends) {
+      const from = start.split(',').map(Number) as Point;
+      if (walked.has(edgeKey(from, first))) continue;
+      const line = [from];
+      let at = first;
+      for (;;) {
+        walked.add(edgeKey(line[line.length - 1] as Point, at));
+        line.push(at);
+        const onward = (next.get(`${at}`) ?? []).filter((p) => !walked.has(edgeKey(at, p)));
+        if ((next.get(`${at}`) ?? []).length !== 2 || onward.length === 0) break;
+        at = onward[0] as Point;
+      }
+      lines.push(line);
+    }
+  }
+  return lines;
+}
+
+/** Each stretch of at least `window` km along a line whose points all lie within `bend` km of its chord. */
+function ruledStretches(lines: Point[][], window: number, bend: number): [Point, Point][] {
+  const ruled: [Point, Point][] = [];
+  for (const line of lines) {
+    let end = 0;
+    let length = 0;
+    for (let start = 0; start < line.length; start++) {
+      while (end + 1 < line.length && length < window) {
+        length += distance(line[end] as Point, line[end + 1] as Point);
+        end++;
+      }
+      if (length < window) break;
+      const a = line[start] as Point;
+      const b = line[end] as Point;
+      const chord = distance(a, b);
+      let off = 0;
+      for (let k = start + 1; k < end; k++) {
+        const [px, py] = line[k] as Point;
+        off = Math.max(
+          off,
+          Math.abs((px - a[0]) * (b[1] - a[1]) - (py - a[1]) * (b[0] - a[0])) / chord,
+        );
+      }
+      if (off < bend) ruled.push([a, b]);
+      length -= distance(line[start] as Point, line[start + 1] as Point);
+    }
+  }
+  return ruled;
+}

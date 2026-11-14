@@ -24,6 +24,7 @@ import { map, openGame, startGame } from './support.ts';
  *
  * `--zooms widest,middle,closest` measures each drawing at those zooms: the whole map,
  * 1 px per km over Italy, and 4.2 px per km over the Alps, as the map capture pans.
+ * `plateau-middle` and `plateau-closest` look at the Persian plateau at 1.6 and 4.2.
  * A zoom waits until the map reports its terrain built, where the build has that flag.
  * `--root <dir>` serves the build of another checkout, to compare commits.
  *
@@ -67,6 +68,8 @@ const ZOOMS: Record<string, { at: MapPoint; scale: number } | undefined> = {
   widest: undefined,
   middle: { at: { x: 2600, y: 2200 }, scale: 1 },
   closest: { at: { x: 2420, y: 1880 }, scale: 4.2 },
+  'plateau-middle': { at: { x: 6000, y: 3150 }, scale: 1.6 },
+  'plateau-closest': { at: { x: 6080, y: 3330 }, scale: 4.2 },
 };
 const zooms = values.zooms.split(',');
 for (const zoom of zooms) if (!(zoom in ZOOMS)) throw new Error(`unknown zoom ${zoom}`);
@@ -90,8 +93,11 @@ async function zoomTo(page: Page, at: MapPoint, scale: number) {
   await page.mouse.up();
   const busy = page.locator('canvas[data-terrain="busy"]');
   const flagged = await page.locator('canvas[data-terrain]').count();
-  if (flagged > 0)
+  if (flagged > 0) {
+    // The flag still says "ready" for the old view until the page draws a frame of the new one.
+    await busy.waitFor({ timeout: 10_000 }).catch(() => undefined);
     await busy.waitFor({ state: 'detached', timeout: 120_000 }).catch(() => undefined);
+  }
 }
 
 async function measure(browser: Browser, base: string, query: string, zoom: string, shot?: string) {

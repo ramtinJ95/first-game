@@ -1,8 +1,21 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { parseMap } from '../../sim/map.ts';
-import { Land, placeFields, placeRelief, TIERS, WOOD_RIM, type Mark, type Tier } from './marks.ts';
+import { parseMap, type MultiPolygon, type Point } from '../../sim/map.ts';
+import { PAPER } from '../palette.ts';
+import { groundTint, TINT_CELL } from './draw.ts';
+import {
+  foldOutline,
+  Land,
+  placeFields,
+  placeRelief,
+  TIERS,
+  WOOD_RIM,
+  type Mark,
+  type Tier,
+} from './marks.ts';
+import { AreaIndex } from './area-index.ts';
+import { WAVER } from './waver.ts';
 
 const map = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../../../data/map/map.json'), 'utf8')),
@@ -17,6 +30,14 @@ const GAUL = { left: 1536, top: 1024, right: 2560, bottom: 1536 };
 const SAHARA = { left: 1024, top: 3072, right: 2048, bottom: 3584 };
 const NILE_DELTA = { left: 3968, top: 3584, right: 4160, bottom: 3776 };
 const ROMA = { left: 2432, top: 2304, right: 2560, bottom: 2432 };
+/** The Zagros and the plateau between Susa, Aspadana, and Persepolis. */
+const ZAGROS = { left: 5632, top: 3072, right: 6144, bottom: 3584 };
+/** The plain north of Persepolis, between the folds of the Zagros. */
+const PERSIS = { left: 6016, top: 3264, right: 6144, bottom: 3392 };
+/** The western edge of the Dasht-e Kavir. */
+const KAVIR = { left: 5952, top: 2880, right: 6080, bottom: 3008 };
+/** The steppe between Olbia and Tanais. */
+const STEPPE = { left: 4096, top: 1536, right: 4608, bottom: 2048 };
 
 interface Foot {
   kind: Mark['kind'];
@@ -62,16 +83,21 @@ describe('placing the terrain', () => {
   it('places nothing in the sea or a lake, and each kind only inside its own area', () => {
     const inside: Partial<Record<Mark['kind'], (x: number, y: number) => boolean>> = {
       mountain: (x, y) => land.mountains.inside(x, y),
+      fold: (x, y) => land.mountains.inside(x, y) && land.cover(x, y) !== 'green',
       hill: (x, y) => land.hills.inside(x, y),
-      tree: (x, y) => land.forest.inside(x, y),
+      tree: (x, y) => land.forest.inside(x, y) || land.riverAt(x, y, 4) !== undefined,
       dune: (x, y) => land.desert.inside(x, y),
       stipple: (x, y) => land.desert.inside(x, y),
+      crack: (x, y) => land.salt.inside(x, y) && land.panDepth(x, y) > 0,
+      tumulus: (x, y) => land.cover(x, y) === 'dry',
+      hamlet: (x, y) => land.cover(x, y) !== 'green' && !land.desert.inside(x, y),
+      qanat: (x, y) => land.cover(x, y) === 'arid' && !land.mountains.inside(x, y),
     };
     for (const tier of ['wide', 'middle', 'close'] as const) {
       const rects =
         tier === 'close'
-          ? [ROMA, NILE_DELTA, { left: 2176, top: 1792, right: 2304, bottom: 1920 }]
-          : [...chunks(ALPS, tier), ...chunks(SAHARA, tier)];
+          ? [ROMA, NILE_DELTA, { left: 2176, top: 1792, right: 2304, bottom: 1920 }, PERSIS, KAVIR]
+          : [...chunks(ALPS, tier), ...chunks(SAHARA, tier), ...chunks(ZAGROS, tier)];
       for (const rect of rects) {
         for (const { kind, x, y } of feet([
           ...placeRelief(land, rect, tier),
@@ -145,5 +171,310 @@ describe('the ground at the closest zoom', () => {
     );
     expect(wet).toEqual([]);
     for (const s of streams) for (const [x, y] of s.points) expect(land.open(x, y)).toBe(true);
+  });
+});
+
+describe('the dry lands', () => {
+  const count = (marks: readonly Mark[], kind: Mark['kind']) =>
+    marks.filter((m) => m.kind === kind).length;
+  const across = (area: typeof ALPS, tier: Tier) =>
+    chunks(area, tier).flatMap((rect) => placeRelief(land, rect, tier));
+
+  it('tells the green land of the forests from the dry steppe and the arid plateau', () => {
+    const at = (id: string) => {
+      const province = map.provinces.find((p) => p.id === id);
+      if (!province) throw new Error(`no ${id}`);
+      return land.cover(province.city[0], province.city[1]);
+    };
+    expect(at('lutetia')).toBe('green');
+    expect(at('olbia')).toBe('dry');
+    expect(at('ankyra')).toBe('dry');
+    expect(at('numantia')).toBe('dry');
+    expect(at('persepolis')).toBe('arid');
+    expect(at('aspadana')).toBe('arid');
+    expect(at('babylon')).toBe('arid');
+  });
+
+  it('colours the bare ground paper on green land and warmer the drier it is', () => {
+    const tint = groundTint(land, map.width, map.height);
+    const colour = (id: string) => {
+      const province = map.provinces.find((p) => p.id === id);
+      if (!province) throw new Error(`no ${id}`);
+      const i = Math.floor(province.city[0] / TINT_CELL);
+      const j = Math.floor(province.city[1] / TINT_CELL);
+      const k = (j * tint.width + i) * 4;
+      return (
+        ((tint.pixels[k] ?? 0) << 16) | ((tint.pixels[k + 1] ?? 0) << 8) | (tint.pixels[k + 2] ?? 0)
+      );
+    };
+    const blue = (c: number) => c & 0xff;
+    expect(colour('lutetia')).toBe(PAPER);
+    expect(blue(colour('olbia'))).toBeLessThan(blue(PAPER));
+    expect(blue(colour('persepolis'))).toBeLessThan(blue(colour('olbia')));
+  });
+
+  it('lays the dry ranges as folds and keeps the green ranges as peaks', () => {
+    const zagros = across(ZAGROS, 'middle');
+    const alps = placeRelief(land, ALPS, 'middle');
+    expect(count(zagros, 'fold')).toBeGreaterThan(100);
+    expect(count(zagros, 'fold')).toBeGreaterThan(count(zagros, 'mountain') * 4);
+    expect(count(alps, 'mountain')).toBeGreaterThan(300);
+    expect(count(alps, 'fold') * 15).toBeLessThan(count(alps, 'mountain'));
+  });
+
+  it('keeps the whole of every fold on the coastal ranges of Cilicia, Cyprus, and Tingis on land', () => {
+    const coasts = [
+      { left: 4352, top: 2816, right: 4608, bottom: 3072 },
+      { left: 4096, top: 3072, right: 4352, bottom: 3328 },
+      { left: 640, top: 2432, right: 896, bottom: 2688 },
+    ];
+    let folds = 0;
+    for (const tier of ['middle', 'close'] as const) {
+      for (const rect of coasts.flatMap((c) => chunks(c, tier))) {
+        for (const m of placeRelief(land, rect, tier)) {
+          if (m.kind !== 'fold') continue;
+          folds++;
+          for (const [x, y] of foldOutline(m)) {
+            expect(land.open(x, y), `fold at ${m.x},${m.y} reaches ${x},${y}`).toBe(true);
+          }
+        }
+      }
+    }
+    expect(folds).toBeGreaterThan(20);
+  });
+
+  it('shows the ground of the dry land from the middle zoom, with burial mounds on the steppe', () => {
+    const steppe = across(STEPPE, 'middle');
+    expect(count(steppe, 'tuft')).toBeGreaterThan(200);
+    expect(count(steppe, 'tumulus')).toBeGreaterThan(10);
+    expect(count(across(GAUL, 'middle'), 'tuft') * 20).toBeLessThan(count(steppe, 'tuft'));
+  });
+
+  it('lays salt crust only on the pans of the salt desert, and no dunes on it', () => {
+    expect(land.pans.length).toBeGreaterThan(4);
+    for (const pan of land.pans) {
+      for (const lobe of pan.lobes) expect(land.salt.inside(lobe.x, lobe.y)).toBe(true);
+    }
+    const [pan] = land.pans;
+    if (!pan) throw new Error('no pan');
+    const around = { left: pan.x - 64, top: pan.y - 64, right: pan.x + 64, bottom: pan.y + 64 };
+    const marks = [...placeRelief(land, around, 'close'), ...placeRelief(land, around, 'middle')];
+    expect(count(marks, 'crack')).toBeGreaterThan(50);
+    const onPans = marks.filter(
+      (m) => (m.kind === 'dune' || m.kind === 'stipple') && land.panDepth(m.x, m.y) > 0,
+    );
+    expect(onPans).toEqual([]);
+    expect(count(across(SAHARA, 'middle'), 'crack')).toBe(0);
+  });
+
+  it('brings each qanat down from the foot of a range to a hamlet on open land', () => {
+    const marks = [PERSIS, ZAGROS].flatMap((area) =>
+      chunks(area, 'close').flatMap((rect) => placeFields(land, rect)),
+    );
+    const hamlets = marks.flatMap((m) => (m.kind === 'hamlet' ? [m] : []));
+    const qanats = marks.flatMap((m) => (m.kind === 'qanat' ? [m] : []));
+    expect(hamlets.length).toBeGreaterThan(20);
+    expect(qanats.length).toBeGreaterThan(5);
+    for (const { points } of qanats) {
+      for (const [x, y] of points) {
+        expect(land.open(x, y) && !land.mountains.inside(x, y), `${x},${y}`).toBe(true);
+      }
+      const [mx, my] = points[0] as readonly [number, number];
+      const foot = [0, 1, 2, 3, 4, 5, 6, 7].some((n) =>
+        land.mountains.inside(mx + Math.cos(n * 0.785) * 3, my + Math.sin(n * 0.785) * 3),
+      );
+      expect(foot, `the mother well at ${mx},${my} lies at a range's foot`).toBe(true);
+      const [ex, ey] = points[points.length - 1] as readonly [number, number];
+      const end = hamlets.some((h) => Math.hypot(h.x - ex, h.y - ey) < 4);
+      expect(end, `the qanat ending at ${ex},${ey} reaches a hamlet`).toBe(true);
+    }
+    const gaul = chunks(GAUL, 'close').flatMap((rect) => placeFields(land, rect));
+    expect(count(gaul, 'hamlet') * 10).toBeLessThan(hamlets.length);
+  });
+});
+
+/** Each stretch of at least `window` km along a line whose points all lie within `bend` km of its chord. */
+function ruledStretches(lines: Point[][], window: number, bend: number): [Point, Point][] {
+  const ruled: [Point, Point][] = [];
+  const length = (a: Point, b: Point) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+  for (const line of lines) {
+    let end = 0;
+    let run = 0;
+    for (let start = 0; start < line.length; start++) {
+      while (end + 1 < line.length && run < window) {
+        run += length(line[end] as Point, line[end + 1] as Point);
+        end++;
+      }
+      if (run < window) break;
+      const a = line[start] as Point;
+      const b = line[end] as Point;
+      const chord = length(a, b);
+      let off = 0;
+      for (let k = start + 1; k < end; k++) {
+        const [px, py] = line[k] as Point;
+        off = Math.max(
+          off,
+          Math.abs((px - a[0]) * (b[1] - a[1]) - (py - a[1]) * (b[0] - a[0])) / chord,
+        );
+      }
+      if (off < bend) ruled.push([a, b]);
+      run -= length(line[start] as Point, line[start + 1] as Point);
+    }
+  }
+  return ruled;
+}
+
+function insideOutline(outline: MultiPolygon, x: number, y: number): boolean {
+  let inside = false;
+  for (const ring of outline.flat()) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [ax, ay] = ring[i] as Point;
+      const [bx, by] = ring[j] as Point;
+      if (ay > y !== by > y && x < ((bx - ax) * (y - ay)) / (by - ay) + ax) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/** The pairs of edges of a ring that cross each other, found through a grid of 16 km cells. */
+function crossings(ring: readonly Point[]): [Point, Point][] {
+  const cells = new Map<string, number[]>();
+  const n = ring.length;
+  const at = (i: number) => ring[i % n] as Point;
+  for (let i = 0; i < n; i++) {
+    const [ax, ay] = at(i);
+    const [bx, by] = at(i + 1);
+    for (
+      let cx = Math.floor(Math.min(ax, bx) / 16);
+      cx <= Math.floor(Math.max(ax, bx) / 16);
+      cx++
+    ) {
+      for (
+        let cy = Math.floor(Math.min(ay, by) / 16);
+        cy <= Math.floor(Math.max(ay, by) / 16);
+        cy++
+      ) {
+        const key = `${cx},${cy}`;
+        cells.set(key, [...(cells.get(key) ?? []), i]);
+      }
+    }
+  }
+  const side = (a: Point, b: Point, c: Point) =>
+    Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+  const found: [Point, Point][] = [];
+  for (const edges of cells.values()) {
+    for (const i of edges) {
+      for (const j of edges) {
+        if (j <= i + 1 || (i === 0 && j === n - 1)) continue;
+        const [a, b, c, d] = [at(i), at(i + 1), at(j), at(j + 1)];
+        if (side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0)
+          found.push([a, c]);
+      }
+    }
+  }
+  return found;
+}
+
+function boundsOf(outline: MultiPolygon): {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+} {
+  const points = outline.flat(2);
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  return {
+    left: Math.min(...xs),
+    top: Math.min(...ys),
+    right: Math.max(...xs),
+    bottom: Math.max(...ys),
+  };
+}
+
+describe("the desert's edge", () => {
+  const drawn = () => land.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline);
+  const original = map.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline);
+  /**
+   * The runs of each ring that a player sees as the desert's edge where it wavers in full:
+   * away from the coast and the frame, and with no desert on its far side, as there is
+   * along the seam between two named deserts.
+   */
+  const seen = (outlines: readonly MultiPolygon[]) => {
+    const index = new AreaIndex(outlines, 0, { seams: false });
+    const desert = (x: number, y: number) => index.inside(x, y);
+    return outlines.flatMap((outline) =>
+      outline.flat().flatMap((ring) => {
+        const runs: Point[][] = [[]];
+        for (const [i, point] of [...ring, ...ring.slice(0, 1)].entries()) {
+          const before = ring[(i + ring.length - 1) % ring.length] as Point;
+          const after = ring[(i + 1) % ring.length] as Point;
+          const length = Math.hypot(after[0] - before[0], after[1] - before[1]) || 1;
+          const nx = -(after[1] - before[1]) / length;
+          const ny = (after[0] - before[0]) / length;
+          const edge =
+            desert(point[0] + nx, point[1] + ny) !== desert(point[0] - nx, point[1] - ny);
+          if (edge && land.coast.smoothDepth(point[0], point[1]) >= WAVER.coastKm[1]) {
+            runs.at(-1)?.push(point);
+          } else if (runs.at(-1)?.length) runs.push([]);
+        }
+        return runs.filter((run) => run.length > 1);
+      }),
+    );
+  };
+
+  it('bends at least 1 km off a straight line in every 40 km, where the map data ran ruled lines', () => {
+    const ruled = (outlines: readonly MultiPolygon[]) =>
+      ruledStretches(seen(outlines), 40, 1).map(([a, b]) => `${a.join(',')} to ${b.join(',')}`);
+    expect(ruled(drawn())).toEqual([]);
+    expect(ruled(original).length).toBeGreaterThan(100);
+  });
+
+  it('never crosses itself', () => {
+    const crossed = drawn()
+      .flatMap((outline) => outline.flat().flatMap(crossings))
+      .map(([a, b]) => `${a.join(',')} and ${b.join(',')}`);
+    expect(crossed).toEqual([]);
+  });
+
+  it('bends an edge two deserts share alike in both, so no ground lies in two deserts', () => {
+    const each = drawn().map((outline) => new AreaIndex([outline], 0, { seams: false }));
+    const twice: string[] = [];
+    const corners = original.flatMap((outline) => outline.flat(2));
+    for (const [cx, cy] of [...corners, [3525, 3840] as Point]) {
+      for (let x = cx - 6; x <= cx + 6; x += 0.5) {
+        for (let y = cy - 6; y <= cy + 6; y += 0.5) {
+          if (each.filter((index) => index.inside(x, y)).length > 1) twice.push(`${x},${y}`);
+        }
+      }
+    }
+    expect(twice.slice(0, 5)).toEqual([]);
+    expect(land.desert.inside(3525, 3840)).toBe(each.some((index) => index.inside(3525, 3840)));
+  });
+
+  it('keeps the dunes and stipple on the drawn desert', () => {
+    const tacape = map.provinces.find((p) => p.id === 'tacape');
+    if (!tacape) throw new Error('no tacape');
+    const [tx, ty] = tacape.city;
+    const edge = { left: tx - 384, top: ty, right: tx + 128, bottom: ty + 384 };
+    const marks = [
+      ...chunks(SAHARA, 'middle').flatMap((rect) => placeRelief(land, rect, 'middle')),
+      ...chunks(edge, 'middle').flatMap((rect) => placeRelief(land, rect, 'middle')),
+      ...chunks(edge, 'close').flatMap((rect) => placeRelief(land, rect, 'close')),
+    ].filter((m) => m.kind === 'dune' || m.kind === 'stipple');
+    expect(marks.length).toBeGreaterThan(1000);
+    const deserts = drawn().map((outline) => ({ outline, box: boundsOf(outline) }));
+    const off = marks.filter(
+      (m) =>
+        !deserts.some(
+          ({ outline, box }) =>
+            m.x >= box.left &&
+            m.x <= box.right &&
+            m.y >= box.top &&
+            m.y <= box.bottom &&
+            insideOutline(outline, m.x, m.y),
+        ),
+    );
+    expect(off.map((m) => `${m.kind} at ${m.x},${m.y}`)).toEqual([]);
   });
 });

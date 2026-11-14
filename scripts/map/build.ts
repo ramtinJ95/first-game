@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { relative } from 'node:path';
 import { parseArgs } from 'node:util';
 import { POWERS, TERRAIN_KINDS, type GameMap, type StartingOwner } from '../../src/sim/map.ts';
+import * as borderRules from './borders.ts';
 import { buildMap, MAP_FILE, serializeMap, type MapBuild } from './build-map.ts';
 import { readCities } from './cities.ts';
 import { area } from './geometry.ts';
@@ -10,7 +11,12 @@ import * as settlementRules from './settlements.ts';
 import { loadSources } from './sources.ts';
 import * as terrainRules from './terrain.ts';
 
-const { values } = parseArgs({ options: { preview: { type: 'boolean', default: false } } });
+const { values } = parseArgs({
+  options: {
+    preview: { type: 'boolean', default: false },
+    borders: { type: 'boolean', default: false },
+  },
+});
 
 const started = performance.now();
 const cities = readCities();
@@ -28,7 +34,7 @@ console.log(
 );
 if (values.preview) console.log(`wrote ${relative(process.cwd(), await writePreview(build.map))}`);
 
-function report({ map, moves, merges, joins }: MapBuild): void {
+function report({ map, moves, merges, joins, borders }: MapBuild): void {
   const km2 = (value: number) => `${Math.round(value).toLocaleString('en')} km²`;
   console.log(
     `${map.provinces.length} provinces, ${map.coastline.length} coastlines, ${map.rivers.length} river lines`,
@@ -68,6 +74,20 @@ function report({ map, moves, merges, joins }: MapBuild): void {
     const where = `${Math.abs(lat).toFixed(1)}${lat < 0 ? 'S' : 'N'} ${Math.abs(lon).toFixed(1)}${lon < 0 ? 'W' : 'E'}`;
     console.log(
       `  ${km2(join.area).padStart(14)} near ${where} -> ${join.to} (${join.distance.toFixed(0)} km away)`,
+    );
+  }
+
+  const land = map.provinces.reduce((sum, province) => sum + province.area, 0);
+  const moved = borders.reduce((sum, change) => sum + change.lost, 0);
+  const changed = [...borders].sort((a, b) => b.gained + b.lost - a.gained - a.lost);
+  console.log(
+    `\nborder rules: ${rules(borderRules)}\nborders re-cut along the land moved ${km2(moved)}, ` +
+      `${((100 * moved) / land).toFixed(2)} % of the land; ${values.borders ? 'by province' : 'most changed (--borders lists all)'}:`,
+  );
+  for (const change of values.borders ? changed : changed.slice(0, 12)) {
+    const to = change.to.map((move) => `${move.id} ${km2(move.area)}`).join(', ');
+    console.log(
+      `  ${change.id.padEnd(22)} +${km2(change.gained).padStart(12)} -${km2(change.lost).padStart(12)}  lost to ${to || 'none'}`,
     );
   }
 

@@ -171,6 +171,27 @@ const VIEWS: readonly View[] = [
     state: startGame,
   },
   {
+    name: 'persia-plateau-middle',
+    title: 'The Zagros and the plateau from Ekbatana to Persepolis at the middle zoom',
+    at: { x: 6000, y: 3150 },
+    scale: 1.6,
+    state: startGame,
+  },
+  {
+    name: 'persia-kavir',
+    title: 'The salt pans of the Dasht-e Kavir below Hekatompylos',
+    at: { x: 6150, y: 2880 },
+    scale: 3,
+    state: startGame,
+  },
+  {
+    name: 'sahara-edge-closest',
+    title: 'The arid coast south-east of Tacape at the closest zoom',
+    at: { x: 2220, y: 3320 },
+    scale: 4,
+    state: startGame,
+  },
+  {
     name: 'gaul-names',
     title: 'Central Gaul west of Lugdunum, where a village was written "Hérisson, Cm."',
     at: { x: 1880, y: 1657 },
@@ -189,8 +210,15 @@ export default defineScenario({
       await pause(page);
       await loadSave(page, view.state());
       if (view.at !== 'widest') await camera(page).jumpTo(view.at, view.scale);
-      // The figures' sheet is painted once the zoom rests, and a frame in software takes
-      // seconds, so the shot waits for the terrain, a rest, and a frame drawn after it.
+      // A page that draws in software can still say "ready" for the view before the jump
+      // until its next frame, so the shot first waits for the new view's chunks to be
+      // sought. The figures' sheet is painted once the zoom rests, and a frame in software
+      // takes seconds, so the shot then waits for the terrain, a rest, and a frame drawn
+      // after it.
+      await page
+        .locator('canvas[data-terrain="busy"]')
+        .waitFor({ timeout: 10_000 })
+        .catch(() => undefined);
       const ready = page.locator('canvas[data-terrain="ready"]');
       await ready.waitFor({ timeout: 90_000 });
       await page.waitForTimeout(3000);

@@ -1,12 +1,30 @@
-import { Container, Graphics, RenderTexture, Sprite, type Renderer } from 'pixi.js';
+import {
+  BufferImageSource,
+  Container,
+  Graphics,
+  RenderTexture,
+  Sprite,
+  Texture,
+  type Renderer,
+} from 'pixi.js';
 import type { GameMap } from '../../sim/map.ts';
 import { coversView, fitTexture } from '../cached-texture.ts';
+import { fillLand, landOutline } from '../land-outline.ts';
 import { visibleRect, type Camera, type Size } from '../camera.ts';
 import { BuildQueue, chunkKey, chunkRect, chunkRow, chunksNear, OVERHANG } from './chunks.ts';
 import { DETAIL, detailAlpha, type Band } from './detail.ts';
 import { PAPER } from '../palette.ts';
 import { createLakes } from './lakes.ts';
-import { drawDesert, drawMarks, drawPeaks, drawValleys, drawWoods } from './draw.ts';
+import {
+  drawDesert,
+  drawMarks,
+  drawPans,
+  drawPeaks,
+  drawValleys,
+  drawWoods,
+  groundTint,
+  TINT_CELL,
+} from './draw.ts';
 import {
   Land,
   peaksIn,
@@ -60,6 +78,12 @@ export interface Terrain {
    * shaded sides under every owner's colour. Call `repaint` after changing one.
    */
   readonly washes: Container;
+  /**
+   * The borders between provinces, painted into the terrain over the relief, trees, and
+   * fields. They change only with the zoom, and drawn each frame without a graphics card
+   * they cost about an eighth of the frame. Call `repaint` after stroking them again.
+   */
+  readonly borders: Container;
   repaint(): void;
   /** The lakes, which sit over the washes so no owner's colour tints them. */
   readonly lakes: Container;
@@ -84,32 +108,39 @@ export interface Terrain {
 export function createTerrain(map: GameMap, parent: Container, renderer: Renderer): Terrain {
   const land = new Land(map);
 
-  // The watered strips follow rivers and fan out to the coast, so they are clipped to
-  // the land. The mask costs only when the cached texture is drawn again.
-  const valleys = new Graphics(drawValleys(land.valleys, land.deltas));
+  // The ground's colour is a raster of 16 km cells drawn larger with smoothing, and the
+  // watered strips follow rivers and fan out to the coast, so both are clipped to the
+  // land, by one mask. The mask costs only when the cached texture is drawn again.
+  const outline = landOutline(map);
   const landMask = new Graphics();
-  for (const province of map.provinces) {
-    for (const [outer] of province.outline) if (outer) landMask.poly(outer.flat()).fill(0xffffff);
-  }
-  valleys.mask = landMask;
+  fillLand(landMask, outline, 0xffffff);
+  const tint = groundTint(land, map.width, map.height);
+  const tintSprite = new Sprite(
+    new Texture({
+      source: new BufferImageSource({
+        resource: tint.pixels,
+        width: tint.width,
+        height: tint.height,
+        format: 'rgba8unorm',
+      }),
+    }),
+  );
+  tintSprite.scale.set(TINT_CELL);
+  const clipped = new Container();
+  clipped.addChild(
+    tintSprite,
+    new Graphics(drawDesert(land.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline))),
+    new Graphics(drawPans(land.pans)),
+    new Graphics(drawValleys(land.valleys, land.deltas)),
+  );
+  clipped.mask = landMask;
   const paper = new Graphics();
-  for (const province of map.provinces) {
-    for (const polygon of province.outline) {
-      const [outer, ...holes] = polygon;
-      if (!outer) continue;
-      paper.poly(outer.flat()).fill(PAPER);
-      for (const hole of holes) paper.poly(hole.flat()).cut();
-    }
-  }
+  fillLand(paper, outline, PAPER);
   const washes = new Container({ label: 'washes' });
+  const borders = new Container({ label: 'borders' });
   let repaint = true;
   const ground = new Container({ label: 'ground' });
-  ground.addChild(
-    new Graphics(drawDesert(map.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline))),
-    valleys,
-    landMask,
-    new Graphics(drawWoods(land.woods)),
-  );
+  ground.addChild(clipped, landMask, new Graphics(drawWoods(land.woods)));
 
   const tier = (name: Tier, band: Band): Layer => ({
     name,
@@ -162,7 +193,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   // drawn into a texture a little larger than the screen and shown as one sprite. A pan
   // slides the sprite and draws again only after moving CACHE_MARGIN pixels.
   const art = new Container();
-  art.addChild(paper, ground, washes, ...layers.map((layer) => layer.container));
+  art.addChild(paper, ground, washes, ...layers.map((layer) => layer.container), borders);
   const root = new Container();
   root.addChild(art);
   let texture = RenderTexture.create({
@@ -212,6 +243,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
 
   return {
     washes,
+    borders,
     repaint() {
       repaint = true;
     },

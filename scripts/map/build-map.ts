@@ -13,10 +13,13 @@ import type { ProvinceId } from '../../src/sim/ids.ts';
 import type { City } from './cities.ts';
 import {
   area,
+  boxesOverlap,
+  boxOf,
   clipLine,
   closestOnBoundary,
   compare,
   comparePoints,
+  conform,
   contains,
   distance,
   intersection,
@@ -29,7 +32,7 @@ import { mapPlane, touchesExtent, type Plane } from './projection.ts';
 import { onExtentEdge, partition, relations } from './provinces.ts';
 import { chooseSettlements } from './settlements.ts';
 import type { LonLat, LonLatPolygon, NaturalEarthRiver, Sources } from './sources.ts';
-import { peaksOnLand, terrainAreas } from './terrain.ts';
+import { groundHeight, peaksOnLand, terrainAreas } from './terrain.ts';
 
 export const MAP_FILE = resolve(import.meta.dirname, '../../data/map/map.json');
 
@@ -58,11 +61,23 @@ export interface IslandJoinLog {
   at: LonLat;
 }
 
+/** What re-cutting the borders along the land did to one province, in km². */
+export interface BorderChange {
+  id: ProvinceId;
+  gained: number;
+  lost: number;
+  /** The land it lost, by the province that took it. */
+  to: { id: ProvinceId; area: number }[];
+}
+
 export interface MapBuild {
   map: GameMap;
   moves: CityMove[];
   merges: OrphanMergeLog[];
   joins: IslandJoinLog[];
+  /** Each province as the straight borders between the cities' Voronoi cells cut it. */
+  straight: Map<ProvinceId, MultiPolygon>;
+  borders: BorderChange[];
 }
 
 export function buildMap(cities: City[], sources: Sources): MapBuild {
@@ -83,13 +98,19 @@ export function buildMap(cities: City[], sources: Sources): MapBuild {
     throw new Error(`cities more than ${MAX_CITY_MOVE_KM} km from land: ${list}`);
   }
 
-  const { territories, island, merges, joins } = partition(landArea, placed);
+  const rivers = riverLines(sources.rivers, plane);
+  const { land, territories, straight, island, merges, joins } = partition(landArea, placed, {
+    rivers: rivers.map((river) => river.line),
+    height: groundHeight(sources.elevation, plane),
+    extent: plane.extent,
+  });
   const { neighbours, coastal } = relations(territories, plane.extent);
   const idOf = (seed: number) => (cities[seed] as City).id as ProvinceId;
 
+  const outlines = conform(territories.map(roundOutline));
   const provinces = cities
     .map((city, i): Province => {
-      const outline = roundOutline(territories[i] ?? []);
+      const outline = outlines[i] ?? [];
       if (outline.length === 0) throw new Error(`province ${city.id} has no land`);
       return {
         id: city.id as ProvinceId,
@@ -108,7 +129,6 @@ export function buildMap(cities: City[], sources: Sources): MapBuild {
     })
     .sort((a, b) => compare(a.id, b.id));
 
-  const rivers = riverLines(sources.rivers, plane);
   return {
     map: {
       version: MAP_VERSION,
@@ -118,7 +138,7 @@ export function buildMap(cities: City[], sources: Sources): MapBuild {
       height: plane.height,
       extent: roundRing(plane.extent)[0] ?? [],
       provinces,
-      coastline: coastline(landArea, plane.extent).flatMap(roundLine),
+      coastline: coastline(land, plane.extent).flatMap(roundLine),
       rivers,
       terrain: terrainAreas(sources, plane, landArea, rivers),
       peaks: peaksOnLand(sources.elevationPoints, plane, landArea),
@@ -137,7 +157,49 @@ export function buildMap(cities: City[], sources: Sources): MapBuild {
       distance: join.distance,
       at: plane.toLonLat(join.at),
     })),
+    straight: new Map(straight.map((outline, seed) => [idOf(seed), roundOutline(outline)])),
+    borders: borderChanges(
+      cities.map((_, seed) => idOf(seed)),
+      straight,
+      territories,
+    ),
   };
+}
+
+/** A move smaller than this is the sliver the coast's new vertices leave between two cuts. */
+const MOVE_FLOOR_KM2 = 1;
+
+function borderChanges(
+  ids: ProvinceId[],
+  straight: MultiPolygon[],
+  bent: MultiPolygon[],
+): BorderChange[] {
+  const before = straight.map((outline) => ({ outline, box: boxOf(outline) }));
+  const after = bent.map((outline) => ({ outline, box: boxOf(outline) }));
+  const moved = ids.map((_, i) =>
+    ids.map((_, j) => {
+      const from = before[i];
+      const to = after[j];
+      if (i === j || !from || !to || !boxesOverlap(from.box, to.box)) return 0;
+      const taken = area(intersection(from.outline, to.outline));
+      return taken >= MOVE_FLOOR_KM2 ? taken : 0;
+    }),
+  );
+  return ids
+    .map((id, i): BorderChange => {
+      const lostTo = moved[i] ?? [];
+      return {
+        id,
+        gained: moved.reduce((sum, row) => sum + (row[i] ?? 0), 0),
+        lost: lostTo.reduce((sum, taken) => sum + taken, 0),
+        to: ids
+          .flatMap((other, j) =>
+            (lostTo[j] ?? 0) > 0 ? [{ id: other, area: lostTo[j] ?? 0 }] : [],
+          )
+          .sort((a, b) => b.area - a.area),
+      };
+    })
+    .sort((a, b) => compare(a.id, b.id));
 }
 
 export function landInExtent(land: LonLatPolygon[], plane: Plane = mapPlane()): MultiPolygon {
