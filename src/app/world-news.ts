@@ -1,10 +1,10 @@
+import { peaceText } from '../sim/ai/peace.ts';
 import { LEADER_SHARE } from '../sim/ai/thresholds.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { DayEvent } from '../sim/events.ts';
 import type { CityId, FactionId } from '../sim/ids.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
-import { warSides, type WarKey } from '../sim/state/war.ts';
 import type { World } from '../sim/world/world.ts';
 import type { Alert } from './alerts.ts';
 import { factionName, whole } from './names.ts';
@@ -49,17 +49,14 @@ export function worldNewsOfDay(
     });
   }
 
-  for (const key of Object.keys(before.wars) as WarKey[]) {
-    const sides = warSides(key);
-    if (after.wars[key] || !sides) continue;
-    const [a, b] = sides;
+  for (const event of events) {
+    if (event.kind !== 'peaceMade') continue;
+    const [a, b] = event.between;
     if (!others(a, b) || !great(a) || !great(b)) continue;
-    // A war that ends with a power's fall is told as that fall.
-    if (after.factions[a]?.defeatedOn !== null || after.factions[b]?.defeatedOn !== null) continue;
     add({
-      kind: 'powersMadePeace',
+      kind: 'peaceMade',
       world: 'corner',
-      text: `${factionName(after, a)} and ${factionName(after, b)} made peace`,
+      text: `${factionName(after, a)} and ${factionName(after, b)} made ${peaceText(after, event.terms)}`,
     });
   }
 
@@ -77,7 +74,10 @@ export function worldNewsOfDay(
   for (const city of Object.values(after.cities)) {
     const was = before.cities[city.id];
     if (!was || was.owner === city.owner || !others(was.owner, city.owner)) continue;
-    const byPeace = ceded.get(city.id) === city.owner;
+    const receiver = ceded.get(city.id);
+    const byPeace = receiver === city.owner;
+    // A city ceded and then taken that day fell from the side the peace gave it to.
+    const lost = receiver && !byPeace ? receiver : was.owner;
     const focus = {
       at: city.position,
       select: { kind: 'province', province: city.province },
@@ -87,16 +87,16 @@ export function worldNewsOfDay(
       const home = world.map.provinces.find(
         (province) => province.capital && (province.id as string) === city.id,
       );
-      const first = home && home.owner !== 'independent' ? (home.owner as FactionId) : was.owner;
+      const first = home && home.owner !== 'independent' ? (home.owner as FactionId) : lost;
       add({
         kind: 'capitalFell',
         world: 'corner',
         text:
           first === city.owner
-            ? `${factionName(after, city.owner)} took back its capital ${city.name} from ${factionName(after, was.owner)}${byPeace ? ' by a peace' : ''}`
-            : first === was.owner
+            ? `${factionName(after, city.owner)} took back its capital ${city.name} from ${factionName(after, lost)}${byPeace ? ' by a peace' : ''}`
+            : first === lost
               ? `${city.name}, the capital of ${factionName(after, first)}, ${byPeace ? 'was ceded' : 'fell'} to ${factionName(after, city.owner)}`
-              : `${city.name}, the capital of ${factionName(after, first)}, ${byPeace ? 'was ceded by' : 'fell from'} ${factionName(after, was.owner)} to ${factionName(after, city.owner)}`,
+              : `${city.name}, the capital of ${factionName(after, first)}, ${byPeace ? 'was ceded by' : 'fell from'} ${factionName(after, lost)} to ${factionName(after, city.owner)}`,
         focus,
       });
     } else if (near(city.position)) {

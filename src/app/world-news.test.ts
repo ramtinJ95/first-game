@@ -5,7 +5,7 @@ import type { CityId, FactionId } from '../sim/ids.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { newWar, warKey } from '../sim/state/war.ts';
-import { cornerAlerts, type Alert } from './alerts.ts';
+import { alertsOfDay, cornerAlerts, type Alert } from './alerts.ts';
 import { worldNewsOfDay } from './world-news.ts';
 
 const f = FIXTURE;
@@ -46,8 +46,19 @@ describe('worldNewsOfDay', () => {
     expect(war.map((a) => [a.kind, a.world, a.tone, a.text])).toEqual([
       ['powersAtWar', 'corner', 'neutral', 'Carthage declared war on Rome'],
     ]);
-    expect(worldNewsOfDay(after, before, [], world).map((a) => a.text)).toEqual([
-      'Carthage and Rome made peace',
+    const peace = [
+      {
+        kind: 'peaceMade',
+        between: [f.carthage, f.rome],
+        terms: { kind: 'asThingsStand' },
+      } as const,
+    ];
+    const told = [
+      ...alertsOfDay(after, before, peace),
+      ...worldNewsOfDay(after, before, peace, world),
+    ].filter((alert) => /made peace/.test(alert.text));
+    expect(told.map((a) => [a.kind, a.world, a.text])).toEqual([
+      ['peaceMade', 'corner', 'Carthage and Rome made peace as things stand'],
     ]);
   });
 
@@ -135,7 +146,34 @@ describe('worldNewsOfDay', () => {
       world,
     ).map((alert) => alert.text);
     expect(news).toContain('Capua was ceded to Syracusae, 170 km from your land');
-    expect(news).toContain('Carthago, the capital of Carthage, fell to Numidia');
+    expect(news).toContain('Carthago, the capital of Carthage, fell from Syracusae to Numidia');
+  });
+
+  it('names the side a ceded capital fell from when it is taken the same day', () => {
+    const before = buildFixture();
+    const minor = before.factions[f.syracusaeFaction];
+    if (!minor) throw new Error('fixture changed');
+    const numidia = 'numidia' as FactionId;
+    const mauri = 'mauri' as FactionId;
+    before.factions[numidia] = { ...structuredClone(minor), id: numidia, name: 'Numidia' };
+    before.factions[mauri] = { ...structuredClone(minor), id: mauri, name: 'Mauri' };
+    owner(before, f.carthago, f.syracusaeFaction);
+    const after = structuredClone(before);
+    after.day = (before.day + 1) as Day;
+    owner(after, f.carthago, mauri);
+    const terms = {
+      kind: 'payment',
+      payer: f.syracusaeFaction,
+      gold: 0,
+      cities: [f.carthago],
+    } as const;
+    const news = worldNewsOfDay(
+      before,
+      after,
+      [{ kind: 'peaceMade', between: [numidia, f.syracusaeFaction], terms }],
+      world,
+    ).map((alert) => alert.text);
+    expect(news).toContain('Carthago, the capital of Carthage, fell from Numidia to Mauri');
   });
 
   it('tells when another great power is destroyed, and once', () => {

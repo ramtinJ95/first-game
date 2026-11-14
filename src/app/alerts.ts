@@ -44,7 +44,6 @@ export const ALERT_KINDS = [
   'peaceRefused',
   'peaceMade',
   'powersAtWar',
-  'powersMadePeace',
   'capitalFell',
   'powerFell',
   'newLeader',
@@ -755,15 +754,8 @@ function eventAlert(
           text: `Peace with ${factionName(after, other)}${event.terms.kind === 'asThingsStand' ? ' as things stand' : `: ${termsText(after, event.terms, player)}`}${until}`,
         };
       }
-      const terms = peaceText(after, event.terms);
-      const powers = event.between.every((id) => after.factions[id]?.kind === 'greatPower');
-      return powers
-        ? {
-            kind: 'peaceMade',
-            tone: 'neutral',
-            text: `${factionName(after, a)} and ${factionName(after, b)} made ${terms}`,
-          }
-        : undefined;
+      // A peace between two others is the world's news (`worldNewsOfDay`).
+      return undefined;
     }
   }
 }
