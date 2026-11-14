@@ -3,7 +3,7 @@ import { changeCityOwner } from '../cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { FactionId } from '../ids.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
-import { termsPoints } from '../peace/terms.ts';
+import { GOLD_PER_POINT, termsPoints } from '../peace/terms.ts';
 import { TRUCE_DAYS } from '../peace/truce.ts';
 import { expectConsistent } from '../references.ts';
 import type { Day } from '../state/day.ts';
@@ -18,6 +18,7 @@ import { enemiesOf } from './situation.ts';
 import {
   MIN_WAR_DAYS,
   OFFER_GAP_DAYS,
+  OPENING_MARGIN,
   OTHER_WAR_POINTS,
   PEACE_RESOLVE,
   SHORTAGE_POINTS,
@@ -258,11 +259,35 @@ describe("the AI's offers", () => {
     expect(peaceOrders(context(state, f.carthage))).toEqual([]);
   });
 
-  test('the winner asks for the most the loser would give, and the loser offers the least the winner takes', () => {
+  test('the winner opens OPENING_MARGIN above the least it takes, and the loser offers that least', () => {
     const state = warOn(1 + WEARY_DAYS * (PEACE_RESOLVE + 10));
     changeCityOwner(state, f.capua, f.carthage);
-    expect(proposal(state, f.carthage, f.rome)).toEqual(gold(f.rome, 2500));
     expect(proposal(state, f.rome, f.carthage)).toEqual(gold(f.rome, 500));
+    expect(proposal(state, f.carthage, f.rome)).toEqual(
+      gold(f.rome, 500 + OPENING_MARGIN * GOLD_PER_POINT),
+    );
+    expect(peaceAnswer(state, f.rome, f.carthage, gold(f.rome, 2500))?.accepts).toBe(true);
+    expectConsistent(state);
+  });
+
+  test('the winner opens no more than halfway to the most the loser would give', () => {
+    let halfway = 0;
+    for (let day = 80; day <= 600; day += 15) {
+      const state = warOn(day);
+      changeCityOwner(state, f.capua, f.carthage);
+      const least = Math.max(0, -(peaceWish(state, f.carthage, f.rome)?.wish ?? 0));
+      const most = peaceWish(state, f.rome, f.carthage)?.wish ?? 0;
+      const terms = proposal(state, f.carthage, f.rome);
+      if (!terms || most <= least) continue;
+      const asked = terms.kind === 'payment' ? terms.gold / GOLD_PER_POINT : 0;
+      expect(asked, `day ${day}`).toBeGreaterThanOrEqual(least);
+      expect(asked, `day ${day}`).toBeLessThanOrEqual(
+        least + Math.min(OPENING_MARGIN, (most - least) / 2),
+      );
+      if ((most - least) / 2 < OPENING_MARGIN) halfway += 1;
+      expectConsistent(state);
+    }
+    expect(halfway).toBeGreaterThan(0);
   });
 
   test('a proposal is one that both sides accept by the same rule', () => {

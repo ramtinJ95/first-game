@@ -23,6 +23,7 @@ import {
   MAX_WEARINESS,
   MIN_WAR_DAYS,
   OFFER_GAP_DAYS,
+  OPENING_MARGIN,
   OTHER_WAR_POINTS,
   PEACE_RESOLVE,
   SHORTAGE_POINTS,
@@ -342,9 +343,10 @@ export function paymentBetween(
 
 /**
  * The terms the faction offers the enemy, or undefined when no terms satisfy both sides
- * by `peaceWish`. A faction that is winning asks for the most the enemy would give. Any
- * other asks for no more than it needs, or offers the least the enemy would take, which is
- * peace as things stand when neither side wants anything.
+ * by `peaceWish`. A faction that is winning opens above the least it would take, by
+ * OPENING_MARGIN points or halfway to the most the enemy would give, whichever is less.
+ * Any other asks for no more than it needs, or offers the least the enemy would take,
+ * which is peace as things stand when neither side wants anything.
  */
 export function proposal(
   state: State,
@@ -364,7 +366,9 @@ export function proposal(
   if (standing && warDamage(state, standing).even && standing.days >= EVEN_WAR_DAYS)
     return AS_THINGS_STAND;
   if (winning && most > 0) {
-    const asked = paymentBetween(state, enemy, faction, Math.max(need, 0), most, 'most');
+    const least = Math.max(need, 0);
+    const opening = least + Math.min(OPENING_MARGIN, (most - least) / 2);
+    const asked = paymentBetween(state, enemy, faction, least, opening, 'most');
     if (asked) return asked;
   }
   if (need <= 0 && theirNeed <= 0) return AS_THINGS_STAND;

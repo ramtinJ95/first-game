@@ -80,21 +80,19 @@ describe('a rising peace price has a remembered, measured reason', () => {
     changeCityOwner(state, f.capua, f.carthage);
     const treasury = state.factions[f.rome];
     if (!treasury) throw new Error('fixture');
-    treasury.stores.gold = 2000;
+    treasury.stores.gold = 300;
     const first = proposal(state, f.carthage, f.rome);
-    expect(first).toEqual({ kind: 'payment', payer: f.rome, gold: 2000, cities: [] });
+    expect(first).toEqual({ kind: 'payment', payer: f.rome, gold: 300, cities: [] });
     if (!first) throw new Error('no proposal');
     run(state, { kind: 'offerPeace', faction: f.carthage, to: f.rome, terms: first });
     run(state, refuse);
     state.day = 691 as Day;
     treasury.stores.gold = 3000;
     const next = proposal(state, f.carthage, f.rome);
-    expect(next).toEqual({ kind: 'payment', payer: f.rome, gold: 3000, cities: [] });
+    expect(next).toEqual({ kind: 'payment', payer: f.rome, gold: 500, cities: [] });
     if (!next) throw new Error('no proposal');
     run(state, { kind: 'offerPeace', faction: f.carthage, to: f.rome, terms: next });
-    expect(state.peaceOffers[key]?.change).toContain(
-      'Your treasury rose from 2,000 to 3,000 gold.',
-    );
+    expect(state.peaceOffers[key]?.change).toContain('Your treasury rose from 300 to 3,000 gold.');
     expect(state.peaceOffers[key]?.change).toContain(
       'The previous gold demand reached all the gold you held.',
     );
