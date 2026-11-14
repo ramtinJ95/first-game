@@ -1,4 +1,4 @@
-import { dateText, factionName, whole } from '../app/names.ts';
+import { dateText, factionName, reasonText, whole } from '../app/names.ts';
 import {
   paymentBetween,
   peaceAnswer,
@@ -19,6 +19,11 @@ import type { PeaceTerms } from '../sim/state/peace.ts';
 import { warSides } from '../sim/state/war.ts';
 
 type State = DeepReadonly<GameState>;
+
+/** Rules may name records by id; the panel always uses their readable names. */
+export function peaceVerdict(state: State, answer: PeaceAnswer): string {
+  return reasonText(state, answer.verdict);
+}
 
 /** Terms the panel puts ready for the player to offer, with what the enemy would answer. */
 export interface PeaceChoice {
@@ -41,6 +46,7 @@ export interface WarRow {
   /** The player's offer that waits, sent or still queued for the next day. */
   readonly ourOffer: string | undefined;
   readonly choices: readonly PeaceChoice[];
+  readonly volatile: boolean;
 }
 
 export interface TruceRow {
@@ -156,6 +162,16 @@ export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
               : undefined,
           ourOffer: ours,
           choices: peaceChoices(state, enemy),
+          volatile:
+            standing.besieging.length + standing.besieged.length > 0 ||
+            Object.values(state.battles).some((battle) => {
+              const a = battle.sides.attackers.factions;
+              const b = battle.sides.defenders.factions;
+              return (
+                (a.includes(player) && b.includes(enemy)) ||
+                (b.includes(player) && a.includes(enemy))
+              );
+            }),
         },
       ];
     })

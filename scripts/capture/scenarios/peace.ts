@@ -35,6 +35,7 @@ async function openWars(page: Page) {
 
 export default defineScenario({
   name: 'peace',
+  viewport: { width: 1280, height: 900 },
   title:
     'Peace: the wars panel with two wars, an offer refused with its reason, an offer from Carthage, and the map the day after a peace',
   async run({ page, shot }) {

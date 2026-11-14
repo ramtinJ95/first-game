@@ -23,6 +23,7 @@ import {
   dateText,
   factionName,
   placeName,
+  reasonText,
   TROOP_NAMES,
   whole,
 } from './names.ts';
@@ -734,12 +735,19 @@ function eventAlert(
       }
       return undefined;
     }
+    case 'peaceOfferEnded':
+      if (event.from !== player && event.to !== player) return undefined;
+      return {
+        kind: 'peaceOfferEnded',
+        tone: 'neutral',
+        text: `Peace offer with ${factionName(after, event.from === player ? event.to : event.from)} ended. ${reasonText(after, event.reason)}`,
+      };
     case 'peaceRefused':
       if (event.from === player) {
         return {
           kind: 'peaceRefused',
           tone: 'bad',
-          text: `${factionName(after, event.by)} refused your offer of peace, and the war goes on`,
+          text: `${factionName(after, event.by)} refused your offer of peace, and the war goes on. ${reasonText(after, event.reason).replace('would refuse.', 'refuses.').replace('would accept.', 'accepts.')}`,
         };
       }
       if (event.by === player) {

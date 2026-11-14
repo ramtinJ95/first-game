@@ -7,10 +7,13 @@ import {
   CityIdSchema,
   ProvinceIdSchema,
   SiegeIdSchema,
+  FactionIdSchema,
   type SiegeId,
 } from '../sim/ids.ts';
 import { DaySchema } from '../sim/state/day.ts';
 import { MapPointSchema } from '../sim/state/map-point.ts';
+import { PeaceForecastSchema, PeaceTermsSchema } from '../sim/state/peace.ts';
+import type { Order } from '../sim/orders/orders.ts';
 import {
   ALERT_KINDS,
   PAUSE_KINDS,
@@ -51,6 +54,31 @@ const AlertSchema = v.object({
 });
 
 const PageSchema = v.object({
+  paused: v.optional(v.boolean()),
+  pendingPeace: v.optional(
+    v.array(
+      v.variant('kind', [
+        v.object({
+          kind: v.literal('offerPeace'),
+          faction: FactionIdSchema,
+          to: FactionIdSchema,
+          terms: PeaceTermsSchema,
+          forecast: v.optional(PeaceForecastSchema),
+        }),
+        v.object({
+          kind: v.literal('acceptPeace'),
+          faction: FactionIdSchema,
+          from: FactionIdSchema,
+          terms: PeaceTermsSchema,
+        }),
+        v.object({
+          kind: v.literal('refusePeace'),
+          faction: FactionIdSchema,
+          from: FactionIdSchema,
+        }),
+      ]),
+    ),
+  ),
   chronicle: v.pipe(v.array(AlertSchema), v.maxLength(CHRONICLE_KEPT)),
   camera: v.optional(
     v.object({ centre: MapPointSchema, scale: v.pipe(v.number(), v.finite(), v.minValue(0)) }),
@@ -79,6 +107,11 @@ const PageSchema = v.object({
  * them again nor stops for them twice.
  */
 export interface Page {
+  readonly paused?: boolean;
+  readonly pendingPeace?: readonly Extract<
+    Order,
+    { kind: 'offerPeace' | 'acceptPeace' | 'refusePeace' }
+  >[];
   readonly chronicle: readonly Alert[];
   readonly camera: Camera | undefined;
   readonly selection: Pick | undefined;
@@ -114,10 +147,13 @@ export function parsePage(
       error: `The save's page is malformed at ${path ? `page.${path}` : 'page'}: ${first.message}`,
     };
   }
-  const { chronicle, camera, selection, panel, occupied, told, weakSieges } = parsed.output;
+  const { chronicle, camera, selection, panel, occupied, told, weakSieges, paused, pendingPeace } =
+    parsed.output;
   return {
     ok: true,
     page: {
+      paused,
+      pendingPeace,
       chronicle,
       camera,
       selection,
