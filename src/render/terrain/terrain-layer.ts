@@ -35,6 +35,7 @@ import {
   type Tier,
 } from './marks.ts';
 import type { Rect } from './scatter.ts';
+import { startupStep } from '../startup.ts';
 
 /** Pixels of terrain drawn beyond each edge of the view, so a pan can slide the drawing. */
 const CACHE_MARGIN = 256;
@@ -106,7 +107,7 @@ export interface Terrain {
  * drawn the first time they come into view, and kept.
  */
 export function createTerrain(map: GameMap, parent: Container, renderer: Renderer): Terrain {
-  const land = new Land(map);
+  const land = startupStep('land', () => new Land(map));
 
   // The ground's colour is a raster of 16 km cells drawn larger with smoothing, and the
   // watered strips follow rivers and fan out to the coast, so both are clipped to the
@@ -114,7 +115,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   const outline = landOutline(map);
   const landMask = new Graphics();
   fillLand(landMask, outline, 0xffffff);
-  const tint = groundTint(land, map.width, map.height);
+  const tint = startupStep('ground-tint', () => groundTint(land, map.width, map.height));
   const tintSprite = new Sprite(
     new Texture({
       source: new BufferImageSource({

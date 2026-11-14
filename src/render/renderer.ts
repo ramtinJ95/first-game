@@ -38,7 +38,7 @@ import { BANNER, BATTLE_HIT_RADIUS, drawnArmies, type DrawnArmy } from './marker
 import {
   BORDER,
   factionColour,
-  WASH_STRENGTH,
+  washStrength,
   INK,
   LABEL_HALO,
   MARGIN,
@@ -58,6 +58,8 @@ import { createPlaces } from './terrain/places-layer.ts';
 import { createTerrain } from './terrain/terrain-layer.ts';
 import { createArmyLayer } from './armies/layer.ts';
 import { createWash } from './washes.ts';
+import { startupStep } from './startup.ts';
+import './batch-limits.ts';
 import {
   buildScene,
   figureHeight,
@@ -330,6 +332,7 @@ export async function createRenderer({
   drawing,
   waitForGpu = false,
 }: RendererOptions): Promise<Renderer> {
+  const started = performance.now();
   const app = new Application();
   await app.init({
     canvas,
@@ -341,6 +344,8 @@ export async function createRenderer({
     autoStart: false,
   });
   canvas.dataset['renderer'] = app.renderer.name;
+  canvas.dataset['batchTextures'] = String(app.renderer.limits.maxBatchableTextures);
+  performance.measure('startup:pixi-init', { start: started });
   const viewport = (): Size => ({ width: app.screen.width, height: app.screen.height });
 
   const layers = Object.fromEntries(
@@ -375,7 +380,7 @@ export async function createRenderer({
   });
   const seaSprite = new Sprite(seaTexture);
   let seaDrawn: { x: number; y: number; scale: number } | undefined;
-  const swell = new Sprite(waterTexture());
+  const swell = new Sprite(startupStep('water-texture', waterTexture));
   swell.scale.set(SWELL.scale);
   layers.sea.addChild(seaSprite, swell);
   const swellOn = drawing?.swell ?? true;
@@ -386,25 +391,32 @@ export async function createRenderer({
     swell.visible = false;
   }
 
-  const terrain = createTerrain(map, layers.terrain, app.renderer);
+  const terrain = startupStep('terrain', () => createTerrain(map, layers.terrain, app.renderer));
 
-  const wash = createWash({ ...map, terrain: terrain.land.terrain });
+  const wash = startupStep('wash-create', () =>
+    createWash({ ...map, terrain: terrain.land.terrain }),
+  );
   terrain.washes.addChild(wash.root);
 
-  const borderLines = borderRuns(sharedBorders(map));
+  const borderLines = startupStep('borders', () => borderRuns(sharedBorders(map)));
   const borders = new Graphics();
-  terrain.borders.addChild(borders);
+  const ownerBorders = new Graphics();
+  terrain.borders.addChild(borders, ownerBorders);
   // The map build clips rivers and the coastline to the extent, so they need no mask.
   // A stencil mask here cost over a third of each frame drawn without a graphics card.
   const inkLines = new Graphics();
   const frame = new Graphics();
   layers.riversAndCoast.addChild(terrain.lakes, inkLines, frame);
 
-  const fog = createFog(app.renderer, map);
+  const fog = startupStep('fog', () => createFog(app.renderer, map));
   layers.fog.addChild(fog.root);
   const fogShown = layers.fog.visible;
 
-  const grain = new TilingSprite({ texture: paperTexture(), width: 1, height: 1 });
+  const grain = new TilingSprite({
+    texture: startupStep('paper-texture', paperTexture),
+    width: 1,
+    height: 1,
+  });
   layers.grain.addChild(grain);
 
   const symbols = citySymbols();
@@ -564,7 +576,12 @@ export async function createRenderer({
     for (const line of [waterLines, borders, inkLines, frame]) line.scale.set(1 / scale);
   }
 
+  let washedAt = -1;
+  let borderOwners = '';
+  let borderScale = -1;
   function recolour(state: DeepReadonly<GameState>) {
+    const strengths = washStrength(camera.scale);
+    washedAt = strengths.greatPower;
     const washes = map.provinces.map((province) => {
       const owner = provinceOwner(state, province.id);
       if (!owner) return undefined;
@@ -572,12 +589,42 @@ export async function createRenderer({
       return {
         owner,
         colour: factionColour(state, owner),
-        strength: power ? WASH_STRENGTH.greatPower : WASH_STRENGTH.minor,
+        strength: power ? strengths.greatPower : strengths.minor,
       };
     });
     const started = performance.now();
     if (!wash.paint(washes)) return;
     performance.measure('wash', { start: started });
+    terrain.repaint();
+  }
+
+  function ownershipLines(state: DeepReadonly<GameState>) {
+    const wide = Math.max(0, Math.min(1, (0.9 - camera.scale) / 0.5));
+    const owners = `${state.player}|${map.provinces.map((p) => provinceOwner(state, p.id) ?? '').join('|')}`;
+    if (borderOwners === owners && borderScale === camera.scale) return;
+    borderOwners = owners;
+    borderScale = camera.scale;
+    ownerBorders.clear();
+    if (wide > 0)
+      for (const province of map.provinces) {
+        const owner = provinceOwner(state, province.id);
+        if (!owner) continue;
+        const own = owner === state.player;
+        if (own)
+          traceOutline(ownerBorders, province.outline, camera.scale).stroke({
+            width: 3,
+            color: LABEL_HALO,
+            alpha: wide,
+            join: 'round',
+          });
+        traceOutline(ownerBorders, province.outline, camera.scale).stroke({
+          width: own ? 1.8 : 0.9,
+          color: factionColour(state, owner),
+          alpha: wide * 0.85,
+          join: 'round',
+        });
+      }
+    ownerBorders.scale.set(1 / camera.scale);
     terrain.repaint();
   }
 
@@ -1100,6 +1147,8 @@ export async function createRenderer({
       fenced = undefined;
       const now = performance.now();
       let dirty = cameraMoved;
+      if (washStrength(camera.scale).greatPower !== washedAt) recolour(current);
+      ownershipLines(current);
       if (current !== shown) {
         recolour(current);
         syncSettlements(current);
