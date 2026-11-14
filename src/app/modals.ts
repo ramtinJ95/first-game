@@ -1,5 +1,16 @@
 import type { CityId, FactionId } from '../sim/ids.ts';
 import type { TurningPoint } from './turning-points.ts';
+import type { Page } from './page.ts';
+
+/** Loading a saved automatic stop must not turn it into a player-owned pause. */
+export function restoreModalResume({ saved, hasModal, paused, forcePause }: {
+  saved: Pick<Page, 'paused' | 'resumeOnClose'> | undefined;
+  hasModal: boolean;
+  paused: boolean;
+  forcePause: boolean;
+}): boolean {
+  return hasModal && (saved?.resumeOnClose ?? (!forcePause && !(saved?.paused ?? paused)));
+}
 
 /**
  * What covers the game, one at a time. The start screen and the loss replace whatever

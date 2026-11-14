@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { newWar, warKey } from '../src/sim/state/war.ts';
 import type { FactionId } from '../src/sim/ids.ts';
@@ -47,15 +48,15 @@ test.describe('peace', () => {
     const panel = await openWars(page);
     const war = panel.getByTestId('war-row');
     await expect(war).toHaveAttribute('data-enemy', 'carthage');
-    await expect(war.getByTestId('war-summary')).toHaveText('The war goes your way (+20)');
+    await expect(war.getByTestId('war-summary')).toHaveText('The war goes your way (+35)');
     await expect(war).toContainText('You besiege Carthago.');
 
     await panel.getByLabel('Carthage pays you').check();
-    await panel.getByTestId('peace-gold').fill('1500');
+    await panel.getByTestId('peace-gold').fill('3000');
     await expect(panel.getByTestId('peace-verdict')).toHaveText(
       'Carthage would refuse. It wants terms worth 2 points more, such as 200 gold more.',
     );
-    await expect(panel).toContainText('Carthage is losing the war +20');
+    await expect(panel).toContainText('Carthage is losing the war +35');
     await expect(panel).toContainText('Carthage does not end a war for nothing -15');
     await expect(panel.getByTestId('peace-forecast-warning')).toContainText(
       'This forecast may change',
@@ -153,6 +154,36 @@ test.describe('peace', () => {
   });
 
   for (const accept of [true, false]) {
+    for (const manual of [false, true]) {
+      test(`export/load preserves ${manual ? 'manual' : 'offer-owned'} pause before ${accept ? 'accepting' : 'refusing'}`, async ({ page }) => {
+        await load(page, carthageOffersPeace());
+        await resume(page);
+        const panel = page.getByTestId('wars-panel');
+        await expect(panel.getByTestId('peace-paused')).toBeVisible();
+        if (manual) {
+          await resume(page);
+          await pause(page);
+        }
+        const download = page.waitForEvent('download');
+        await page.getByRole('button', { name: 'Game', exact: true }).click();
+        await page.getByRole('menuitem', { name: 'Export to a file' }).click();
+        const file = await (await download).path();
+        if (!file) throw new Error('the exported save was not downloaded');
+        const text = readFileSync(file, 'utf8');
+        expect(JSON.parse(text).page).toMatchObject({ paused: true, resumeOnClose: !manual });
+        await dropSave(page, text);
+        await expect(panel.getByTestId('peace-paused')).toBeVisible();
+        await panel.getByTestId(accept ? 'accept-peace' : 'refuse-peace').click();
+        if (manual) {
+          await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
+          await resume(page);
+        } else {
+          await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+        }
+        await expect(page.getByTestId('alerts')).toContainText(accept ? 'Peace with Carthage' : 'You refused peace with Carthage');
+      });
+    }
+
     test(`a manual pause supersedes the offer's automatic pause before ${accept ? 'accepting' : 'refusing'}`, async ({
       page,
     }) => {

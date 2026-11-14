@@ -19,6 +19,10 @@ export function peaceStanding(enemy: 'mediolanum' | 'macedon', score: -2 | 0 | 2
   const loser = war.sides[score > 0 ? against : rome];
   if (!loser) throw new Error('missing war side');
   loser.lost = Math.round((Math.abs(score) * 2000) / 30);
+  // These captures show a real defeat, rather than a token clash against a full realm.
+  if (score !== 0) for (const formation of Object.values(state.formations)) {
+    if (state.armies[formation.army]?.owner === (score > 0 ? against : rome)) formation.men = Math.min(formation.men, 100);
+  }
   state.wars[warKey(rome, against)] = war;
   expectConsistent(state);
   return state;

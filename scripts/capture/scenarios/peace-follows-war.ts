@@ -61,7 +61,7 @@ export default defineScenario({
       'Carthago is under siege: the panel warns that the next-day answer may change with the battle or siege',
     );
     await panel.getByLabel('Carthage pays you').check();
-    await panel.getByTestId('peace-gold').fill('1500');
+    await panel.getByTestId('peace-gold').fill('3000');
     await panel.getByTestId('offer-peace').click();
     await resume(page);
     await expect(page.getByTestId('alerts')).toContainText('Carthage refused your offer of peace');

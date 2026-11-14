@@ -66,6 +66,9 @@ describe("the AI's answer", () => {
       const side = war?.sides[f.carthage];
       if (!minor || !side) throw new Error('fixture');
       minor.kind = 'minor';
+      const survivors = state.formations[f.citizenSpears];
+      if (!survivors) throw new Error('fixture');
+      survivors.men = 500;
       side.lost = Math.round((score * 2000) / 30);
       const answer = peaceAnswer(state, f.carthage, f.rome, AS_THINGS_STAND);
       expect(answer?.accepts).toBe(true);
@@ -117,6 +120,7 @@ describe("the AI's answer", () => {
     expect(refused?.wish.factors.map((factor) => [factor.kind, factor.points])).toEqual([
       ['weariness', PEACE_RESOLVE - 5],
       ['resolve', -PEACE_RESOLVE],
+      ['restraint', 0],
     ]);
     expect(peaceAnswer(warOn(early), f.carthage, f.rome, gold(f.rome, 500))?.verdict).toBe(
       'Carthage would accept.',

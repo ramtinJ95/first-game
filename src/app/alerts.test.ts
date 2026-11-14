@@ -906,7 +906,7 @@ describe('peace', () => {
     expect(alerts).toContainEqual(
       expect.objectContaining({
         kind: 'peaceRefused',
-        text: 'Carthage refused your offer of peace, and the war goes on. Carthage refuses. It wants 2,100 gold. The forecast changed: battle losses changed at Ariminum.',
+        text: 'Carthage refused your offer of peace. It wants 2,100 gold. The forecast changed: battle losses changed at Ariminum.',
       }),
     );
     expect(alerts).toContainEqual(
@@ -981,7 +981,7 @@ describe('peace', () => {
       {
         kind: 'peaceRefused',
         tone: 'bad',
-        text: 'Carthage refused your offer of peace, and the war goes on. Carthage will not talk of peace before day 61.',
+        text: 'Carthage refused your offer of peace. Carthage will not talk of peace before day 61.',
       },
     ]);
   });

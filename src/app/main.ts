@@ -35,7 +35,7 @@ import { fateChoices, type FateChoice } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
 import { refusalText } from './names.ts';
 import { alertsInSight, followJoin, seesPick, sightOfAll } from './sighted.ts';
-import { enqueue, keepOpen, type Modal } from './modals.ts';
+import { enqueue, keepOpen, restoreModalResume, type Modal } from './modals.ts';
 import { CHRONICLE_KEPT, pageData, parsePage, type Page, type Panel } from './page.ts';
 import { readPauses, stopsOfDay, writePauses, type PauseSettings } from './pauses.ts';
 import {
@@ -429,6 +429,7 @@ function homeOf(state: DeepReadonly<GameState>): MapPoint | undefined {
 function pageNow(): Page {
   return {
     paused: clock.paused,
+    resumeOnClose: resumeOnClose || (stopAsked && !clock.paused),
     pendingPeace: clock.pending.filter(
       (order): order is Extract<Order, { kind: 'offerPeace' | 'acceptPeace' | 'refusePeace' }> =>
         ['offerPeace', 'acceptPeace', 'refusePeace'].includes(order.kind),
@@ -488,7 +489,7 @@ function enter(
       if (!answered) modals = enqueue(modals, { kind: 'peaceOffer', from: offer.from });
     }
   }
-  resumeOnClose = modals.length > 0 && !pause && !(page?.paused ?? clock.paused);
+  resumeOnClose = restoreModalResume({ saved: page, hasModal: modals.length > 0, paused: clock.paused, forcePause: pause });
   if (pause || page?.paused || modals.length > 0) clock.pause();
   else if (page?.paused === false) clock.resume();
   const home = focus && !page?.camera ? homeOf(state) : undefined;

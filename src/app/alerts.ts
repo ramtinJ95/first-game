@@ -742,12 +742,15 @@ function eventAlert(
         tone: 'neutral',
         text: `Peace offer with ${factionName(after, event.from === player ? event.to : event.from)} ended. ${reasonText(after, event.reason)}`,
       };
-    case 'peaceRefused':
+    case 'peaceRefused': {
       if (event.from === player) {
+        const name = factionName(after, event.by);
+        const reason = reasonText(after, event.reason);
+        const repeated = `${name} would refuse. `;
         return {
           kind: 'peaceRefused',
           tone: 'bad',
-          text: `${factionName(after, event.by)} refused your offer of peace, and the war goes on. ${reasonText(after, event.reason).replace('would refuse.', 'refuses.').replace('would accept.', 'accepts.')}`,
+          text: `${name} refused your offer of peace. ${reason.startsWith(repeated) ? reason.slice(repeated.length) : reason}`,
         };
       }
       if (event.by === player) {
@@ -758,6 +761,7 @@ function eventAlert(
         };
       }
       return undefined;
+    }
     case 'peaceMade': {
       const [a, b] = event.between;
       const other = a === player ? b : b === player ? a : undefined;

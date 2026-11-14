@@ -55,6 +55,7 @@ const AlertSchema = v.object({
 
 const PageSchema = v.object({
   paused: v.optional(v.boolean()),
+  resumeOnClose: v.optional(v.boolean()),
   pendingPeace: v.optional(
     v.array(
       v.variant('kind', [
@@ -108,6 +109,7 @@ const PageSchema = v.object({
  */
 export interface Page {
   readonly paused?: boolean;
+  readonly resumeOnClose?: boolean;
   readonly pendingPeace?: readonly Extract<
     Order,
     { kind: 'offerPeace' | 'acceptPeace' | 'refusePeace' }
@@ -147,12 +149,13 @@ export function parsePage(
       error: `The save's page is malformed at ${path ? `page.${path}` : 'page'}: ${first.message}`,
     };
   }
-  const { chronicle, camera, selection, panel, occupied, told, weakSieges, paused, pendingPeace } =
+  const { chronicle, camera, selection, panel, occupied, told, weakSieges, paused, pendingPeace, resumeOnClose } =
     parsed.output;
   return {
     ok: true,
     page: {
       paused,
+      resumeOnClose,
       pendingPeace,
       chronicle,
       camera,
