@@ -759,7 +759,7 @@ export async function createRenderer({
   >();
   function placedCity(city: DeepReadonly<City>) {
     const at = mapToScreen(camera, viewport(), city.position);
-    if (coastOutline === landOutline(map)) return { ...at, growth: symbolGrowth(camera.scale) };
+    if (camera.scale < ATLAS_COAST_SCALE) return { ...at, growth: symbolGrowth(camera.scale) };
     let placed = cityContacts.get(city.id);
     if (
       !placed ||
@@ -800,7 +800,7 @@ export async function createRenderer({
         at.x < view.width + halfWidth &&
         at.y < view.height + halfHeight;
       if (!symbol.visible) continue;
-      if (coastOutline !== landOutline(map)) {
+      if (camera.scale >= ATLAS_COAST_SCALE) {
         const fitted = placedCity(city);
         at = fitted;
         grow = fitted.growth;
@@ -972,7 +972,7 @@ export async function createRenderer({
     for (const column of columns) {
       const at = mapToScreen(camera, view, column.position);
       const placed =
-        columnLayer.visible && coastOutline !== landOutline(map)
+        columnLayer.visible && camera.scale >= ATLAS_COAST_SCALE
           ? fitColumnMarker(at, onLand, camera.scale)
           : { ...at, growth: 1 };
       const graphics = columnMarks.get(column.id)?.graphics;
@@ -1104,8 +1104,7 @@ export async function createRenderer({
     }
   }
 
-  const drawingLand = () =>
-    coastOutline === landOutline(map) ? terrain.land.land : atlasLand(map);
+  const drawingLand = () => (camera.scale < ATLAS_COAST_SCALE ? terrain.land.land : atlasLand(map));
   const toMap = (screen: MapPoint) => screenToMap(camera, viewport(), screen);
   const onDrawnLand = coastalSurface(drawingLand, terrain.land.lakes, toMap);
   const onLand = coastalSurface(drawingLand, terrain.land.lakes, toMap, terrain.land.land);
@@ -1334,7 +1333,7 @@ export async function createRenderer({
       const next = drawnArmies(previous, current, progress)
         .filter((army) => sight.armies.has(army.id))
         .map((army) => {
-          if (figureHeight(camera.scale) > 0 || coastOutline === landOutline(map)) return army;
+          if (figureHeight(camera.scale) > 0 || camera.scale < ATLAS_COAST_SCALE) return army;
           const at = mapToScreen(camera, viewport(), army.position);
           const sea = current.armies[army.id]?.activity.kind === 'embarked';
           const fitted = fitCoastalSprite(

@@ -126,6 +126,34 @@ test.each([0.6, 0.66, 1, 4])(
   },
 );
 
+test.each([
+  [0.6, 1.5],
+  [1.5, 2.5],
+  [2.5, 3.5],
+  [3.5, 4.01],
+])('city contacts remain placeable throughout zooms %s to %s', (from, to) => {
+  const state = newGame(map, { seed: 1, player: 'rome' });
+  for (let sample = from; sample < to; sample += 0.05) {
+    const scale = Math.round(sample * 100) / 100;
+    for (const city of Object.values(state.cities)) {
+      const camera = { centre: city.position, scale };
+      const land = coastalSurface(
+        () => drawn,
+        physical.lakes,
+        (p) => screenToMap(camera, viewport, p),
+        physical.land,
+      );
+      const fitted = fitCitySymbol(
+        mapToScreen(camera, viewport, city.position),
+        city.rank,
+        land,
+        scale,
+      );
+      expect(fitted.growth, `${city.name}/${scale}`).toBe(symbolGrowth(scale));
+    }
+  }
+});
+
 test('damaged and burning Carthago effects follow its displayed city, without moving rules or sight boundaries', () => {
   const state = newGame(map, { seed: 1, player: 'rome' });
   const id = 'carthago' as CityId;

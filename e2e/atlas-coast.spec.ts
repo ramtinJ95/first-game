@@ -22,6 +22,8 @@ test('crossing the middle-detail boundary restrokes even within the ordinary str
   const at = { x: 3540, y: 2989 };
   for (const [scale, coast] of [
     [0.59, 'physical'],
+    [4, 'atlas'],
+    [0.15824, 'physical'],
     [0.61, 'atlas'],
     [0.59, 'physical'],
   ] as const) {
