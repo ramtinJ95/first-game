@@ -29,3 +29,8 @@
 - Hills have seeded width, height, skew and readable inclination around their own relief's strike; their depth index needs a nonzero 36 km reach and samples on a 12 km lattice. Dry folds keep the full range strike, with broader seeded angle, aspect, size and spacing variation. Both retain the existing chunk-overhang budget.
 - `rural.ts`/`rural-draw.ts` enrich the close fields tier using existing land, cover and river data: river-attached irrigation branches and irregular reed/palm pools in coastal cultivated fans; meadow ribbons and small pastoral camps/flocks on watered open dry plains, clear of woods, relief and farm rings. These are atlas ornaments, never rules entities or navigable water. Farm tracts vary coherently with local river direction instead of a constant delta angle. [Seven-region audit, lake metrics and verification](../evidence/map-natural.md).
 - Pinned-before captures use the historical revision's own save helper, not a compatibility exception in the current game.
+
+#### Camera completion and picking
+
+- `data-latest-view` increments on camera input, focus, restored views, resize, and context restoration. `data-drawn-view` and `data-drawn-state` advance only when the GPU has finished a frame with all visible scene sprites painted; submitting a frame is not completion. `data-zoom`, `data-drawn-size`, and `data-drawn-frames` describe completed frames even while sheets are still painting.
+- Picking and right-click commands use the camera, viewport, city boxes, banners, battles, and figure boxes from one completed frame, never the pending camera. A held frame leaves that snapshot unchanged. During the first asynchronous figure-sheet paint, banners remain visible and pickable until the replacement scene is ready.
