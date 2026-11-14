@@ -1,0 +1,52 @@
+[
+  {
+    "file": "grouped-alert.png",
+    "title": "Six formations of spearmen mustered at Roma on one day: one alert line with ×6",
+    "kind": "screenshot"
+  },
+  {
+    "file": "early-muster.png",
+    "title": "Carthage besieges Roma, and Roma musters its recruits at once: the alert says the city cannot fall or be stormed while they stand",
+    "kind": "screenshot"
+  },
+  {
+    "file": "city-sacked.png",
+    "title": "Mediolanum thirty days after Rome sacked it: the city panel gives its gold and harvest a day, and how long it yields half its gold",
+    "kind": "screenshot"
+  },
+  {
+    "file": "top-bar-limits.png",
+    "title": "The top bar with Rome's food and manpower at their limits: \"Full\" and \"At limit\", with the reason on hover",
+    "kind": "screenshot"
+  },
+  {
+    "file": "weak-siege-city.png",
+    "title": "Mediolanum's city panel under a siege of 600 spearmen: too few to starve it, and how many more men the blockade needs",
+    "kind": "screenshot"
+  },
+  {
+    "file": "weak-siege-army.png",
+    "title": "The besieging army panel says the same in plain words",
+    "kind": "screenshot"
+  },
+  {
+    "file": "watching-on.png",
+    "title": "Rome has fallen and the player watches on: the top bar says the realm has fallen, no store alerts, and every army on the map shows",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "What the page tells of stores, cities, and sieges: grouped alerts, an early muster, a sacked city, stores at their limits, a siege too weak to starve its city, and a defeated player watching on",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "What the page tells of stores, cities, and sieges: grouped alerts, an early muster, a sacked city, stores at their limits, a siege too weak to starve its city, and a defeated player watching on (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "What the page tells of stores, cities, and sieges: grouped alerts, an early muster, a sacked city, stores at their limits, a siege too weak to starve its city, and a defeated player watching on (Playwright trace)",
+    "kind": "trace"
+  }
+]
