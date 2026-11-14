@@ -39,20 +39,21 @@ export function termsProblem(
 ): string | undefined {
   if (terms.kind === 'asThingsStand') return undefined;
   const { payer, gold, cities } = terms;
-  if (!sides.includes(payer)) return `${payer} is not a side of the war`;
+  const payerName = state.factions[payer]?.name ?? payer;
+  if (!sides.includes(payer)) return `${payerName} is not a side of the war`;
   if (gold === 0 && cities.length === 0) return 'a payment must give gold or cities';
   const stores = state.factions[payer]?.stores;
   if (!stores || (gold > 0 && stores.gold < gold)) {
-    return `${payer} has ${Math.max(0, Math.floor(stores?.gold ?? 0))} gold, not the ${gold} the terms ask`;
+    return `${payerName} has ${Math.max(0, Math.floor(stores?.gold ?? 0))} gold, not the ${gold} the terms ask`;
   }
   if (new Set(cities).size !== cities.length) return 'the terms name a city twice';
   for (const id of cities) {
     const city = Object.hasOwn(state.cities, id) ? state.cities[id] : undefined;
     if (!city) return `city ${id} does not exist`;
-    if (city.owner !== payer) return `${payer} does not hold ${city.name}`;
+    if (city.owner !== payer) return `${payerName} does not hold ${city.name}`;
   }
   const held = Object.values(state.cities).filter((city) => city.owner === payer).length;
-  if (cities.length >= held) return `${payer} would hand over its last city`;
+  if (cities.length >= held) return `${payerName} would hand over its last city`;
   return undefined;
 }
 

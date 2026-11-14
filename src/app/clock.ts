@@ -66,8 +66,8 @@ export interface Clock {
   togglePause(): void;
   setSpeed(speed: Speed): void;
   frame(): void;
-  /** Replaces the game with a loaded one. Orders queued for the old game are dropped. */
-  load(state: GameState): void;
+  /** Replaces the game and restores explicitly saved orders, dropping the old game's queue. */
+  load(state: GameState, pending?: readonly Order[]): void;
 }
 
 export function createClock({
@@ -170,10 +170,10 @@ export function createClock({
     frame() {
       catchUp();
     },
-    load(next) {
+    load(next, waiting = []) {
       state = next;
       previous = next;
-      pending = [];
+      pending = [...waiting];
       progress = 0;
       lastFrameAt = now();
     },

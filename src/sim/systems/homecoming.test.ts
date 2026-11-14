@@ -5,6 +5,7 @@ import { executeOrder, type Order } from '../orders/orders.ts';
 import { landOwnerAt } from '../peace/home.ts';
 import { expectConsistent } from '../references.ts';
 import type { GameState } from '../state/game-state.ts';
+import type { Day } from '../state/day.ts';
 import type { MapPoint } from '../state/map-point.ts';
 import type { PeaceTerms } from '../state/peace.ts';
 import { tick } from '../tick.ts';
@@ -152,6 +153,7 @@ describe('homecoming', () => {
 
   test('an army overseas whose owner cedes its last port lands at a foreign port and marches home', () => {
     let state = atWar();
+    state.day = (state.day + 1) as Day;
     place(state, f.romanArmy, CARTHAGO);
     place(state, f.punicArmy, { x: 2229.9, y: 2865.1 + 60 });
     const terms: PeaceTerms = { kind: 'payment', payer: f.rome, gold: 0, cities: [f.roma] };

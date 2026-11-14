@@ -84,7 +84,8 @@ export type DayEvent =
       position: MapPoint;
     }
   | { kind: 'peaceOffered'; from: FactionId; to: FactionId; terms: PeaceTerms }
-  | { kind: 'peaceRefused'; by: FactionId; from: FactionId; terms: PeaceTerms }
+  | { kind: 'peaceRefused'; by: FactionId; from: FactionId; terms: PeaceTerms; reason: string }
+  | { kind: 'peaceOfferEnded'; from: FactionId; to: FactionId; reason: string }
   | { kind: 'peaceMade'; between: readonly [FactionId, FactionId]; terms: PeaceTerms };
 
 const sinks = new WeakMap<GameState, DayEvent[]>();

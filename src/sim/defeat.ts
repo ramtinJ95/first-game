@@ -1,4 +1,5 @@
 import { removeArmy } from './armies.ts';
+import { emit } from './events.ts';
 import type { FactionId } from './ids.ts';
 import { removeRecord } from './records.ts';
 import type { GameState } from './state/game-state.ts';
@@ -36,7 +37,18 @@ export function defeatFaction(state: GameState, faction: FactionId): void {
     if (warSides(key)?.includes(faction)) removeRecord(state.wars, key);
   }
   for (const key of Object.keys(state.peaceOffers) as (keyof GameState['peaceOffers'])[]) {
-    if (warSides(key)?.includes(faction)) removeRecord(state.peaceOffers, key);
+    const sides = warSides(key);
+    const offer = state.peaceOffers[key];
+    const to = sides?.find((side) => side !== offer?.from);
+    if (sides?.includes(faction) && offer && to) {
+      emit(state, {
+        kind: 'peaceOfferEnded',
+        from: offer.from,
+        to,
+        reason: `${record.name} has fallen; its wars and offers end without a payment.`,
+      });
+      removeRecord(state.peaceOffers, key);
+    }
   }
   for (const key of Object.keys(state.truces) as (keyof GameState['truces'])[]) {
     if (warSides(key)?.includes(faction)) removeRecord(state.truces, key);

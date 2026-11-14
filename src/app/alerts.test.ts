@@ -884,6 +884,38 @@ describe('weakSiegeNews', () => {
 });
 
 describe('peace', () => {
+  it('keeps a refusal reason and forecast change in the alert and a lost offer in the news', () => {
+    const state = buildFixture();
+    atWar(state);
+    const alerts = alertsOfDay(state, state, [
+      {
+        kind: 'peaceRefused',
+        by: f.carthage,
+        from: f.rome,
+        terms: { kind: 'asThingsStand' },
+        reason:
+          'Carthage would refuse. It wants 2,100 gold. The forecast changed: battle losses changed at Ariminum.',
+      },
+      {
+        kind: 'peaceOfferEnded',
+        from: f.rome,
+        to: f.carthage,
+        reason: 'The offer expired after 30 days without an answer; the war goes on.',
+      },
+    ]);
+    expect(alerts).toContainEqual(
+      expect.objectContaining({
+        kind: 'peaceRefused',
+        text: 'Carthage refused your offer of peace. It wants 2,100 gold. The forecast changed: battle losses changed at Ariminum.',
+      }),
+    );
+    expect(alerts).toContainEqual(
+      expect.objectContaining({
+        kind: 'peaceOfferEnded',
+        text: 'Peace offer with Carthage ended. The offer expired after 30 days without an answer; the war goes on.',
+      }),
+    );
+  });
   const asThingsStand = { kind: 'asThingsStand' } as const;
   function day(state: GameState, orders: Order[]) {
     const { state: next, events, rejected } = tick(state, orders, world);
@@ -949,7 +981,7 @@ describe('peace', () => {
       {
         kind: 'peaceRefused',
         tone: 'bad',
-        text: 'Carthage refused your offer of peace, and the war goes on',
+        text: 'Carthage refused your offer of peace. Carthage will not talk of peace before Year 1, day 61.',
       },
     ]);
   });

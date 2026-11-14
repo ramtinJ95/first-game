@@ -138,13 +138,13 @@ describe('terms of peace', () => {
     const offer = (terms: PeaceTerms) =>
       run(state, { kind: 'offerPeace', faction: f.carthage, to: f.rome, terms });
     expect(offer({ kind: 'payment', payer: f.carthage, gold: 9000, cities: [] })).toBe(
-      'carthage has 3000 gold, not the 9000 the terms ask',
+      'Carthage has 3000 gold, not the 9000 the terms ask',
     );
     expect(offer({ kind: 'payment', payer: f.carthage, gold: 0, cities: [f.roma] })).toBe(
-      'carthage does not hold Roma',
+      'Carthage does not hold Roma',
     );
     expect(offer({ kind: 'payment', payer: f.carthage, gold: 0, cities: [f.carthago] })).toBe(
-      'carthage would hand over its last city',
+      'Carthage would hand over its last city',
     );
     expect(state.peaceOffers).toEqual({});
   });
@@ -193,7 +193,7 @@ describe('terms of peace', () => {
     const rome = state.factions[f.rome];
     if (rome) rome.stores.gold = 100;
     expect(run(state, { kind: 'acceptPeace', faction: f.carthage, from: f.rome, terms })).toBe(
-      'rome has 100 gold, not the 4000 the terms ask',
+      'Rome has 100 gold, not the 4000 the terms ask',
     );
     expect(areAtWar(state, f.rome, f.carthage)).toBe(true);
   });
@@ -273,6 +273,7 @@ describe('what the review found', () => {
     expect(
       run(state, { kind: 'offerPeace', faction: f.rome, to: f.carthage, terms: generous }),
     ).toBeUndefined();
+    state.day = (state.day + 1) as Day;
     expect(
       run(state, { kind: 'offerPeace', faction: f.rome, to: f.carthage, terms: greedy }),
     ).toBeUndefined();

@@ -2,13 +2,14 @@
   import { whole } from '../app/names.ts';
   import { peaceAnswer, termsText, type PeaceAnswer } from '../sim/ai/peace.ts';
   import { GOLD_PER_POINT } from '../sim/peace/terms.ts';
+  import { peaceForecast } from '../sim/peace/forecast.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { CityId, FactionId } from '../sim/ids.ts';
   import type { Order } from '../sim/orders/orders.ts';
   import type { GameState } from '../sim/state/game-state.ts';
   import type { PeaceTerms } from '../sim/state/peace.ts';
   import type { Actions } from './actions.ts';
-  import { warRoomOf, type WarRow } from './war-room.ts';
+  import { peaceVerdict, warRoomOf, type WarRow } from './war-room.ts';
 
   let {
     game,
@@ -77,7 +78,13 @@
   }
 
   function offer(war: WarRow, terms: PeaceTerms) {
-    actions.issue({ kind: 'offerPeace', faction: game.player, to: war.enemy, terms });
+    actions.issue({
+      kind: 'offerPeace',
+      faction: game.player,
+      to: war.enemy,
+      terms,
+      forecast: peaceForecast(game, war.enemy, game.player, terms),
+    });
   }
 
   function answer(war: WarRow, accept: boolean) {
@@ -140,6 +147,12 @@
       <ul class="facts">
         {#each war.facts as fact (fact)}<li>{fact}</li>{/each}
       </ul>
+      {#if war.volatile}
+        <p class="muted" data-testid="peace-forecast-warning">
+          A battle or siege in this war is under way. This forecast may change with it before {war.name}
+          answers.
+        </p>
+      {/if}
 
       {#if war.theirOffer}
         <div class="offer" data-testid="their-offer">
@@ -172,7 +185,9 @@
                 ? `: ${termsText(game, choice.terms, game.player)}`
                 : ''}
             </button>
-            <span class={choice.answer.accepts ? 'good' : 'bad'}>{choice.answer.verdict}</span>
+            <span class={choice.answer.accepts ? 'good' : 'bad'}
+              >{peaceVerdict(game, choice.answer)}</span
+            >
           </li>
         {/each}
       </ul>
@@ -213,14 +228,14 @@
 
       {#if draftAnswer && draft}
         <p class={draftAnswer.accepts ? 'good' : 'bad'} data-testid="peace-verdict">
-          {draftAnswer.verdict}
+          {peaceVerdict(game, draftAnswer)}
         </p>
         {@render reckoning(draftAnswer)}
         <div class="row">
           <button
             type="button"
             data-testid="offer-peace"
-            disabled={draftAnswer.problem !== undefined}
+            disabled={draftAnswer.problem !== undefined || war.ourOffer !== undefined}
             onclick={() => offer(war, draft)}>Offer these terms</button
           >
         </div>

@@ -205,12 +205,15 @@ export function fallenTo(state: GameState, id: string) {
   city.fellOn = state.day;
 }
 
-export async function dropSave(page: Page, state: GameState) {
-  const dataTransfer = await page.evaluateHandle((save) => {
-    const transfer = new DataTransfer();
-    transfer.items.add(new File([save], 'save.json', { type: 'application/json' }));
-    return transfer;
-  }, saveGame(state));
+export async function dropSave(page: Page, state: GameState | string) {
+  const dataTransfer = await page.evaluateHandle(
+    (save) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([save], 'save.json', { type: 'application/json' }));
+      return transfer;
+    },
+    typeof state === 'string' ? state : saveGame(state),
+  );
   await page.dispatchEvent('canvas', 'drop', { dataTransfer });
 }
 
@@ -816,6 +819,13 @@ export function idleBesideEnemyCity(id: string, km = 15): GameState {
 export function siegeToEndInPeace(): GameState {
   const state = siegeOfCarthago();
   state.day = (state.day + 120) as Day;
+  const losses = state.wars[warKey(rome, carthage)]?.sides[carthage];
+  if (!losses) throw new Error('the peace fixture needs a war');
+  // Earlier fighting, not the current siege alone, makes this a defeated side.
+  losses.lost = 1000;
+  const payer = state.factions[carthage];
+  if (!payer) throw new Error('the peace fixture needs Carthage');
+  payer.stores.gold = 5000;
   return state;
 }
 

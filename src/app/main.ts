@@ -35,7 +35,7 @@ import { fateChoices, type FateChoice } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
 import { refusalText } from './names.ts';
 import { alertsInSight, followJoin, seesPick, sightOfAll } from './sighted.ts';
-import { enqueue, keepOpen, type Modal } from './modals.ts';
+import { enqueue, keepOpen, restoreModalResume, type Modal } from './modals.ts';
 import { CHRONICLE_KEPT, pageData, parsePage, type Page, type Panel } from './page.ts';
 import { readPauses, stopsOfDay, writePauses, type PauseSettings } from './pauses.ts';
 import {
@@ -428,6 +428,12 @@ function homeOf(state: DeepReadonly<GameState>): MapPoint | undefined {
 /** What the page keeps beside the game in a save. */
 function pageNow(): Page {
   return {
+    paused: clock.paused,
+    resumeOnClose: resumeOnClose || (stopAsked && !clock.paused),
+    pendingPeace: clock.pending.filter(
+      (order): order is Extract<Order, { kind: 'offerPeace' | 'acceptPeace' | 'refusePeace' }> =>
+        ['offerPeace', 'acceptPeace', 'refusePeace'].includes(order.kind),
+    ),
     chronicle,
     camera: renderer.camera(),
     selection,
@@ -450,7 +456,7 @@ function enter(
   { pause, focus }: { pause: boolean; focus: boolean },
   page?: Page,
 ) {
-  clock.load(state);
+  clock.load(state, page?.pendingPeace);
   chronicle = page?.chronicle ?? [];
   toldOnce = new Set(page?.told);
   occupied = new Map(page?.occupied);
@@ -468,8 +474,29 @@ function enter(
     outcome.kind === 'lost'
       ? [{ kind: 'lost', on: outcome.on, city: undefined, by: undefined }]
       : openFates(state);
-  resumeOnClose = modals.length > 0 && !pause && !clock.paused;
-  if (pause || modals.length > 0) clock.pause();
+  if (outcome.kind !== 'lost') {
+    for (const offer of Object.values(state.peaceOffers)) {
+      if (
+        offer.from === state.player ||
+        standingOffer(state, state.player, offer.from)?.from !== offer.from
+      )
+        continue;
+      const answered = page?.pendingPeace?.some(
+        (order) =>
+          (order.kind === 'acceptPeace' || order.kind === 'refusePeace') &&
+          order.from === offer.from,
+      );
+      if (!answered) modals = enqueue(modals, { kind: 'peaceOffer', from: offer.from });
+    }
+  }
+  resumeOnClose = restoreModalResume({
+    saved: page,
+    hasModal: modals.length > 0,
+    paused: clock.paused,
+    forcePause: pause,
+  });
+  if (pause || page?.paused || modals.length > 0) clock.pause();
+  else if (page?.paused === false) clock.resume();
   const home = focus && !page?.camera ? homeOf(state) : undefined;
   view.refresh();
   if (page?.camera) renderer.lookAt(page.camera);
@@ -651,6 +678,8 @@ function held(): boolean {
 const actions: Actions = {
   togglePause() {
     if (held()) return;
+    // A deliberate clock action supersedes a modal's automatic resume.
+    resumeOnClose = false;
     clock.togglePause();
     view.refresh();
   },

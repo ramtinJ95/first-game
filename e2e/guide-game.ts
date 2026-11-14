@@ -89,6 +89,13 @@ export async function loadDiscovery(page: Page, state: GameState) {
   const viewport = page.viewportSize();
   if (!viewport) throw new Error('no viewport');
   await loadAt(page, state, fitCamera(viewport, map));
+  if (state.peaceOffers[warKey(rome, carthage)]?.from === carthage) {
+    const wars = page.getByTestId('wars-panel');
+    await expect(wars.getByTestId('their-offer')).toBeVisible();
+    await wars.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(wars).toBeHidden();
+    await expect(page.getByTestId('wars-button')).toHaveAccessibleName('Wars 1, 1 offer waiting');
+  }
 }
 export async function pickCity(page: Page, id: string) {
   const point = camera(page).city(id);

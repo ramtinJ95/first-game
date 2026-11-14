@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CityId, FactionId } from '../sim/ids.ts';
 import type { Day } from '../sim/state/day.ts';
-import { enqueue, keepOpen, type Modal } from './modals.ts';
+import { enqueue, keepOpen, restoreModalResume, type Modal } from './modals.ts';
 
 const fate = (city: string): Modal => ({ kind: 'fate', city: city as CityId });
 const won: Modal = { kind: 'won', on: 5 as Day };
@@ -14,6 +14,28 @@ const lost: Modal = {
 };
 
 describe('the modal queue', () => {
+  it.each([true, false])(
+    'restores saved automatic-resume ownership=%s independently of paused and the load screen',
+    (resumeOnClose) => {
+      expect(
+        restoreModalResume({
+          saved: { paused: true, resumeOnClose },
+          hasModal: true,
+          paused: true,
+          forcePause: true,
+        }),
+      ).toBe(resumeOnClose);
+      expect(
+        restoreModalResume({
+          saved: { paused: true, resumeOnClose },
+          hasModal: false,
+          paused: true,
+          forcePause: false,
+        }),
+      ).toBe(false);
+    },
+  );
+
   it('puts the win before the fates and the fates before the guide, each once', () => {
     let queue: Modal[] = [guide];
     for (const modal of [fate('capua'), won, fate('capua'), fate('roma'), guide]) {
