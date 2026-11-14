@@ -38,9 +38,12 @@ export function peaceFundsText(
   state: DeepReadonly<GameState>,
   terms: DeepReadonly<PeaceTerms>,
 ): string | undefined {
-  if (terms.kind !== 'payment' || terms.payer !== state.player) return undefined;
-  const held = Math.max(0, Math.floor(state.factions[state.player]?.stores.gold ?? 0));
-  return `You hold ${whole(held)} gold. ${
+  if (terms.kind !== 'payment' || terms.payer !== state.player || terms.gold === 0)
+    return undefined;
+  const held = Math.floor(state.factions[state.player]?.stores.gold ?? 0);
+  const treasury =
+    held < 0 ? `Your treasury is ${whole(held)} gold.` : `You hold ${whole(held)} gold.`;
+  return `${treasury} ${
     held >= terms.gold
       ? `You can pay the ${whole(terms.gold)} gold asked.`
       : `You need ${whole(terms.gold - held)} gold more to pay the ${whole(terms.gold)} asked.`

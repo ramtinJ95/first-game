@@ -38,6 +38,30 @@ function firstOffer() {
 }
 
 describe('a rising peace price has a remembered, measured reason', () => {
+  test('history keeps a negative treasury rather than pretending it was zero', () => {
+    const state = buildFixture();
+    state.day = 201 as Day;
+    state.wars[key] = newWar(f.carthage, f.rome, 1 as Day);
+    const treasury = state.factions[f.rome];
+    if (!treasury) throw new Error('fixture');
+    treasury.stores.gold = -20.4;
+    run(state, {
+      kind: 'offerPeace',
+      faction: f.carthage,
+      to: f.rome,
+      terms: { kind: 'asThingsStand' },
+    });
+    run(state, refuse);
+    const loaded = loadGame(saveGame(state));
+    if (!loaded.ok) throw new Error(loaded.error);
+    expect(loaded.state.wars[key]?.sides[f.carthage]?.lastOffer?.receiverGold).toBe(-21);
+    state.day = 202 as Day;
+    treasury.stores.gold = 100;
+    run(state, payment(100));
+    expect(state.peaceOffers[key]?.change).toContain('Your treasury rose from -21 to 100 gold.');
+    expectConsistent(state);
+  });
+
   test('an expired offer remains the comparison point for the next demand', () => {
     const state = firstOffer();
     state.day = 230 as Day;

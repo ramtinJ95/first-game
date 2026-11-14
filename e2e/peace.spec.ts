@@ -185,6 +185,12 @@ test.describe('peace', () => {
     );
     await expect(panel.getByTestId('accept-peace')).toBeDisabled();
     await expect(panel.getByTestId('refuse-peace')).toBeEnabled();
+    treasury.stores.gold = -20.4;
+    await load(page, fixture.state);
+    await expect(panel.getByTestId('peace-funds')).toHaveText(
+      'Your treasury is -21 gold. You need 8,921 gold more to pay the 8,900 asked.',
+    );
+    await expect(panel.getByTestId('accept-peace')).toBeDisabled();
   });
 
   test('a winning second-front AI explains its discount, but still refuses free early peace', async ({

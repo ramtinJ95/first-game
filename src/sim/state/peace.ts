@@ -42,8 +42,8 @@ export const PeaceOfferSchema = v.object({
   forecast: v.optional(PeaceForecastSchema),
   /** The sender's own reckoning, kept to explain the price of a later offer. */
   ownForecast: v.optional(PeaceForecastSchema),
-  /** The receiver's spendable gold at the offer, which can cap an AI's demand. */
-  receiverGold: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
+  /** The receiver's treasury at the offer, whose nonnegative part caps an AI's demand. */
+  receiverGold: v.optional(v.pipe(v.number(), v.integer())),
   /** A measured increase from this side's preceding offer in this war. */
   change: v.optional(v.string()),
 });

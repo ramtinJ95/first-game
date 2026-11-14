@@ -38,7 +38,7 @@ export function offerPeace(state: GameState, order: OfferPeaceOrder): string | u
     madeOn: state.day,
     forecast: order.forecast ?? peaceForecast(state, order.to, order.faction, order.terms),
     ownForecast: peaceForecast(state, order.faction, order.to, order.terms),
-    receiverGold: Math.max(0, Math.floor(state.factions[order.to]?.stores.gold ?? 0)),
+    receiverGold: Math.floor(state.factions[order.to]?.stores.gold ?? 0),
   };
   offer.change = offerPriceRise(state, side.lastOffer, offer, order.to);
   state.peaceOffers[key] = offer;

@@ -54,5 +54,10 @@ describe('an incoming peace price against the present treasury', () => {
     );
     expect(peaceFundsText(state, { ...terms, payer: f.carthage })).toBeUndefined();
     expect(peaceFundsText(state, { kind: 'asThingsStand' })).toBeUndefined();
+    treasury.stores.gold = -20.4;
+    expect(peaceFundsText(state, terms)).toBe(
+      'Your treasury is -21 gold. You need 8,921 gold more to pay the 8,900 asked.',
+    );
+    expect(peaceFundsText(state, { ...terms, gold: 0, cities: [f.capua] })).toBeUndefined();
   });
 });
