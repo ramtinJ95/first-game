@@ -8,6 +8,7 @@ import { population } from './systems/population.ts';
 import { movement } from './systems/movement.ts';
 import type { World } from './world/world.ts';
 import { sieges } from './systems/sieges.ts';
+import { trade } from './systems/trade.ts';
 
 /** A system changes the tick's own copy of the state in place. It may read the world. */
 export type System = (state: GameState, world: World) => void;
@@ -23,6 +24,7 @@ export const SYSTEMS: readonly System[] = [
   battles,
   sieges,
   economy,
+  trade,
   construction,
   population,
   advanceDay,

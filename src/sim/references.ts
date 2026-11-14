@@ -37,6 +37,7 @@ export function findBrokenReferences(state: DeepReadonly<GameState>): string[] {
     refugeeColumns: state.refugeeColumns,
     battles: state.battles,
     sieges: state.sieges,
+    tradeRoutes: state.tradeRoutes,
   };
   for (const [name, records] of Object.entries(collections)) {
     for (const [key, record] of Object.entries(records)) {
@@ -237,6 +238,30 @@ export function findBrokenReferences(state: DeepReadonly<GameState>): string[] {
         `truce ${key} names unknown faction ${faction}`,
       );
     }
+  }
+
+  const pairs = new Set<string>();
+  for (const route of Object.values(state.tradeRoutes)) {
+    expect(
+      get(state.cities, route.from)?.owner === route.owner,
+      `trade ${route.id} has a missing or changed origin`,
+    );
+    expect(
+      get(state.cities, route.to)?.owner === route.partner,
+      `trade ${route.id} has a missing or changed destination`,
+    );
+    expect(route.from !== route.to, `trade ${route.id} trades with itself`);
+    const pair = JSON.stringify([route.from, route.to].sort());
+    if (route.status === 'running') {
+      expect(!pairs.has(pair), `trade ${route.id} duplicates a running route`);
+      pairs.add(pair);
+    }
+    const km = route.path.slice(1).reduce((sum, p, i) => {
+      const a = route.path[i];
+      if (!a) throw new Error('a trade path segment has no start');
+      return sum + Math.sqrt((p.x - a.x) ** 2 + (p.y - a.y) ** 2);
+    }, 0);
+    expect(Math.abs(km - route.km) < 0.01, `trade ${route.id} has a false path length`);
   }
 
   const defeated = new Set(
