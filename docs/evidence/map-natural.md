@@ -1,6 +1,6 @@
 # Natural shores and regional close-up audit
 
-Second part of map round four (brief items 2–4); atlas ownership/startup are separate in PR #49. Baseline: `bfb5617`. No rule, province outline, city coordinate, dependency, font, or external art changes. A deep comparison of every non-lake map record against baseline is identical.
+Second part of map round four (brief items 2–4); atlas ownership/startup are separate in PR #49. The pinned visual baseline is `bfb5617`; the branch is rebased onto `a98a2de`. No rule, province outline, city coordinate, dependency, font, or external art changes. A deep comparison of every non-lake map record against baseline is identical.
 
 ## Lakes
 
@@ -70,7 +70,7 @@ The fixed delta sample has **14 river-attached channels and 19 marsh/palm pools*
 
 ## Verification and review
 
-- `npm run check`, **789 unit tests**, and production build passed locally. All normal limits/retries remain unchanged.
+- After the `a98a2de` rebase and `npm ci`, `npm run check`, **836 unit tests**, production build, and all 20 full-drawing capture views passed locally. All normal limits/retries remain unchanged.
 - Unit checks cover source-detail retention, maximum straight shore run, anchor/deviation bounds, whole-map topology/holes, actual relief response, angle/size/spacing spread, rural density, river attachment, land placement, chunk overhang and no-seam repeatability.
 - `map-natural` captures the seven regions and Tatta/Urmia/Garda, before/after, from the identical day-1 views at closest zoom. Before is built from the pinned main archive, not a simulated “old style”.
 - Its capture scheduling weight starts at an explicit 240 s estimate (123.4 s locally for both builds and all 20 views); no timeout or retry changes.
