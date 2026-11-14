@@ -71,6 +71,7 @@ test.describe('peace', () => {
     await expect(panel.getByTestId('war-row')).toHaveCount(0);
 
     await panel.getByRole('button', { name: 'Close' }).click();
+    await page.getByRole('button', { name: 'Overview' }).click();
     const armies = page.getByTestId('overview-armies');
     await expect(armies).not.toContainText('Besieging');
     await expect(armies).toContainText(/Gathering ships|At sea|Marching/);

@@ -18,7 +18,6 @@ import { warKey } from '../sim/state/war.ts';
 import { areAtWar } from '../sim/wars.ts';
 import type { World } from '../sim/world/world.ts';
 import { armyTitle, buildingList, factionName, placeName, TROOP_NAMES, whole } from './names.ts';
-import { warKey } from '../sim/state/war.ts';
 
 export const ALERT_KINDS = [
   'battleBegan',

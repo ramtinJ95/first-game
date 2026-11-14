@@ -78,7 +78,6 @@ export default defineScenario({
     await wars.getByRole('button', { name: 'Peace as things stand' }).click();
     await wars.getByTestId('offer-peace').click();
     await wars.getByRole('button', { name: 'Close' }).click();
-    await page.getByRole('button', { name: 'Overview' }).click();
     const carthago = cityPoint('carthago');
     await camera(page).jumpTo({ x: carthago.x + 10, y: carthago.y - 10 }, 2.2);
     await resume(page);

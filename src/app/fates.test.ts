@@ -9,7 +9,7 @@ import { parseMap } from '../sim/map.ts';
 import { newGame } from '../sim/new-game.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { warKey } from '../sim/state/war.ts';
+import { newWar, warKey } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import { buildWorld } from '../sim/world/world.ts';
 import { cityBalance } from '../ui/describe.ts';
@@ -26,7 +26,7 @@ function mediolanumFalls(): GameState {
   const city = state.cities[mediolanum];
   const army = Object.values(state.armies).find((a) => a.owner === rome);
   if (!city || !army) throw new Error('the new game changed');
-  state.wars[warKey(rome, city.owner)] = { since: state.day };
+  state.wars[warKey(rome, city.owner)] = newWar(rome, city.owner, state.day);
   army.activity = { kind: 'idle', position: { ...city.position } };
   city.garrison = 0;
   city.foodDays = 0;
