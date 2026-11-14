@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { march, OUT_OF_SIGHT, romeSees, romeWithPunicArmyAt } from '../../../e2e/fog-game.ts';
 import {
   armyOf,
+  camera as mapCamera,
   carthage,
   cityPoint,
   dropSave,
@@ -12,20 +13,14 @@ import {
   rome,
   untilDrawn,
 } from '../../../e2e/support.ts';
-import { fitCamera, mapToScreen, panBy, wheelFactor, zoomAt } from '../../../src/render/camera.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
 import type { MapPoint } from '../../../src/sim/state/map-point.ts';
 import { defineScenario } from '../scenario.ts';
 
 const viewport = { width: 1280, height: 720 };
-const centre = { x: viewport.width / 2, y: viewport.height / 2 };
 const CLIP_MS = 12_000;
 
-const frames = (page: Page) =>
-  page.evaluate(
-    () =>
-      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
-  );
+const frames = untilDrawn;
 
 async function day(page: Page): Promise<number> {
   return Number(await page.getByTestId('time-controls-day').getAttribute('data-day'));
@@ -95,8 +90,8 @@ export default defineScenario({
     march(state, armyOf(state, rome), cityPoint('ariminum'), cityPoint('carnuntum'));
     if (romeSees(state, OUT_OF_SIGHT)) throw new Error('the Punic army starts in sight');
     const startDay = state.day;
-    let camera = fitCamera(viewport, map);
-    const onScreen = (points: MapPoint[]) => points.map((p) => mapToScreen(camera, viewport, p));
+    const camera = mapCamera(page);
+    const onScreen = (points: MapPoint[]) => points.map(camera.screen);
 
     await open(page, 'fog=off', state);
     const clear = await page.screenshot();
@@ -117,19 +112,7 @@ export default defineScenario({
     );
 
     const zoomTo = async (at: MapPoint, notches: number) => {
-      const screen = mapToScreen(camera, viewport, at);
-      await page.mouse.move(screen.x, screen.y);
-      for (let i = 0; i < notches; i++) {
-        await page.mouse.wheel(0, -100);
-        camera = zoomAt(camera, screen, wheelFactor(-100), viewport, map);
-        await page.waitForTimeout(60);
-      }
-      const from = mapToScreen(camera, viewport, at);
-      await page.mouse.move(from.x, from.y);
-      await page.mouse.down();
-      await page.mouse.move(centre.x, centre.y, { steps: 10 });
-      await page.mouse.up();
-      camera = panBy(camera, centre.x - from.x, centre.y - from.y, viewport, map);
+      await camera.closeUp(at, notches);
     };
 
     await zoomTo({ x: 2520, y: 1950 }, 6);
@@ -156,7 +139,7 @@ export default defineScenario({
     await frames(page);
     await shot(
       'fog-edge',
-      `The edge of the fog at ${camera.scale.toFixed(1)} px per km: a band of pen hatching marks where Roman sight ends and fades away from it`,
+      `The edge of the fog at ${camera.camera.scale.toFixed(1)} px per km: a band of pen hatching marks where Roman sight ends and fades away from it`,
     );
     await resume(page);
 
@@ -205,7 +188,7 @@ export default defineScenario({
       .sort((a, b) => a - b);
     const at = (p: number) => gaps[Math.min(gaps.length - 1, Math.floor(gaps.length * p))] ?? NaN;
     const summary =
-      `Pan with the fog on while both armies march at speed 3, ${camera.scale.toFixed(1)} px per km: ` +
+      `Pan with the fog on while both armies march at speed 3, ${camera.camera.scale.toFixed(1)} px per km: ` +
       `${gaps.length} frames, frame interval median ${at(0.5).toFixed(1)} ms, p95 ${at(0.95).toFixed(1)} ms, ` +
       `main thread busy ${(busy / gaps.length).toFixed(1)} ms per frame`;
     console.log(summary);

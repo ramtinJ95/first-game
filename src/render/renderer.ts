@@ -37,7 +37,13 @@ import { landOutline } from './land-outline.ts';
 import { drawColumnMark, drawnColumns, type DrawnColumn } from './columns.ts';
 import { createFog, fogCircles } from './fog.ts';
 import { LABEL_PRIORITY, placeLabels, type Box, type LabelRequest } from './labels.ts';
-import { BANNER, BATTLE_HIT_RADIUS, drawnArmies, type DrawnArmy } from './markers.ts';
+import {
+  BANNER,
+  BATTLE_HIT_RADIUS,
+  drawnArmies,
+  type DrawnArmy,
+  type DrawnBattle,
+} from './markers.ts';
 import {
   BORDER,
   factionColour,
@@ -53,7 +59,7 @@ import {
 import { paperTexture, waterTexture } from './paper.ts';
 import { toPixels } from './lines.ts';
 import { FramePacer } from './frame-pacer.ts';
-import { cityAt, pickAt, type DrawnCity, type Pick } from './pick.ts';
+import { cityAt, pickAt, type DrawnCity, type FigureHit, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
 import { citySymbols } from './symbols.ts';
 import { createLife } from './terrain/life.ts';
@@ -468,7 +474,6 @@ export async function createRenderer({
   let strokedAt = 0;
   let coastOutline = landOutline(map);
   let shown: DeepReadonly<GameState> | undefined;
-  let laidOut: DeepReadonly<GameState> | undefined;
   // Each game state the page hands over gets a number, and the canvas says the latest it
   // was given and the latest it has drawn, so a test or a capture can wait until the
   // map shows a state it loaded: a click picks what the map last drew.
@@ -486,6 +491,26 @@ export async function createRenderer({
   let armies: DrawnArmy[] = [];
   let columns: DrawnColumn[] = [];
   let drawnCities: DrawnCity[] = [];
+  // All hit geometry and its transform belong to one completed frame. Mixing the live
+  // camera with old figures or city boxes can select the land behind a visible army.
+  interface DrawnView {
+    camera: Camera;
+    size: Size;
+    state: string;
+    revision: number;
+    ready: boolean;
+    cities: readonly DrawnCity[];
+    armies: readonly DrawnArmy[];
+    battles: readonly DrawnBattle[];
+    figures: readonly FigureHit[];
+  }
+  let displayed: DrawnView | undefined;
+  let viewRevision = 0;
+  canvas.dataset['latestView'] = String(viewRevision);
+  const moveCamera = () => {
+    cameraMoved = true;
+    canvas.dataset['latestView'] = String(++viewRevision);
+  };
   /** Where each city's name stands relative to the city, which the army scene depends on. */
   let nameSides = '';
   /** The town and village symbols and names drawn, which a siege camp keeps clear of. */
@@ -496,6 +521,7 @@ export async function createRenderer({
   let swellAt = -Infinity;
   let sheetPainted = false;
   let scene: Scene | undefined;
+  let sceneReady = true;
   /** The sprites last drawn, so a click picks only what is on the screen. */
   let drawnFigures: readonly SceneSprite[] = [];
   let built:
@@ -1022,7 +1048,7 @@ export async function createRenderer({
       return { id: b.id, position: { x: at.x, y: at.y - lift } };
     });
   };
-  const bannersShown = () => (scene && scene.height > 0 ? [] : armies);
+  const bannersShown = () => (bannerLayer.visible ? armies : []);
 
   const listening = new AbortController();
   const { signal } = listening;
@@ -1049,7 +1075,7 @@ export async function createRenderer({
       const at = local(event);
       if (!drag.moved && Math.hypot(at.x - drag.x, at.y - drag.y) < DRAG_THRESHOLD) return;
       camera = panBy(camera, at.x - drag.x, at.y - drag.y, viewport(), map);
-      cameraMoved = true;
+      moveCamera();
       drag = { ...drag, ...at, moved: true };
       canvas.style.cursor = 'grabbing';
     },
@@ -1059,11 +1085,12 @@ export async function createRenderer({
     'pointerup',
     (event) => {
       if (event.pointerId !== drag?.pointer) return;
-      if (!drag.moved) {
+      if (!drag.moved && displayed) {
+        const view = displayed;
         const screen = local(event);
         // City symbols win over figures and banners alike. Armies here in the city
         // panel reaches an army whose banner or convoy covers the symbol.
-        const onSymbol = drawnCities.some(
+        const onSymbol = view.cities.some(
           ({ symbol }) =>
             screen.x >= symbol.left &&
             screen.x <= symbol.right &&
@@ -1072,16 +1099,16 @@ export async function createRenderer({
         );
         const pick = pickAt(
           map,
-          camera,
-          viewport(),
-          onSymbol ? [] : bannersShown(),
+          view.camera,
+          view.size,
+          onSymbol ? [] : view.armies,
           screen,
-          battlesShown(),
-          onSymbol ? [] : figuresShown(),
+          view.battles,
+          onSymbol ? [] : view.figures,
         );
         // A city's name can stand over a neighbouring province, so a click on it, or on
         // its symbol, picks the city's own province.
-        const city = !pick || pick.kind === 'province' ? cityAt(drawnCities, screen) : undefined;
+        const city = !pick || pick.kind === 'province' ? cityAt(view.cities, screen) : undefined;
         const province = city && map.provinces.find((p) => (p.id as string) === city)?.id;
         onPick(province ? { kind: 'province', province } : pick);
       }
@@ -1102,20 +1129,13 @@ export async function createRenderer({
     'contextmenu',
     (event) => {
       event.preventDefault();
-      if (!onCommand) return;
+      if (!onCommand || !displayed) return;
+      const view = displayed;
       const screen = local(event);
       onCommand({
-        point: screenToMap(camera, viewport(), screen),
-        pick: pickAt(
-          map,
-          camera,
-          viewport(),
-          bannersShown(),
-          screen,
-          battlesShown(),
-          figuresShown(),
-        ),
-        city: cityAt(drawnCities, screen),
+        point: screenToMap(view.camera, view.size, screen),
+        pick: pickAt(map, view.camera, view.size, view.armies, screen, view.battles, view.figures),
+        city: cityAt(view.cities, screen),
         screen,
       });
     },
@@ -1127,22 +1147,28 @@ export async function createRenderer({
       event.preventDefault();
       const lines = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 33 : 1;
       camera = zoomAt(camera, local(event), wheelFactor(event.deltaY * lines), viewport(), map);
-      cameraMoved = true;
+      moveCamera();
     },
     { signal, passive: false },
   );
-  /** The size of the frame the pacer waits on, which becomes `data-drawn-size` once it is done. */
-  let fenced: string | undefined;
+  /** The submitted frame becomes pickable and observable once its GPU fence signals. */
+  let fenced: DrawnView | undefined;
   let finishedFrames = 0;
   /** Says on the canvas that the GPU has finished a frame of this size, and how many it has. */
-  const finished = (size: string) => {
+  const finished = (view: DrawnView) => {
+    displayed = view;
     finishedFrames += 1;
-    canvas.dataset['drawnSize'] = size;
+    canvas.dataset['drawnSize'] = `${view.size.width}x${view.size.height}`;
     canvas.dataset['drawnFrames'] = String(finishedFrames);
+    if (view.ready) {
+      canvas.dataset['drawnState'] = view.state;
+      canvas.dataset['drawnView'] = String(view.revision);
+    }
+    canvas.dataset['zoom'] = view.camera.scale.toFixed(4);
   };
   const onResize = () => {
     camera = clampCamera(camera, viewport(), map);
-    cameraMoved = true;
+    moveCamera();
   };
   app.renderer.on('resize', onResize);
   canvas.addEventListener(
@@ -1150,7 +1176,7 @@ export async function createRenderer({
     () => {
       // Restored render textures are empty, even when their view still fits.
       ink.invalidate();
-      cameraMoved = true;
+      moveCamera();
     },
     { signal: listening.signal },
   );
@@ -1159,14 +1185,8 @@ export async function createRenderer({
     draw({ previous, current, progress, selection, planned, replaced, previousSight, sight }) {
       const given = String(stateId(current));
       if (canvas.dataset['latestState'] !== given) canvas.dataset['latestState'] = given;
-      // While the GPU still draws the last frame, this one sends it nothing and keeps every
-      // change for the next, but lays the cities out again, which costs the GPU nothing,
-      // so a click picks what the screen will show.
-      if (!pacer.ready()) {
-        if (cameraMoved || current !== laidOut) layoutCities(current);
-        laidOut = current;
-        return false;
-      }
+      // Held frames keep both the picture and its hit geometry unchanged.
+      if (!pacer.ready()) return false;
       if (fenced) finished(fenced);
       fenced = undefined;
       const now = performance.now();
@@ -1193,7 +1213,6 @@ export async function createRenderer({
       const terrainState = terrainNow.busy ? 'busy' : 'ready';
       if (canvas.dataset['terrain'] !== terrainState) canvas.dataset['terrain'] = terrainState;
       if (dirty) layoutCities(current);
-      laidOut = current;
       if (
         !highlighted ||
         highlighted.scale !== camera.scale ||
@@ -1284,6 +1303,8 @@ export async function createRenderer({
           keepClear: drawnPlaces,
         });
         drawnFigures = armyLayer.draw(scene);
+        sceneReady =
+          drawnFigures.length === scene.sprites.filter((sprite) => sprite.alpha > 0.05).length;
         canvas.dataset['figures'] = String(drawnFigures.filter((sprite) => sprite.army).length);
         built = {
           previous,
@@ -1311,7 +1332,9 @@ export async function createRenderer({
       if (!dirty) return false;
       life.update(camera, viewport(), now, sight);
       moveSwell(now);
-      bannerLayer.visible = !scene || scene.height === 0;
+      // A cold figure sheet paints asynchronously. Keep visible, pickable flags until
+      // the replacement art is drawn, rather than letting armies vanish during a zoom.
+      bannerLayer.visible = !scene || scene.height === 0 || !sceneReady;
       columnLayer.visible = bannerLayer.visible;
       drawRoutes(current, selection, planned, replaced);
       placeBanners(current, selection);
@@ -1354,17 +1377,24 @@ export async function createRenderer({
       app.render();
       // The size of the last frame the GPU has finished, which the screen shows, so a test
       // or a capture knows the map has followed a resize. The element's size says it at once.
-      const size = `${app.screen.width}x${app.screen.height}`;
+      const completed: DrawnView = {
+        camera,
+        size: view,
+        state: given,
+        revision: viewRevision,
+        ready: sceneReady,
+        cities: drawnCities,
+        armies: bannersShown(),
+        battles: battlesShown(),
+        figures: figuresShown(),
+      };
       if (waitForGpu) {
         finish();
-        finished(size);
+        finished(completed);
       } else {
         pacer.rendered();
-        fenced = size;
+        fenced = completed;
       }
-      canvas.dataset['drawnState'] = String(stateId(current));
-      // The zoom of the frame drawn, in px per km, so a test knows what the wheel reached.
-      canvas.dataset['zoom'] = camera.scale.toFixed(4);
       return true;
     },
     focus(point, covered = { left: 0, top: 0, right: 0, bottom: 0 }) {
@@ -1374,12 +1404,12 @@ export async function createRenderer({
         y: point.y - (covered.top - covered.bottom) / 2 / scale,
       };
       camera = clampCamera({ centre, scale }, viewport(), map);
-      cameraMoved = true;
+      moveCamera();
     },
     camera: () => camera,
     lookAt(next) {
       camera = clampCamera(next, viewport(), map);
-      cameraMoved = true;
+      moveCamera();
     },
     destroy() {
       terrain.destroy();

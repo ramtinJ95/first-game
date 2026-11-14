@@ -1,14 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
-import {
-  fitCamera,
-  mapToScreen,
-  panBy,
-  wheelFactor,
-  zoomAt,
-  type Camera,
-} from '../../../src/render/camera.ts';
+import { fitCamera, wheelFactor } from '../../../src/render/camera.ts';
 import type { CityId, FactionId } from '../../../src/sim/ids.ts';
 import { parseMap } from '../../../src/sim/map.ts';
 import { newGame } from '../../../src/sim/new-game.ts';
@@ -19,7 +12,7 @@ import { tick } from '../../../src/sim/tick.ts';
 import { buildWorld } from '../../../src/sim/world/world.ts';
 import type { MapPoint } from '../../../src/sim/state/map-point.ts';
 import { defineScenario } from '../scenario.ts';
-import { openGame } from '../../../e2e/support.ts';
+import { camera as mapCamera, openGame, untilDrawn } from '../../../e2e/support.ts';
 
 const map = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../../../data/map/map.json'), 'utf8')),
@@ -48,37 +41,21 @@ function cityPoint(id: string): MapPoint {
   return { x: province.city[0], y: province.city[1] };
 }
 
-const frames = (page: Page) =>
-  page.evaluate(
-    () =>
-      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
-  );
+const frames = untilDrawn;
 
 /** Drives the page with real mouse input and follows the page's camera with the same maths. */
 function controls(page: Page) {
-  let camera: Camera = fitCamera(viewport, map);
+  const view = mapCamera(page);
   return {
-    screen: (point: MapPoint) => mapToScreen(camera, viewport, point),
+    screen: view.screen,
     get scale() {
-      return camera.scale;
+      return view.camera.scale;
     },
-    async zoom(at: MapPoint, notches: number, pauseMs = 90) {
-      await page.mouse.move(at.x, at.y);
-      for (let i = 0; i < Math.abs(notches); i++) {
-        const deltaY = notches > 0 ? -100 : 100;
-        await page.mouse.wheel(0, deltaY);
-        camera = zoomAt(camera, at, wheelFactor(deltaY), viewport, map);
-        await page.waitForTimeout(pauseMs);
-      }
-    },
+    zoom: view.zoom,
     async drag(from: MapPoint, to: MapPoint, steps = 15) {
       // A press and release that barely moves is a click, which would select a province.
       if (Math.hypot(to.x - from.x, to.y - from.y) < 8) return;
-      await page.mouse.move(from.x, from.y);
-      await page.mouse.down();
-      await page.mouse.move(to.x, to.y, { steps });
-      await page.mouse.up();
-      camera = panBy(camera, to.x - from.x, to.y - from.y, viewport, map);
+      await view.drag(from, to, steps);
     },
     async bringToCentre(point: MapPoint) {
       await this.drag(this.screen(point), centre);
@@ -89,14 +66,14 @@ function controls(page: Page) {
      * panels, so every step reaches the map. The point is pulled to the centre between
      * steps, so it stays on screen.
      */
-    async goTo(point: MapPoint, scale: number, pauseMs = 25) {
+    async goTo(point: MapPoint, scale: number) {
       await page.keyboard.press('Escape');
-      const out = Math.ceil(Math.log(camera.scale / fitCamera(viewport, map).scale) / NOTCH);
-      if (out > 0) await this.zoom(centre, -out, pauseMs);
-      let notches = scale > camera.scale ? Math.round(Math.log(scale / camera.scale) / NOTCH) : 0;
+      const out = Math.ceil(Math.log(this.scale / fitCamera(viewport, map).scale) / NOTCH);
+      if (out > 0) await this.zoom(centre, -out);
+      let notches = scale > this.scale ? Math.round(Math.log(scale / this.scale) / NOTCH) : 0;
       while (notches > 0) {
         const step = Math.min(3, notches);
-        await this.zoom(safe(this.screen(point)), step, pauseMs);
+        await this.zoom(safe(this.screen(point)), step);
         notches -= step;
         await this.pull(point);
       }
@@ -245,14 +222,14 @@ export default defineScenario({
     );
 
     const camera = controls(page);
-    await camera.zoom(camera.screen({ x: 2650, y: 2500 }), 6, 120);
+    await camera.zoom(camera.screen({ x: 2650, y: 2500 }), 6);
     await camera.bringToCentre({ x: 2620, y: 2480 });
     await frames(page);
     await page.waitForTimeout(300);
     await shot('italy', `Italy at ${camera.scale.toFixed(2)} px per km, the same view as before`);
 
     const town = nearestTown({ x: 2585, y: 2300 });
-    await camera.zoom(camera.screen(town), 10, 70);
+    await camera.zoom(camera.screen(town), 10);
     await camera.pull(town);
     await page.waitForTimeout(3000);
     await shot('closest-town', `The closest zoom on ${town.name}, a town in the Apennines`);

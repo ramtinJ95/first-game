@@ -81,6 +81,7 @@ export async function openGame(
  * the latest it drew. One animation frame first, so the draw loop has been handed the
  * page's state, then wait until the drawn number reaches it. Counting animation frames
  * is not enough, because a frame is held while the GPU still draws the one before.
+ * Camera revisions also cover zooms, pans, focus and resize while the state is paused.
  */
 export async function untilDrawn(page: Page) {
   await page.waitForFunction(
@@ -88,9 +89,18 @@ export async function untilDrawn(page: Page) {
       new Promise<boolean>((done) => {
         requestAnimationFrame(() => {
           const canvas = document.querySelector<HTMLCanvasElement>('canvas[data-renderer]');
-          const latest = Number(canvas?.dataset['latestState'] ?? 0);
+          if (!canvas?.dataset['latestState'] || canvas.dataset['latestView'] === undefined) {
+            done(false);
+            return;
+          }
+          const latest = Number(canvas.dataset['latestState']);
+          const view = Number(canvas.dataset['latestView']);
           const check = () => {
-            if (Number(canvas?.dataset['drawnState'] ?? 0) >= latest) done(true);
+            if (
+              Number(canvas.dataset['drawnState']) >= latest &&
+              Number(canvas.dataset['drawnView']) >= view
+            )
+              done(true);
             else requestAnimationFrame(check);
           };
           check();
@@ -299,13 +309,13 @@ export function camera(page: Page) {
       const foot = this.screen(point);
       return { x: foot.x + BANNER.flagWidth - 2, y: foot.y - BANNER.pole + 2 };
     },
-    async zoom(screen: MapPoint, notches: number, pauseMs = 60) {
+    async zoom(screen: MapPoint, notches: number) {
       await page.mouse.move(screen.x, screen.y);
       for (let i = 0; i < Math.abs(notches); i++) {
         const deltaY = notches > 0 ? -100 : 100;
         await page.mouse.wheel(0, deltaY);
         at = zoomAt(at, screen, wheelFactor(deltaY), viewport, map);
-        await page.waitForTimeout(pauseMs);
+        await untilDrawn(page);
       }
     },
     async drag(from: MapPoint, to: MapPoint, steps = 12) {
@@ -314,6 +324,7 @@ export function camera(page: Page) {
       await page.mouse.move(to.x, to.y, { steps });
       await page.mouse.up();
       at = panBy(at, to.x - from.x, to.y - from.y, viewport, map);
+      await untilDrawn(page);
     },
     /** Zooms in on a map point and brings it to the middle of the view. */
     async closeUp(point: MapPoint, notches: number) {
@@ -331,7 +342,7 @@ export function camera(page: Page) {
       await page.mouse.move(screen.x, screen.y);
       await page.mouse.wheel(0, deltaY);
       at = zoomAt(at, screen, wheelFactor(deltaY), viewport, map);
-      await page.waitForTimeout(200);
+      await untilDrawn(page);
       await this.drag(this.screen(point), { x: viewport.width / 2, y: viewport.height / 2 }, 3);
     },
   };

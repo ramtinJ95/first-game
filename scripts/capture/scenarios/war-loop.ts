@@ -28,7 +28,7 @@ export default defineScenario({
     await dropSave(page, state);
     await page.getByTestId('time-controls-day').filter({ hasText: 'day 1' }).waitFor();
     const view = camera(page);
-    await view.zoom(view.city('capua'), 3, 0);
+    await view.zoom(view.city('capua'), 3);
     await page.getByRole('button', { name: 'Speed 1', exact: true }).click();
     await resume(page);
 
