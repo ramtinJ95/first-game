@@ -72,6 +72,10 @@ export function placeName(state: DeepReadonly<GameState>, point: MapPoint): stri
  */
 export function reasonText(state: DeepReadonly<GameState>, reason: string): string {
   return reason
+    .replace(
+      /\b(before|until|since|on) day (\d+)\b/g,
+      (_, when: string, day: string) => `${when} ${dateText(Number(day))}`,
+    )
     .replace(/\bdestination -?[\d.]+, -?[\d.]+/g, 'the destination')
     .replace(/\b(?:the start )?-?[\d.]+, -?[\d.]+/g, (pair) =>
       pair.startsWith('the start') ? 'the start' : 'that point',

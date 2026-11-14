@@ -1,6 +1,7 @@
 import { unrestPaceOf } from '../sim/buildings/buildings.ts';
 import {
   AT_CITY_KM,
+  dateText,
   factionName,
   nearestCity,
   placeName,
@@ -460,7 +461,7 @@ export function cityStatus(state: State, sight: Sight, city: DeepReadonly<City>)
       }),
     );
     const by = owners.size > 0 ? ` by ${[...owners].join(' and ')}` : '';
-    parts.push(`Besieged${by} since day ${siege.startedOn}`);
+    parts.push(`Besieged${by} since ${dateText(siege.startedOn)}`);
   }
   if (city.unrestDays > 0) parts.push(`In unrest for ${unrestDaysLeft(state, city)} more days`);
   if (city.recruits.length > 0) parts.push(`Training ${troopsText(city.recruits)}`);
@@ -533,8 +534,7 @@ export function overviewOf(state: State, sight: Sight): Overview {
 /**
  * What a minor city holds for whoever goes to war with it, in plain words: its walls and
  * wealth (`fortified`), the partner of its league, which joins its wars, and the men of
- * its own armies at the city that the player sees. Nothing for a plain city or a great
- * power's.
+ * its own armies at the city that the player sees. A great power has no minor kind.
  */
 export function minorText(
   state: State,
@@ -543,14 +543,21 @@ export function minorText(
 ): string | undefined {
   const owner = state.factions[city.owner];
   if (owner?.kind !== 'minor') return undefined;
+  const men = armiesAt(state, sight, city.position)
+    .filter((army) => army.owner === city.owner)
+    .reduce((sum, army) => sum + menOf(state, army), 0);
   const parts: string[] = [];
   if (city.fortified > 1) parts.push('Rich and walled: strong walls and a large granary');
   if (city.fortified < 1) parts.push('Poor and open: weak walls and little food');
   const partner = owner.league ? state.factions[owner.league] : undefined;
-  if (partner) parts.push(`Leagued with ${partner.name}, which joins its wars`);
-  const men = armiesAt(state, sight, city.position)
-    .filter((army) => army.owner === city.owner)
-    .reduce((sum, army) => sum + menOf(state, army), 0);
+  const independent =
+    partner?.kind === 'minor' &&
+    partner.defeatedOn === null &&
+    Object.values(state.cities).some((other) => other.owner === partner.id);
+  if (independent) parts.push(`Leagued with ${partner.name}, which joins its wars`);
+  else if (owner.league) parts.push('Leagued city: its partner is no longer independent');
+  else if (city.fortified === 1)
+    parts.push(men > 0 ? 'Standing-army city' : 'Unleagued city: standard walls');
   if (men > 0) parts.push(`Keeps an army of ${whole(men)} men at the city`);
   return parts.length > 0 ? parts.join('. ') : undefined;
 }
@@ -593,7 +600,7 @@ export function sackText(state: State, city: DeepReadonly<City>): string | undef
   const left = SACK.poorDays - (state.day - city.sackedOn);
   if (left <= 0) return undefined;
   const share = SACK.poorOutput === 0.5 ? 'half' : `${Math.round(SACK.poorOutput * 100)}% of`;
-  return `Sacked on day ${city.sackedOn}: yields ${share} its gold for ${whole(left)} more days`;
+  return `Sacked in ${dateText(city.sackedOn)}: yields ${share} its gold for ${whole(left)} more days`;
 }
 
 /** A store's balance that runs out within this many days is a warning. */
@@ -648,7 +655,7 @@ export function storeNote(
         bad: false,
       }
     : {
-        text: `At limit${when}`,
+        text: `At the call-up limit${when}`,
         why: `At the call-up limit${when}. You can call up ${Math.round(MANPOWER_SHARE * 100)}% of your people, less the men under arms and in training. Grow your cities or let men go to call up more.`,
         bad: false,
       };

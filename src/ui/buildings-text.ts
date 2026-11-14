@@ -14,6 +14,7 @@ import { recruit } from '../sim/orders/recruit.ts';
 import type { City } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { workPause } from '../sim/systems/construction.ts';
+import { dailyBalances, limitsOf } from '../sim/systems/economy.ts';
 import { signed } from './describe.ts';
 
 type State = DeepReadonly<GameState>;
@@ -26,6 +27,7 @@ export interface BuildingLine {
 }
 
 export interface BuildOption extends BuildingLine {
+  readonly caution: string | undefined;
   readonly gold: number;
   readonly days: number;
   /** Why this building cannot start, when the reason is its own, such as its gold or its people. */
@@ -97,11 +99,45 @@ export function cityBuildings(
     blocked,
     options: whys.map(([kind, why]) => ({
       ...line(state, city, kind),
+      caution: gainCaution(waiting, next, kind),
       gold: BUILDINGS[kind].gold,
       days: BUILDINGS[kind].days,
       why: blocked ? undefined : why,
     })),
   };
+}
+
+/** Current usefulness, separate from permission to build and the building's lasting effect. */
+function gainCaution(
+  state: State,
+  city: DeepReadonly<City>,
+  kind: BuildingKind,
+): string | undefined {
+  const gain = buildingGain(state, city, kind);
+  if (kind === 'temple') {
+    return gain.calmed.some((id) => (state.cities[id]?.unrestDays ?? 0) > 0)
+      ? undefined
+      : 'No city whose unrest this would hasten is in unrest now.';
+  }
+  const stores = state.factions[city.owner]?.stores;
+  const balance = dailyBalances(state).get(city.owner);
+  const withIt: State = {
+    ...state,
+    cities: { ...state.cities, [city.id]: { ...city, buildings: [...city.buildings, kind] } },
+  };
+  const limits = limitsOf(withIt).get(city.owner);
+  const wasted = (['gold', 'food', 'manpower'] as const).filter(
+    (key) =>
+      gain.daily[key] > 0 &&
+      stores &&
+      balance &&
+      limits &&
+      stores[key] >= limits[key] &&
+      balance[key] >= 0,
+  );
+  return wasted.length > 0
+    ? `${wasted.map((key) => key[0]?.toUpperCase() + key.slice(1)).join(' and ')} full: the extra daily gain would be lost now.`
+    : undefined;
 }
 
 function line(state: State, city: DeepReadonly<City>, kind: BuildingKind): BuildingLine {

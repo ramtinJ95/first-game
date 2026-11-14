@@ -70,7 +70,7 @@ test.describe('what the page tells of stores, cities, and sieges', () => {
     await openMediolanum(page);
     const panel = page.getByTestId('city-panel');
     await expect(panel.getByTestId('city-sacked')).toHaveText(
-      `Sacked on day 1: yields half its gold for ${(3 * 365 - (state.day - 1)).toLocaleString('en')} more days`,
+      `Sacked in Year 1, day 1: yields half its gold for ${(3 * 365 - (state.day - 1)).toLocaleString('en')} more days`,
     );
     await expect(panel.getByTestId('city-food-balance')).toHaveText(
       /^Grows \d+\.\d, eats \d+\.\d a day · [+−]\d+\.\d$/,
@@ -81,7 +81,7 @@ test.describe('what the page tells of stores, cities, and sieges', () => {
     await load(page, storesAtTheirLimits());
     await expect(page.getByTestId('store-food-note')).toHaveText('Full');
     await expect(page.getByTestId('store-food')).toHaveAttribute('title', /^Granaries full\. /);
-    await expect(page.getByTestId('store-manpower-note')).toHaveText('At limit');
+    await expect(page.getByTestId('store-manpower-note')).toHaveText('At the call-up limit');
     await expect(page.getByTestId('store-manpower')).toHaveAttribute(
       'title',
       /^At the call-up limit\. /,

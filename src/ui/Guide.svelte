@@ -54,18 +54,40 @@
     <dl>
       <dt>Select and march</dt>
       <dd>
-        Click your army's banner to select it. Right-click on the map to march it there, or on one
-        of your ports to cross the sea.
+        Click an army's banner or figures; a city symbol opens its city, with Armies here below.
+        Right-click to march. Right-click a port to see ways by land or sea; ships also gather on a
+        shore. Your army panel's Join section combines nearby idle armies of yours; they stay
+        separate until you join them.
       </dd>
       <dt>War and sieges</dt>
       <dd>
-        Click a foreign city or army to declare war on its owner. An army that halts beside an enemy
-        city besieges it, and the city panel can storm the walls.
+        A foreign city or army opens Declare war. March to its city to besiege it. Bring enough men
+        to cut the food: a weaker force suffers sallies. The city panel offers Storm and, after a
+        capture, Occupy, Sack, or Enslave.
+      </dd>
+      <dt>Buildings and stores</dt>
+      <dd>
+        Select your city to recruit or build. Buildings cost gold now and finish later; unrest and
+        enemies at the walls stop work. Full stores waste further gains. Watch the daily balances:
+        short gold or food costs men.
+      </dd>
+      <dt>Wars and peace</dt>
+      <dd>
+        Wars in the top bar lists your wars and waiting offers. Offer peace as things stand, or with
+        gold or cities; it shows what the enemy would accept. Peace sends armies home and starts a
+        truce.
       </dd>
       <dt>Pause and speed</dt>
       <dd>
         Space pauses and resumes. The buttons 1, 2, and 3 in the top bar set the speed. Orders given
-        while paused wait for the next day.
+        while paused wait for the next day. Battles, weak sieges, and the first approaching enemy in
+        a war can pause for you; the Game menu changes these stops. An offer of peace pauses for
+        your answer.
+      </dd>
+      <dt>Overview and Chronicle</dt>
+      <dd>
+        Overview finds your cities and armies. Chronicle, above the news, keeps earlier events;
+        click a report to go there. Only forces in sight appear on the map.
       </dd>
       <dt>Stances</dt>
       <dd data-testid="guide-stances">

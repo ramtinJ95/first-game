@@ -3,6 +3,8 @@
   import type { View } from '../app/view.svelte.ts';
   import type { Stores } from '../sim/state/faction.ts';
   import { dailyBalances, limitsOf } from '../sim/systems/economy.ts';
+  import { warsOf } from './describe.ts';
+  import { standingOffer } from '../sim/peace/offer.ts';
   import type { Actions } from './actions.ts';
   import { cssColour, ordersWaitingText, signed, storeNote } from './describe.ts';
   import type { FrameActions } from './frame-actions.ts';
@@ -30,6 +32,13 @@
   const stores = $derived(game.factions[game.player]?.stores);
   const balance = $derived(dailyBalances(game).get(game.player));
   const limits = $derived(limitsOf(game).get(game.player));
+  const wars = $derived(warsOf(game, game.player));
+  const offers = $derived(
+    wars.filter((war) => {
+      const offer = standingOffer(game, game.player, war.against);
+      return offer && offer.from !== game.player;
+    }).length,
+  );
   const waiting = $derived(
     view.current.paused ? ordersWaitingText(view.current.pending, game.player) : undefined,
   );
@@ -69,6 +78,15 @@
   <span class="end">
     <button
       type="button"
+      data-testid="wars-button"
+      class:offer={offers > 0}
+      aria-expanded={view.current.panel === 'wars'}
+      aria-label={`Wars ${wars.length}${offers > 0 ? `, ${offers} ${offers === 1 ? 'offer' : 'offers'} waiting` : ''}`}
+      onclick={() => actions.togglePanel('wars')}
+      >Wars {wars.length}{#if offers > 0}<span class="offer-note">Offer waiting</span>{/if}</button
+    >
+    <button
+      type="button"
       aria-expanded={view.current.panel === 'overview'}
       aria-controls="overview"
       onclick={() => actions.togglePanel('overview')}>Overview</button
@@ -86,6 +104,16 @@
     padding: 5px 12px;
   }
 
+  .offer-note {
+    display: block;
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .offer {
+    font-weight: bold;
+  }
+
   .waiting {
     display: flex;
     flex-direction: column;
@@ -99,6 +127,8 @@
     display: flex;
     gap: 6px;
     margin-left: auto;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .realm {
@@ -152,5 +182,36 @@
   .falling .change,
   .falling .note {
     color: var(--bad);
+  }
+
+  @media (min-width: 1024px) {
+    .bar,
+    .stores {
+      flex-wrap: nowrap;
+      gap: 6px;
+    }
+    .bar {
+      padding-inline: 6px;
+    }
+    .end {
+      gap: 4px;
+    }
+    .end button {
+      padding-inline: 5px;
+    }
+    .realm {
+      font-size: 14px;
+      gap: 4px;
+    }
+  }
+
+  @media (min-width: 1024px) and (max-width: 1150px) {
+    /* Long store notes keep their own line, leaving room for orders and every button. */
+    .store .line:first-child {
+      display: contents;
+    }
+    .note {
+      order: 1;
+    }
   }
 </style>

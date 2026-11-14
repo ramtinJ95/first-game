@@ -99,7 +99,7 @@ describe('the wars panel', () => {
           enemy: f.carthage,
           name: 'Carthage',
           daysLeft: 265,
-          text: 'Truce with Carthage: 265 days left. Neither side may declare war before day 566.',
+          text: 'Truce with Carthage: 265 days left. Neither side may declare war before Year 2, day 201.',
         },
       ],
     });

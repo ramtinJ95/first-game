@@ -19,6 +19,15 @@ describe('reasonText', () => {
       'No land route reaches that point',
     );
   });
+
+  it('formats calendar dates in rule refusals, including a truce and peace talks', () => {
+    expect(reasonText(state, 'rome keeps a truce with carthage until day 568')).toBe(
+      'Rome keeps a truce with Carthage until Year 2, day 203',
+    );
+    expect(reasonText(state, 'Carthage will not talk of peace before day 426.')).toBe(
+      'Carthage will not talk of peace before Year 2, day 61.',
+    );
+  });
 });
 
 describe('dateText', () => {

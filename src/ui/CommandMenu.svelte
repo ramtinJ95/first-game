@@ -77,11 +77,21 @@
     {#each groups as { group, heading, options } (group)}
       <div class="group" role="group" aria-labelledby="command-menu-{group}">
         <p class="heading" id="command-menu-{group}" role="presentation">{heading}</p>
-        {#each options as option (option.label)}
-          <button type="button" role="menuitem" onclick={() => choose(option)}>
-            <span>{option.label}</span>
-            <span class="days">{option.detail}</span>
-          </button>
+        {#each options as option, index (option.label)}
+          <div class="option">
+            <button
+              type="button"
+              role="menuitem"
+              aria-describedby={option.notice ? `command-warning-${group}-${index}` : undefined}
+              onclick={() => choose(option)}
+            >
+              <span>{option.label}</span>
+              <span class="days">{option.detail}</span>
+            </button>
+            {#if option.notice}<p class="warning" id="command-warning-{group}-{index}">
+                {option.notice}
+              </p>{/if}
+          </div>
         {/each}
       </div>
     {/each}
@@ -100,6 +110,9 @@
     gap: 4px;
     min-width: 240px;
     padding: 8px 10px 10px;
+    max-width: min(560px, calc(100vw - 16px));
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
     background: var(--paper-solid);
     border: 2px solid var(--ink);
     box-shadow:
@@ -132,6 +145,17 @@
     gap: 16px;
     justify-content: space-between;
     text-align: left;
+  }
+
+  .option {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .warning {
+    font-size: 12px;
+    color: var(--bad);
   }
 
   .menu button:focus-visible {

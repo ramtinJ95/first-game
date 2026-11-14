@@ -231,7 +231,7 @@ const clock = createClock({
     const stops = stopsOfDay(
       groupAlerts([
         ...alertsInSight(alertsOfDay(before, after, events, occupied), saw, sees),
-        ...sightingsOfDay(before, after, saw, sees, world),
+        ...sightingsOfDay(before, after, saw, sees, world, toldOnce),
         ...weak.alerts,
         // The world's news reaches every power, whether it sees the place or not.
         ...worldNewsOfDay(before, after, events, world),

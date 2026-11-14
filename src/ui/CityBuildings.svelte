@@ -77,6 +77,8 @@
             ></span
           >
           <span class="effect">{option.effect}</span>
+          {#if option.caution}<span class="caution">{option.caution} You may still build.</span
+            >{/if}
           {#if option.why}<span class="why">{option.why}</span>{/if}
         </button>
       {/each}
@@ -126,6 +128,11 @@
   .effect,
   .why {
     font-size: 11px;
+  }
+
+  .caution {
+    font-size: 11px;
+    font-style: italic;
   }
 
   .cost {
