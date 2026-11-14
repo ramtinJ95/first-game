@@ -1,5 +1,4 @@
 import { expect } from '@playwright/test';
-import { peaceStanding } from '../../../e2e/peace-support.ts';
 import {
   camera,
   carthageDemandsPeace,
@@ -7,13 +6,12 @@ import {
   openGame,
   pause,
   resume,
+  siegeToEndInPeace,
   startGame,
   untilDrawn,
 } from '../../../e2e/support.ts';
-import type { FactionId } from '../../../src/sim/ids.ts';
 import { saveGame } from '../../../src/sim/save.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
-import { peaceChoices } from '../../../src/ui/war-room.ts';
 import { defineScenario } from '../scenario.ts';
 
 export default defineScenario({
@@ -62,20 +60,20 @@ export default defineScenario({
       'Overview opens over the wars panel while the offer waits, and the clock stays paused',
     );
 
-    const winning = peaceStanding('macedon', 2);
-    await show(winning, true);
-    const most = peaceChoices(winning, 'macedon' as FactionId).find(
-      (choice) => choice.terms.kind === 'payment',
-    )?.terms;
-    if (most?.kind !== 'payment') throw new Error('Macedon should offer to pay');
-    await panel.getByRole('radio', { name: 'Macedon pays you' }).check();
-    await panel.getByTestId('peace-gold').fill(String(most.gold + 300));
-    await expect(panel.getByTestId('peace-verdict')).toContainText(
-      'It would give terms worth 3 points less, such as 300 gold less.',
+    await show(siegeToEndInPeace(), true);
+    await panel.getByLabel('Carthage pays you').check();
+    await panel.getByTestId('peace-gold').fill('3000');
+    await expect(panel.getByTestId('peace-verdict')).toHaveText(
+      'Carthage would refuse. It would give terms worth 2 points less, such as 200 gold less.',
     );
+    await panel.getByTestId('offer-peace').click();
+    await resume(page);
+    await expect(page.getByTestId('alerts')).toContainText('Carthage refused your offer of peace');
+    await pause(page);
+    await expect(page.getByTestId('alerts')).toContainText('It would give terms worth');
     await shot(
       'winner-refusal',
-      'Rome is winning and asks Macedon for 300 gold more than it would pay; the refusal says Macedon would give less',
+      'Rome is winning and asks Carthage for 3,000 gold; the refusal, in the panel and the news, says Carthage would give 200 less',
     );
 
     await show(startGame(), true);

@@ -27,7 +27,12 @@ test('the guide teaches buildings, peace, news, automatic pauses, and the real s
   ])
     await expect(guide.locator('dt').filter({ hasText: heading })).toHaveCount(1);
   await expect(guide).toContainText('ships also gather on a shore');
-  await expect(guide).toContainText('An offer of peace pauses for your answer');
+  await expect(guide).toContainText(
+    'An offer of peace comes to you. The game stays paused until you resume it',
+  );
+  await expect(guide.getByTestId('guide-pauses')).toContainText(
+    'Your city is besieged, in danger, or falls',
+  );
   await expect(guide).toContainText(
     "Your army panel's Join section combines nearby idle armies of yours",
   );
