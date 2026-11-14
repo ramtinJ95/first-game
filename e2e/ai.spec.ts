@@ -110,18 +110,22 @@ test('at the highest speed the page plays on until a foreign army has marched an
   // On this small page the open panel and the alerts cover much of the map, so the panel
   // is closed and each taken city is brought to the open top left before it is clicked.
   const conquerors: string[] = [];
+  // At fit zoom the camera is clamped to the whole map and cannot pan a covered
+  // city clear of the news. Zoom from unobstructed canvas before trying to move it.
+  const anchor = { x: 480, y: 180 };
+  await view.zoom(anchor, 8);
+  await untilDrawn(page);
   for (const id of conquest.taken) {
     await page.keyboard.press('Escape');
     const from = view.screen(cityPoint(id));
     // Pan from clear canvas, not from a city that a corner invitation may cover.
-    const anchor = { x: 480, y: 180 };
     expect(
       await page.evaluate(
         ({ x, y }) => document.elementFromPoint(x, y) instanceof HTMLCanvasElement,
         anchor,
       ),
     ).toBe(true);
-    await view.drag(anchor, { x: anchor.x + 120 - from.x, y: anchor.y + 100 - from.y });
+    await view.drag(anchor, { x: anchor.x + 480 - from.x, y: anchor.y + 140 - from.y });
     await untilDrawn(page);
     const at = view.city(id);
     await page.mouse.click(at.x, at.y);
