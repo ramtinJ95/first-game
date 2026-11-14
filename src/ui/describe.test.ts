@@ -655,6 +655,31 @@ describe('the stance texts', () => {
 });
 
 describe('cityBalance and minorText', () => {
+  it('attributes one endpoint receipt to each trading city and none to an unrelated city', () => {
+    const state = buildFixture();
+    const before = new Map(
+      Object.values(state.cities).map((city) => [city.id, cityBalance(state, city).gold]),
+    );
+    const result = executeOrder(
+      state,
+      { kind: 'openTrade', faction: f.rome, from: f.roma, to: f.capua, mode: 'land' },
+      fixtureWorld(),
+    );
+    expect(result).toBeUndefined();
+    const route = Object.values(state.tradeRoutes)[0];
+    if (!route) throw new Error('missing route');
+    for (const city of Object.values(state.cities)) {
+      expect(cityBalance(state, city).gold - (before.get(city.id) ?? 0)).toBeCloseTo(
+        city.id === f.roma || city.id === f.capua ? route.daily : 0,
+      );
+    }
+    const unarmed = { ...state, armies: {} };
+    const total = Object.values(state.cities)
+      .filter((c) => c.owner === f.rome)
+      .reduce((sum, c) => sum + cityBalance(state, c).gold, 0);
+    expect(total).toBeCloseTo(dailyBalances(unarmed).get(f.rome)?.gold ?? 0);
+  });
+
   it("gives each city's share of its realm's yield, so the cities add up to the realm", () => {
     const state = newGame(fixtureWorld().map, { seed: 1, player: 'rome' });
     const minors = Object.values(state.cities)

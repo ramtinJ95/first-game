@@ -6,20 +6,23 @@
   import type { GameState } from '../sim/state/game-state.ts';
   import type { Actions } from './actions.ts';
   import { cityBuildings } from './buildings-text.ts';
+  import type { World } from '../sim/world/world.ts';
 
   let {
     game,
+    world,
     city,
     pending,
     actions,
   }: {
     game: DeepReadonly<GameState>;
+    world: World;
     city: DeepReadonly<City>;
     pending: readonly Order[];
     actions: Actions;
   } = $props();
 
-  const shown = $derived(cityBuildings(game, pending, city));
+  const shown = $derived(cityBuildings(game, pending, city, world));
 </script>
 
 <section data-testid="city-buildings" aria-label="Buildings">
