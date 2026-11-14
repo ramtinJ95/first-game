@@ -91,6 +91,7 @@ export interface PlacesLayer {
     camera: Camera,
     viewport: Size,
     cityBoxes: readonly Box[],
+    land?: (screen: { x: number; y: number }) => boolean,
   ): { requests: LabelRequest[]; boxes: Box[] };
   /** Shows the names that won a place, at `box`, and hides the others. */
   placeLabels(placed: ReadonlyMap<string, Box>): void;
@@ -164,7 +165,7 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
   }
 
   return {
-    layout(camera, viewport, cityBoxes) {
+    layout(camera, viewport, cityBoxes, land) {
       const scale = camera.scale;
       bands = {
         towns: detailAlpha(DETAIL.towns, scale),
@@ -193,6 +194,12 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
           d.kind === 'peak'
             ? { x: peakKm * scale, y: peakKm * scale }
             : { x: HALF[d.kind].x * grow, y: HALF[d.kind].y * grow };
+        if (
+          d.kind !== 'peak' &&
+          land &&
+          ![-half.x, 0, half.x].every((dx) => land({ x: at.x + dx, y: at.y + 3.6 * grow }))
+        )
+          continue;
         d.symbol?.position.set(at.x, at.y);
         d.symbol?.scale.set(grow);
         onScreen.push({

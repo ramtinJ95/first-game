@@ -216,6 +216,8 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   art.addChild(paper, ground, washes, ...layers.map((layer) => layer.container), borders);
   const root = new Container();
   root.addChild(art);
+  const coastMask = new Graphics();
+  art.addChild(coastMask);
   let texture = RenderTexture.create({
     width: 1,
     height: 1,
@@ -277,6 +279,8 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       if (drawnOutline !== nextOutline) {
         fillLand(paper.clear(), nextOutline, PAPER);
         fillLand(landMask.clear(), nextOutline, 0xffffff);
+        fillLand(coastMask.clear(), nextOutline, 0xffffff);
+        art.mask = coastMask;
         drawnOutline = nextOutline;
         repaint = true;
       }

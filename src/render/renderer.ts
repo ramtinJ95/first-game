@@ -32,9 +32,10 @@ import {
 import { BORDER_WEIGHTS, borderRuns, sharedBorders } from './borders.ts';
 import type { DrawOptions } from './draw-options.ts';
 import { cacheDrawing, coversView, fitTexture } from './cached-texture.ts';
-import { naturalCoast } from './coast.ts';
+import { atlasCoast, atlasLand, ATLAS_COAST_SCALE } from './atlas-coast.ts';
+import { coastalSurface, fitCoastalScene, fitCoastalSprite } from './coastal-ground.ts';
 import { landOutline } from './land-outline.ts';
-import { drawColumnMark, drawnColumns, type DrawnColumn } from './columns.ts';
+import { drawColumnMark, drawnColumns, fitColumnMarker, type DrawnColumn } from './columns.ts';
 import { createFog, fogCircles } from './fog.ts';
 import { LABEL_PRIORITY, placeLabels, type Box, type LabelRequest } from './labels.ts';
 import {
@@ -580,7 +581,8 @@ export async function createRenderer({
     strokedAt = scale;
     const round = { cap: 'round', join: 'round' } as const;
     const flat = { cap: 'butt', join: 'bevel' } as const;
-    const coast = scale >= 1.75 ? naturalCoast(map) : undefined;
+    const coast = scale >= ATLAS_COAST_SCALE ? atlasCoast(map) : undefined;
+    canvas.dataset['coast'] = coast ? 'atlas' : 'physical';
     const coastline = coast?.lines ?? map.coastline;
     const outline = coast?.land ?? landOutline(map);
     if (outline !== coastOutline) {
@@ -786,7 +788,7 @@ export async function createRenderer({
         population: city.population,
       });
     }
-    const settled = places.layout(camera, view, symbolBoxes);
+    const settled = places.layout(camera, view, symbolBoxes, onLand);
     const placed = placeLabels(
       [...requests, ...settled.requests],
       [...symbolBoxes, ...settled.boxes, ...standingMarkers(state)],
@@ -913,7 +915,13 @@ export async function createRenderer({
     const view = viewport();
     for (const column of columns) {
       const at = mapToScreen(camera, view, column.position);
-      columnMarks.get(column.id)?.graphics.position.set(at.x, at.y);
+      const placed =
+        columnLayer.visible && coastOutline !== landOutline(map)
+          ? fitColumnMarker(at, onLand, camera.scale)
+          : { ...at, growth: 1 };
+      const graphics = columnMarks.get(column.id)?.graphics;
+      graphics?.position.set(placed.x, placed.y);
+      graphics?.scale.set(placed.growth);
     }
   }
 
@@ -986,7 +994,10 @@ export async function createRenderer({
     grain.height = height;
     grain.tilePosition.set(x, y);
     fog.place(x, y, camera.scale, width, height);
-    if (Math.abs(Math.log(camera.scale / strokedAt)) > Math.log(RESTROKE_RATIO)) {
+    if (
+      Math.abs(Math.log(camera.scale / strokedAt)) > Math.log(RESTROKE_RATIO) ||
+      camera.scale >= ATLAS_COAST_SCALE !== (coastOutline !== landOutline(map))
+    ) {
       restroke(camera.scale);
     }
     if (
@@ -1037,10 +1048,11 @@ export async function createRenderer({
     }
   }
 
-  const onLand = (screen: MapPoint) => {
-    const point = screenToMap(camera, viewport(), screen);
-    return terrain.land.open(point.x, point.y);
-  };
+  const drawingLand = () =>
+    coastOutline === landOutline(map) ? terrain.land.land : atlasLand(map);
+  const toMap = (screen: MapPoint) => screenToMap(camera, viewport(), screen);
+  const onDrawnLand = coastalSurface(drawingLand, terrain.land.lakes, toMap);
+  const onLand = coastalSurface(drawingLand, terrain.land.lakes, toMap, terrain.land.land);
   /** At the zooms that draw figures, a battle's marker stands above its fighting. */
   const battleLift = () =>
     scene && scene.height > 0 ? (1.75 * scene.height + 14) / camera.scale : 0;
@@ -1251,9 +1263,30 @@ export async function createRenderer({
       ) {
         dirty = true;
       }
-      const next = drawnArmies(previous, current, progress).filter((army) =>
-        sight.armies.has(army.id),
-      );
+      const next = drawnArmies(previous, current, progress)
+        .filter((army) => sight.armies.has(army.id))
+        .map((army) => {
+          if (figureHeight(camera.scale) > 0 || coastOutline === landOutline(map)) return army;
+          const at = mapToScreen(camera, viewport(), army.position);
+          const sea = current.armies[army.id]?.activity.kind === 'embarked';
+          const fitted = fitCoastalSprite(
+            {
+              key: sea ? 'ship.0' : 'standard.0',
+              ...at,
+              size: 0,
+              mirror: false,
+              alpha: 1,
+              rotation: 0,
+              depth: at.y,
+            },
+            onDrawnLand,
+            camera.scale,
+            onLand,
+          );
+          return fitted.x === at.x && fitted.y === at.y
+            ? army
+            : { ...army, position: screenToMap(camera, viewport(), fitted) };
+        });
       if (!sameArmies(armies, next)) {
         armies = next;
         dirty = true;
@@ -1321,9 +1354,16 @@ export async function createRenderer({
           motion: still ? 0 : motion,
           now: clock / 1000,
           growth: symbolGrowth(camera.scale),
-          land: onLand,
+          land: (screen) => {
+            const point = screenToMap(camera, viewport(), screen);
+            return terrain.land.open(point.x, point.y);
+          },
           names: new Map(drawnCities.flatMap(({ id, label }) => (label ? [[id, label]] : []))),
           keepClear: drawnPlaces,
+        });
+        scene = fitCoastalScene(scene, onDrawnLand, camera.scale, onLand, (sprite) => {
+          const army = sprite.army && armies.find((army) => army.id === sprite.army);
+          return army ? mapToScreen(camera, view, army.position) : undefined;
         });
         drawnFigures = armyLayer.draw(scene);
         sceneReady =
@@ -1354,7 +1394,7 @@ export async function createRenderer({
         }
       }
       if (!dirty) return false;
-      life.update(camera, viewport(), clock, sight);
+      life.update(camera, viewport(), clock, sight, onDrawnLand);
       moveSwell(clock);
       // A cold figure sheet paints asynchronously. Keep visible, pickable flags until
       // the replacement art is drawn, rather than letting armies vanish during a zoom.

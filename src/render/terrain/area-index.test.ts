@@ -28,6 +28,39 @@ function zigzag(left: number, top: number, width: number, height: number): Point
 }
 
 describe('the area index', () => {
+  it('tests an entire contact across a subpixel inlet, and cancels shared province seams', () => {
+    const box = (left: number, right: number): MultiPolygon => [
+      [
+        [
+          [left, 0],
+          [right, 0],
+          [right, 16],
+          [left, 16],
+        ],
+      ],
+    ];
+    const lake: MultiPolygon = [
+      [
+        box(0, 16)[0]?.[0] as Point[],
+        [
+          [8.02, 2],
+          [8.04, 2],
+          [8.04, 10],
+          [8.02, 10],
+        ],
+      ],
+    ];
+    const shore = new AreaIndex([lake]);
+    expect(shore.inside(1, 6)).toBe(true);
+    expect(shore.inside(15, 6)).toBe(true);
+    expect(shore.spanInside(1, 15, 6)).toBe(false);
+    expect(shore.spanInside(1, 7, 6)).toBe(true);
+    expect(shore.spanInside(-1, 17, 6, false)).toBe(false);
+    expect(shore.spanInside(-1, 17, -1, false)).toBe(true);
+    const provinces = new AreaIndex([box(0, 8), box(8, 16)]);
+    expect(provinces.spanInside(1, 15, 6)).toBe(true);
+  });
+
   it('answers a point beside an edge that starts on a strip line', () => {
     const square: MultiPolygon = [
       [

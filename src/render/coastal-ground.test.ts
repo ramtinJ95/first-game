@@ -1,0 +1,242 @@
+import { readFileSync } from 'node:fs';
+import { expect, test } from 'vitest';
+import { COAST_VIEWS } from '../../e2e/coast-views.ts';
+import { parseMap } from '../sim/map.ts';
+import { newGame } from '../sim/new-game.ts';
+import { expectConsistent } from '../sim/references.ts';
+import {
+  allocateId,
+  type ArmyId,
+  type BattleId,
+  type CityId,
+  type ConvoyId,
+  type RefugeeColumnId,
+} from '../sim/ids.ts';
+import type { Sight } from '../sim/sight.ts';
+import type { GameState } from '../sim/state/game-state.ts';
+import type { MapPoint } from '../sim/state/map-point.ts';
+import { buildWorld } from '../sim/world/world.ts';
+import { locate } from '../sim/world/find-path.ts';
+import { executeOrder } from '../sim/orders/orders.ts';
+import { movement } from '../sim/systems/movement.ts';
+import { drawnColumns, fitColumnMarker } from './columns.ts';
+import { atlasLand } from './atlas-coast.ts';
+import { buildScene, type Scene, type Sprite } from './armies/scene.ts';
+import { mapToScreen, screenToMap, symbolGrowth } from './camera.ts';
+import { coastalSurface, fitCoastalScene, groundFits } from './coastal-ground.ts';
+import { Land } from './terrain/marks.ts';
+
+const map = parseMap(
+  JSON.parse(readFileSync(new URL('../../data/map/map.json', import.meta.url), 'utf8')),
+);
+
+test('a real Alexandria to Pelusium evacuation cart stays on land below the figure tier', () => {
+  const state = newGame(map, { seed: 1, player: 'egypt' });
+  expect(
+    executeOrder(
+      state,
+      {
+        kind: 'evacuate',
+        faction: state.player,
+        city: 'alexandria' as CityId,
+        to: 'pelusium' as CityId,
+        share: 0.1,
+      },
+      world,
+    ),
+  ).toBeUndefined();
+  for (let day = 0; day < 17; day++) movement(state);
+  const previous = structuredClone(state);
+  movement(state);
+  const columns = drawnColumns(previous, state, 0.23, seeAll(state));
+  const column = columns[0];
+  if (!column) throw new Error('missing evacuation column');
+  expect(physical.open(column.position.x, column.position.y)).toBe(true);
+  expect(drawn.inside(column.position.x, column.position.y)).toBe(false);
+  const original = JSON.stringify(state);
+  for (const scale of [0.61, 0.75, 0.89]) {
+    const camera = { centre: column.position, scale };
+    const land = coastalSurface(
+      () => drawn,
+      physical.lakes,
+      (p) => screenToMap(camera, viewport, p),
+      physical.land,
+    );
+    const cart = fitColumnMarker(mapToScreen(camera, viewport, column.position), land, scale);
+    for (let i = -11; i <= 11; i += 0.02)
+      expect(land({ x: cart.x + i * cart.growth, y: cart.y + 1.6 * cart.growth })).toBe(true);
+  }
+  expect(JSON.stringify(state)).toBe(original);
+  expectConsistent(state);
+});
+const world = buildWorld(map);
+const physical = new Land(map);
+const drawn = atlasLand(map);
+const viewport = { width: 1280, height: 720 };
+
+function sceneWith(sprite: Sprite): Scene {
+  return {
+    height: 54,
+    sprites: [sprite],
+    wakes: [],
+    works: [],
+    breaches: [],
+    armyBoxes: new Map(),
+    battleAnchors: new Map(),
+  };
+}
+const sprite: Sprite = {
+  key: 'spearmen.stand.0@0',
+  x: 20,
+  y: 0,
+  size: 54,
+  mirror: false,
+  alpha: 1,
+  rotation: 0,
+  depth: 0,
+  army: 'a' as ArmyId,
+  hit: { left: 0, top: -54, right: 40, bottom: 0 },
+};
+
+test('a displaced contact is fitted rather than hidden, and hit boxes move with it without changing the input', () => {
+  const land = (p: MapPoint) => p.x >= 40;
+  const before = sceneWith(sprite);
+  before.armyBoxes.set('a' as ArmyId, sprite.hit as NonNullable<Sprite['hit']>);
+  const saved = JSON.stringify(before);
+  expect(groundFits(sprite, land)).toBe(false);
+  const after = fitCoastalScene(before, land, 4);
+  const placed = after.sprites[0] as Sprite;
+  expect(after.sprites).toHaveLength(1);
+  expect(placed.key).toBe(sprite.key);
+  expect(groundFits(placed, land)).toBe(true);
+  expect(placed.hit?.left).toBeCloseTo(
+    placed.x + (((sprite.hit?.left ?? 0) - sprite.x) * placed.size) / sprite.size,
+  );
+  expect(after.armyBoxes.get('a' as ArmyId)).toEqual(placed.hit);
+  expect(JSON.stringify(before)).toBe(saved);
+});
+
+test('an over-wide ship reduces its symbol in a narrow channel instead of disappearing or standing on land', () => {
+  const ship = { ...sprite, key: 'ship.0@0', x: 0, size: 48 };
+  const land = (p: MapPoint) => Math.abs(p.x) >= 2;
+  const after = fitCoastalScene(sceneWith(ship), land, 4);
+  expect(after.sprites).toHaveLength(1);
+  const placed = after.sprites[0] as Sprite;
+  expect(placed.size).toBeLessThan(ship.size);
+  expect(groundFits(placed, land)).toBe(true);
+});
+
+test('an impossible surface is an explicit failure, never a hidden figure', () => {
+  expect(() => fitCoastalScene(sceneWith(sprite), () => false, 4)).toThrow(
+    'No safe drawing surface',
+  );
+});
+
+function seeAll(state: GameState): Sight {
+  return {
+    faction: state.player,
+    provinces: new Set(),
+    circles: [],
+    armies: new Set(Object.keys(state.armies) as ArmyId[]),
+    convoys: new Set(Object.keys(state.convoys) as ConvoyId[]),
+    refugeeColumns: new Set(Object.keys(state.refugeeColumns) as RefugeeColumnId[]),
+    battles: new Set(Object.keys(state.battles) as BattleId[]),
+    sees: () => true,
+  };
+}
+
+function near(at: MapPoint, surface: 'land' | 'sea'): MapPoint {
+  for (let radius = 0; radius <= 100; radius += 0.5)
+    for (let k = 0; k < 24; k++) {
+      const angle = (k * Math.PI) / 12;
+      const p = { x: at.x + Math.cos(angle) * radius, y: at.y + Math.sin(angle) * radius };
+      if (locate(world.mesh, p, surface) < 0) continue;
+      if (surface === 'land' && !physical.open(p.x, p.y)) continue;
+      return p;
+    }
+  throw new Error(`No ${surface} near ${JSON.stringify(at)}`);
+}
+
+test.each(COAST_VIEWS.filter((v) => !v.name.endsWith('middle')))(
+  'armies, refugee carts and convoy hulls keep their surface at $title, middle and closest zoom',
+  ({ at, name }) => {
+    const state = newGame(map, { seed: 1, player: 'rome' });
+    const army = Object.values(state.armies).find((a) => a.owner === state.player);
+    if (!army) throw new Error('missing opening Roman army');
+    const shipId = allocateId(state, 'army');
+    const formations = army.formations.map((id) => {
+      const formation = state.formations[id];
+      if (!formation) throw new Error(`missing formation ${id}`);
+      const fresh = allocateId(state, 'formation');
+      state.formations[fresh] = { ...formation, id: fresh, army: shipId };
+      return fresh;
+    });
+    const shipArmy = { ...army, id: shipId, formations };
+    state.armies[shipId] = shipArmy;
+    const landPoint = near(at, 'land'),
+      seaPoint = near(at, 'sea');
+    army.activity = { kind: 'idle', position: landPoint };
+    const convoy = 'coast-convoy' as ConvoyId;
+    shipArmy.activity = { kind: 'embarked', convoy };
+    state.convoys[convoy] = {
+      id: convoy,
+      owner: shipArmy.owner,
+      armies: [shipArmy.id],
+      position: seaPoint,
+      waypoints: [{ x: seaPoint.x + 1, y: seaPoint.y }],
+    };
+    expectConsistent(state);
+    const original = JSON.stringify(state);
+    for (const scale of [1, 4]) {
+      const camera = { centre: at, scale };
+      const onPhysicalLand = (p: MapPoint) => {
+        const q = screenToMap(camera, viewport, p);
+        return physical.open(q.x, q.y);
+      };
+      const toMap = (p: MapPoint) => screenToMap(camera, viewport, p);
+      const onDrawnLand = coastalSurface(() => drawn, physical.lakes, toMap);
+      const onWalkable = coastalSurface(() => drawn, physical.lakes, toMap, physical.land);
+      const raw = buildScene({
+        previous: state,
+        current: state,
+        progress: 0.5,
+        camera,
+        viewport,
+        previousSight: seeAll(state),
+        sight: seeAll(state),
+        motion: 3.2,
+        now: 7.1,
+        growth: symbolGrowth(scale),
+        land: onPhysicalLand,
+      });
+      // Exercise the very same refugee/cart art at this field location without
+      // inventing a column whose road from Roma illegally crosses the open sea.
+      const foot = mapToScreen(camera, viewport, landPoint);
+      for (const key of ['cart.0@0', 'refugeeWoman.stand.0@0'])
+        raw.sprites.push({ ...sprite, ...foot, key, size: raw.height, depth: foot.y });
+      expect(
+        raw.sprites.some((s) => s.army === army.id),
+        `${name}/${scale} army`,
+      ).toBe(true);
+      expect(
+        raw.sprites.some((s) => s.key.startsWith('ship.')),
+        `${name}/${scale} convoy`,
+      ).toBe(true);
+      expect(
+        raw.sprites.some((s) => s.key.startsWith('cart.')),
+        `${name}/${scale} refugee cart`,
+      ).toBe(true);
+      const safe = fitCoastalScene(raw, onDrawnLand, scale, onWalkable, (s) =>
+        s.key.startsWith('ship.') ? mapToScreen(camera, viewport, seaPoint) : undefined,
+      );
+      expect(safe.sprites).toHaveLength(raw.sprites.length);
+      for (const s of safe.sprites) {
+        expect(groundFits(s, onDrawnLand), `${name}/${scale}/${s.key}`).toBe(true);
+        if (!s.key.startsWith('ship.'))
+          expect(groundFits(s, onWalkable), `${name}/${scale}/${s.key} walkable`).toBe(true);
+      }
+    }
+    expect(JSON.stringify(state)).toBe(original);
+    expectConsistent(state);
+  },
+);

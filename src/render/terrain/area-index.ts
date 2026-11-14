@@ -258,6 +258,35 @@ export class AreaIndex {
     return this.#near(x, y, k % this.#columns, Math.floor(k / this.#columns));
   }
 
+  /** The whole horizontal ground contact, including inlets narrower than a pixel. */
+  spanInside(left: number, right: number, y: number, wanted = true): boolean {
+    const from = Math.min(left, right),
+      to = Math.max(left, right);
+    if (this.inside(from, y) !== wanted || this.inside(to, y) !== wanted) return false;
+    const band = Math.floor(y / BAND) * BAND_ROW;
+    const crossings: number[] = [];
+    for (let strip = Math.floor(from / STRIP); strip <= Math.floor(to / STRIP); strip++) {
+      for (const [ax, ay, bx, by] of this.#strips.get(band + strip) ?? []) {
+        if (ay > y === by > y) continue;
+        const x = ax + ((bx - ax) * (y - ay)) / (by - ay);
+        if (x > from && x < to && Math.floor(x / STRIP) === strip) crossings.push(x);
+      }
+    }
+    crossings.sort((a, b) => a - b);
+    for (let i = 0; i < crossings.length;) {
+      let end = i + 1;
+      while (
+        end < crossings.length &&
+        Math.abs((crossings[end] as number) - (crossings[i] as number)) < 1e-8
+      )
+        end++;
+      // Conforming province seams occur twice and do not change the surface.
+      if ((end - i) % 2 !== 0) return false;
+      i = end;
+    }
+    return true;
+  }
+
   /**
    * Roughly how far the point lies from the area's edge on either side, up to the
    * reach. It can be up to `DISTANCE_ERROR` km more than the true distance.
