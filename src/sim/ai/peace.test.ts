@@ -153,8 +153,9 @@ describe("the AI's answer", () => {
     run(state, { kind: 'declareWar', faction: f.rome, against: f.carthage });
     state.day = 200 as Day;
     const war = state.wars[warKey(f.rome, f.carthage)];
-    if (!war?.sides[f.carthage]) throw new Error('no war');
-    war.sides[f.carthage].lost = 400;
+    const losing = war?.sides[f.carthage];
+    if (!losing) throw new Error('no war');
+    losing.lost = 400;
     const wish = peaceWish(state, f.carthage, f.rome)?.wish ?? 0;
     const city: PeaceTerms = { kind: 'payment', payer: f.carthage, gold: 0, cities: [f.syracusae] };
     const cityPoints = -termsPoints(state, city, f.carthage);
