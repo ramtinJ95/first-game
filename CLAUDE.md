@@ -81,6 +81,7 @@ Use these sections in this order: Why, What changed, Scope, Blast Radius, Verifi
 
 - Verification lists each command you ran and its real outcome.
 - A pull request that changes anything visible embeds the screenshots and at least one clip from `npm run capture`. It names its Nexus preview URL. `npm run capture` and `npm run capture:fetch` declare the media as Nexus outputs.
+- Media links point at `refs/heads/pr-assets/<branch>/...`, never at a commit. Only the folder's `README.md` names the head commit the media shows, and a reviewer checks that it matches the pull request head before merging. CI publishes changed screenshots only. Name more with a `Publish scenarios:` line, as [commands](docs/engineering/commands.md) describes.
 - A pull request that changes only rules shows the test output.
 
 ## Scope
