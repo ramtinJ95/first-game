@@ -20,7 +20,7 @@ For a new simulation, add `scripts/sim/<name>.ts` and run `npm run sim -- <name>
 
 ## Generation and documentation
 
-`scripts/registries.ts` discovers sorted files and writes ignored static modules only when content changes. `npm ci` (`prepare`), `npm run dev`, `check`, `test`, `e2e`, and `build` regenerate them; `capture` uses that same build command. `npm run sim -- <name>` regenerates before running a script. For direct `node` commands after adding a registration, run `node scripts/registries.ts` first. Static imports deliberately keep plain Node tools, browser builds, unit tests, and the pure rules type-check on the same source; no bundler-only discovery or dependency is added.
+`scripts/registries.ts` discovers sorted files and writes ignored static modules only when content changes. `npm ci` (`prepare`), `npm run dev`, `check`, `test`, `e2e`, and `build` regenerate them; `capture` uses that same build command. `npm run sim -- <name>` regenerates before running a script. For direct `node` commands after adding a registration, run `node scripts/registries.ts` first. If a dev server is already running when a registration is added, regenerate or restart it. Static imports deliberately keep plain Node tools, browser builds, unit tests, and the pure rules type-check on the same source; no bundler-only discovery or dependency is added.
 
 Area guides moved from `CLAUDE.md` keep their original text, apart from the obsolete save/order/alert extension instructions updated for this change. Write area detail in its linked guide. `CLAUDE.md` keeps cross-cutting rules.
 
