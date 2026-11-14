@@ -401,7 +401,7 @@ function seaExcess(map: GameMap, oracle: LandOracle): string {
   return `Sea paths between ${excesses.length} pairs of harbours: against the reference mean ${pct(mean(excesses))}, lowest ${pct(Math.min(...excesses))}, highest ${pct(Math.max(...excesses))}; mean query ${mean(times).toFixed(2)} ms, worst ${Math.max(...times).toFixed(2)} ms; legs over land ${wet}.`;
 }
 
-function main() {
+export function main() {
   const map = loadMap();
   const oracle = new LandOracle(map);
   const reference = buildNavMesh(map, 0);

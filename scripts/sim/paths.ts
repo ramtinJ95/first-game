@@ -1,1 +1,3 @@
-import '../movement/experiment.ts';
+import { main } from '../movement/experiment.ts';
+
+main();
