@@ -1,7 +1,7 @@
+import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import * as v from 'valibot';
 import {
   ASSETS_BRANCH,
   fetchAssetsTip,
@@ -33,8 +33,11 @@ export interface PublishOptions {
   runUrl?: string;
   reference: { dir: string; info: ReferenceInfo } | null;
   named: NamedScenarios;
-  /** Head branches of this repository's open pull requests; only their folders survive. */
-  openBranches: readonly string[];
+  /**
+   * Head branches of this repository's open pull requests; only their folders survive.
+   * Asked again after each read of the tip, so a pull request opened meanwhile keeps its folder.
+   */
+  openBranches: () => readonly string[];
 }
 
 export interface PublishResult {
@@ -78,7 +81,8 @@ export function publishCaptures(options: PublishOptions): PublishResult {
     const folder = writeBranchFolder(clone, options.capturesDir, report);
     for (let attempt = 1; ; attempt++) {
       const tip = fetchAssetsTip(clone);
-      const tree = writeTree(clone, keptFolders(clone, tip, options, folder));
+      const open = options.openBranches();
+      const tree = writeTree(clone, keptFolders(clone, tip, open, options.branch, folder));
       if (tip && tree === git(clone, ['rev-parse', `${tip}^{tree}`]) && !hasParent(clone, tip)) {
         return { commit: tip, changed: false, markdown, selection };
       }
@@ -137,19 +141,20 @@ function writeBranchFolder(clone: string, capturesDir: string, report: Report): 
 function keptFolders(
   clone: string,
   tip: string | null,
-  options: PublishOptions,
+  open: readonly string[],
+  branch: string,
   folder: TreeEntry,
 ): Map<string, TreeEntry> {
   const kept = new Map<string, TreeEntry>();
   if (tip) {
-    for (const branch of options.openBranches) {
+    for (const branch of open) {
       const entry = treeAt(clone, tip, branch);
       if (entry) kept.set(branch, entry);
     }
     const stage = newestStage(clone, tip);
     if (stage) kept.set(stage.path, stage.entry);
   }
-  kept.set(options.branch, folder);
+  kept.set(branch, folder);
   return kept;
 }
 
@@ -245,35 +250,20 @@ function hasParent(clone: string, commit: string): boolean {
   return /^parent /m.test(git(clone, ['cat-file', 'commit', commit]));
 }
 
-const OpenPulls = v.array(
-  v.object({
-    head: v.object({ ref: v.string(), repo: v.nullable(v.object({ full_name: v.string() })) }),
-  }),
-);
-
-export async function listOpenBranches(repo: GitHubRepo, token: string | undefined) {
-  if (!token) {
-    throw new Error('listing open pull requests needs GITHUB_TOKEN or GH_TOKEN in the environment');
-  }
-  const fullName = `${repo.owner}/${repo.name}`.toLowerCase();
-  const branches: string[] = [];
-  let url: string | null =
-    `https://api.github.com/repos/${repo.owner}/${repo.name}/pulls?state=open&per_page=100`;
-  while (url) {
-    const response: Response = await fetch(url, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${token}`,
-        'User-Agent': 'capture-publish',
-      },
-    });
-    if (!response.ok) throw new Error(`GET ${url} answered ${response.status}`);
-    for (const pull of v.parse(OpenPulls, await response.json())) {
-      if (pull.head.repo?.full_name.toLowerCase() === fullName) branches.push(pull.head.ref);
-    }
-    url = /<([^>]+)>;\s*rel="next"/.exec(response.headers.get('link') ?? '')?.[1] ?? null;
-  }
-  return branches;
+export function listOpenBranches(repo: GitHubRepo): string[] {
+  const fullName = `${repo.owner}/${repo.name}`;
+  const listing = execFileSync(
+    'gh',
+    [
+      'api',
+      '--paginate',
+      `repos/${fullName}/pulls?state=open&per_page=100`,
+      '--jq',
+      `.[] | select(.head.repo.full_name == "${fullName}") | .head.ref`,
+    ],
+    { encoding: 'utf8' },
+  );
+  return listing.split('\n').filter(Boolean);
 }
 
 function required(value: string | undefined, flag: string): string {
@@ -318,10 +308,7 @@ if (import.meta.main) {
         }
       : null,
     named: combineNamed(values.scenario, parseNamedScenarios(prBody)),
-    openBranches: await listOpenBranches(
-      remoteRepo(cwd, values.remote),
-      process.env['GITHUB_TOKEN'] || process.env['GH_TOKEN'],
-    ),
+    openBranches: () => listOpenBranches(remoteRepo(cwd, values.remote)),
   });
   console.error(
     result.changed

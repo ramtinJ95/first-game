@@ -67,7 +67,7 @@ function publish(branch: string, options: Partial<PublishOptions> = {}) {
     head: 'head-1',
     reference: null,
     named: [],
-    openBranches: [],
+    openBranches: () => [],
     ...options,
   });
 }
@@ -226,7 +226,7 @@ describe('publishCaptures', () => {
     const openTree = git(bare, ['rev-parse', 'pr-assets:feat/open']);
 
     writeCaptures(join(root, 'captures'), { map: { 'start.png': 'start' } });
-    publish('feat/map', { openBranches: ['feat/open', 'feat/map', 'feat/never-published'] });
+    publish('feat/map', { openBranches: () => ['feat/open', 'feat/map', 'feat/never-published'] });
 
     expect(assetsCommitCount()).toBe(1);
     expect(git(bare, ['rev-parse', 'pr-assets:feat/open'])).toBe(openTree);
@@ -243,8 +243,9 @@ describe('publishCaptures', () => {
     writeCaptures(join(root, 'captures'), { map: { 'start.png': 'start' } });
     publish('feat/map');
     raceOnReceive('publisher', 'once');
+    const openLists = [[], ['feat/rival']];
 
-    publish('feat/map', { head: 'head-2', openBranches: ['feat/rival'] });
+    publish('feat/map', { head: 'head-2', openBranches: () => openLists.shift() ?? [] });
 
     expect(assetsCommitCount()).toBe(1);
     expect(Object.keys(assetsTree()).sort()).toEqual([
@@ -288,7 +289,7 @@ describe('fetchCaptures', () => {
     });
     publish('feat/map');
     writeCaptures(join(root, 'captures'), { armies: { 'march.png': 'march' } });
-    const latest = publish('feat/armies', { openBranches: ['feat/map'] });
+    const latest = publish('feat/armies', { openBranches: () => ['feat/map'] });
 
     const fetched = join(root, 'fetched');
     mkdirSync(join(fetched, 'stale'), { recursive: true });

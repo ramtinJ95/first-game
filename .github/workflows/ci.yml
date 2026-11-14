@@ -191,7 +191,7 @@ jobs:
         run: gh pr view "$PR" -R "$REPO" --json body --jq .body > pr-body.txt
       - name: Publish captures to pr-assets
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
           HEAD_REF: ${{ github.head_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
