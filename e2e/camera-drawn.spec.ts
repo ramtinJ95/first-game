@@ -244,12 +244,13 @@ test('a frame that finishes between draw polls is pickable immediately', async (
   await page.addInitScript(() => {
     let armed = false;
     let held = false;
-    let submitted: WebGL2RenderingContext | undefined;
+    let pending: WebGLSync | null = null;
+    let finishSubmitted: (() => void) | undefined;
     Reflect.set(window, 'armFrame', () => {
       armed = true;
     });
     Reflect.set(window, 'finishFrame', () => {
-      submitted?.finish();
+      finishSubmitted?.();
       held = false;
     });
     const fence = WebGL2RenderingContext.prototype.fenceSync;
@@ -258,14 +259,19 @@ test('a frame that finishes between draw polls is pickable immediately', async (
       if (armed) {
         armed = false;
         held = true;
-        submitted = this;
+        pending = sync;
+        finishSubmitted = this.finish.bind(this);
         document.querySelector('canvas')?.setAttribute('data-test-frame-submitted', 'yes');
       }
       return sync;
     };
     const status = WebGL2RenderingContext.prototype.getSyncParameter;
     WebGL2RenderingContext.prototype.getSyncParameter = function (sync, name) {
-      if (held && name === this.SYNC_STATUS) return this.UNSIGNALED;
+      if (sync === pending && name === this.SYNC_STATUS) {
+        // Native sync status may stay cached until the next task. Release just this
+        // submitted fence explicitly, so same-task input tests the polling boundary.
+        return held ? this.UNSIGNALED : this.SIGNALED;
+      }
       return status.call(this, sync, name);
     };
   });

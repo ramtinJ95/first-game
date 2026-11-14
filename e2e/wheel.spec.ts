@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { fitCamera, wheelFactor, zoomAt } from '../src/render/camera.ts';
-import { camera, map, openGame, pause } from './support.ts';
+import { camera, map, openGame, pause, untilDrawn } from './support.ts';
 
 /** Short of the closest zoom, so a notch lost would show and not vanish in the clamp. */
 const NOTCHES = 14;
@@ -28,6 +28,7 @@ test.describe('the wheel', () => {
 
     await page.mouse.move(persia.x, persia.y);
     for (let i = 0; i < NOTCHES; i++) await page.mouse.wheel(0, -100);
+    await untilDrawn(page);
     await expect.poll(() => drawnZoom(page)).toBeCloseTo(expected.scale, 3);
     const quick = await drawnZoom(page);
 
@@ -38,6 +39,7 @@ test.describe('the wheel', () => {
     for (let i = 0; i < NOTCHES; i++) {
       step = zoomAt(step, persia, wheelFactor(-100), viewport, map);
       await page.mouse.wheel(0, -100);
+      await untilDrawn(page);
       await expect.poll(() => drawnZoom(page)).toBeCloseTo(step.scale, 3);
     }
     expect(await drawnZoom(page)).toBeCloseTo(quick, 3);
