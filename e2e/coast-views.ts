@@ -13,7 +13,7 @@ export const COAST_VIEWS = [
   { name: 'brittany', title: 'Brittany', lon: -4.25, lat: 48.45, scale: 4 },
   { name: 'aegean-middle', title: 'Whole Aegean', lon: 25, lat: 38.35, scale: 1 },
   { name: 'italy-middle', title: 'Whole Italy', lon: 12.4, lat: 41.9, scale: 0.66 },
-  { name: 'rhodes', title: 'Rhodos, island settlement', lon: 28.15, lat: 36.35, scale: 4 },
+  { name: 'rhodes', title: 'Rhodos island', lon: 28.15, lat: 36.35, scale: 4 },
   { name: 'gades', title: 'Gades and its harbour', lon: -6.3, lat: 36.5, scale: 4 },
   {
     name: 'ionian-bound',

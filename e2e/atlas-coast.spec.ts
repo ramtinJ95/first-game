@@ -12,6 +12,84 @@ import { pageData } from '../src/app/page.ts';
 import { saveGame } from '../src/sim/save.ts';
 import { camera, map, openGame, pause, startGame, untilDrawn } from './support.ts';
 
+type FenceControl = { hold: boolean; polls: number; restore(): void };
+
+test('held-pacer city layout uses the new zoom surface in both atlas/widest directions', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await openGame(page);
+  await pause(page);
+  await camera(page).jumpTo({ x: 3540, y: 2989 }, 4);
+  const canvas = page.locator('canvas[data-renderer]');
+  await expect(canvas).toHaveAttribute('data-terrain', 'ready');
+  await canvas.evaluate((element) => {
+    const gl = (element as HTMLCanvasElement).getContext('webgl2');
+    if (!gl) throw new Error('held-pacer regression requires WebGL 2');
+    const original = gl.getSyncParameter;
+    const control: FenceControl = {
+      hold: true,
+      polls: 0,
+      restore: () => {
+        gl.getSyncParameter = original;
+      },
+    };
+    gl.getSyncParameter = function (sync, parameter) {
+      if (control.hold && parameter === gl.SYNC_STATUS) {
+        control.polls++;
+        return gl.UNSIGNALED;
+      }
+      return original.call(this, sync, parameter);
+    };
+    (window as unknown as { coastFence: FenceControl }).coastFence = control;
+  });
+  try {
+    for (const [deltaY, coast] of [
+      [2000, 'physical'],
+      [-2000, 'atlas'],
+    ] as const) {
+      await page.evaluate(() => {
+        const control = (window as unknown as { coastFence: FenceControl }).coastFence;
+        control.hold = true;
+        control.polls = 0;
+      });
+      // Submit a frame, then force its fence unsignalled. The following zoom must
+      // therefore execute layoutCities in the held-pacer branch, not just a normal draw.
+      await canvas.dispatchEvent('wheel', { deltaY: 0, clientX: 640, clientY: 360 });
+      await page.waitForFunction(
+        () => (window as unknown as { coastFence: FenceControl }).coastFence.polls > 0,
+      );
+      const previousCoast = await canvas.getAttribute('data-coast');
+      const previousZoom = await canvas.getAttribute('data-zoom');
+      await canvas.evaluate((element, deltaY) => {
+        (window as unknown as { coastFence: FenceControl }).coastFence.polls = 0;
+        element.dispatchEvent(new WheelEvent('wheel', { deltaY, clientX: 640, clientY: 360 }));
+      }, deltaY);
+      await page.waitForFunction(
+        () => (window as unknown as { coastFence: FenceControl }).coastFence.polls > 0,
+      );
+      await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => done())));
+      expect(errors).toEqual([]);
+      expect(await canvas.getAttribute('data-coast')).toBe(previousCoast);
+      expect(await canvas.getAttribute('data-zoom')).toBe(previousZoom);
+      await page.evaluate(() => {
+        (window as unknown as { coastFence: FenceControl }).coastFence.hold = false;
+      });
+      await expect(canvas).toHaveAttribute('data-coast', coast);
+      await expect
+        .poll(async () => Number(await canvas.getAttribute('data-zoom')) >= 0.6)
+        .toBe(coast === 'atlas');
+    }
+  } finally {
+    await page.evaluate(() => {
+      const control = (window as unknown as { coastFence: FenceControl }).coastFence;
+      control.hold = false;
+      control.restore();
+    });
+  }
+});
+
 test('crossing the middle-detail boundary restrokes even within the ordinary stroke zoom tolerance', async ({
   page,
 }) => {

@@ -20,7 +20,15 @@ async function views({ page, shot }: CaptureContext, stage: string, base = '', l
   await pause(page);
   await load(page, startGame());
   const view = camera(page);
-  for (const { name, title, at, scale } of COAST_VIEWS) {
+  for (const { name, title, at, scale } of [
+    ...COAST_VIEWS,
+    {
+      name: 'knosos',
+      title: 'Knosos on Crete, unchanged island city and harbour',
+      at: cityPoint('knosos'),
+      scale: 4,
+    },
+  ]) {
     await view.jumpTo(at, scale);
     await page.waitForFunction(
       (zoom) =>
