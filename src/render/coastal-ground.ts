@@ -156,7 +156,7 @@ export function fitCoastalScene(
   const sprites = moved ? placed.sort((a, b) => a.depth - b.depth) : scene.sprites;
   let armyBoxes = scene.armyBoxes;
   if (moved) {
-    const fitted = new Map<NonNullable<Sprite['army']>, NonNullable<Sprite['hit']>>();
+    const fitted: Scene['armyBoxes'] = new Map();
     for (const { army, hit } of sprites) {
       if (!army || !hit || !scene.armyBoxes.has(army)) continue;
       const box = fitted.get(army);
