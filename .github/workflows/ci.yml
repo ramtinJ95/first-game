@@ -124,7 +124,17 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           name: captures-${{ matrix.shard }}
-          path: captures/
+          path: |
+            captures/
+            !captures/**/video.webm
+            !captures/**/trace.zip
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: capture-recordings-${{ matrix.shard }}
+          path: |
+            captures/**/video.webm
+            captures/**/trace.zip
 
   capture:
     timeout-minutes: 1
@@ -137,6 +147,8 @@ jobs:
           RESULT: ${{ needs.capture-shards.result }}
         run: test "$RESULT" = success
 
+  # No concurrency group: GitHub keeps one pending job per group and cancels the rest, which
+  # would drop a pull request's publish. The push lease in publish.ts serialises publishes.
   publish-media:
     timeout-minutes: 15
     needs: capture
@@ -147,21 +159,53 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
       - uses: actions/download-artifact@v8
         with:
           pattern: captures-*
           merge-multiple: true
           path: captures
+      - name: Find the main run to compare with
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: >-
+          node scripts/capture/reference.ts --repo "$REPO" --base "$(git rev-parse HEAD^1)"
+          --out reference --info reference.json
+      # Read at run time so that re-running the job applies an edited description.
+      - name: Read the pull request description
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr view "$PR" -R "$REPO" --json body --jq .body > pr-body.txt
       - name: Publish captures to pr-assets
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GIT_AUTHOR_NAME: github-actions[bot]
           GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-        run: node scripts/capture/publish.ts --branch "$HEAD_REF"
+        run: |
+          set --
+          if [ -f reference.json ]; then
+            set -- --reference reference \
+              --reference-commit "$(jq -r .commit reference.json)" \
+              --reference-run-url "$(jq -r .runUrl reference.json)"
+            if [ "$(jq -r .exact reference.json)" = true ]; then set -- "$@" --reference-exact; fi
+          fi
+          node scripts/capture/publish.ts --branch "$HEAD_REF" --head "$HEAD_SHA" \
+            --base "$(git rev-parse HEAD^1)" --run-url "$RUN_URL" --pr-body-file pr-body.txt "$@"
