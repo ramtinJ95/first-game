@@ -12,7 +12,7 @@ export const TradeRouteSchema = v.object({
   partner: FactionIdSchema,
   mode: v.picklist(['land', 'sea']),
   status: v.picklist(['offered', 'running']),
-  path: v.pipe(v.array(MapPointSchema), v.minLength(2)),
+  path: v.pipe(v.array(v.pipe(MapPointSchema, v.readonly())), v.minLength(2), v.readonly()),
   km: positive,
   days: v.pipe(positive, v.integer()),
   daily: positive,
