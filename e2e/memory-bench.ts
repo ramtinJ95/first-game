@@ -39,7 +39,7 @@ const { values } = parseArgs({
 });
 
 /** A run stops once the machine has less than this left, before the tab or the run is killed. */
-const LOW_MB = 450;
+const LOW_MB = 300;
 const VIEWPORT = { width: 1280, height: 720 };
 /**
  * A long session looks at many places, so each zoom goes in over the next of these:
@@ -66,6 +66,35 @@ function trackTextures() {
   const bind = proto.bindTexture;
   const image = proto.texImage2D as (...args: unknown[]) => void;
   const storage = proto.texStorage2D;
+  const buffers = new Map<WebGLBuffer, number>();
+  const boundBuffer = new Map<GLenum, WebGLBuffer | null>();
+  const createBuffer = proto.createBuffer;
+  const deleteBuffer = proto.deleteBuffer;
+  const bindBuffer = proto.bindBuffer;
+  const bufferData = proto.bufferData as (...args: unknown[]) => void;
+  proto.createBuffer = function (this: WebGL2RenderingContext) {
+    const buffer = createBuffer.call(this);
+    if (buffer) buffers.set(buffer, 0);
+    return buffer;
+  };
+  proto.deleteBuffer = function (this: WebGL2RenderingContext, buffer: WebGLBuffer | null) {
+    if (buffer) buffers.delete(buffer);
+    return deleteBuffer.call(this, buffer);
+  };
+  proto.bindBuffer = function (this: WebGL2RenderingContext, target: GLenum, buffer) {
+    boundBuffer.set(target, buffer);
+    return bindBuffer.call(this, target, buffer);
+  };
+  proto.bufferData = function (this: WebGL2RenderingContext, ...args: unknown[]) {
+    const buffer = boundBuffer.get(args[0] as GLenum);
+    const data = args[1];
+    if (buffer)
+      buffers.set(
+        buffer,
+        typeof data === 'number' ? data : ((data as ArrayBufferView | null)?.byteLength ?? 0),
+      );
+    return bufferData.apply(this, args);
+  } as typeof proto.bufferData;
   proto.createTexture = function (this: WebGL2RenderingContext) {
     const texture = create.call(this);
     if (texture) sizes.set(texture, 0);
@@ -100,6 +129,8 @@ function trackTextures() {
     textureReport: () => ({
       count: sizes.size,
       bytes: [...sizes.values()].reduce((sum, bytes) => sum + bytes, 0),
+      buffers: buffers.size,
+      bufferBytes: [...buffers.values()].reduce((sum, bytes) => sum + bytes, 0),
     }),
   });
 }
@@ -128,7 +159,11 @@ async function sample(page: Page, step: string) {
   const { metrics } = await session.send('Performance.getMetrics');
   const metric = (name: string) => metrics.find((m) => m.name === name)?.value ?? 0;
   const textures = await page.evaluate(() =>
-    (window as unknown as { textureReport(): { count: number; bytes: number } }).textureReport(),
+    (
+      window as unknown as {
+        textureReport(): { count: number; bytes: number; buffers: number; bufferBytes: number };
+      }
+    ).textureReport(),
   );
   if (values.sites) await printSites(page);
   await session.detach();
@@ -139,6 +174,8 @@ async function sample(page: Page, step: string) {
     listeners: metric('JSEventListeners'),
     textures: textures.count,
     textureMb: Math.round(textures.bytes / 2 ** 20),
+    buffers: textures.buffers,
+    bufferMb: Math.round(textures.bufferBytes / 2 ** 20),
     rendererMb: residentMb('renderer'),
     gpuMb: residentMb('gpu-process'),
     peakMb: peak.tabMb,
@@ -233,12 +270,17 @@ try {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('crash', () => errors.push('the page crashed'));
-  await openGame(page, { base, query: [`draw=${values.draw}`, values.query].filter(Boolean).join('&') });
+  await openGame(page, {
+    base,
+    query: [`draw=${values.draw}`, values.query].filter(Boolean).join('&'),
+  });
   const print = (row: Awaited<ReturnType<typeof sample>>) => {
     rows.push(row);
     console.log(Object.values(row).join(','));
   };
-  console.log('step,heapMb,nodes,listeners,textures,textureMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb');
+  console.log(
+    'step,heapMb,nodes,listeners,textures,textureMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb',
+  );
   if (values.sites) {
     const session = await page.context().newCDPSession(page);
     await session.send('HeapProfiler.startSampling', { samplingInterval: 65536 });
@@ -301,7 +343,8 @@ try {
   await browser.close();
   await server.close();
   if (values.out) {
-    const header = 'step,heapMb,nodes,listeners,textures,textureMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb';
+    const header =
+      'step,heapMb,nodes,listeners,textures,textureMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb';
     writeFileSync(values.out, [header, ...rows.map((r) => Object.values(r).join(','))].join('\n'));
   }
 }
