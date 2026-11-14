@@ -16,6 +16,7 @@ export type ScenarioVerdict =
   | { kind: 'unchanged'; scenario: string };
 
 export interface ReferenceInfo {
+  branch: string;
   commit: string;
   runUrl: string;
   exact: boolean;

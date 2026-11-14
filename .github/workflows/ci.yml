@@ -175,13 +175,14 @@ jobs:
           pattern: captures-*
           merge-multiple: true
           path: captures
-      - name: Find the main run to compare with
+      - name: Find the base branch's run to compare with
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          BASE_REF: ${{ github.base_ref }}
         run: >-
-          node scripts/capture/reference.ts --repo "$REPO" --base "$(git rev-parse HEAD^1)"
-          --out reference --info reference.json
+          node scripts/capture/reference.ts --repo "$REPO" --base-ref "$BASE_REF"
+          --base "$(git rev-parse HEAD^1)" --out reference --info reference.json
       # Read at run time so that re-running the job applies an edited description.
       - name: Read the pull request description
         env:
@@ -203,6 +204,7 @@ jobs:
           set --
           if [ -f reference.json ]; then
             set -- --reference reference \
+              --reference-branch "$(jq -r .branch reference.json)" \
               --reference-commit "$(jq -r .commit reference.json)" \
               --reference-run-url "$(jq -r .runUrl reference.json)"
             if [ "$(jq -r .exact reference.json)" = true ]; then set -- "$@" --reference-exact; fi

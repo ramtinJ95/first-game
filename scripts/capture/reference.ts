@@ -64,15 +64,19 @@ if (import.meta.main) {
     options: {
       repo: { type: 'string' },
       base: { type: 'string' },
+      'base-ref': { type: 'string', default: 'main' },
       out: { type: 'string', default: 'reference' },
       info: { type: 'string', default: 'reference.json' },
     },
   });
   const { repo, base } = values;
+  const baseRef = values['base-ref'];
   if (!repo || !base) throw new Error('usage: reference.ts --repo <owner/name> --base <sha>');
   const runs = v.parse(
     Runs,
-    ghApi(`repos/${repo}/actions/workflows/ci.yml/runs?branch=main&event=push&per_page=30`),
+    ghApi(
+      `repos/${repo}/actions/workflows/ci.yml/runs?branch=${encodeURIComponent(baseRef)}&per_page=30`,
+    ),
   ).workflow_runs;
   const chosen = chooseReferenceRun(
     runs,
@@ -82,15 +86,16 @@ if (import.meta.main) {
         .artifacts,
   );
   if (!chosen) {
-    console.error('no main run has screenshots to compare with; every scenario counts as new');
+    console.error(`no ${baseRef} run has screenshots to compare with; every scenario counts as new`);
   } else {
     downloadScreenshots(repo, chosen.run, resolve(values.out));
     const info: ReferenceInfo = {
+      branch: baseRef,
       commit: chosen.run.head_sha,
       runUrl: chosen.run.html_url,
       exact: chosen.exact,
     };
     writeFileSync(values.info, JSON.stringify(info) + '\n');
-    console.error(`comparing with main ${info.commit} from ${info.runUrl}`);
+    console.error(`comparing with ${baseRef} ${info.commit} from ${info.runUrl}`);
   }
 }

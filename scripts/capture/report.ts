@@ -13,17 +13,17 @@ export interface Report {
 }
 
 const VERDICT_LABELS: Record<ScenarioVerdict['kind'], string> = {
-  new: 'new, main has no captures of it',
+  new: 'new, the base has no captures of it',
   named: 'named for publishing',
-  changed: 'changed from main',
-  unchanged: 'unchanged from main',
+  changed: 'changed from the base',
+  unchanged: 'unchanged from the base',
 };
 
 export function renderReadme(report: Report): string {
   const { reference } = report;
   const compared = reference
-    ? `main \`${reference.commit}\` from ${reference.runUrl} (${reference.exact ? 'the base commit' : 'the newest main run with captures'})`
-    : 'no main run, so every scenario is published whole';
+    ? `${reference.branch} \`${reference.commit}\` from ${reference.runUrl} (${reference.exact ? 'the base commit' : `the newest ${reference.branch} run with captures`})`
+    : 'no run of the base branch, so every scenario is published whole';
   const lines = [
     `# Captures of ${report.branch}`,
     '',
@@ -46,8 +46,8 @@ export function renderReadme(report: Report): string {
 
 export function renderSummary(report: Report): string {
   const against = report.reference
-    ? `compared with main ${report.reference.commit}`
-    : 'no main run to compare with';
+    ? `compared with ${report.reference.branch} ${report.reference.commit}`
+    : 'no run of the base branch to compare with';
   const lines = [`Captures of ${report.head} (${against})`, ''];
   for (const { verdict, images } of report.scenarios) {
     for (const image of images) {
@@ -69,7 +69,7 @@ function leftOut({ scenarios, runUrl }: Report): string[] {
     ? `The full set is in the run's artifacts, ${runUrl}#artifacts, for the repository's artifact retention.`
     : 'The full set is in the local `captures/` folder of the machine that published.';
   return [
-    ...(lines.length ? ['## Left out (unchanged from main)', '', ...lines, ''] : []),
+    ...(lines.length ? ['## Left out (unchanged from the base)', '', ...lines, ''] : []),
     fullSet,
     '',
   ];

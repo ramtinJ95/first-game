@@ -280,6 +280,7 @@ if (import.meta.main) {
       base: { type: 'string' },
       'run-url': { type: 'string' },
       reference: { type: 'string' },
+      'reference-branch': { type: 'string', default: 'main' },
       'reference-commit': { type: 'string' },
       'reference-run-url': { type: 'string' },
       'reference-exact': { type: 'boolean', default: false },
@@ -301,6 +302,7 @@ if (import.meta.main) {
       ? {
           dir: resolve(cwd, values.reference),
           info: {
+            branch: values['reference-branch'],
             commit: required(values['reference-commit'], '--reference-commit'),
             runUrl: required(values['reference-run-url'], '--reference-run-url'),
             exact: values['reference-exact'],
