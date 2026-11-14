@@ -34,10 +34,13 @@
     weakSiegeText,
   } from './describe.ts';
   import WarStatus from './WarStatus.svelte';
+  import CityTrade from './CityTrade.svelte';
+  import type { World } from '../sim/world/world.ts';
 
   let {
     game,
     map,
+    world,
     city,
     sight,
     pending,
@@ -46,6 +49,7 @@
   }: {
     game: DeepReadonly<GameState>;
     map: DeepReadonly<GameMap>;
+    world: World;
     city: DeepReadonly<City>;
     sight: Sight;
     pending: readonly Order[];
@@ -93,7 +97,7 @@
 
   /** What the player has left once the recruits and buildings waiting for the next day are paid. */
   const available = $derived(
-    afterWaiting(game, pending).factions[game.player]?.stores ?? { gold: 0, manpower: 0 },
+    afterWaiting(game, pending, world).factions[game.player]?.stores ?? { gold: 0, manpower: 0 },
   );
 
   function refusal(troop: Troop): string | undefined {
@@ -242,8 +246,9 @@
   {/if}
 
   {#if own}
-    <CityBuildings {game} {city} {pending} {actions} />
+    <CityBuildings {game} {world} {city} {pending} {actions} />
   {/if}
+  <CityTrade {game} {world} {city} {pending} {actions} />
 
   {#if raising.length > 0 || own}
     <h3>Raising</h3>

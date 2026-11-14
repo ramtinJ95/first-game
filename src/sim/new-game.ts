@@ -10,6 +10,7 @@ import type { GameState } from './state/game-state.ts';
 import type { MapPoint } from './state/map-point.ts';
 import { fullDefences } from './systems/sieges.ts';
 import type { Troop } from './troops.ts';
+import { goodAt } from './trade/goods.ts';
 
 export interface NewGameOptions {
   seed: number;
@@ -144,6 +145,7 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
     wars: {},
     peaceOffers: {},
     truces: {},
+    tradeRoutes: {},
   };
 
   for (const power of POWERS) {
@@ -191,7 +193,12 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
       if (traits.army.length > 0) addArmy(state, owner, traits.army, position);
       if (kind === 'leagued') leagued.push({ faction: owner, position });
     }
-    state.provinces[province.id] = { id: province.id, name: province.name, city };
+    state.provinces[province.id] = {
+      id: province.id,
+      name: province.name,
+      city,
+      good: goodAt(seed, province.owner, position),
+    };
     state.cities[city] = {
       id: city,
       name: province.name,

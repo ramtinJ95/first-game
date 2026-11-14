@@ -15,6 +15,7 @@ import {
   rome,
   setRich,
   startGame,
+  untilDrawn,
 } from '../../../e2e/support.ts';
 import type { FactionId } from '../../../src/sim/ids.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
@@ -26,7 +27,7 @@ async function load(page: Page, state: GameState) {
     .getByTestId('time-controls-day')
     .and(page.locator(`[data-day="${state.day}"]`))
     .waitFor();
-  await page.waitForTimeout(250);
+  await untilDrawn(page);
 }
 
 function percentile(sorted: number[], p: number): number {

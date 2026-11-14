@@ -16,6 +16,7 @@ import type { Sight } from '../sim/sight.ts';
 import type { Battle } from '../sim/state/battle.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
+import { routePoint } from '../sim/trade/routes.ts';
 import {
   clampCamera,
   fitCamera,
@@ -354,6 +355,8 @@ export async function createRenderer({
   const worldLayers = LAYERS.filter((layer) => layer.world).map(({ name }) => layers[name]);
 
   const outlines = new Map(map.provinces.map((p) => [p.id, p.outline]));
+  const tradeMarks = new Graphics();
+  layers.markers.addChild(tradeMarks);
 
   layers.paper.addChild(new Graphics().rect(0, 0, map.width, map.height).fill(MARGIN));
 
@@ -1243,6 +1246,27 @@ export async function createRenderer({
       drawRoutes(current, selection, planned, replaced);
       placeBanners(current, selection);
       placeColumns(current);
+      tradeMarks.clear();
+      for (const route of Object.values(current.tradeRoutes)) {
+        if (route.status !== 'running') continue;
+        const before = previous.tradeRoutes[route.id];
+        const p =
+          before && before.returning === route.returning
+            ? before.progress + (route.progress - before.progress) * progress
+            : route.progress;
+        const point = routePoint(route, p);
+        if (
+          route.owner !== current.player &&
+          route.partner !== current.player &&
+          !sight.sees(point)
+        )
+          continue;
+        const at = mapToScreen(camera, viewport(), point);
+        tradeMarks
+          .circle(at.x, at.y, 3)
+          .fill(route.blocked ? 0x9b3e2d : 0x8b6a33)
+          .stroke({ color: INK, width: 1 });
+      }
       placeBattles(selection);
       if (scene && scene.height > 0 && selection?.kind === 'army') {
         const box = scene.armyBoxes.get(selection.army);

@@ -1,5 +1,5 @@
 import type { BuildingKind } from './buildings/buildings.ts';
-import type { ArmyId, BattleId, CityId, FactionId } from './ids.ts';
+import type { ArmyId, BattleId, CityId, FactionId, TradeRouteId } from './ids.ts';
 import type { Day } from './state/day.ts';
 import type { GameState } from './state/game-state.ts';
 import type { MapPoint } from './state/map-point.ts';
@@ -22,6 +22,15 @@ export type ArmyLoss = 'battle' | 'surrender' | 'storm' | 'sally' | 'defeat';
  * gone by the end of the day.
  */
 export type DayEvent =
+  | {
+      kind: 'tradeOpened' | 'tradeOffered' | 'tradeClosed' | 'tradeRaided';
+      route: TradeRouteId;
+      from: CityId;
+      to: CityId;
+      owners: readonly [FactionId, FactionId];
+      position: MapPoint;
+      cause?: string;
+    }
   | {
       kind: 'battleBegan';
       battle: BattleId;

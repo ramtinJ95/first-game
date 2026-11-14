@@ -32,6 +32,7 @@ import {
   type State,
 } from './situation.ts';
 import { warDeclaration } from './war.ts';
+import { trading } from './trade.ts';
 
 /**
  * The orders a faction gives today. It reads the state and the world and changes
@@ -49,15 +50,12 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
     router: createRouter(state, world, faction),
   };
   if (record.kind === 'minor') {
-    return withJoins(context, [
-      ...peaceOrders(context),
-      ...stances(context),
-      ...minorOrders(context),
-    ]);
+    const orders = [...peaceOrders(context), ...stances(context), ...minorOrders(context)];
+    return withJoins(context, [...orders, ...trading(state, world, faction, orders)]);
   }
   const muster = musterCity(context);
   const recruits = recruitment(state, faction, muster);
-  return withJoins(context, [
+  const orders = [
     ...peaceOrders(context),
     ...stances(context),
     ...endOverlongMarches(context),
@@ -68,7 +66,8 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
     ...recruits,
     ...construction(state, faction, recruits.length > 0),
     ...warDeclaration(context),
-  ]);
+  ];
+  return withJoins(context, [...orders, ...trading(state, world, faction, orders)]);
 }
 
 /**

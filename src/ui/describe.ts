@@ -1,4 +1,5 @@
 import { unrestPaceOf } from '../sim/buildings/buildings.ts';
+import { routesAt } from '../sim/trade/routes.ts';
 import {
   AT_CITY_KM,
   dateText,
@@ -582,9 +583,18 @@ export function unrestText(days: number): string {
  */
 export function cityBalance(state: State, city: DeepReadonly<City>): Stores {
   const alone = { ...state, cities: { [city.id]: city }, armies: {} };
-  const balance = dailyBalances(alone).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
+  const balance = dailyBalances(alone, false).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
   const share = adminShareOf(state, city.owner);
-  return { gold: balance.gold * share, food: balance.food, manpower: balance.manpower * share };
+  const trade = routesAt(state, city.id)
+    .filter(
+      (r) => r.status === 'running' && r.blocked === null && !areAtWar(state, r.owner, r.partner),
+    )
+    .reduce((sum, r) => sum + r.daily, 0);
+  return {
+    gold: (balance.gold + trade) * share,
+    food: balance.food,
+    manpower: balance.manpower * share,
+  };
 }
 
 /** What the city's fields grow and its people eat each day, and the difference. */

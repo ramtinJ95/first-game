@@ -543,6 +543,32 @@ function eventAlert(
 ): Omit<Alert, 'day'> | undefined {
   const player = after.player;
   switch (event.kind) {
+    case 'tradeOpened':
+    case 'tradeOffered':
+    case 'tradeClosed':
+    case 'tradeRaided': {
+      if (!event.owners.includes(player)) return undefined;
+      const from = after.cities[event.from]?.name ?? event.from;
+      const to = after.cities[event.to]?.name ?? event.to;
+      const text =
+        event.kind === 'tradeOpened'
+          ? `Trade opened: ${from} to ${to}.`
+          : event.kind === 'tradeOffered'
+            ? `${from} invites ${to} to trade. Select ${to} to accept or refuse.`
+            : event.kind === 'tradeClosed'
+              ? `Trade closed: ${from} to ${to}, ${event.cause}.`
+              : `Trade interrupted: ${from} to ${to}, ${event.cause === 'siege' ? 'a siege stops deliveries' : 'an enemy raided the road'}.`;
+      const destination = after.cities[event.to];
+      return {
+        kind: event.kind,
+        text,
+        tone: event.kind === 'tradeClosed' || event.kind === 'tradeRaided' ? 'bad' : 'good',
+        focus: {
+          at: event.position,
+          select: destination ? { kind: 'province', province: destination.province } : undefined,
+        },
+      };
+    }
     case 'battleBegan': {
       const where = placeName(after, event.position);
       const select = after.battles[event.battle]

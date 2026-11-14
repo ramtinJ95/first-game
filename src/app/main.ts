@@ -716,4 +716,4 @@ const actions: Actions = {
   },
 };
 
-mount(Hud, { target: host, props: { view, map, actions, frame } });
+mount(Hud, { target: host, props: { view, map, world, actions, frame } });
