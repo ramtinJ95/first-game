@@ -1,4 +1,12 @@
 import type { Box } from '../labels.ts';
+import { INK, LABEL_HALO } from '../palette.ts';
+
+/** Smaller and italic, not paler: the opaque halo separates names from any ground ink. */
+export const SETTLEMENT_NAME = {
+  fontWeight: '600',
+  fill: INK,
+  stroke: { color: LABEL_HALO, width: 3, join: 'round' as const },
+} as const;
 
 export interface SymbolRequest {
   readonly id: string;

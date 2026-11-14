@@ -1,8 +1,14 @@
-import type { MultiPolygon, Point, Ring } from '../../sim/map.ts';
-import { hash01 } from './random.ts';
+import type { MultiPolygon, Point, Ring } from '../sim/map.ts';
+import { hash01 } from './terrain/random.ts';
 
-/** Sub-km drawing detail, not a change to a lake's geographic control points. */
-export const LAKE_SHORE = { step: 0.65, handle: 0.45, ripple: 0.22, wavelength: 2.8 } as const;
+/** Sub-km drawing detail, never navigation geometry. */
+export const SHORE = { step: 0.65, handle: 0.45, ripple: 0.22, wavelength: 2.8 } as const;
+
+interface ShoreOptions {
+  /** Long sea chords need uniform sampling and stronger variation in tight straits. */
+  sea?: boolean;
+  fixed?: (a: Point, b: Point) => boolean;
+}
 
 function smooth(t: number): number {
   const u = Math.max(0, Math.min(1, t));
@@ -30,13 +36,19 @@ interface Edge {
   bottom: number;
 }
 
-function shore(ring: Ring, edges: readonly Edge[]): Point[] {
+function shore(
+  ring: Ring,
+  edges: readonly Edge[],
+  fixed: (a: Point, b: Point) => boolean,
+  sea: boolean,
+): Point[] {
   return ring.flatMap((a, i) => {
     const previous = ring[(i + ring.length - 1) % ring.length] as Point;
     const b = ring[(i + 1) % ring.length] as Point;
     const next = ring[(i + 2) % ring.length] as Point;
     const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
     if (length === 0) return [];
+    if (fixed(a, b)) return [a];
     // Cap displacement from each sample's base at 0.72 km, tighter near other shores.
     // An edge over 3 km away cannot tighten that quarter-clearance limit. Cull those
     // once per source edge instead of measuring every edge against every sample.
@@ -56,7 +68,7 @@ function shore(ring: Ring, edges: readonly Edge[]): Point[] {
       const dx = to[0] - from[0],
         dy = to[1] - from[1];
       const size = Math.min(
-        LAKE_SHORE.handle,
+        SHORE.handle,
         Math.hypot(via[0] - from[0], via[1] - from[1]) / 3,
         Math.hypot(to[0] - via[0], to[1] - via[1]) / 3,
       );
@@ -67,7 +79,7 @@ function shore(ring: Ring, edges: readonly Edge[]): Point[] {
       tb = handle(a, b, next);
     const phase = hash01(Math.round((a[0] + b[0]) * 10), Math.round((a[1] + b[1]) * 10), 1321);
     const side = phase < 0.5 ? -1 : 1;
-    const steps = Math.ceil((length + 2 * LAKE_SHORE.handle) / LAKE_SHORE.step);
+    const steps = Math.ceil((length + 2 * SHORE.handle) / (sea ? 0.35 : SHORE.step));
     const baseAt = (n: number): Point => [
       a[0] + ((b[0] - a[0]) * n) / steps,
       a[1] + ((b[1] - a[1]) * n) / steps,
@@ -104,11 +116,12 @@ function shore(ring: Ring, edges: readonly Edge[]): Point[] {
       // Cubic tangents and the ripple start smoothly. Tight inlets deliberately limit
       // that drawing before it can cross another shore: geography wins there.
       const fade = smooth((t * length) / 0.7) * smooth((u * length) / 0.7);
-      const ripple =
-        side *
-        LAKE_SHORE.ripple *
-        fade *
-        (0.65 + 0.35 * Math.sin(2 * Math.PI * ((t * length) / LAKE_SHORE.wavelength + phase)));
+      const wave = sea
+        ? 0.55 * Math.sin(2 * Math.PI * ((t * length) / (1.8 + 0.6 * phase) + phase)) +
+          0.3 * Math.sin(2 * Math.PI * ((t * length) / 4.9 + 3 * phase)) +
+          0.15 * Math.sin(2 * Math.PI * ((t * length) / 9.3 + 7 * phase))
+        : 0.65 + 0.35 * Math.sin(2 * Math.PI * ((t * length) / SHORE.wavelength + phase));
+      const ripple = side * SHORE.ripple * fade * wave;
       const candidate: Point = [
         u ** 3 * a[0] +
           3 * u * u * t * (a[0] + ta[0]) +
@@ -122,8 +135,13 @@ function shore(ring: Ring, edges: readonly Edge[]): Point[] {
           ((b[0] - a[0]) / length) * ripple,
       ];
       const base = baseAt(n);
-      const dx = candidate[0] - base[0],
-        dy = candidate[1] - base[1];
+      // Sample uniformly along the source chord. Cubic easing along a very long
+      // edge otherwise consumes the clearance cap and flattens its lateral detail.
+      const normal =
+        (-(b[1] - a[1]) * (candidate[0] - base[0]) + (b[0] - a[0]) * (candidate[1] - base[1])) /
+        length;
+      const dx = sea ? (-(b[1] - a[1]) / length) * normal : candidate[0] - base[0],
+        dy = sea ? ((b[0] - a[0]) / length) * normal : candidate[1] - base[1];
       const limit =
         0.24 *
         Math.min(
@@ -132,14 +150,20 @@ function shore(ring: Ring, edges: readonly Edge[]): Point[] {
           distance(base, previous, a),
           distance(base, b, next),
         );
-      const share = Math.min(1, limit / (Math.hypot(dx, dy) || 1));
+      // Scale the whole ornament, rather than clipping each crest to the clearance:
+      // clipping produces a new straight line parallel to the neighbouring shore.
+      const maximum = sea ? 0.75 * SHORE.handle + SHORE.ripple : Math.hypot(dx, dy) || 1;
+      const share = Math.min(1, limit / maximum);
       return [base[0] + dx * share, base[1] + dy * share];
     });
   });
 }
 
-/** Every lake, island and inlet uses one shore for its fill, mask, ink and water lines. */
-export function naturalLakeOutline(outline: MultiPolygon): MultiPolygon {
+/** Fill, mask, ink and water lines share this outline; frame edges can stay fixed. */
+export function naturalShore(
+  outline: MultiPolygon,
+  { fixed = () => false, sea = false }: ShoreOptions = {},
+): MultiPolygon {
   const edges = outline.flat().flatMap((ring) =>
     ring.map((a, index): Edge => ({
       ring,
@@ -152,5 +176,5 @@ export function naturalLakeOutline(outline: MultiPolygon): MultiPolygon {
       bottom: Math.max(a[1], (ring[(index + 1) % ring.length] as Point)[1]),
     })),
   );
-  return outline.map((polygon) => polygon.map((ring) => shore(ring, edges)));
+  return outline.map((polygon) => polygon.map((ring) => shore(ring, edges, fixed, sea)));
 }

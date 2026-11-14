@@ -1,4 +1,5 @@
-import { RenderTexture } from 'pixi.js';
+import { Container, RenderTexture, Sprite, type Renderer } from 'pixi.js';
+import type { Camera, Size } from './camera.ts';
 
 /**
  * A render texture of this size for a layer cached on screen, the same one when its size
@@ -37,4 +38,55 @@ export function coversView(
     left + texture.width >= view.width &&
     top + texture.height >= view.height
   );
+}
+
+/** Static map art in a world layer: pay its vertices only when the view changes. */
+export function cacheDrawing(art: Container, renderer: Renderer, margin: number) {
+  const viewArt = new Container();
+  viewArt.addChild(art);
+  const root = new Container();
+  root.addChild(viewArt);
+  let texture = RenderTexture.create({
+    width: 1,
+    height: 1,
+    resolution: renderer.resolution,
+    antialias: true,
+  });
+  const sprite = new Sprite(texture);
+  let drawn: { x: number; y: number; scale: number } | undefined;
+  return {
+    sprite,
+    invalidate() {
+      drawn = undefined;
+    },
+    render(camera: Camera, view: Size) {
+      const { scale } = camera;
+      const x = view.width / 2 - camera.centre.x * scale;
+      const y = view.height / 2 - camera.centre.y * scale;
+      if (
+        !drawn ||
+        drawn.scale !== scale ||
+        !coversView(texture, x - drawn.x - margin, y - drawn.y - margin, view)
+      ) {
+        texture = fitTexture(
+          texture,
+          Math.ceil(view.width) + 2 * margin,
+          Math.ceil(view.height) + 2 * margin,
+          renderer.resolution,
+        );
+        sprite.texture = texture;
+        viewArt.scale.set(scale);
+        viewArt.position.set(x + margin, y + margin);
+        renderer.render({ container: root, target: texture, clear: true });
+        drawn = { x, y, scale };
+        sprite.scale.set(1 / scale);
+        sprite.position.set((-margin - x) / scale, (-margin - y) / scale);
+      }
+    },
+    destroy() {
+      root.destroy({ children: true });
+      sprite.destroy();
+      texture.destroy(true);
+    },
+  };
 }

@@ -237,6 +237,8 @@ export function paintWash(
 export interface WashLayer {
   /** The wash, in km, clipped to the provinces' land. */
   readonly root: Container;
+  /** Changes only the rendered shore mask, never the province raster. */
+  clip(outline: MultiPolygon): void;
   /** Paints the washes again when they changed, and says whether they did. */
   paint(washes: readonly (Wash | undefined)[]): boolean;
 }
@@ -259,6 +261,9 @@ export function createWash(map: WashedMap): WashLayer {
   let painted = '';
   return {
     root,
+    clip(outline) {
+      fillLand(land.clear(), outline, 0xffffff);
+    },
     paint(washes) {
       const key = washes
         .map((wash) => (wash ? `${wash.owner}:${wash.colour}:${wash.strength}` : ''))

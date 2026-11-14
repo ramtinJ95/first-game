@@ -7,7 +7,7 @@ import {
   Texture,
   type Renderer,
 } from 'pixi.js';
-import type { GameMap } from '../../sim/map.ts';
+import type { GameMap, MultiPolygon } from '../../sim/map.ts';
 import { coversView, fitTexture } from '../cached-texture.ts';
 import { fillLand, landOutline } from '../land-outline.ts';
 import { visibleRect, type Camera, type Size } from '../camera.ts';
@@ -95,7 +95,7 @@ export interface Terrain {
    */
   update(camera: Camera, viewport: Size, now: number): { busy: boolean; redrawn: boolean };
   /** Rebuilds the lakes' lines at a fixed width on screen, as the renderer does for the coast. */
-  restroke(scale: number): void;
+  restroke(scale: number, outline?: MultiPolygon): void;
   /** Stops building chunks, before the renderer is destroyed. */
   destroy(): void;
 }
@@ -113,6 +113,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   // watered strips follow rivers and fan out to the coast, so both are clipped to the
   // land, by one mask. The mask costs only when the cached texture is drawn again.
   const outline = landOutline(map);
+  let drawnOutline = outline;
   const landMask = new Graphics();
   fillLand(landMask, outline, 0xffffff);
   const tint = startupStep('ground-tint', () => groundTint(land, map.width, map.height));
@@ -253,7 +254,13 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
     destroy() {
       queue.destroy();
     },
-    restroke(scale) {
+    restroke(scale, nextOutline = outline) {
+      if (drawnOutline !== nextOutline) {
+        fillLand(paper.clear(), nextOutline, PAPER);
+        fillLand(landMask.clear(), nextOutline, 0xffffff);
+        drawnOutline = nextOutline;
+        repaint = true;
+      }
       lakes.restroke(scale);
       lakesStale = true;
     },
