@@ -5,9 +5,10 @@ import { UNREST_DAYS } from '../sim/cities.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { dailyBalances, economy, limitsOf } from '../sim/systems/economy.ts';
+import { dailyBalances, economy, limitsOf, UPKEEP_PER_MAN } from '../sim/systems/economy.ts';
 import { tick } from '../sim/tick.ts';
-import { recruitForecast, RECRUIT_WARNING_DAYS } from './recruit-forecast.ts';
+import { recruitForecast } from './recruit-forecast.ts';
+import { population } from '../sim/systems/population.ts';
 import { TROOPS } from '../sim/troops.ts';
 import { executeOrder } from '../sim/orders/orders.ts';
 
@@ -23,22 +24,33 @@ it('warns for a gold-only shortfall even before the new formation musters', () =
   expect(forecast.lasts.gold).toBe(firstShortfall(state, 'gold'));
 });
 
-it.each([365, 366])('warns through the one-year boundary, not beyond it (%i days)', (days) => {
-  const state = goldOnly();
-  const current = required(dailyBalances(state).get(f.rome));
-  const final = recruitForecast(state, [], world, 'spearmen').after;
-  required(state.factions[f.rome]).stores.gold =
-    TROOPS.spearmen.recruit.gold - current.gold * 15 - final.gold * (days - 15 - 0.5);
+it('warns of a lasting deficit years away, which the people grow too slowly to close', () => {
+  const state = foodDeficitAfterSpearmen(-20);
   const forecast = recruitForecast(state, [], world, 'spearmen');
-  expect(RECRUIT_WARNING_DAYS).toBe(365);
-  expect(forecast.lasts.gold).toBe(days);
-  expect(forecast.runway.find((store) => store.key === 'gold')).toMatchObject({
-    urgent: days <= 365,
-    text: `about ${days} days left`,
+  expect(forecast.lasts.food).toBeGreaterThan(365);
+  expect(forecast.short.food).toBeGreaterThan(365);
+  expect(forecast.warning).toContain(
+    `stores run short in about ${forecast.short.food?.toLocaleString('en-US')} days`,
+  );
+  expect(forecast.runway.find((store) => store.key === 'food')).toMatchObject({
+    urgent: true,
+    text: `about ${forecast.short.food?.toLocaleString('en-US')} days left as the people grow`,
   });
-  if (days <= 365) expect(forecast.warning).toContain('Gold shortfall');
-  else expect(forecast.warning).toBeUndefined();
-  expect(forecast.after.gold).toBeLessThan(0);
+  expect(forecast.short.food).toBe(firstShortfall(state, 'food', true));
+  expectConsistent(state);
+});
+
+it('stays plain for a small deficit that the growing people close before the stores run out', () => {
+  const state = foodDeficitAfterSpearmen(-1);
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  expect(forecast.lasts.food).toBeGreaterThan(2000);
+  expect(forecast.short.food).toBeUndefined();
+  expect(forecast.warning).toBeUndefined();
+  expect(forecast.runway.find((store) => store.key === 'food')).toMatchObject({
+    urgent: false,
+    text: `short in about ${forecast.lasts.food?.toLocaleString('en-US')} days at today's yields, but the people's growth closes the gap first`,
+  });
+  expect(() => firstShortfall(state, 'food', true)).toThrow('Stores never ran short');
   expectConsistent(state);
 });
 
@@ -89,15 +101,16 @@ it('projects a queued trade with its world before quoting recruitment, without c
   expectConsistent(projected);
 });
 
-function firstShortfall(initial: GameState, store: 'food' | 'gold') {
+function firstShortfall(initial: GameState, store: 'food' | 'gold', growing = false) {
   let state = initial;
-  for (let day = 1; day <= 2000; day++) {
+  for (let day = 1; day <= 6000; day++) {
     const result = tick(
       state,
       day === 1 ? [{ kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' }] : [],
       fixtureWorld(),
       [
         economy,
+        ...(growing ? [population] : []),
         (state) => {
           state.day = (state.day + 1) as Day;
         },
@@ -125,5 +138,22 @@ function goldOnly(): GameState {
   required(state.factions[f.rome]).stores.gold = 2500;
   for (const id of required(state.armies[f.romanArmy]).formations)
     required(state.formations[id]).men = 2000;
+  return state;
+}
+
+/** Rome's people and full granary as they are, with one army sized so the food balance after a spearmen raise is `after`. */
+function foodDeficitAfterSpearmen(after: number): GameState {
+  const state = buildFixture();
+  for (const city of Object.values(state.cities))
+    if (city.owner === f.rome) city.population = 200_000;
+  const formations = required(state.armies[f.romanArmy]).formations;
+  const first = required(state.formations[required(formations[0])]);
+  const now = required(dailyBalances(state).get(f.rome)).food;
+  const raised = now - TROOPS.spearmen.recruit.men * UPKEEP_PER_MAN.food;
+  first.men += Math.round((raised - after) / UPKEEP_PER_MAN.food);
+  const stores = required(state.factions[f.rome]).stores;
+  stores.food = required(limitsOf(state).get(f.rome)).food;
+  stores.gold = 100_000;
+  stores.manpower = 100_000;
   return state;
 }

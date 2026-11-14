@@ -46,11 +46,13 @@ describe('warnings before a cautious player loses men or cities', () => {
     expect(forecast.after.food).toBeCloseTo(balance.food - 18);
     expect(forecast.after.gold).toBeCloseTo(balance.gold - 30);
     expect(forecast.warning).toContain('Food shortfall');
-    expect(forecast.warning).not.toContain('Gold shortfall');
-    expect(forecast.lasts.gold).toBeGreaterThan(365);
+    expect(forecast.short.gold).toBeGreaterThan(365);
+    expect(forecast.warning).toContain(
+      `Gold shortfall: stores run short in about ${forecast.short.gold} days`,
+    );
     expect(forecast.runway.find((store) => store.key === 'gold')).toMatchObject({
-      urgent: false,
-      text: `about ${forecast.lasts.gold?.toLocaleString('en-US')} days left`,
+      urgent: true,
+      text: `about ${forecast.short.gold?.toLocaleString('en-US')} days left as the people grow`,
     });
     let actual = state;
     let ranShortOn = 0;
