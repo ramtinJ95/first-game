@@ -1,0 +1,117 @@
+[
+  {
+    "file": "before-gaul.png",
+    "title": "before: Open Gaul south of Lutetia, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-italy.png",
+    "title": "before: Farmland east of Roma, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-delta.png",
+    "title": "before: The Nile delta, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-anatolia.png",
+    "title": "before: Anatolia east of Ankyra, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-plateau.png",
+    "title": "before: The Persian plateau north of Persepolis, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-steppe.png",
+    "title": "before: The steppe north-east of Olbia, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-iberia.png",
+    "title": "before: The Iberian interior south of Numantia, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-tatta.png",
+    "title": "before: Lake Tatta (Tuz), closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-urmia.png",
+    "title": "before: Lake Urmia, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-garda.png",
+    "title": "before: Lake Garda, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-gaul.png",
+    "title": "after: Open Gaul south of Lutetia, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-italy.png",
+    "title": "after: Farmland east of Roma, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-delta.png",
+    "title": "after: The Nile delta, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-anatolia.png",
+    "title": "after: Anatolia east of Ankyra, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-plateau.png",
+    "title": "after: The Persian plateau north of Persepolis, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-steppe.png",
+    "title": "after: The steppe north-east of Olbia, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-iberia.png",
+    "title": "after: The Iberian interior south of Numantia, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-tatta.png",
+    "title": "after: Lake Tatta (Tuz), closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-urmia.png",
+    "title": "after: Lake Urmia, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-garda.png",
+    "title": "after: Lake Garda, closest zoom, the same day-1 view",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Natural shores, varied relief, and all seven regions at the closest zoom, before and after",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Natural shores, varied relief, and all seven regions at the closest zoom, before and after (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Natural shores, varied relief, and all seven regions at the closest zoom, before and after (Playwright trace)",
+    "kind": "trace"
+  }
+]

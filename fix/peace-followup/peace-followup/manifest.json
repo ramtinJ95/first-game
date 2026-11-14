@@ -1,0 +1,57 @@
+[
+  {
+    "file": "winning-second-front.png",
+    "title": "151 Roman casualties and a second war do not buy free early peace: Carthage names Egypt and still asks 100 gold",
+    "kind": "screenshot"
+  },
+  {
+    "file": "quick-offer-ready.png",
+    "title": "Suggested terms explicitly say Send offer, not an ambiguous promise of payment",
+    "kind": "screenshot"
+  },
+  {
+    "file": "quick-offer-sent.png",
+    "title": "One click really queues the payment offer, confirms it is sent, and disables duplicate sends",
+    "kind": "screenshot"
+  },
+  {
+    "file": "incoming-price-rise.png",
+    "title": "An incoming 5,100-gold demand against 8,940 held; the rise from 4,500 and the new conquest are explained",
+    "kind": "screenshot"
+  },
+  {
+    "file": "price-rise-news.png",
+    "title": "The same treasury, old and new prices, and changed war facts remain in the offer news",
+    "kind": "screenshot"
+  },
+  {
+    "file": "incoming-unaffordable.png",
+    "title": "After spending, 8,800 held cannot pay 8,900: the shortfall is explicit and Accept is disabled",
+    "kind": "screenshot"
+  },
+  {
+    "file": "calendar-talks.png",
+    "title": "The existing shared year/day form covers both the war start and the first day of talks",
+    "kind": "screenshot"
+  },
+  {
+    "file": "calendar-truce.png",
+    "title": "A late-game truce keeps a duration in days and its deadline in calendar form, never raw day 3914",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A second front is a discount, not a free truce; suggested terms send, and incoming prices explain affordability and rises",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A second front is a discount, not a free truce; suggested terms send, and incoming prices explain affordability and rises (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A second front is a discount, not a free truce; suggested terms send, and incoming prices explain affordability and rises (Playwright trace)",
+    "kind": "trace"
+  }
+]
