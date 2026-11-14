@@ -1,5 +1,12 @@
 import type { DeepReadonly } from '../../sim/deep-readonly.ts';
-import type { ArmyId, BattleId, CityId, FactionId, FormationId } from '../../sim/ids.ts';
+import type {
+  ArmyId,
+  BattleId,
+  CityId,
+  FactionId,
+  FormationId,
+  TradeRouteId,
+} from '../../sim/ids.ts';
 import type { Sight } from '../../sim/sight.ts';
 import type { Army, Stance } from '../../sim/state/army.ts';
 import type { Battle } from '../../sim/state/battle.ts';
@@ -29,6 +36,7 @@ import {
 import { FADE_FROM, FALL_DAYS, STEP_DAYS, formationDay, type FormationDay } from './losses.ts';
 import { seeded } from './seed.ts';
 import { alongTrail, dayPath, trailLength } from './trail.ts';
+import { tradePose } from '../trade.ts';
 
 /** The colours the sheet paints, in its order: the five powers, then every minor city. */
 export const SHEET_COLOURS: readonly number[] = [...Object.values(POWER_COLOURS), MINOR_COLOUR];
@@ -69,6 +77,7 @@ export interface Sprite {
   readonly depth: number;
   /** The army a click on this sprite selects, and the box it answers to. */
   readonly army?: ArmyId;
+  readonly trade?: TradeRouteId;
   readonly hit?: {
     readonly left: number;
     readonly top: number;
@@ -226,6 +235,7 @@ export function buildScene(input: SceneInput): Scene {
   ctx.armies();
   ctx.convoys();
   ctx.columns();
+  ctx.traders();
   scene.sprites.sort((a, b) => a.depth - b.depth);
   return scene;
 }
@@ -290,7 +300,7 @@ class Context {
    * figure that the layout of its army could not keep on land, such as a man running from
    * a broken line toward the shore, or undefined when there is none, and it is not drawn.
    */
-  nudge(x: number, y: number, kind: FigureKind, besieged?: CityId): MapPoint | undefined {
+  nudge(x: number, y: number, kind: GroundArt, besieged?: CityId): MapPoint | undefined {
     const fits = (px: number, py: number) =>
       this.dry(px, py, kind) && (!besieged || !this.covers(px, py, this.h, besieged));
     if (fits(x, y)) return { x, y };
@@ -1439,6 +1449,128 @@ class Context {
       }
       if (army && box.left < Infinity) {
         for (const id of convoy.armies) this.scene.armyBoxes.set(id, box);
+      }
+    }
+  }
+
+  traders() {
+    const { previous, current, progress, sight, motion, now } = this.input;
+    for (const route of Object.values(current.tradeRoutes)) {
+      const raid = route.raid;
+      const age = raid ? current.day + progress - raid.on : Infinity;
+      if (
+        raid &&
+        age < 6 &&
+        (route.owner === current.player ||
+          route.partner === current.player ||
+          sight.sees(raid.position))
+      ) {
+        const at = this.screen(raid.position);
+        if (this.inView(at)) {
+          const colour = colourIndex(current, route.owner);
+          const ground = this.nudge(at.x, at.y, 'cart');
+          if (ground)
+            this.push({
+              key: `${artKey('cart')}@${colour}`,
+              x: ground.x,
+              y: ground.y,
+              size: this.h * 0.65,
+              mirror: false,
+              alpha: 1 - age / 6,
+              rotation: -0.3,
+              depth: 1e7 + ground.y,
+              trade: route.id,
+            });
+          for (let i = 0; i < 3; i++)
+            this.push({
+              key: artKey('dust'),
+              x: at.x + (i - 1) * this.h * 0.35,
+              y: at.y - this.h * (0.1 + frac(now * 0.2 + i / 3) * 0.5),
+              size: this.h * 0.7,
+              mirror: false,
+              alpha: (1 - age / 6) * 0.35,
+              rotation: 0,
+              depth: at.y + 1,
+              trade: route.id,
+            });
+        }
+      }
+      const before = previous.tradeRoutes[route.id];
+      const pose = tradePose(before, route, progress);
+      if (!pose) continue;
+      if (
+        route.owner !== current.player &&
+        route.partner !== current.player &&
+        !sight.sees(pose.point)
+      )
+        continue;
+      const base = this.screen(pose.point);
+      if (!this.inView(base)) continue;
+      const colour = colourIndex(current, route.owner);
+      const walking = current.day >= route.departsOn;
+      const phase = motion * 0.8 + seeded(route.id);
+      const mirror = pose.heading.x < 0;
+      if (route.mode === 'sea') {
+        const bob = Math.sin(now * 1.4 + seeded(route.id) * 6) * 0.04 * this.h;
+        const frame = Math.floor(frac(phase) * OWNED.ship) % OWNED.ship;
+        this.push({
+          key: `${artKey('ship', frame)}@${colour}`,
+          x: base.x,
+          y: base.y + bob,
+          size: this.h * 0.85,
+          mirror,
+          alpha: 1,
+          rotation: 0,
+          depth: base.y,
+          trade: route.id,
+        });
+        const stern = { x: base.x - pose.heading.x * this.h, y: base.y - pose.heading.y * this.h };
+        for (const side of [-1, 1])
+          this.scene.wakes.push({
+            alpha: 0.6,
+            points: [
+              stern,
+              {
+                x: stern.x - pose.heading.x * this.h * 1.6 - pose.heading.y * side * this.h * 0.4,
+                y: stern.y - pose.heading.y * this.h * 1.6 + pose.heading.x * side * this.h * 0.25,
+              },
+            ],
+          });
+        continue;
+      }
+      const cart = this.nudge(base.x, base.y, 'cart');
+      if (cart)
+        this.push({
+          key: `${artKey('cart', Math.floor(frac(walking ? phase : 0) * OWNED.cart))}@${colour}`,
+          x: cart.x,
+          y: cart.y,
+          size: this.h * 0.85,
+          mirror,
+          alpha: 1,
+          rotation: 0,
+          depth: cart.y,
+          trade: route.id,
+        });
+      for (const [i, kind] of (['refugee', 'refugeeWoman'] as const).entries()) {
+        const back = (i === 0 ? -1.15 : 1.2) * this.h;
+        const at = this.nudge(
+          base.x - pose.heading.x * back,
+          base.y - pose.heading.y * back * GROUND_Y,
+          kind,
+        );
+        if (!at) continue;
+        const activity = walking ? 'march' : 'stand';
+        this.push({
+          key: `${figureKey(kind, activity, frameOf(activity, phase + i * 0.4))}@${colour}`,
+          x: at.x,
+          y: at.y,
+          size: this.h * 0.85,
+          mirror,
+          alpha: 1,
+          rotation: 0,
+          depth: at.y,
+          trade: route.id,
+        });
       }
     }
   }
