@@ -53,22 +53,28 @@ test('inhabited coast is within 8.15 km of the physical coast in both continuous
   const shared = coast.lines.filter((line) => inhabitedPoints.has(line[0] as Point));
   const physical = new CoastDistance(map.coastline);
   const art = new CoastDistance(coast.lines);
+  let drawnToPhysical = 0,
+    physicalToDrawn = 0;
   for (const point of coastSamples(shared))
-    expect(physical.nearest(point).distance + SAMPLE_KM / 2).toBeLessThanOrEqual(8.15);
+    drawnToPhysical = Math.max(drawnToPhysical, physical.nearest(point).distance + SAMPLE_KM / 2);
   for (const point of coastSamples(map.coastline))
-    expect(art.nearest(point).distance + SAMPLE_KM / 2).toBeLessThanOrEqual(8.15);
+    physicalToDrawn = Math.max(physicalToDrawn, art.nearest(point).distance + SAMPLE_KM / 2);
+  expect(drawnToPhysical).toBeLessThanOrEqual(8.15);
+  expect(physicalToDrawn).toBeLessThanOrEqual(8.15);
 });
 
 test('scenery is disjoint from physical land and never a province or land order target', () => {
   const art = atlasCoast(map);
   expect(drawing.scenery.length).toBeGreaterThan(100);
   const physical = landOutline(map);
-  for (const p of drawing.scenery) {
+  const scenery = drawing.scenery.map((p) => {
     const polygon = art.land[p];
     if (!polygon) throw new Error(`missing scenery ${p}`);
-    expect(intersection([polygon], physical)).toEqual([]);
-    for (const [x, y] of polygon.flat()) expect(provinceAt(map, { x, y })).toBeUndefined();
-  }
+    return polygon;
+  });
+  expect(intersection(scenery, physical)).toEqual([]);
+  const targets = scenery.flat(2).map(([x, y]) => provinceAt(map, { x, y }));
+  expect(targets.every((target) => target === undefined)).toBe(true);
 });
 
 test('every unchanged city position still stands on drawn land', () => {
