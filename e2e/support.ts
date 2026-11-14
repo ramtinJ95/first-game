@@ -72,6 +72,7 @@ export async function openGame(
   const asked = [query, pauses ? '' : 'pauses=off'].filter(Boolean).join('&');
   await page.goto(`${base}/?play=${power}${asked ? `&${asked}` : ''}`);
   await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+  await untilDrawn(page);
 }
 
 /**

@@ -1,9 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { planCommand } from '../src/app/command.ts';
+import { zoomAt, wheelFactor } from '../src/render/camera.ts';
+import { BANNER } from '../src/render/markers.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 import {
   armyOf,
   camera,
+  cityPoint,
   idleBesideEnemyCity,
   map,
   openGame,
@@ -13,14 +16,43 @@ import {
 } from './support.ts';
 import { loadSave } from './watch.ts';
 
-test.use({ storageState: { cookies: [], origins: [] } });
-
 const errors: string[] = [];
 test.beforeEach(({ page }) => {
   errors.length = 0;
   page.on('pageerror', (error) => errors.push(error.message));
 });
 test.afterEach(() => expect(errors).toEqual([]));
+
+test('opening a game waits for its first completed map before a map click', async ({ page }) => {
+  await page.addInitScript(() => {
+    let held = true;
+    Reflect.set(window, 'releaseFirstFrame', () => {
+      held = false;
+    });
+    const status = WebGL2RenderingContext.prototype.getSyncParameter;
+    WebGL2RenderingContext.prototype.getSyncParameter = function (sync, name) {
+      if (held && name === this.SYNC_STATUS) {
+        document.querySelector('canvas')?.setAttribute('data-test-first-frame-held', 'yes');
+        return this.UNSIGNALED;
+      }
+      return status.call(this, sync, name);
+    };
+  });
+  let returned = false;
+  const opened = openGame(page).then(() => {
+    returned = true;
+  });
+  await expect(page.getByTestId('map')).toHaveAttribute('data-test-first-frame-held', 'yes');
+  expect(returned).toBe(false);
+  await page.evaluate(() => {
+    const release = Reflect.get(window, 'releaseFirstFrame') as () => void;
+    release();
+  });
+  await opened;
+  const city = camera(page).screen(cityPoint('mediolanum'));
+  await page.mouse.click(city.x, city.y);
+  await expect(page.getByTestId('city-name')).toHaveText('Mediolanum');
+});
 
 test('the order-paths close-up waits for its first sheet and keeps a pickable flag meanwhile', async ({
   page,
@@ -51,8 +83,8 @@ test('the order-paths close-up waits for its first sheet and keeps a pickable fl
     returned = true;
   });
   const canvas = page.getByTestId('map');
-  await expect(canvas).toHaveAttribute('data-zoom', '2.0000');
   await page.waitForFunction(() => Reflect.has(window, 'releaseSheet'));
+  await expect(canvas).toHaveAttribute('data-zoom', '2.0000');
   expect(returned).toBe(false);
   const pending = await canvas.evaluate((element) => ({
     latest: Number(element.dataset['latestView']),
@@ -206,4 +238,85 @@ test('a right click during a held GPU frame orders the visible map point, not th
   });
   await untilDrawn(page);
   await expect(canvas).not.toHaveAttribute('data-zoom', '0.6000');
+});
+
+test('a frame that finishes between draw polls is pickable immediately', async ({ page }) => {
+  await page.addInitScript(() => {
+    let armed = false;
+    let held = false;
+    let submitted: WebGL2RenderingContext | undefined;
+    Reflect.set(window, 'armFrame', () => {
+      armed = true;
+    });
+    Reflect.set(window, 'finishFrame', () => {
+      submitted?.finish();
+      held = false;
+    });
+    const fence = WebGL2RenderingContext.prototype.fenceSync;
+    WebGL2RenderingContext.prototype.fenceSync = function (condition, flags) {
+      const sync = fence.call(this, condition, flags);
+      if (armed) {
+        armed = false;
+        held = true;
+        submitted = this;
+        document.querySelector('canvas')?.setAttribute('data-test-frame-submitted', 'yes');
+      }
+      return sync;
+    };
+    const status = WebGL2RenderingContext.prototype.getSyncParameter;
+    WebGL2RenderingContext.prototype.getSyncParameter = function (sync, name) {
+      if (held && name === this.SYNC_STATUS) return this.UNSIGNALED;
+      return status.call(this, sync, name);
+    };
+  });
+  await openGame(page);
+  await pause(page);
+  const state = idleBesideEnemyCity('mediolanum');
+  await loadSave(page, state);
+  const army = armyOf(state, rome);
+  if (army.activity.kind !== 'idle') throw new Error('no idle army');
+  const view = camera(page);
+  await view.jumpTo(army.activity.position, 0.6);
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error('no viewport');
+  const anchor = { x: 800, y: 500 };
+  const next = zoomAt(view.camera, anchor, wheelFactor(100), viewport, map);
+  const foot = {
+    x: (army.activity.position.x - next.centre.x) * next.scale + viewport.width / 2,
+    y: (army.activity.position.y - next.centre.y) * next.scale + viewport.height / 2,
+  };
+  const point = { x: foot.x + BANNER.flagWidth - 2, y: foot.y - BANNER.pole + 2 };
+  const canvas = page.getByTestId('map');
+  await canvas.evaluate((element, anchor) => {
+    const arm = Reflect.get(window, 'armFrame') as () => void;
+    arm();
+    element.dispatchEvent(
+      new WheelEvent('wheel', {
+        clientX: anchor.x,
+        clientY: anchor.y,
+        deltaY: 100,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }, anchor);
+  await expect(canvas).toHaveAttribute('data-test-frame-submitted', 'yes');
+  await expect(canvas).toHaveAttribute('data-zoom', '0.6000');
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await canvas.evaluate((element, point) => {
+    const finish = Reflect.get(window, 'finishFrame') as () => void;
+    finish();
+    element.dispatchEvent(
+      new PointerEvent('pointerup', {
+        clientX: point.x,
+        clientY: point.y,
+        pointerId: 1,
+        button: 0,
+        bubbles: true,
+      }),
+    );
+  }, point);
+  await page.mouse.up();
+  await expect(page.getByTestId('army-name')).toHaveText('First Legion');
 });

@@ -1085,6 +1085,7 @@ export async function createRenderer({
     'pointerup',
     (event) => {
       if (event.pointerId !== drag?.pointer) return;
+      if (!drag.moved) settleFrame();
       if (!drag.moved && displayed) {
         const view = displayed;
         const screen = local(event);
@@ -1129,6 +1130,7 @@ export async function createRenderer({
     'contextmenu',
     (event) => {
       event.preventDefault();
+      settleFrame();
       if (!onCommand || !displayed) return;
       const view = displayed;
       const screen = local(event);
@@ -1166,6 +1168,12 @@ export async function createRenderer({
     }
     canvas.dataset['zoom'] = view.camera.scale.toFixed(4);
   };
+  function settleFrame(): boolean {
+    if (!pacer.ready()) return false;
+    if (fenced) finished(fenced);
+    fenced = undefined;
+    return true;
+  }
   const onResize = () => {
     camera = clampCamera(camera, viewport(), map);
     moveCamera();
@@ -1186,9 +1194,7 @@ export async function createRenderer({
       const given = String(stateId(current));
       if (canvas.dataset['latestState'] !== given) canvas.dataset['latestState'] = given;
       // Held frames keep both the picture and its hit geometry unchanged.
-      if (!pacer.ready()) return false;
-      if (fenced) finished(fenced);
-      fenced = undefined;
+      if (!settleFrame()) return false;
       const now = performance.now();
       let dirty = cameraMoved;
       if (washStrength(camera.scale).greatPower !== washedAt) recolour(current);
