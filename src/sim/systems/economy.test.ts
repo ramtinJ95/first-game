@@ -396,6 +396,7 @@ describe('armies that stand together', () => {
       owner: FIXTURE.rome,
       formations: [formation],
       stance: 'holdTheLine',
+      name: 'Second Legion',
       generalSkill: 7,
       activity: { kind: 'idle', position: { x: roma.position.x + 5, y: roma.position.y } },
     };

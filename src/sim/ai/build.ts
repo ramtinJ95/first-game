@@ -32,7 +32,7 @@ const CHEAPEST = Math.min(...BUILDING_KINDS.map((kind) => BUILDINGS[kind].gold))
  * What a building in the city is worth to its owner in gold a day. Gold counts as it
  * is, manpower at MANPOWER_PRICE, and food at FOOD_PRICE while the realm's harvest feeds
  * fewer than FOOD_MARGIN_MEN more men. On a border, towers are worth the
- * upkeep of the field army their garrison spares. A temple is worth the output it saves
+ * upkeep of the field army their garrison spares. A temple is worth the gold and manpower it saves
  * in CONQUESTS_A_YEAR cities like the nearest city of another faction in its reach, and
  * towers behind the border and a temple with no city to take are worth nothing.
  */
@@ -48,10 +48,7 @@ export function buildingWorth(state: State, city: CityView, kind: BuildingKind):
     const target = nearestForeign(state, city, BUILDINGS.temple.reachKm, true);
     if (target && !calmedAlready(state, city, target)) {
       const output =
-        target.population *
-        (OUTPUT_PER_PERSON.gold +
-          OUTPUT_PER_PERSON.food * FOOD_PRICE +
-          OUTPUT_PER_PERSON.manpower * MANPOWER_PRICE);
+        target.population * (OUTPUT_PER_PERSON.gold + OUTPUT_PER_PERSON.manpower * MANPOWER_PRICE);
       const savedDays =
         ((1 - UNREST_OUTPUT) / 2) * UNREST_DAYS * (1 - 1 / BUILDINGS.temple.unrestPace);
       worth += (CONQUESTS_A_YEAR / 365) * savedDays * output;

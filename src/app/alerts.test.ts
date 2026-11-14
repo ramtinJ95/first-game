@@ -293,12 +293,12 @@ describe('alertsOfDay', () => {
     expect(deserted[0]?.text).toMatch(/^\d+ men deserted First Legion at Roma$/);
   });
 
-  it('tells that an army arrived when it joins the army standing at the city', () => {
+  it('tells, by its own name, that an army arrived when it joins the army standing at the city', () => {
     const state = buildFixture();
     const roma = state.cities[f.roma];
     const first = state.armies[f.romanArmy];
     if (!roma || !first) throw new Error('fixture changed');
-    first.activity = { kind: 'idle', position: { ...roma.position } };
+    first.activity = { kind: 'idle', position: { x: roma.position.x + 5, y: roma.position.y } };
     const id = 'army-roman-2' as ArmyId;
     const formation = 'formation-roman-2' as FormationId;
     state.formations[formation] = {
@@ -313,6 +313,7 @@ describe('alertsOfDay', () => {
       owner: f.rome,
       formations: [formation],
       stance: 'holdTheLine',
+      name: 'Second Legion',
       generalSkill: 0,
       activity: { kind: 'idle', position: { x: roma.position.x + 40, y: roma.position.y } },
     };
@@ -321,6 +322,7 @@ describe('alertsOfDay', () => {
     expect(after.armies[id]).toBeUndefined();
     const arrivals = ofKind(alerts, 'armyArrived');
     expect(arrivals).toHaveLength(1);
+    expect(arrivals[0]?.text).toMatch(/^Second Legion arrived /);
     expect(arrivals[0]?.focus?.select).toEqual({ kind: 'army', army: f.romanArmy });
   });
 
