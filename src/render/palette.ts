@@ -31,8 +31,8 @@ export const MINOR_COLOUR = 0x667c94;
  */
 export const WASH_STRENGTH = { greatPower: 0.34, minor: 0.14 } as const;
 
-/** At atlas scale ownership wins; close in, the original light washes win. */
-export const WIDE_WASH_STRENGTH = { greatPower: 0.6, minor: 0.3 } as const;
+/** Atlas minors keep their ground colour; powers stand out by their wash. */
+export const WIDE_WASH_STRENGTH = { greatPower: 0.6, minor: 0 } as const;
 
 export function washStrength(scale: number): { greatPower: number; minor: number } {
   const t = Math.round(Math.max(0, Math.min(1, (0.9 - scale) / 0.5)) * 16) / 16;

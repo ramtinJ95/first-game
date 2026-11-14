@@ -4,20 +4,17 @@ import { MINOR_COLOUR, POWER_COLOURS, washStrength, WASH_STRENGTH } from './pale
 import { WASH_GROUNDS } from '../../scripts/map-colours.ts';
 import { WASH_DESERT_GAIN } from './washes.ts';
 
-const colours = { ...POWER_COLOURS, minors: MINOR_COLOUR };
-
-test('atlas washes differ from bare ground and every other owner by at least ΔE76 10', () => {
+test('atlas power washes differ from ground and every other power by at least ΔE76 10', () => {
   for (const [ground, colour] of Object.entries(WASH_GROUNDS)) {
     const strengths = washStrength(0.17);
-    const washed = Object.entries(colours).map(
+    const washed = Object.entries(POWER_COLOURS).map(
       ([owner, tint]) =>
         [
           owner,
           washTint(
             colour,
             tint,
-            (owner === 'minors' ? strengths.minor : strengths.greatPower) *
-              (ground === 'desert' ? WASH_DESERT_GAIN : 1),
+            strengths.greatPower * (ground === 'desert' ? WASH_DESERT_GAIN : 1),
           ),
         ] as const,
     );
@@ -36,11 +33,25 @@ test('atlas washes differ from bare ground and every other owner by at least ΔE
   }
 });
 
+test('minor land keeps every ground colour unchanged throughout the atlas zoom band', () => {
+  for (const scale of [0, 0.17, 0.4]) {
+    const strength = washStrength(scale).minor;
+    expect(strength).toBe(0);
+    for (const [ground, colour] of Object.entries(WASH_GROUNDS)) {
+      expect(
+        washTint(colour, MINOR_COLOUR, strength * (ground === 'desert' ? WASH_DESERT_GAIN : 1)),
+        `${ground} at ${scale} px/km`,
+      ).toBe(colour);
+    }
+  }
+});
+
 test('close washes keep the original light strengths, with a monotonic atlas handover', () => {
   expect(washStrength(1)).toEqual(WASH_STRENGTH);
   expect(washStrength(4)).toEqual(WASH_STRENGTH);
   for (let s = 0.17; s < 1; s += 0.01) {
     expect(washStrength(s).greatPower).toBeGreaterThanOrEqual(washStrength(s + 0.01).greatPower);
+    expect(washStrength(s).minor).toBeLessThanOrEqual(washStrength(s + 0.01).minor);
   }
 });
 

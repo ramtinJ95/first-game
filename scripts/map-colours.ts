@@ -19,9 +19,9 @@ export function colourReport(): string {
   const lines = [
     '# Atlas ownership contrast',
     '',
-    'CIE76 ΔE, D65 Lab converted from sRGB. Each cell is **before → after**; dash is self-comparison. Floor: **10** for every owner against the bare ground and every other owner on that same ground, including minors. Regenerate with `node scripts/map-colours.ts`.',
+    'CIE76 ΔE, D65 Lab converted from sRGB. Each cell is **before → after**; dash is self-comparison. Floor: **10** between every pair of powers and between each power and each ground swatch. Minors have no atlas wash: their difference from ground is deliberately **0**, not subject to the floor. Power/minor contrast is therefore the power/ground contrast; boundary ink separates neighbouring minors. Regenerate with `node scripts/map-colours.ts`.',
     '',
-    'These are full-strength wash interiors at atlas scale (0.17 px/km), using the actual normal-alpha composition and desert gain. Border fades necessarily reach zero; owner-coloured boundary ink carries those edges, and a cream halo/double-weight stroke identifies the player first. Relief ink and opaque drawing highlights are not ownership pixels. The mountain row is the representative shaded-ground swatch, not a claim that opaque ink is tinted. At 0.9 px/km and closer the original 0.34/0.14 wash strengths return.',
+    'These are full-strength wash interiors at atlas scale (0.17 px/km), using the actual normal-alpha composition and desert gain. The owner chose unwashed minors after reviewing the first PR captures: sand stays sand and forest stays forest across the predominantly minor-held opening map. Minors remain unwashed through 0.4 px/km; the original light 0.34/0.14 power/minor strengths return by 0.9 px/km. Border fades necessarily reach zero; owner-coloured boundary ink carries those edges, and a cream halo/double-weight stroke identifies the player first. Relief ink and opaque drawing highlights are not ownership pixels. The mountain row is the representative shaded-ground swatch, not a claim that opaque ink is tinted.',
   ];
   for (const [ground, colour] of Object.entries(WASH_GROUNDS)) {
     const washes = (colours: typeof before, strengths: { greatPower: number; minor: number }) =>
