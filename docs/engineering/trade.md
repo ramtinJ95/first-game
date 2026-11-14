@@ -189,5 +189,24 @@ an invitation whose Accept is disabled for want of a slot and refuse it into the
 and check that the partner list leads with agreeing cities and is reachable at 390 px.
 The `trade-told` capture shows the quote with its risk, the list, the war lines, Close
 route, an invitation, the news, and the list on a phone. The first look is intentionally
-a plain moving marker; drawn trade figures, selected routes, map goods and the guide are
-later work.
+a plain moving marker. Drawing trade below covers the drawn figures, selected routes, map
+goods, raids and the guide.
+
+## Drawing trade
+
+`src/render/trade.ts` interpolates a crossing through arrival before reversing it and
+adds a province's stored good to its existing city label from 0.9 px/km. The existing
+label collision rule decides where it fits. Selecting a city draws its active routes
+with the same dashed ink and halo as army paths.
+
+The army scene reuses its owned cart, civilian walking cycles and ship sheets for
+merchants, with a wake at sea and dry-ground checks on land. Own trade stays known;
+foreign traders require sight. They do not grant sight or reveal hostile armies.
+The last road raid is readonly saved data, under the separate `trade-raid-marks`
+change. It shows a damaged cart, settling dust and a marked location for six days.
+
+`trade-look` captures both zooms for cart and ship, selected routes, goods and the
+raid. It waits for terrain and exact-resolution figure sheets, not a fixed sleep or
+a blurry fallback. It opts into a 90-second **recording cap** so the clip includes
+the ship and raid after the caravan; scenario and test execution timeouts are
+unchanged. Other scenarios keep the existing 12-second recording cap.
