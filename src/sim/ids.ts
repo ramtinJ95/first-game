@@ -9,6 +9,7 @@ export const ConvoyIdSchema = v.pipe(v.string(), v.brand('ConvoyId'));
 export const RefugeeColumnIdSchema = v.pipe(v.string(), v.brand('RefugeeColumnId'));
 export const BattleIdSchema = v.pipe(v.string(), v.brand('BattleId'));
 export const SiegeIdSchema = v.pipe(v.string(), v.brand('SiegeId'));
+export const TradeRouteIdSchema = v.pipe(v.string(), v.brand('TradeRouteId'));
 
 export type FactionId = v.InferOutput<typeof FactionIdSchema>;
 export type ProvinceId = v.InferOutput<typeof ProvinceIdSchema>;
@@ -19,6 +20,7 @@ export type ConvoyId = v.InferOutput<typeof ConvoyIdSchema>;
 export type RefugeeColumnId = v.InferOutput<typeof RefugeeColumnIdSchema>;
 export type BattleId = v.InferOutput<typeof BattleIdSchema>;
 export type SiegeId = v.InferOutput<typeof SiegeIdSchema>;
+export type TradeRouteId = v.InferOutput<typeof TradeRouteIdSchema>;
 
 interface IdOfKind {
   faction: FactionId;
@@ -30,6 +32,7 @@ interface IdOfKind {
   refugeeColumn: RefugeeColumnId;
   battle: BattleId;
   siege: SiegeId;
+  tradeRoute: TradeRouteId;
 }
 
 /** The counter's ceiling. A counter at it is spent: it is still exact, but it hands out no more ids. */

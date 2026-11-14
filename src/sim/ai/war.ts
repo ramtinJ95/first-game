@@ -2,6 +2,7 @@ import type { FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import { truceBetween } from '../peace/truce.ts';
 import { distance } from '../world/find-path.ts';
+import { tradeIncome } from '../trade/routes.ts';
 import type { Context } from './armies.ts';
 import {
   canFight,
@@ -101,9 +102,21 @@ export function warDeclaration(context: Context): Order[] {
       : rivals.has(other)
         ? Math.min(odds, RIVAL_ODDS)
         : odds * sated;
+  const income = tradeIncome(state).get(faction) ?? 0;
+  const tradeCost = (other: FactionId) =>
+    Object.values(state.tradeRoutes)
+      .filter(
+        (r) =>
+          r.status === 'running' &&
+          r.blocked === null &&
+          ((r.owner === faction && r.partner === other) ||
+            (r.partner === faction && r.owner === other)),
+      )
+      .reduce((sum, r) => sum + r.daily, 0);
   const scoreOf = (other: FactionId, theirs: number, km: number) =>
     free /
     Math.max(1, theirs) /
+    (1 + Math.min(0.25, (tradeCost(other) / Math.max(1, income)) * 0.25)) /
     (needed(other) * (enemies.size === 0 ? 1 : 1 + km / WAR_DISTANCE_KM));
 
   // A neighbour scores at most its best city in reach would with no army near it, so

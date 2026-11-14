@@ -11,6 +11,7 @@ import type { Stores } from '../state/faction.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
 import { TROOPS } from '../troops.ts';
+import { tradeIncome } from '../trade/routes.ts';
 
 /** What one person of a calm city adds to the owner's stores each day. */
 export const OUTPUT_PER_PERSON: Readonly<Stores> = {
@@ -63,7 +64,7 @@ export const RALLY_DISTANCE = 10;
 export function economy(state: GameState): void {
   muster(state);
   const limits = limitsOf(state);
-  for (const [id, balance] of dailyBalances(state)) {
+  for (const [id, balance] of dailyBalances(state, false)) {
     const stores = state.factions[id]?.stores;
     const limit = limits.get(id);
     if (!stores || !limit) continue;
@@ -109,11 +110,15 @@ export function limitsOf(state: DeepReadonly<GameState>): Map<FactionId, Stores>
     limit.food += GRANARY_DAYS * men * UPKEEP_PER_MAN.food;
     limit.manpower -= men;
   }
+  for (const [owner, income] of tradeIncome(state)) of(owner).gold += TREASURY_DAYS * income;
   return limits;
 }
 
 /** Each faction's income less its upkeep for one day, with the state as it stands. */
-export function dailyBalances(state: DeepReadonly<GameState>): Map<FactionId, Stores> {
+export function dailyBalances(
+  state: DeepReadonly<GameState>,
+  includeTrade = true,
+): Map<FactionId, Stores> {
   const balances = new Map<FactionId, Stores>();
   const of = (faction: FactionId) => {
     let balance = balances.get(faction);
@@ -140,11 +145,12 @@ export function dailyBalances(state: DeepReadonly<GameState>): Map<FactionId, St
     balance.gold -= men * UPKEEP_PER_MAN.gold;
     balance.food -= men * UPKEEP_PER_MAN.food;
   }
+  if (includeTrade) for (const [owner, income] of tradeIncome(state)) of(owner).gold += income;
   return balances;
 }
 
 /** The share of its gold and manpower each city of a faction yields for the realm's size. */
-function adminShares(state: DeepReadonly<GameState>): Map<FactionId, number> {
+export function adminShares(state: DeepReadonly<GameState>): Map<FactionId, number> {
   const cities = new Map<FactionId, number>();
   for (const city of Object.values(state.cities)) {
     cities.set(city.owner, (cities.get(city.owner) ?? 0) + 1);

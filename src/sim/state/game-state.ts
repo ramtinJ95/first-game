@@ -10,6 +10,7 @@ import {
   ProvinceIdSchema,
   RefugeeColumnIdSchema,
   SiegeIdSchema,
+  TradeRouteIdSchema,
 } from '../ids.ts';
 import { RngStateSchema } from '../rng.ts';
 import { ArmySchema } from './army.ts';
@@ -24,6 +25,7 @@ import { ProvinceSchema } from './province.ts';
 import { RefugeeColumnSchema } from './refugee-column.ts';
 import { SiegeSchema } from './siege.ts';
 import { WarKeySchema, WarSchema } from './war.ts';
+import { TradeRouteSchema } from './trade-route.ts';
 
 /**
  * The whole game as plain data. Each collection maps a record's id to the record.
@@ -49,6 +51,7 @@ export const GameStateSchema = v.object({
   peaceOffers: v.record(WarKeySchema, PeaceOfferSchema),
   /** Each pair of factions that made peace and may not declare war on each other yet. */
   truces: v.record(WarKeySchema, TruceSchema),
+  tradeRoutes: v.record(TradeRouteIdSchema, TradeRouteSchema),
 });
 
 export type GameState = v.InferOutput<typeof GameStateSchema>;

@@ -77,10 +77,10 @@ export function buildFixture(seed = 1): GameState {
       },
     },
     provinces: {
-      [f.latium]: { id: f.latium, name: 'Latium', city: f.roma },
-      [f.campania]: { id: f.campania, name: 'Campania', city: f.capua },
-      [f.africa]: { id: f.africa, name: 'Africa', city: f.carthago },
-      [f.sicilia]: { id: f.sicilia, name: 'Sicilia', city: f.syracusae },
+      [f.latium]: { id: f.latium, name: 'Latium', city: f.roma, good: 'grain' },
+      [f.campania]: { id: f.campania, name: 'Campania', city: f.capua, good: 'iron' },
+      [f.africa]: { id: f.africa, name: 'Africa', city: f.carthago, good: 'luxuries' },
+      [f.sicilia]: { id: f.sicilia, name: 'Sicilia', city: f.syracusae, good: 'timber' },
     },
     cities: {
       [f.roma]: {
@@ -190,5 +190,6 @@ export function buildFixture(seed = 1): GameState {
     wars: {},
     peaceOffers: {},
     truces: {},
+    tradeRoutes: {},
   };
 }

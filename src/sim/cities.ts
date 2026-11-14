@@ -5,6 +5,7 @@ import type { CityId, FactionId } from './ids.ts';
 import { recordCapture } from './peace/war-record.ts';
 import type { GameState } from './state/game-state.ts';
 import type { Troop } from './troops.ts';
+import { closeRoutesAt } from './trade/routes.ts';
 
 /** How long a city that changed owner stays in unrest. Its output recovers evenly over these days. */
 export const UNREST_DAYS = 90;
@@ -47,6 +48,7 @@ export function changeCityOwner(state: GameState, cityId: CityId, owner: Faction
   if (!city) throw new Error(`city ${cityId} does not exist`);
   if (!Object.hasOwn(state.factions, owner)) throw new Error(`faction ${owner} does not exist`);
   const previous = city.owner;
+  closeRoutesAt(state, cityId);
   city.owner = owner;
   city.unrestDays = UNREST_DAYS;
   city.recruits = [];
