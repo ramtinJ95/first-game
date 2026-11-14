@@ -199,6 +199,24 @@ adds a province's stored good to its existing city label from 0.9 px/km. The exi
 label collision rule decides where it fits. Selecting a city draws its active routes
 with the same dashed ink and halo as army paths.
 
+`route-dashes.ts` makes seven-pixel dashes and five-pixel gaps. Moving army/planned
+paths clip to the screen plus the stroke's cap margin before dashing, but skipped
+length still advances the phase. Both ink and halo reuse those segments.
+
+Selected trade paths reuse `cacheDrawing`, the coast ink's bounded view texture with
+a 256 px margin at the renderer's resolution. Their source art uses world coordinates
+and pixel-sized strokes, retaining complete paths so a later pan cannot uncover a
+missing road. Zoom, selected running routes, blockage or path changes rebuild the
+art; crossing progress does not change a road. Covered pans/resizes reuse the texture;
+an uncovered view or WebGL restoration repaints it. One sprite replaces the static
+route vertices, and is hidden when no routes are selected. Merchant motion and moving
+army/planned paths are not cached. Dash length, widths, halo and colours are unchanged;
+covered pans use the same raster reuse as coast ink.
+
+The trade panel explicitly says that paused orders wait: opening gold is paid on
+the next running tick. The queued-order forecast reserves slots and costs, but the
+actual treasury stays unchanged until then. The browser test checks both states.
+
 The army scene reuses its owned cart, civilian walking cycles and ship sheets for
 merchants, with a wake at sea and dry-ground checks on land. Own trade stays known;
 foreign traders require sight. They do not grant sight or reveal hostile armies.

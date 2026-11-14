@@ -38,10 +38,16 @@ export default defineScenario({
     await page
       .getByRole('button', { name: 'Open trade route to Carthago by sea', exact: true })
       .click();
+    await expect(page.getByTestId('store-gold-amount')).toHaveText('5,000');
     await page.getByTestId('trade-routes').scrollIntoViewIfNeeded();
     await shot(
       'trade-ordered',
-      'The paid opening order waiting for the next day occupies a route slot at both ends',
+      'The queued opening order reserves a route slot at both ends; the treasury still holds 5,000 gold while paused',
+    );
+    await page.getByTestId('trade-payment-timing').scrollIntoViewIfNeeded();
+    await shot(
+      'trade-payment-queued',
+      'Opening gold is paid when the clock runs, not when a paused order is queued',
     );
   },
 });
