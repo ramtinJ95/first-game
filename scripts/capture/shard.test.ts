@@ -15,6 +15,21 @@ describe('capture shards', () => {
     expect(shardScenarios(['map'], '2/6')).toEqual([]);
   });
 
+  it('balances heavy scenarios instead of grouping them on one runner', () => {
+    const scenarios = [100, 100, 50, 50, 10, 10];
+    const shards = [1, 2, 3].map((index) =>
+      shardScenarios(scenarios, `${index}/3`, (seconds) => seconds),
+    );
+    expect(shards.map((items) => items.reduce((sum, seconds) => sum + seconds, 0))).toEqual([
+      110, 110, 100,
+    ]);
+    expect(shards.flat().sort((a, b) => a - b)).toEqual([...scenarios].sort((a, b) => a - b));
+  });
+
+  it.each([0, -1, NaN, Infinity])('rejects invalid scheduling duration %s', (seconds) => {
+    expect(() => shardScenarios(['map'], '1/6', () => seconds)).toThrow('positive and finite');
+  });
+
   it.each(['0/6', '7/6', '1/0', '-1/6', '1.5/6', '1', '1/Infinity'])('rejects %s', (shard) => {
     expect(() => shardScenarios([], shard)).toThrow('invalid capture shard');
   });

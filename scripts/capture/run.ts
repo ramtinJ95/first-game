@@ -19,6 +19,7 @@ import {
 import { SOFTWARE_GL } from '../../playwright.config.ts';
 import type { Scenario } from './scenario.ts';
 import { shardScenarios } from './shard.ts';
+import measuredSeconds from './scenario-seconds.json' with { type: 'json' };
 
 const CAPTURES_DIR = resolve('captures');
 const SCENARIOS_DIR = join(import.meta.dirname, 'scenarios');
@@ -183,7 +184,14 @@ async function captureScenario(
 }
 
 async function main(names: string[], shard: string | undefined): Promise<number> {
-  const scenarios = shardScenarios(await loadScenarios(names), shard);
+  const all = await loadScenarios(names);
+  const durations: Readonly<Record<string, number>> = measuredSeconds;
+  const scenarios = shardScenarios(all, shard, (scenario) => {
+    const measured = durations[scenario.name];
+    if (measured === undefined)
+      console.log(`no CI duration for ${scenario.name}; scheduling as 60s`);
+    return measured ?? 60;
+  });
   if (names.length === 0) rmSync(CAPTURES_DIR, { recursive: true, force: true });
 
   const port = await freePort();
