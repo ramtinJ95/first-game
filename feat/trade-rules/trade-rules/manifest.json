@@ -1,0 +1,27 @@
+[
+  {
+    "file": "trade-forecast.png",
+    "title": "Roma and Carthago: unlike goods, sea distance, payment to each end, opening price, payback, and Carthage’s consent",
+    "kind": "screenshot"
+  },
+  {
+    "file": "trade-ordered.png",
+    "title": "The paid opening order waiting for the next day occupies a route slot at both ends",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Trade goods, city slots, and the price and income forecast before opening a route",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Trade goods, city slots, and the price and income forecast before opening a route (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Trade goods, city slots, and the price and income forecast before opening a route (Playwright trace)",
+    "kind": "trace"
+  }
+]

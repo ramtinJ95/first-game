@@ -1,0 +1,27 @@
+[
+  {
+    "file": "missing-change.png",
+    "title": "The import refusal names baseline-format-12; the running game is not replaced",
+    "kind": "screenshot"
+  },
+  {
+    "file": "unknown-change.png",
+    "title": "The import refusal names future-fleets; the running game is not replaced",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Saved games name the missing or unknown state change instead of comparing a shared version number",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Saved games name the missing or unknown state change instead of comparing a shared version number (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Saved games name the missing or unknown state change instead of comparing a shared version number (Playwright trace)",
+    "kind": "trace"
+  }
+]

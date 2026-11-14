@@ -1,0 +1,42 @@
+[
+  {
+    "file": "rome-beaten-at-hadrumetum.png",
+    "title": "Rome beaten at Hadrumetum while it holds Capua: the army falls back into the field, a few days away",
+    "kind": "screenshot"
+  },
+  {
+    "file": "carthage-beaten-at-roma.png",
+    "title": "Carthage beaten at Roma while it holds Carthago: the army falls back into the field, a few days away",
+    "kind": "screenshot"
+  },
+  {
+    "file": "capua-as-carthage.png",
+    "title": "As Carthage a right click on Capua, which is not a port, offers the crossing to Roma with the days at sea and ashore, and no march round the sea",
+    "kind": "screenshot"
+  },
+  {
+    "file": "port-menu-roma-as-carthage.png",
+    "title": "As Carthage a right click on Roma, a port, offers only the crossing: the march of 287 days is gone",
+    "kind": "screenshot"
+  },
+  {
+    "file": "port-menu-massalia-as-rome.png",
+    "title": "As Rome a right click on Massalia offers both ways, because neither takes more than half again the days of the other",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A beaten army overseas falls back into the field, a right click across the sea offers the crossing, and the port menu offers no march round the sea",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A beaten army overseas falls back into the field, a right click across the sea offers the crossing, and the port menu offers no march round the sea (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A beaten army overseas falls back into the field, a right click across the sea offers the crossing, and the port menu offers no march round the sea (Playwright trace)",
+    "kind": "trace"
+  }
+]
