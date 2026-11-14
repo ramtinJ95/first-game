@@ -361,9 +361,8 @@ function weakSiegeWarning(
     if (needed <= 0) return undefined;
     return `${city.name} holds a garrison of ${whole(city.garrison)}, more than the ${whole(men)} men who would besiege it. Its food would not fall, and sallies would cut the besiegers down. ${whole(needed)} more men would hold the siege.`;
   }
-  const total =
-    others.reduce((sum, other) => sum + menOf(state, other), 0) +
-    arrivals.reduce((sum, arrival) => sum + menOf(state, arrival.army), 0);
+  const already = others.reduce((sum, other) => sum + menOf(state, other), 0);
+  const total = already + arrivals.reduce((sum, arrival) => sum + menOf(state, arrival.army), 0);
   const first = arrivals[0];
   const next = arrivals.find((arrival) => first && arrival.days > first.days);
   const alone =
@@ -380,7 +379,8 @@ function weakSiegeWarning(
     )
     .join('. ');
   const deficit = Math.max(0, Math.ceil(BLOCKADE_ODDS * city.garrison) - total);
-  return `${city.name}: garrison ${whole(city.garrison)}. ${timings}. ${alone}Together with ${whole(total - arrivals.reduce((sum, a) => sum + menOf(state, a.army), 0))} besiegers already there, ${whole(total)} men are committed${deficit > 0 ? `; ${whole(deficit)} more would hold the siege` : ', enough to hold the siege before losses'}. Sallies cut down any force below the blockade strength while it waits; arrivals and men assume no battles or losses on the way.`;
+  const existing = already > 0 ? `Together with ${whole(already)} besiegers already there, ` : '';
+  return `${city.name}: garrison ${whole(city.garrison)}. ${timings}. ${alone}${existing}${whole(total)} men are committed${deficit > 0 ? `; ${whole(deficit)} more would hold the siege` : ', enough to hold the siege before losses'}. Sallies cut down any force below the blockade strength while it waits; arrivals and men assume no battles or losses on the way.`;
 }
 
 export function planCommand(

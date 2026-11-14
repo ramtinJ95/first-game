@@ -56,7 +56,8 @@
       <dd>
         Click an army's banner or figures; a city symbol opens its city, with Armies here below.
         Right-click to march. Right-click a port to see ways by land or sea; ships also gather on a
-        shore.
+        shore. Your army panel's Join section combines nearby idle armies of yours; they stay
+        separate until you join them.
       </dd>
       <dt>War and sieges</dt>
       <dd>

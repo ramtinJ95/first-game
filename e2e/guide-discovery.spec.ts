@@ -28,6 +28,9 @@ test('the guide teaches buildings, peace, news, automatic pauses, and the real s
     await expect(guide.locator('dt').filter({ hasText: heading })).toHaveCount(1);
   await expect(guide).toContainText('ships also gather on a shore');
   await expect(guide).toContainText('An offer of peace pauses for your answer');
+  await expect(guide).toContainText(
+    "Your army panel's Join section combines nearby idle armies of yours",
+  );
   await expect(guide).not.toContainText('halts beside an enemy');
 });
 
@@ -87,6 +90,7 @@ test('the siege order names the second legion and the days the first waits alone
   await showSiegeWarning(page);
   await expect(page.getByTestId('notice')).toContainText('stands alone for 17 days');
   await expect(page.getByTestId('notice')).toContainText('enough to hold the siege before losses');
+  await expect(page.getByTestId('notice')).not.toContainText('0 besiegers already there');
 });
 
 test('a city symbol under a convoy wins the click; Armies here reaches the convoy', async ({

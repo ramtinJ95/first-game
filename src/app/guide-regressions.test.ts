@@ -171,6 +171,7 @@ describe('guide and text regressions', () => {
     expect(planned.notice).toContain(
       '1,700 men are committed, enough to hold the siege before losses',
     );
+    expect(planned.notice).not.toContain('besiegers already there');
     const halted = planCommand(state, world, army, target, [
       { kind: 'halt', faction: f.rome, army: second },
     ]);
@@ -183,6 +184,21 @@ describe('guide and text regressions', () => {
     ]);
     expect(queued.notice).toContain('Second Legion (900 men) arrives');
     expect(queued.notice).not.toContain('stands alone');
+    const besieger = required(state.armies[f.punicArmy]);
+    const siege = 'siege-existing' as SiegeId;
+    besieger.owner = f.rome;
+    besieger.activity = { kind: 'besieging', position: city.position, siege };
+    state.sieges[siege] = {
+      id: siege,
+      city: city.id,
+      besiegers: [besieger.id],
+      startedOn: state.day,
+    };
+    expect(
+      planCommand(state, world, army, target, [
+        { kind: 'moveArmy', faction: f.rome, army: second, to: city.position },
+      ]).notice,
+    ).toContain('Together with 1,500 besiegers already there, 3,200 men are committed');
   });
 
   it('times the march actually issued, not a faster sea route that was not chosen', () => {
