@@ -1,25 +1,27 @@
 import {
-  camera,
   cityPoint,
   crossingToCaralis,
-  openGame,
   pause,
   refugeesToCapua,
   siegeOfCarthago,
   startGame,
 } from '../../../e2e/support.ts';
-import { loadSave } from '../../../e2e/watch.ts';
 import { COAST_VIEWS } from '../../../e2e/coast-views.ts';
-import { withBaseline } from '../baseline.ts';
+import { currentHelpers, withBaseline, type CaptureHelpers } from '../baseline.ts';
 import { defineScenario, type CaptureContext } from '../scenario.ts';
 
 const BEFORE = 'c02aec7ebaa68132f9add8652b977ce2b57bb028';
 
-async function views({ page, shot }: CaptureContext, stage: string, base = '', load = loadSave) {
-  await openGame(page, { base, query: 'hide=fog' });
+async function views(
+  { page, shot }: CaptureContext,
+  stage: string,
+  base = '',
+  helpers: CaptureHelpers = currentHelpers,
+) {
+  await helpers.openGame(page, { base, query: 'hide=fog' });
   await pause(page);
-  await load(page, startGame());
-  const view = camera(page);
+  await helpers.loadSave(page, startGame());
+  const view = helpers.camera(page);
   for (const { name, title, at, scale } of [
     ...COAST_VIEWS,
     {
@@ -40,7 +42,7 @@ async function views({ page, shot }: CaptureContext, stage: string, base = '', l
       scale,
     );
     await page.locator('canvas[data-terrain="ready"]').waitFor({ timeout: 60_000 });
-    await page.waitForTimeout(250);
+    await helpers.untilDrawn(page);
     await shot(`${stage}-${name}`, `${stage}: ${title}, day 1, ${scale} px/km`);
     await view.jumpTo(at, 0.1);
   }
@@ -69,7 +71,7 @@ async function views({ page, shot }: CaptureContext, stage: string, base = '', l
       at: column.position,
     },
   ]) {
-    await load(page, state);
+    await helpers.loadSave(page, state);
     await view.jumpTo(at, 4);
     await page.locator('canvas[data-terrain="ready"]').waitFor({ timeout: 60_000 });
     await page.waitForFunction(
@@ -88,6 +90,6 @@ export default defineScenario({
   title: 'Real atlas sea coasts, islands and constrained crossings, before and after',
   async run(context) {
     await views(context, 'after');
-    await withBaseline(BEFORE, (base, load) => views(context, 'before', base, load));
+    await withBaseline(BEFORE, (base, helpers) => views(context, 'before', base, helpers));
   },
 });
