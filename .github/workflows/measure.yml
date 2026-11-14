@@ -1,0 +1,76 @@
+name: Measure capture determinism and replay
+on:
+  push:
+    branches: [measure/capture-replay]
+permissions:
+  contents: read
+  actions: read
+  checks: write
+jobs:
+  capture-shards:
+    timeout-minutes: 12
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      - run: npm run capture -- --shard=${{ matrix.shard }}/6
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: same-${{ matrix.shard }}
+          path: |
+            captures/
+            !captures/**/video.webm
+            !captures/**/trace.zip
+          retention-days: 3
+  measure:
+    needs: capture-shards
+    if: ${{ !cancelled() }}
+    timeout-minutes: 40
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: determinism-c40d8c7, current: self, reference: '43647196098', settings: '0:0,1:8,2:8,3:8,3:16' }
+          - { name: replay-56-panel, current: '43626525542', reference: '43625680525', settings: '3:8' }
+          - { name: replay-57-map, current: '43628700915', reference: '43628105585', settings: '3:8' }
+          - { name: replay-43-rules, current: '43557252854', reference: '43552190908', settings: '3:8' }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          get() { mkdir -p "$2"; for a in $(gh api "repos/${{ github.repository }}/actions/runs/$1/artifacts?per_page=100" --jq '.artifacts[]|select(.name|startswith("captures-"))|.name'); do gh run download "$1" -R "${{ github.repository }}" -n "$a" -D "$2.tmp"; find "$2.tmp" \( -name video.webm -o -name trace.zip \) -delete; cp -r "$2.tmp"/. "$2"/; rm -rf "$2.tmp"; done; }
+          if [ "${{ matrix.current }}" = self ]; then mkdir -p current; for n in 1 2 3 4 5 6; do gh run download "${{ github.run_id }}" -R "${{ github.repository }}" -n same-$n -D current; done; else get "${{ matrix.current }}" current; fi
+          get "${{ matrix.reference }}" reference
+          du -sh current reference; ls current | wc -l; ls reference | wc -l
+      - name: Measure
+        run: node .github/measure/measure.ts current reference '${{ matrix.settings }}' > result.tsv
+      - name: Report as a check run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jq -n --arg name "measure ${{ matrix.name }}" --arg sha "${{ github.sha }}" --rawfile text result.tsv \
+            '{name:$name, head_sha:$sha, status:"completed", conclusion:"neutral", output:{title:$name, summary:"tab-separated per file", text:$text}}' \
+            | gh api repos/${{ github.repository }}/check-runs --input -
