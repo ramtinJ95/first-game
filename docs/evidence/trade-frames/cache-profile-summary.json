@@ -1,0 +1,46 @@
+[
+  {
+    "zoom": "middle",
+    "frameMs": 21.899999976158142,
+    "gpuWaitMs": 19.800000071525574,
+    "submissionAndJsMs": 2.0999999046325684,
+    "indices": 29202,
+    "draws": 13,
+    "offscreen": 1,
+    "uploads": 0,
+    "paths": "2",
+    "figures": "4",
+    "nearbyCpuTopMs": [
+      ["(program)", 166.503],
+      ["readPixels", 80.98100000000011],
+      ["Tt", 1.439],
+      ["#y", 1.1920000000000002],
+      ["draw", 0.636],
+      ["(anonymous)", 0.45],
+      ["(garbage collector)", 0.40499999999999997],
+      ["Pt", 0.398]
+    ]
+  },
+  {
+    "zoom": "closest",
+    "frameMs": 22.799999952316284,
+    "gpuWaitMs": 21.40000009536743,
+    "submissionAndJsMs": 1.3999998569488525,
+    "indices": 27642,
+    "draws": 13,
+    "offscreen": 1,
+    "uploads": 0,
+    "paths": "2",
+    "figures": "3",
+    "nearbyCpuTopMs": [
+      ["(program)", 257.27599999999995],
+      ["readPixels", 84.44200000000018],
+      ["WebGL2RenderingContext.<computed>", 0.683],
+      ["(anonymous)", 0.539],
+      ["nd", 0.387],
+      ["break", 0.38],
+      ["triangulate", 0.268],
+      ["rd", 0.262]
+    ]
+  }
+]

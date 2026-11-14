@@ -8,9 +8,11 @@
 - **Owner decision:** accept the measured 88-day decision interval for PR51, rather than the original 60. The next slice, goods required by troops and buildings, adds choices. The raw harness still prints its original 60-day target as not met.
 - Every previously met world, AI and peace guard remains met. The largest-power distribution was already not met on main (Persia leads 9/20); after trade Carthage leads 11/20. This is not claimed as a newly met target.
 - **Rules frame guard met in the tested views:** all four median/p95 comparisons are within +10% at both zooms over three balanced rounds on automatic merges with current main #57.
-- **Look frame guard NOT met:** closest-zoom median delivered interval 33.3 ms versus main 16.7 ms (+99.4%); drawn median/p95 25.1/27.7 versus 23/25.1 ms. PR53 remains draft. The required limit is not waived; green CI smoke checks do not substitute for it.
+- **Look frame guard still NOT met:** the original comparison and the later clipping-only candidate both failed. The bounded route-texture candidate below is awaiting its browser and matched-frame proof. PR53 remains draft; the required limit is not waived.
 
-## Source and verification
+## Rules delivery source and verification
+
+This section records the #51 delivery. Its subsequent merge and the #53 rendering follow-up are recorded below.
 
 The branch is based on main `9895ab1`, including the second-front peace correction in #55 and warning changes in #56. Baseline tables were rerun on that exact main. Feature tables are fresh runs with the final pressure-reservation correction at `c2016ba`, not extrapolated from older peace rules. Check/build and all 1,100 rules tests pass; the look stack passes 1,113 tests and five trade browser tests on its isolated production build.
 
@@ -63,7 +65,7 @@ The next cold peak, day 1,004, searched 44 paths, including 26 sea paths, while 
 | 2     | 0.904 / 2.062 / 4.993      | 1.108 / 1.837 / 4.317       | -13.5%             |
 | 3     | 0.906 / 2.074 / 4.969      | 1.100 / 1.850 / 4.299       | -13.5%             |
 
-## Frame comparison
+## Original frame comparison (before #51 merged)
 
 The existing `e2e/frame-bench.ts` measures the same six-day world, treasuries, armies and camera in all three production builds. Baseline is main `df0623b` (#57). Rules `c2016ba` and look `518ce71` were each automatically merged with that main in temporary worktrees, without committing or rebasing the PR branches, which GitHub reports mergeable. Main removes only goods and trade records; rules adds live route markers; the look adds merchant figures. Each window verifies that the clock advances and the look actually draws merchants, with exact-resolution sheets ready. Full drawing, SwiftShader flags, and the original 1.5-second warm-up plus 5-second sampling window are unchanged.
 
@@ -90,6 +92,156 @@ All simulation, unit, browser and capture jobs owned by this worker had finished
 Earlier software trials were not a pass: a low-starting-load trial measured main drawn medians 34.0/36.8 ms, rules 38.4/39.7, and look 49.9/47.6 at middle/closest zoom while load rose. CDP profiles then put about 94–95% of samples in synchronized GPU `readPixels`; the trader routine had about 3.8 ms self time over a 6.65-second window. A same-look-source ablation omitting only merchant figures was inconsistent: forward middle zoom was 38.0 ms without figures versus 42.3 with them, but reverse was 37.4 versus 37.1; closest figures were 36.5/37.7 versus 37.4/35.2 without. This did not justify a speculative scene-cache rewrite, and no renderer optimization was made from it. An initial comparison on the pre-#57 renderer was stopped explicitly when #57 landed; those incomplete old-target readings are not mixed into this complete new-target comparison. These earlier results are disclosed, not relabelled as successful controls.
 
 The CI frame job is a separate smoke measurement of each revision’s day-301 AI world on a Linux software GPU, not a matched-state relative budget assertion. Green functional browser or frame jobs alone do not prove this comparison. The table applies to these two tested moving-merchant views and builds, not every future map workload or physical GPU.
+
+## PR53 frame follow-up
+
+After #51 merged as `c02aec7`, #53 was cleanly rebased onto that actual squash commit
+(`729102f` before the optimization edits). The rules control's complete tree at
+`4cea1c0` is identical to `c02aec7`. The owner requested the same +10% limit for all
+four interval/drawn median/p95 metrics, at both zooms, **against these merged rules**,
+with selected routes and merchants on screen. Unselected views are also checked
+for regressions. The original failed comparison above is retained, not relabelled.
+
+### Drawn-frame profiles
+
+Before editing the renderer, an exact single-drawn-frame WebGL trace of the closest
+selected-city view submitted 83,376 indices in look versus 27,972 in rules: about
+55,400 extra indices from selected trade paths. The look drew two selected routes
+and three merchant sprites with their exact-resolution sheets ready. It had 14
+draw calls, one offscreen swell pass, and no texture uploads. Offscreen road/sea
+dashes were rebuilt and submitted on every frame. The nearby-window CPU profile
+was dominated by synchronized GPU waiting, not trader scene construction; this did
+not justify freezing or speculatively caching merchant animation.
+
+A separate cold replay on the pinned **pre-optimization** sources enters 4 px/km
+directly from the wide map, including #57's natural-coast restroke above 1.75 and
+its first mask paints. Its one drawn frame takes 2,621.8 ms in rules and 2,605.2 ms
+in look, each with 32 offscreen draws. These are first-paint diagnostics, not the
+steady-state budget sample. Merchant sheets are still pending in that cold frame
+(zero drawn merchant sprites); the warm trace above separately verifies real
+merchants. The shared cold work is not passed off as a trade-specific regression.
+
+### Clipping and retained geometry: failed candidate
+
+The first candidate clipped moving paths before making their seven-pixel dashes
+and five-pixel gaps, preserving phase through skipped lengths and corners. Both
+halo and ink reused those segments. Selected trade geometry was retained until
+its view or route changed. A warm frame fell from 83,376 to 52,236 indices, with
+the same two paths and three merchants. That reduction alone was **not enough**.
+
+Three alternating pairs use rules/look, look/rules, then rules/look. Each build
+loads the same initial six-played-day world, treasuries, armies and camera, and
+runs at speed 1. Full SwiftShader drawing and the original 1,500 ms warm-up plus
+5,000 ms sample are unchanged. The clock must advance, and merchants and ready
+sheets are checked. No other tests owned by this worker run during sampling; a
+peer's one-worker unit suite overlapped the first rules run, so this is not called
+a wholly idle host. All readings remain included. Each cell is interval
+median/p95; drawn median/p95, in ms.
+
+| Round | Build | Middle                   | Closest                  |
+| ----- | ----- | ------------------------ | ------------------------ |
+| 1     | rules | 16.8 / 33.4; 23.9 / 28.4 | 33.3 / 33.4; 25.7 / 29.9 |
+| 1     | look  | 33.3 / 33.4; 26.9 / 30.4 | 33.3 / 33.4; 28.1 / 31.4 |
+| 2     | look  | 33.3 / 33.4; 25 / 27.2   | 33.3 / 33.4; 25.5 / 27.5 |
+| 2     | rules | 16.7 / 33.4; 22.5 / 24.5 | 16.7 / 33.4; 22.5 / 24.6 |
+| 3     | rules | 16.7 / 33.4; 21.9 / 23.5 | 16.7 / 33.4; 22 / 24.6   |
+| 3     | look  | 16.7 / 33.4; 23.4 / 25.8 | 33.3 / 33.4; 25.6 / 27.1 |
+
+| Zoom    | Rules median-of-three    | Look median-of-three     | Change: interval median/p95; drawn median/p95 | All four ≤10% |
+| ------- | ------------------------ | ------------------------ | --------------------------------------------- | ------------- |
+| middle  | 16.7 / 33.4; 22.5 / 24.5 | 33.3 / 33.4; 25 / 27.2   | +99.4% / 0.0%; +11.1% / +11.0%                | NOT met       |
+| closest | 16.7 / 33.4; 22.5 / 24.6 | 33.3 / 33.4; 25.6 / 27.5 | +99.4% / 0.0%; +13.8% / +11.8%                | NOT met       |
+
+### Bounded route-texture candidate: budget still not met
+
+The remaining selected-route graphic still submits 24,624 indices on every warm
+frame. The next candidate reuses #57's existing `cacheDrawing` primitive instead
+of adding another cache framework: full world-space source art with pixel-sized
+strokes is painted into a view texture with a 256 px margin. Covered pans and
+resizes reuse it; zooms, changed routes, uncovered views and context restoration
+repaint it. One sprite replaces the static route vertices, hidden entirely when
+no routes are selected. Moving army paths and merchant animation are not cached.
+Dash length, widths, halo and colours stay unchanged; raster reuse during a covered
+pan follows the existing coast-ink behavior.
+
+This candidate (`b9624ba`) passed static checks/build, all 1,129 unit tests and six
+affected browser tests. The browser checks include isolated route ink, covered
+resize, exact pixels across WebGL restoration, and clearing closed routes. Scoped
+read-only review found no actionable cache ownership or transform issue. A fresh
+warm frame at exactly 4 px/km submits 27,678 indices, 13 draws, one swell offscreen
+pass and zero uploads, with two selected routes and three merchants. This is a
+vertex reduction, not proof of the frame budget.
+
+The benchmark's rounded wheel notches previously reached 0.9573/3.8821 rather than
+the advertised 1/4 px/km. A final fractional wheel step now reaches the exact
+camera target, asserted from the renderer before sampling; the 1,500/5,000 ms
+windows are unchanged. An incomplete nominal-zoom cache run is not acceptance
+evidence. The complete exact-zoom selected comparison follows, with every reading:
+
+| Round | Build | Middle                   | Closest                  |
+| ----- | ----- | ------------------------ | ------------------------ |
+| 1     | rules | 16.7 / 33.4; 23.3 / 25.9 | 33.3 / 33.4; 24.6 / 28.5 |
+| 1     | look  | 33.3 / 33.4; 25.1 / 27.8 | 33.3 / 33.4; 25 / 29.1   |
+| 2     | look  | 33.2 / 33.4; 24.4 / 27.5 | 33.3 / 33.4; 24.5 / 28.5 |
+| 2     | rules | 16.7 / 33.4; 23.2 / 25.5 | 33.3 / 33.4; 26 / 28.3   |
+| 3     | rules | 16.8 / 33.4; 24.2 / 26.5 | 16.7 / 33.4; 22.4 / 25.7 |
+| 3     | look  | 16.7 / 33.4; 23.4 / 25.3 | 16.7 / 33.4; 23.8 / 25.8 |
+
+| Zoom    | Rules median-of-three    | Look median-of-three     | Change: interval median/p95; drawn median/p95 | All four ≤10% |
+| ------- | ------------------------ | ------------------------ | --------------------------------------------- | ------------- |
+| middle  | 16.7 / 33.4; 23.3 / 25.9 | 33.2 / 33.4; 24.4 / 27.5 | +98.8% / 0.0%; +4.7% / +6.2%                  | NOT met       |
+| closest | 33.3 / 33.4; 24.6 / 28.3 | 33.3 / 33.4; 24.5 / 28.5 | 0.0% / 0.0%; −0.4% / +0.7%                    | met           |
+
+No unselected acceptance matrix was run after this failure. A later ON/OFF marker
+layer ablation had zero selected paths in its ON scenes versus two in its OFF
+scenes; its fourth case stopped on the merchant guard. That is an invalid scene
+comparison, not evidence that transparent sprite area is the cost. No cropping
+change was made from it. A save-day wait can match the opening game's day before
+an asynchronous file drop is received; whether that caused these particular
+scenes remains unconfirmed. The harness now pauses and flushes the old game and
+requires a changed, drawn state after the drop, in addition to the fixture day.
+Further profiling also checks the selected city and route count before sampling.
+PR53 remains draft: neither numerical failure nor an invalid ablation is a pass.
+
+### Final matched-day control and untested trimming handover
+
+The earlier setup let the clock run during camera/terrain preparation. The final
+protocol instead pauses the predecessor, witnesses receipt of a changed drawn
+state, keeps day 7 paused through exact camera and sheet readiness, and explicitly
+resumes immediately before the unchanged 1,500/5,000 ms window. All twelve final
+views advance from day 7 to 13. Look has two selected routes and four merchant
+sprites at middle, three at closest, in every reading. All three alternating pairs
+are retained; a separate overlapping diagnostic pair is not acceptance evidence.
+
+The tested app is **`b9624ba`**, before sprite trimming, against the complete
+`c02aec7` rules tree. Median-of-three results, in milliseconds:
+
+| Zoom    | Rules interval med/p95; drawn med/p95 | Look                     | Change: interval med/p95; drawn med/p95 | Verdict |
+| ------- | ------------------------------------- | ------------------------ | --------------------------------------- | ------- |
+| middle  | 16.7 / 33.4; 21.7 / 23.4              | 16.7 / 33.4; 23.2 / 29.7 | 0% / 0%; +6.9% / +26.9%                 | FAIL    |
+| closest | 16.7 / 33.4; 22.1 / 24.2              | 16.7 / 33.4; 23.4 / 25.4 | 0% / 0%; +5.9% / +5.0%                  | PASS    |
+
+The complete raw readings and profiles are committed under
+[`docs/evidence/trade-frames`](evidence/trade-frames). The fresh single drawn
+middle frame is 21.9 ms: 19.8 ms in synchronized GPU completion (`readPixels`),
+2.1 ms in JS/submission, 29,202 indices, 13 draws, one swell offscreen pass, zero
+uploads, two routes and four merchants. Closest is 22.8 ms, including 21.4 ms GPU
+wait. These are typical frames, **not captured p95 frames**; they do not prove the
+tail's root cause.
+
+The next candidate trims the cached route sprite to conservative visible dash
+bounds, keeping the full private cache texture for coverage. Pure geometry puts
+about 81% of its middle-zoom screen quad outside the ink's bounding rectangle.
+This is a GPU fill hypothesis, not an isolated causal timing result. No merchant
+animation, route ink or quality reduction is intended. **The trimming candidate
+and its new tests have not been run or built.** Its commit is explicitly labelled
+untested. There is no post-trim budget result.
+
+See [the handover](trade-handover.md) for portable commands, invalid-run criteria,
+remaining pixel/resource checks, media and CI work. `scripts/trade-frame-bench.mjs`
+is the portable version of the measured temporary driver, with strict scene
+guards and summaries; only its syntax/formatting were checked here, not a new
+browser run. No more browser or benchmark runs were made for the handover.
 
 ## Trade targets
 
