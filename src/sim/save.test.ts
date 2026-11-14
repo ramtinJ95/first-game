@@ -23,6 +23,7 @@ describe('save and load', () => {
     );
     expect(loaded).toEqual({
       ok: false,
+      refusal: 'older',
       error: `The save lacks changes: ${name} (${peaceForecasts.adds}).`,
     });
   });
@@ -56,6 +57,7 @@ describe('save and load', () => {
   test('rejects text that is not JSON', () => {
     expect(loadGame('{"format": 1, "state": ')).toEqual({
       ok: false,
+      refusal: 'damaged',
       error: 'The save is not valid JSON.',
     });
   });
@@ -64,6 +66,7 @@ describe('save and load', () => {
     const save = JSON.stringify({ format: 99, state: buildFixture() });
     expect(loadGame(save)).toEqual({
       ok: false,
+      refusal: 'older',
       error: `The save has legacy or malformed format 99; it lacks changes: ${SAVE_FORMAT.join(', ')}.`,
     });
   });
@@ -72,7 +75,11 @@ describe('save and load', () => {
     const result = loadGame(
       JSON.stringify({ format: [...SAVE_FORMAT, 'future-fleets'], state: buildFixture() }),
     );
-    expect(result).toEqual({ ok: false, error: 'The save has unknown changes: future-fleets.' });
+    expect(result).toEqual({
+      ok: false,
+      refusal: 'newer',
+      error: 'The save has unknown changes: future-fleets.',
+    });
   });
 
   test('refuses a missing change and names what it adds', () => {
@@ -84,6 +91,7 @@ describe('save and load', () => {
     );
     expect(result).toEqual({
       ok: false,
+      refusal: 'older',
       error: `The save lacks changes: baseline-format-12 (${baseline.adds}).`,
     });
   });
@@ -103,6 +111,7 @@ describe('save and load', () => {
   test('rejects a save without a format version', () => {
     expect(loadGame(JSON.stringify(buildFixture()))).toEqual({
       ok: false,
+      refusal: 'damaged',
       error: 'The save has no format version or no game state.',
     });
   });
@@ -129,6 +138,7 @@ describe('save and load', () => {
     if (capua) capua.owner = 'sparta';
     expect(loadGame(JSON.stringify(save))).toEqual({
       ok: false,
+      refusal: 'damaged',
       error: "The save's records disagree: city capua has unknown owner sparta.",
     });
   });
