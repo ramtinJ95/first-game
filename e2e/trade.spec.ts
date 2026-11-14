@@ -43,7 +43,7 @@ test('opens a route through the page, watches delivery and gold, and loads a car
   faction.stores.gold = 5000;
   await load(page, state);
   await openCity(page, 'roma', 'Roma');
-  await page.getByLabel('Trade destination', { exact: true }).selectOption('capua');
+  await page.getByLabel('Trade partner', { exact: true }).selectOption('capua');
   await page.getByLabel('Trade transport').selectOption('land');
   await expect(page.getByTestId('trade-forecast')).toContainText('km by land');
   await expect(page.getByTestId('trade-consent')).toContainText('Both ends are yours');
