@@ -60,7 +60,7 @@
     >
       <span>{STANCE_NAMES[option]}</span>
       {#if choice.answers && option !== army.stance}<span class="mark"
-          >Beats their current stance once re-formed</span
+          >Beats it after re-forming</span
         >{/if}
       {#if choice.cost}<span class="cost">{choice.cost}</span>{/if}
     </button>

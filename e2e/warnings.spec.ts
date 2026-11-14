@@ -13,6 +13,7 @@ import {
   armyOf,
   cityPoint,
   withFormations,
+  outnumberedAt,
 } from './support.ts';
 import { allocateId } from '../src/sim/ids.ts';
 import {
@@ -76,6 +77,29 @@ test('a Join ordered while paused is acknowledged in the army panel', async ({ p
     'Join First Legion ordered for the next day',
   );
   await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
+});
+
+test('stance advice leaves the last battle row reachable at 1280x600', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await openGame(page);
+  const state = startGame();
+  outnumberedAt(state, 'roma', 1500);
+  await loadWarnings(page, state);
+  await resume(page);
+  await expect(page.getByTestId('battle-panel')).toBeVisible();
+  await pause(page);
+  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  await page.getByTestId('overview-armies').getByRole('button').first().click();
+  await expect(page.getByTestId('stance-ai-rule')).toContainText(
+    'It may answer your change after you re-form',
+  );
+  const side = page.getByRole('complementary', { name: 'Selection' });
+  await side.evaluate((element) => (element.scrollTop = element.scrollHeight));
+  const column = await side.boundingBox();
+  const row = await page.getByTestId('battle-army').last().boundingBox();
+  if (!column || !row) throw new Error('Battle row missing');
+  expect(row.y).toBeGreaterThanOrEqual(column.y);
+  expect(row.y + row.height).toBeLessThanOrEqual(Math.min(column.y + column.height, 600) + 1);
 });
 
 for (const [name, make, line] of [
