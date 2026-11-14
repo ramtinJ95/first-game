@@ -2,13 +2,26 @@ import * as v from 'valibot';
 import type { DeepReadonly } from './deep-readonly.ts';
 import { findBrokenReferences } from './references.ts';
 import { GameStateSchema, type GameState } from './state/game-state.ts';
+import changes from './save-changes.generated.json' with { type: 'json' };
 
-/**
- * Raise this when a change to the state makes older saves unreadable. Format 12 added
- * each army's name, the faction's count of armies raised, and the page beside the state.
- * Format 13 added what a war remembers, the offers of peace, and the truces.
- */
-export const SAVE_FORMAT = 13;
+/** Add an immutable JSON file in save-changes/, never another shared version number. */
+export const SAVE_FORMAT: readonly string[] = Object.freeze(changes.map((change) => change.name));
+
+function formatError(format: unknown): string | undefined {
+  if (!Array.isArray(format) || !format.every((name): name is string => typeof name === 'string')) {
+    return `The save has legacy or malformed format ${JSON.stringify(format)}; it lacks changes: ${SAVE_FORMAT.join(', ')}.`;
+  }
+  if (new Set(format).size !== format.length) return 'The save repeats a format change.';
+  const missing = changes.filter((change) => !format.includes(change.name));
+  const unknown = format.filter((name) => !SAVE_FORMAT.includes(name)).sort();
+  const differences = [
+    ...(missing.length
+      ? [`lacks changes: ${missing.map((change) => `${change.name} (${change.adds})`).join(', ')}`]
+      : []),
+    ...(unknown.length ? [`has unknown changes: ${unknown.join(', ')}`] : []),
+  ];
+  return differences.length ? `The save ${differences.join('; ')}.` : undefined;
+}
 
 /**
  * `page` is what the page kept beside the game, such as its chronicle and where the
@@ -34,10 +47,11 @@ export function loadGame(text: string): LoadResult {
   if (typeof data !== 'object' || data === null || !('format' in data) || !('state' in data)) {
     return { ok: false, error: 'The save has no format version or no game state.' };
   }
-  if (data.format !== SAVE_FORMAT) {
+  const incompatible = formatError(data.format);
+  if (incompatible) {
     return {
       ok: false,
-      error: `The save has format ${JSON.stringify(data.format)}, but this game reads format ${SAVE_FORMAT}.`,
+      error: incompatible,
     };
   }
   const parsed = v.safeParse(GameStateSchema, data.state);

@@ -7,6 +7,13 @@
     "node": ">=26"
   },
   "scripts": {
+    "prepare": "node scripts/registries.ts",
+    "predev": "node scripts/registries.ts",
+    "precheck": "node scripts/registries.ts",
+    "pretest": "node scripts/registries.ts",
+    "prebuild": "node scripts/registries.ts",
+    "pree2e": "node scripts/registries.ts",
+    "sim": "node scripts/sim.ts",
     "dev": "vite",
     "build": "vite build",
     "build:map": "node scripts/map/build.ts",
@@ -14,7 +21,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.sim.json --noEmit && eslint . && prettier --check .",
     "test": "vitest run",
     "e2e": "playwright test",
-    "capture": "vite build && node scripts/capture/run.ts",
+    "capture": "npm run build && node scripts/capture/run.ts",
     "capture:publish": "node scripts/capture/publish.ts",
     "capture:fetch": "node scripts/capture/fetch.ts",
     "map:cities": "node scripts/map/pleiades.ts",

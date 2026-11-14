@@ -6,3 +6,6 @@ test-results
 *.log
 .DS_Store
 .cache
+src/sim/save-changes.generated.json
+src/app/alert-kinds.generated.ts
+src/sim/orders/registry.generated.ts

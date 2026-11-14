@@ -1,46 +1,11 @@
-import { build, cancelBuilding } from '../buildings/build.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { World } from '../world/world.ts';
-import { acceptPeace } from './accept-peace.ts';
-import { declareWar } from './declare-war.ts';
-import { enslave } from './enslave.ts';
-import { evacuate } from './evacuate.ts';
-import { embark } from './embark.ts';
-import { halt } from './halt.ts';
-import { joinArmy } from './join-army.ts';
-import { moveArmy } from './move-army.ts';
-import { offerPeace } from './offer-peace.ts';
-import { recruit } from './recruit.ts';
-import { refusePeace } from './refuse-peace.ts';
-import { retreat } from './retreat.ts';
-import { sack } from './sack.ts';
-import { setStance } from './set-stance.ts';
-import { storm } from './storm.ts';
+import { ORDER_HANDLERS } from './registry.generated.ts';
 
 /**
  * Every order the rules accept, keyed by its kind. A handler either changes the
  * state and returns nothing, or returns the reason it refused and leaves the state alone.
  */
-const ORDER_HANDLERS = {
-  moveArmy,
-  halt,
-  embark,
-  joinArmy,
-  setStance,
-  declareWar,
-  retreat,
-  recruit,
-  evacuate,
-  storm,
-  sack,
-  enslave,
-  build,
-  cancelBuilding,
-  offerPeace,
-  acceptPeace,
-  refusePeace,
-};
-
 type Handlers = typeof ORDER_HANDLERS;
 
 export type Order = {

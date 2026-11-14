@@ -47,8 +47,41 @@ describe('save and load', () => {
     const save = JSON.stringify({ format: 99, state: buildFixture() });
     expect(loadGame(save)).toEqual({
       ok: false,
-      error: `The save has format 99, but this game reads format ${SAVE_FORMAT}.`,
+      error: `The save has legacy or malformed format 99; it lacks changes: ${SAVE_FORMAT.join(', ')}.`,
     });
+  });
+
+  test('refuses an unknown change and names it', () => {
+    const result = loadGame(
+      JSON.stringify({ format: [...SAVE_FORMAT, 'future-fleets'], state: buildFixture() }),
+    );
+    expect(result).toEqual({ ok: false, error: 'The save has unknown changes: future-fleets.' });
+  });
+
+  test('refuses a missing change and names what it adds', () => {
+    const result = loadGame(
+      JSON.stringify({
+        format: SAVE_FORMAT.filter((name) => name !== 'baseline-format-12'),
+        state: buildFixture(),
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('lacks changes: baseline-format-12');
+      expect(result.error).toContain('army names');
+    }
+  });
+
+  test('treats the format as a set, not an ordered version sequence', () => {
+    expect(
+      loadGame(JSON.stringify({ format: [...SAVE_FORMAT].reverse(), state: buildFixture() })),
+    ).toEqual({ ok: true, state: buildFixture() });
+  });
+
+  test('rejects duplicate and non-string changes', () => {
+    for (const format of [[...SAVE_FORMAT, SAVE_FORMAT[0]], [13], null]) {
+      expect(loadGame(JSON.stringify({ format, state: buildFixture() })).ok).toBe(false);
+    }
   });
 
   test('rejects a save without a format version', () => {

@@ -2,6 +2,7 @@ import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { DayEvent } from '../sim/events.ts';
 import type { ArmyId } from '../sim/ids.ts';
 import type { Order, OrderKind, RejectedOrder } from '../sim/orders/orders.ts';
+import { ORDER_SLOTS } from '../sim/orders/registry.generated.ts';
 import { findBrokenReferences } from '../sim/references.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { System } from '../sim/systems.ts';
@@ -20,25 +21,7 @@ type Slot = 'movement' | 'stance';
  */
 const SLOTS: {
   [K in OrderKind]: Extract<Order, { kind: K }> extends { army: ArmyId } ? Slot : undefined;
-} = {
-  moveArmy: 'movement',
-  halt: 'movement',
-  embark: 'movement',
-  joinArmy: 'movement',
-  retreat: 'movement',
-  setStance: 'stance',
-  recruit: undefined,
-  declareWar: undefined,
-  evacuate: undefined,
-  storm: undefined,
-  sack: undefined,
-  enslave: undefined,
-  build: undefined,
-  cancelBuilding: undefined,
-  offerPeace: undefined,
-  acceptPeace: undefined,
-  refusePeace: undefined,
-};
+} = ORDER_SLOTS;
 
 /** The army whose movement the order changes, or nothing for an order of another slot. */
 export function movedArmy(order: Order): ArmyId | undefined {

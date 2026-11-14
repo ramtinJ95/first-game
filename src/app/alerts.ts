@@ -19,36 +19,8 @@ import { areAtWar } from '../sim/wars.ts';
 import type { World } from '../sim/world/world.ts';
 import { armyTitle, buildingList, factionName, placeName, TROOP_NAMES, whole } from './names.ts';
 
-export const ALERT_KINDS = [
-  'battleBegan',
-  'battleEnded',
-  'armyRetreated',
-  'armyDestroyed',
-  'armyDeserted',
-  'warDeclared',
-  'armyArrived',
-  'formationMustered',
-  'musteredEarly',
-  'cityChangedOwner',
-  'siegeBegan',
-  'storeRanOut',
-  'fateLapsed',
-  'enemySighted',
-  'siegeTooWeak',
-  'siegeBled',
-  'columnLeft',
-  'columnArrived',
-  'buildingFinished',
-  'buildingsLost',
-  'peaceOffered',
-  'peaceRefused',
-  'peaceMade',
-  'powersAtWar',
-  'capitalFell',
-  'powerFell',
-  'newLeader',
-  'cityNearFell',
-] as const;
+import { ALERT_KINDS } from './alert-kinds.generated.ts';
+export { ALERT_KINDS };
 export type AlertKind = (typeof ALERT_KINDS)[number];
 
 /**

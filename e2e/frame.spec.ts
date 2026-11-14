@@ -351,7 +351,7 @@ test.describe('the frame round the game', () => {
     await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
 
     const old = JSON.stringify({
-      format: SAVE_FORMAT - 1,
+      format: SAVE_FORMAT.slice(1),
       state: JSON.parse(saveGame(state)).state,
     });
     await page.getByTestId('import-file').setInputFiles({
@@ -359,14 +359,14 @@ test.describe('the frame round the game', () => {
       mimeType: 'application/json',
       buffer: Buffer.from(old),
     });
-    await expect(page.getByTestId('notice')).toHaveText(
-      `The save did not load. The save has format ${SAVE_FORMAT - 1}, but this game reads format ${SAVE_FORMAT}.`,
+    await expect(page.getByTestId('notice')).toContainText(
+      `The save did not load. The save lacks changes: ${SAVE_FORMAT[0]}`,
     );
     expect(await day(page)).toBe(exported);
   });
 
-  test('Continue refuses an old save in the browser with the same notice', async ({ page }) => {
-    const old = JSON.stringify({ format: SAVE_FORMAT - 1, state: {} });
+  test('Continue refuses a save with an unknown change and names it', async ({ page }) => {
+    const old = JSON.stringify({ format: [...SAVE_FORMAT, 'future-fleets'], state: {} });
     await page.addInitScript((text) => {
       localStorage.setItem(
         'save:auto',
@@ -376,7 +376,7 @@ test.describe('the frame round the game', () => {
     await openStart(page);
     await page.getByRole('button', { name: 'Continue' }).click();
     await expect(page.getByTestId('notice')).toHaveText(
-      `The save did not load. The save has format ${SAVE_FORMAT - 1}, but this game reads format ${SAVE_FORMAT}.`,
+      'The save did not load. The save has unknown changes: future-fleets.',
     );
     await expect(page.getByTestId('start-screen')).toBeVisible();
   });

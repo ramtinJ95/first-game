@@ -1,0 +1,1 @@
+import '../sim-fates.ts';

@@ -1,0 +1,1 @@
+import '../sim-battles.ts';
