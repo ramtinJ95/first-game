@@ -45,10 +45,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: determinism-c40d8c7, current: self, reference: '43647196098', settings: '0:0,1:8,2:8,3:8,3:16' }
-          - { name: replay-56-panel, current: '43626525542', reference: '43625680525', settings: '3:8' }
-          - { name: replay-57-map, current: '43628700915', reference: '43628105585', settings: '3:8' }
-          - { name: replay-43-rules, current: '43557252854', reference: '43552190908', settings: '3:8' }
+          - { name: determinism-c40d8c7, current: self, reference: '43647196098', settings: '3:8,3:16,3:24,5:8,5:16' }
+          - { name: replay-56-panel, current: '43626525542', reference: '43625680525', settings: '3:8,3:16,3:24,5:8,5:16' }
+          - { name: replay-57-map, current: '43628700915', reference: '43628105585', settings: '3:8,3:16,3:24,5:8,5:16' }
+          - { name: replay-43-rules, current: '43557252854', reference: '43552190908', settings: '3:8,3:16,3:24,5:8,5:16' }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -67,6 +67,17 @@ jobs:
           du -sh current reference; ls current | wc -l; ls reference | wc -l
       - name: Measure
         run: node .github/measure/measure.ts current reference '${{ matrix.settings }}' > result.tsv
+      - name: Crop differences
+        if: ${{ matrix.current == 'self' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node .github/measure/crops.ts current reference result.tsv crops
+          for f in crops/*.png; do
+            jq -n --arg name "crop $(basename "$f")" --arg sha "${{ github.sha }}" --rawfile t "$f.txt" --arg b "$(base64 -w0 "$f")" \
+              '{name:$name, head_sha:$sha, status:"completed", conclusion:"neutral", output:{title:$t, summary:$t, text:$b}}' \
+              | gh api repos/${{ github.repository }}/check-runs --input - > /dev/null
+          done
       - name: Report as a check run
         env:
           GH_TOKEN: ${{ github.token }}
