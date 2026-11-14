@@ -1333,7 +1333,7 @@ export async function createRenderer({
       const next = drawnArmies(previous, current, progress)
         .filter((army) => sight.armies.has(army.id))
         .map((army) => {
-          if (figureHeight(camera.scale) > 0 || camera.scale < ATLAS_COAST_SCALE) return army;
+          if (camera.scale < ATLAS_COAST_SCALE) return army;
           const at = mapToScreen(camera, viewport(), army.position);
           const sea = current.armies[army.id]?.activity.kind === 'embarked';
           const fitted = fitCoastalSprite(

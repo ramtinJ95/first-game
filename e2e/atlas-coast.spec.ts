@@ -1,7 +1,14 @@
 import { expect, test } from '@playwright/test';
 import { PNG } from 'pngjs';
 import drawing from '../data/map/drawing-coast.json' with { type: 'json' };
-import { atlasCoast } from '../src/render/atlas-coast.ts';
+import { atlasCoast, atlasLand } from '../src/render/atlas-coast.ts';
+import { coastalSurface, fitCoastalSprite } from '../src/render/coastal-ground.ts';
+import { Land } from '../src/render/terrain/marks.ts';
+import { mapToScreen, screenToMap } from '../src/render/camera.ts';
+import { BANNER } from '../src/render/markers.ts';
+import { factionColour } from '../src/render/palette.ts';
+import { buildWorld } from '../src/sim/world/world.ts';
+import { locate } from '../src/sim/world/find-path.ts';
 import { provinceAt } from '../src/render/pick.ts';
 import { contains, distanceToBoundary } from '../scripts/map/geometry.ts';
 import { mapPlane } from '../scripts/map/projection.ts';
@@ -11,10 +18,12 @@ import type { Pick as MapPick } from '../src/render/pick.ts';
 import { pageData } from '../src/app/page.ts';
 import { saveGame } from '../src/sim/save.ts';
 import { camera, map, openGame, pause, startGame, untilDrawn } from './support.ts';
+import { armyOf, rome } from './support.ts';
+import { loadSave } from './watch.ts';
 
 type FenceControl = { hold: boolean; polls: number; restore(): void };
 
-test('held-pacer city layout uses the new zoom surface in both atlas/widest directions', async ({
+test('a held frame keeps its completed coast until the new atlas/widest view can draw', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -55,7 +64,7 @@ test('held-pacer city layout uses the new zoom surface in both atlas/widest dire
         control.polls = 0;
       });
       // Submit a frame, then force its fence unsignalled. The following zoom must
-      // therefore execute layoutCities in the held-pacer branch, not just a normal draw.
+      // remain pending without changing the completed frame or its coast.
       await canvas.dispatchEvent('wheel', { deltaY: 0, clientX: 640, clientY: 360 });
       await page.waitForFunction(
         () => (window as unknown as { coastFence: FenceControl }).coastFence.polls > 0,
@@ -87,6 +96,94 @@ test('held-pacer city layout uses the new zoom surface in both atlas/widest dire
       control.hold = false;
       control.restore();
     });
+  }
+});
+
+test('a cold figure sheet keeps a coastal fallback banner visible, dry and pickable', async ({
+  page,
+}) => {
+  const physical = new Land(map),
+    art = atlasLand(map),
+    world = buildWorld(map);
+  const near = mapPlane().toPlane([20.8375, 39.0935]);
+  let point: { x: number; y: number } | undefined;
+  for (let dx = -8; dx <= 8 && !point; dx++)
+    for (let dy = -8; dy <= 8; dy++) {
+      const p = { x: near[0] + dx, y: near[1] + dy };
+      if (physical.open(p.x, p.y) && !art.inside(p.x, p.y) && locate(world.mesh, p, 'land') >= 0) {
+        point = p;
+        break;
+      }
+    }
+  if (!point) throw new Error('no physical-land/drawn-water coastal fixture');
+  await page.addInitScript(() => {
+    const decode = HTMLImageElement.prototype.decode;
+    let first = true;
+    HTMLImageElement.prototype.decode = async function () {
+      await decode.call(this);
+      if (first) {
+        first = false;
+        await new Promise<void>((done) => Reflect.set(window, 'releaseCoastSheet', done));
+      }
+    };
+  });
+  await openGame(page, { query: 'hide=fog' });
+  await pause(page);
+  const state = startGame(),
+    army = armyOf(state, rome);
+  army.activity = { kind: 'idle', position: point };
+  await loadSave(page, state);
+  const view = camera(page);
+  let returned = false;
+  const move = view.jumpTo(point, 2).then(() => {
+    returned = true;
+  });
+  try {
+    await page.waitForFunction(() => Reflect.has(window, 'releaseCoastSheet'));
+    const canvas = page.locator('canvas[data-renderer]');
+    await expect(canvas).toHaveAttribute('data-zoom', '2.0000');
+    expect(returned).toBe(false);
+    const viewport = page.viewportSize();
+    if (!viewport) throw new Error('no viewport');
+    const land = coastalSurface(
+      () => art,
+      physical.lakes,
+      (p) => screenToMap(view.camera, viewport, p),
+      physical.land,
+    );
+    const at = mapToScreen(view.camera, viewport, point);
+    expect(land(at)).toBe(false);
+    const fitted = fitCoastalSprite(
+      { key: 'standard.0', ...at, size: 0, mirror: false, alpha: 1, rotation: 0, depth: at.y },
+      land,
+      2,
+    );
+    expect(land(fitted)).toBe(true);
+    const image = PNG.sync.read(await canvas.screenshot());
+    const colour = factionColour(state, army.owner);
+    let pixels = 0;
+    for (
+      let y = Math.ceil(fitted.y - BANNER.pole + 1);
+      y < fitted.y - BANNER.pole + BANNER.flagHeight - 1;
+      y++
+    )
+      for (let x = Math.ceil(fitted.x + 2); x < fitted.x + BANNER.flagWidth - 5; x++) {
+        const offset = (y * image.width + x) * 4;
+        if (
+          Math.abs((image.data[offset] ?? -255) - ((colour >> 16) & 255)) < 3 &&
+          Math.abs((image.data[offset + 1] ?? -255) - ((colour >> 8) & 255)) < 3 &&
+          Math.abs((image.data[offset + 2] ?? -255) - (colour & 255)) < 3
+        )
+          pixels++;
+      }
+    expect(pixels).toBeGreaterThan(4);
+    await page.mouse.click(fitted.x + BANNER.flagWidth - 2, fitted.y - BANNER.pole + 2);
+    await expect(page.getByTestId('army-name')).toHaveText(army.name);
+  } finally {
+    await page.evaluate(() => {
+      (Reflect.get(window, 'releaseCoastSheet') as () => void)();
+    });
+    await move;
   }
 });
 
