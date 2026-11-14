@@ -1,6 +1,7 @@
 import type { FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import { truceBetween } from '../peace/truce.ts';
+import { BLOCKADE_ODDS } from '../systems/sieges.ts';
 import { distance } from '../world/find-path.ts';
 import { tradeIncome } from '../trade/routes.ts';
 import type { Context } from './armies.ts';
@@ -80,9 +81,15 @@ export function warDeclaration(context: Context): Order[] {
 
   const fighting = new Set(targetsOf(state, faction, enemies).map((city) => city.owner));
   let free = strength.get(faction) ?? 0;
+  let pressureFree = free;
   for (const enemy of [...fighting].sort()) {
     const front = frontOf(enemy);
-    if (front) free -= strength.get(enemy) ?? 0;
+    if (front) {
+      const field = strength.get(enemy) ?? 0;
+      free -= field;
+      // A broken field army does not release the troops needed to finish its city.
+      pressureFree -= Math.max(field, front.city.garrison * BLOCKADE_ODDS);
+    }
   }
   const rivals = new Set(
     sorted(state.factions)
@@ -150,7 +157,7 @@ export function warDeclaration(context: Context): Order[] {
     if (score >= 1 && (!best || score > best.score)) best = { against: id, score };
   }
   if (best) return [{ kind: 'declareWar', faction, against: best.against }];
-  return rivalPressure(context, strength, free, rivals, frontOf);
+  return rivalPressure(context, strength, pressureFree, rivals, frontOf);
 }
 
 /** The great power that holds at least LEADER_SHARE of all cities and more than any other. */
@@ -171,9 +178,11 @@ function leaderOf(
 /**
  * A power at war with no great power declares on a great-power neighbour that has kept
  * to its homeland, holding no more cities than the map gave it, once its uncommitted
- * armies outweigh that neighbour's RIVAL_PRESSURE_ODDS times. Existing fronts keep
- * the same strength back as in normal war selection. It picks the one it outweighs
- * most. So a rival who stays at home is pressed while minor cities are still left.
+ * armies outweigh that neighbour's RIVAL_PRESSURE_ODDS times. Each existing front
+ * keeps back at least its field strength or its city's blockade requirement, whichever
+ * is greater, in the same strength points used for a garrison in normal war scoring.
+ * It picks the one it outweighs most. So a rival who stays at home is pressed while
+ * minor cities are still left.
  */
 function rivalPressure(
   { state, world, faction, enemies }: Context,
