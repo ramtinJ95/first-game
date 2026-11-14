@@ -6,4 +6,4 @@
 
 The AI is not a system. It is a pure function from the state to a list of orders, and the clock adds those orders to the next tick.
 
-A field that only your system needs goes into the kind's schema in `src/sim/state/`. A field that old saves lack needs a default with `v.optional(schema, default)`, or a new immutable JSON file in `src/sim/save-changes/` describing what it adds. See [independent changes](independent-changes.md).
+A field that only your system needs goes into the kind's schema in `src/sim/state/`. Every change to the saved shape gets a new immutable JSON file in `src/sim/save-changes/` describing what it adds. A default with `v.optional(schema, default)` is a schema decision, not a substitute for recording that change. See [independent changes](independent-changes.md).

@@ -10,7 +10,7 @@ Add an immutable `src/sim/save-changes/<descriptive-name>.json` containing `{ "a
 
 ## Commands
 
-For a new simulation, add `scripts/sim/<name>.ts` and run `npm run sim -- <name> [arguments]`. Discovery is by filename; no new package script or central dispatch entry is needed. All existing `sim:*` aliases remain compatible. Existing commands have one-file wrappers, including the specialized movement scripts; their old aliases and paths remain valid. `npm run sim -- --help` lists only executable commands, not internal helpers.
+For a new simulation, add `scripts/sim/<name>.ts` and run `npm run sim -- <name> [arguments]`. Discovery is by filename; no new package script or central dispatch entry is needed. All existing `sim:*` aliases remain compatible and forward through the same dispatcher, so they also regenerate before importing rules. Existing commands have one-file wrappers, including the specialized movement scripts; their old aliases and paths remain valid. `npm run sim -- --help` lists only executable commands, not internal helpers.
 
 ## Orders, slots, and alert kinds
 
