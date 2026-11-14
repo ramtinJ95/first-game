@@ -26,6 +26,29 @@ it('certifies uniform-cell spans without skipping a tiny enclosed water cut', ()
   expect(index.spanInside(15.202, 15.208, 15.205, false)).toBe(true);
 });
 
+it('does not certify seam-marked cells as uniform with the default seam detection', () => {
+  const outline: MultiPolygon = [
+    [
+      [
+        [-16, -16],
+        [48, -16],
+        [48, 48],
+        [-16, 48],
+      ],
+      [
+        [15.2, 15.2],
+        [15.21, 15.2],
+        [15.21, 15.21],
+        [15.2, 15.21],
+      ],
+    ],
+  ];
+  const index = new AreaIndex([outline]);
+  expect(index.spanInside(1, 31, 10)).toBe(true);
+  expect(index.spanInside(1, 31, 15.205)).toBe(false);
+  expect(index.spanInside(31, 1, 15.205)).toBe(false);
+});
+
 it('checks the continuous thickness of a contact, including a horizontal water slit between its edges', () => {
   const outline: MultiPolygon = [
     [

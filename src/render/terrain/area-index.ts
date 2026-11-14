@@ -273,12 +273,12 @@ export class AreaIndex {
       const state = wanted ? INSIDE : OUTSIDE;
       let uniform = true;
       for (let k = first; k <= last; k++)
-        if (this.#cells[k] !== state) {
+        if (this.#cells[k] !== state || this.#seamCells?.[k] === 1) {
           uniform = false;
           break;
         }
-      // Every boundary cell is EDGE, including subpixel holes. This proves the
-      // whole contact; mixed/edge cells still require the continuous query below.
+      // Only cells without any boundary or seam certify the whole contact.
+      // Mixed, edge and seam cells still require the continuous query below.
       if (uniform) return true;
     }
     if (this.inside(from, y) !== wanted || this.inside(to, y) !== wanted) return false;
