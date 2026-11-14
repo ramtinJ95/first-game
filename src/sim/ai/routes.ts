@@ -6,6 +6,7 @@ import { connected, distance, findPath } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import { byLand, sorted, type CityView, type State } from './situation.ts';
 import { SEA_KM_FACTOR } from './thresholds.ts';
+import { mayWalkWithin } from '../world/land-reach.ts';
 
 /** The next order on the way to a city: march to a point, or sail from the port the army stands at. */
 export type Step = { kind: 'march'; to: MapPoint } | { kind: 'embark'; to: CityId };
@@ -63,7 +64,7 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
       best = near.find(
         (port) =>
           byLand(world, harbour(port), target.position) &&
-          roadKm(harbour(port), target.position) < Number.POSITIVE_INFINITY,
+          roadKm(harbour(port), target.position, true) < Number.POSITIVE_INFINITY,
       );
     }
     landings.set(target.id, best);
@@ -93,11 +94,14 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
    * The length of the land path, which only the chosen few routes pay to find. A path
    * longer than a march may be costs infinity, so no route takes it.
    */
-  function roadKm(from: MapPoint, to: MapPoint): number {
+  function roadKm(from: MapPoint, to: MapPoint, fixedDestination = false): number {
     const key = `${from.x},${from.y};${to.x},${to.y}`;
     let km = known.get(key);
     if (km === undefined) {
-      const path = findPath(world.mesh, from, to, 'land');
+      const path =
+        fixedDestination && !mayWalkWithin(world.mesh, from, to, MAX_MARCH_KM)
+          ? undefined
+          : findPath(world.mesh, from, to, 'land');
       km = Number.POSITIVE_INFINITY;
       if (path) {
         km = 0;
@@ -125,7 +129,7 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
     if (distance(from, target.position) <= MAX_MARCH_KM && byLand(world, from, target.position)) {
       found.push({
         bound: distance(from, target.position),
-        price: () => roadKm(from, target.position),
+        price: () => roadKm(from, target.position, true),
         step: { kind: 'march', to: target.position },
       });
     }
@@ -150,7 +154,7 @@ export function createRouter(state: State, world: World, faction: FactionId): Ro
       const voyage = distance(harbour(port), landAt) * SEA_KM_FACTOR;
       found.push({
         bound: distance(from, port.position) + voyage + ashore,
-        price: () => roadKm(from, port.position) + voyage + ashore,
+        price: () => roadKm(from, port.position, true) + voyage + ashore,
         step: { kind: 'march', to: port.position },
       });
     }

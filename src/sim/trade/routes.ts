@@ -10,6 +10,7 @@ import { distance, findPath } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import { emit } from '../events.ts';
 import { removeRecord } from '../records.ts';
+import { mayWalkWithin } from '../world/land-reach.ts';
 
 type State = DeepReadonly<GameState>;
 export type TradeMode = 'land' | 'sea';
@@ -85,7 +86,12 @@ function geometry(
   const start = mode === 'land' ? from.position : world.harbours.get(from.id);
   const end = mode === 'land' ? to.position : world.harbours.get(to.id);
   let found: Geometry | undefined;
-  if (start && end && distance(start, end) <= TRADE_RANGE[mode]) {
+  if (
+    start &&
+    end &&
+    distance(start, end) <= TRADE_RANGE[mode] &&
+    (mode !== 'land' || mayWalkWithin(world.mesh, start, end, TRADE_RANGE.land))
+  ) {
     const way = findPath(world.mesh, start, end, mode === 'land' ? 'land' : 'sea');
     if (way) {
       const path = [start, ...way];

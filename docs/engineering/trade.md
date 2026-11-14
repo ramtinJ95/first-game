@@ -15,6 +15,11 @@ Land routes reach 1,000 km at 16 km/day; sea routes require two actual ports and
 1,800 km at 28 km/day. Navigation uses the existing constrained mesh, and paths are
 found once and cached outside the state, keyed by world, endpoints and mode. The save
 holds the path and the caravan's crossing progress and direction.
+The AI screens its military-reserve budget before finding paths. Once the best quote
+reaches a candidate's maximum rounded return and capped income, that candidate cannot
+improve it and is not searched. Land searches also reject regions disconnected inside
+the route's radius before pricing an already-too-long walk round a sea. These bounds
+change neither quoted costs nor the choice or its original tie-breaking order.
 
 Province goods use a hash of the seed and position within a starting homeland's pool
 of three goods, or all five for independent cities. This never advances the world's

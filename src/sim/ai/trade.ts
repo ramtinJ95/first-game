@@ -8,12 +8,16 @@ import {
   routeSlots,
   routeOpeningCost,
   TRADE_RANGE,
+  TRADE_BASE,
+  DIFFERENT_GOODS,
+  TRADE_PAYBACK_DAYS,
   tradeForecast,
   tradeProblem,
   type TradeMode,
 } from '../trade/routes.ts';
 import { distance } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
+import { adminShareOf } from '../systems/economy.ts';
 
 /** One affordable route with the greatest daily return per gold, ties by city id then land. */
 export function bestTrade(
@@ -28,6 +32,7 @@ export function bestTrade(
   // faction cannot buy after keeping its military reserve.
   const minimumCost = routeOpeningCost(0, false);
   if (!payer || budget < minimumCost) return undefined;
+  const share = adminShareOf(state, faction);
   const cities = Object.values(state.cities).sort((a, b) => a.id.localeCompare(b.id));
   const slots = new Map(cities.map((city) => [city.id, routeSlots(city, world)]));
   for (const route of Object.values(state.tradeRoutes)) {
@@ -45,6 +50,22 @@ export function bestTrade(
         (slots.get(to.id) ?? 0) <= 0
       )
         continue;
+      if (best) {
+        const goods =
+          state.provinces[from.province]?.good !== state.provinces[to.province]?.good
+            ? DIFFERENT_GOODS
+            : 1;
+        // Distance cancels from return/cost, apart from the opening cost's ceiling.
+        // Round the ratio bound upward in floating arithmetic; cap the income with
+        // the same multiplication order as the forecast's 1,000 km maximum bonus.
+        const upperWorth =
+          Math.round(((goods * share) / TRADE_PAYBACK_DAYS) * (1 + 8 * Number.EPSILON) * 1000000) /
+          1000000;
+        const endpoint = TRADE_BASE * goods * 2 * share;
+        const upperIncome = endpoint + (to.owner === faction ? endpoint : 0);
+        if (best.worth > upperWorth || (best.worth === upperWorth && best.income >= upperIncome))
+          continue;
+      }
       for (const mode of ['land', 'sea'] as TradeMode[]) {
         const start = mode === 'land' ? from.position : world.harbours.get(from.id);
         const end = mode === 'land' ? to.position : world.harbours.get(to.id);
