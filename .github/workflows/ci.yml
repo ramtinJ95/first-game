@@ -129,7 +129,7 @@ jobs:
         run: test "$RESULT" = success
 
   publish-media:
-    timeout-minutes: 10
+    timeout-minutes: 15
     needs: capture
     if: >-
       !cancelled() && needs.capture.result == 'success' &&
