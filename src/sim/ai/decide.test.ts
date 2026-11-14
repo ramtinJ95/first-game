@@ -233,6 +233,41 @@ describe('a great power', () => {
       expectConsistent(after.state);
     });
 
+    test('keeps the march of an army whose join a join of another stance before it makes impossible', () => {
+      const state = buildFixture();
+      declare(state, f.rome, f.carthage);
+      city(state, f.capua).owner = f.carthage;
+      city(state, f.capua).garrison = 4300;
+      city(state, f.carthago).owner = f.syracusaeFaction;
+      place(state, f.punicArmy, city(state, f.carthago).position);
+      setMen(state, f.hastati, 1700);
+      const rome = state.factions[f.rome];
+      if (!rome) throw new Error('no Rome');
+      rome.stores.gold = 0;
+      for (const [n, stance] of [
+        [2, 'skirmishAndWithdraw'],
+        [3, 'holdTheLine'],
+      ] as const) {
+        const id = `army-roman-${n}` as never;
+        const spears = `formation-roman-${n}` as FormationId;
+        state.formations[spears] = {
+          id: spears,
+          army: id,
+          troop: 'spearmen',
+          men: 2000,
+          morale: 1,
+        };
+        state.armies[id] = { ...army(state, f.romanArmy), id, stance, formations: [spears] };
+      }
+      const orders = decide(state, f.rome);
+      expect(orders.filter((order) => order.kind === 'joinArmy')).toHaveLength(1);
+      const after = tick(state, orders, world);
+      expect(after.rejected).toEqual([]);
+      const romans = Object.values(after.state.armies).filter((a) => a.owner === f.rome);
+      expect(romans.map((a) => a.activity.kind)).toEqual(['marching', 'marching']);
+      expectConsistent(after.state);
+    });
+
     test('takes two armies that win only together, as one army, from inland to their port, across the sea, and on to the target', () => {
       let state = buildFixture();
       declare(state, f.rome, f.syracusaeFaction);

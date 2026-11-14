@@ -34,7 +34,7 @@ import { planCommand, plannedRoutes, type CommandTarget, type Plan } from './com
 import { fateChoices, type FateChoice } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
 import { refusalText } from './names.ts';
-import { alertsInSight, seesPick, sightOfAll } from './sighted.ts';
+import { alertsInSight, followJoin, seesPick, sightOfAll } from './sighted.ts';
 import { enqueue, keepOpen, type Modal } from './modals.ts';
 import { CHRONICLE_KEPT, pageData, parsePage, type Page, type Panel } from './page.ts';
 import { readPauses, stopsOfDay, writePauses, type PauseSettings } from './pauses.ts';
@@ -118,6 +118,8 @@ const powers: PowerCard[] = POWERS.map((power) => {
 });
 
 let selection: Pick | undefined;
+/** The day the selection was last checked against, so an army that joins another is followed. */
+let checked: DeepReadonly<GameState> | undefined;
 /** Every alert of the game, newest first, up to CHRONICLE_KEPT. */
 let chronicle: readonly Alert[] = [];
 let panel: Panel | undefined;
@@ -384,6 +386,12 @@ function loop() {
       clock.pause();
       resumeOnClose = true;
     }
+    view.refresh();
+  }
+  const followed = followJoin(checked, clock.state, selection);
+  checked = clock.state;
+  if (followed !== selection) {
+    selection = followed;
     view.refresh();
   }
   const sight = sightFor(clock.state);

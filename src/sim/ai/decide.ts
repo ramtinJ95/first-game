@@ -6,7 +6,15 @@ import { RALLY_DISTANCE } from '../systems/economy.ts';
 import { SIEGE_DISTANCE } from '../systems/sieges.ts';
 import { distance } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
-import { endOverlongMarches, fates, movements, retreats, storms, type Context } from './armies.ts';
+import {
+  endOverlongMarches,
+  fates,
+  guardOfCapital,
+  movements,
+  retreats,
+  storms,
+  type Context,
+} from './armies.ts';
 import { recruitment } from './budget.ts';
 import { construction } from './build.ts';
 import { minorOrders } from './minor.ts';
@@ -67,10 +75,19 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
  * The day's orders, with the joins that make one army of the faction's idle armies that
  * stand together at one of its cities first: the lowest id, under the best general. An
  * army joins when it was given no order today or the same orders as the army it joins,
- * which then carries them out for both. So a power that gathers at its muster city marches
- * and sails as one army, and a remnant that comes home joins the army there.
+ * which then carries them out for both. The guard of the capital joins only an army that
+ * stays, so the army that takes it in stays as well. Each join is weighed against the
+ * joins before it: an army that a join of another stance sets re-forming takes no more
+ * that day, and an army whose join cannot run keeps its own orders. So a power that
+ * gathers at its muster city marches and sails as one army, and a remnant that comes
+ * home joins the army there.
  */
-function withJoins({ state, faction }: Context, orders: Order[]): Order[] {
+function withJoins(context: Context, orders: Order[]): Order[] {
+  const { state, faction } = context;
+  const guard =
+    context.state.factions[faction]?.kind === 'greatPower'
+      ? guardOfCapital(context).guard?.id
+      : undefined;
   const ordersOf = (id: ArmyId) => orders.filter((order) => 'army' in order && order.army === id);
   const asOrdersOf = (mine: Order[], theirs: Order[], into: ArmyId) =>
     mine.length === theirs.length &&
@@ -79,6 +96,7 @@ function withJoins({ state, faction }: Context, orders: Order[]): Order[] {
     );
   const placed = new Set<ArmyId>();
   const joining = new Set<ArmyId>();
+  const reformed = new Set<ArmyId>();
   const joins: Order[] = [];
   for (const city of sorted(state.cities)) {
     if (city.owner !== faction) continue;
@@ -93,12 +111,17 @@ function withJoins({ state, faction }: Context, orders: Order[]): Order[] {
     if (into?.activity.kind !== 'idle') continue;
     placed.add(into.id);
     for (const army of rest) {
-      if (joinRefusal(state, { faction, army: army.id, into: into.id })) continue;
+      if (reformed.has(into.id) || joinRefusal(state, { faction, army: army.id, into: into.id })) {
+        continue;
+      }
       const own = ordersOf(army.id);
-      if (own.length > 0 && !asOrdersOf(own, ordersOf(into.id), into.id)) continue;
+      const theirs = ordersOf(into.id);
+      if (own.length > 0 && !asOrdersOf(own, theirs, into.id)) continue;
+      if (army.id === guard && theirs.length > 0) continue;
       placed.add(army.id);
       joining.add(army.id);
       joins.push({ kind: 'joinArmy', faction, army: army.id, into: into.id });
+      if (army.stance !== into.stance) reformed.add(into.id);
     }
   }
   return [...joins, ...orders.filter((order) => !('army' in order && joining.has(order.army)))];

@@ -161,6 +161,7 @@ test.describe('the panels', () => {
     const panel = page.getByTestId('army-panel');
     await expect(panel.getByTestId('army-name')).toHaveText('Second Legion');
     await panel.getByRole('button', { name: 'Join First Legion' }).click();
+    await expect(panel.getByTestId('army-name')).toHaveText('First Legion');
     await expect(armies).toHaveCount(1);
     await expect(armies).toContainText('First Legion');
     await expect(armies).toContainText(`${together.toLocaleString('en')} men`);

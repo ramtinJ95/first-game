@@ -12,7 +12,9 @@ import { expectConsistent } from '../references.ts';
 import type { City } from '../state/city.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
+import { menOf } from '../systems/economy.ts';
 import { tick } from '../tick.ts';
+import type { Troop } from '../troops.ts';
 import { distance } from '../world/find-path.ts';
 import { decideOrders } from './decide.ts';
 import { createRouter } from './routes.ts';
@@ -21,10 +23,16 @@ import { byLand } from './situation.ts';
 const world = fixtureWorld();
 const rome = 'rome' as FactionId;
 
-function addArmy(state: GameState, owner: FactionId, men: number, at: MapPoint): ArmyId {
+function addArmy(
+  state: GameState,
+  owner: FactionId,
+  men: number,
+  at: MapPoint,
+  troop: Troop = 'spearmen',
+): ArmyId {
   const id = allocateId(state, 'army');
   const formation = allocateId(state, 'formation');
-  state.formations[formation] = { id: formation, army: id, troop: 'spearmen', men, morale: 1 };
+  state.formations[formation] = { id: formation, army: id, troop, men, morale: 1 };
   state.armies[id] = {
     id,
     owner,
@@ -539,6 +547,10 @@ describe('the guard of the capital', () => {
       raiders,
       alongRoad(roma.position, target.position, km),
     );
+    if (raiders === 0) {
+      removeRecord(state.formations, state.armies[raider]?.formations[0] ?? ('' as never));
+      removeRecord(state.armies, raider);
+    }
     return { state, roma, army, raider, target };
   }
   const huntOf = (state: GameState, army: ArmyId, raider: ArmyId) => {
@@ -574,6 +586,72 @@ describe('the guard of the capital', () => {
       decideOrders(state, world, rome).filter((order) => 'army' in order && order.army === army),
     ).toEqual([]);
     expectConsistent(state);
+  });
+
+  test('a guard that hunts a raid near the capital keeps after it, day after day, until they fight', () => {
+    const start = raid(4500, 3500);
+    const { army } = start;
+    let { state } = start;
+    let fought = false;
+    for (let day = 0; day < 30 && !fought; day++) {
+      const result = tick(state, decideOrders(state, world, rome), world);
+      expect(result.rejected).toEqual([]);
+      state = result.state;
+      fought = state.armies[army]?.activity.kind === 'inBattle';
+    }
+    expect(fought).toBe(true);
+    expectConsistent(state);
+  });
+
+  test('holds the capital against a raid too few to blockade it that could storm its fallen walls', () => {
+    const { state, roma, target } = raid(3500, 0);
+    roma.walls = 0;
+    addArmy(
+      state,
+      target.owner,
+      2500,
+      alongRoad(roma.position, target.position, 80),
+      'heavyCavalry',
+    );
+    expect(2500).toBeLessThan(roma.garrison);
+    const romans = Object.values(state.armies).filter((army) => army.owner === rome);
+    expect(
+      decideOrders(state, world, rome).filter(
+        (order) => 'army' in order && romans.some((army) => army.id === order.army),
+      ),
+    ).toEqual([]);
+    expectConsistent(state);
+  });
+
+  test('never joins the guard into an army that leaves the capital, so the guard stays', () => {
+    const { state, roma, target } = raid(10_000, 0);
+    addArmy(state, rome, 3000, { x: roma.position.x + 3, y: roma.position.y });
+    const marching = addArmy(
+      state,
+      target.owner,
+      11_000,
+      alongRoad(roma.position, target.position, 80),
+    );
+    const raider = state.armies[marching];
+    if (!raider) throw new Error('no raider');
+    raider.activity = {
+      kind: 'marching',
+      position: { ...alongRoad(roma.position, target.position, 80) },
+      waypoints: [{ ...roma.position }],
+    };
+    const orders = decideOrders(state, world, rome);
+    const after = tick(state, orders, world);
+    expect(after.rejected).toEqual([]);
+    const staying = Object.values(after.state.armies)
+      .filter(
+        (army) =>
+          army.owner === rome &&
+          army.activity.kind === 'idle' &&
+          distance(army.activity.position, roma.position) <= 10,
+      )
+      .reduce((sum, army) => sum + menOf(after.state, army), 0);
+    expect(staying).toBeGreaterThanOrEqual(3000);
+    expectConsistent(after.state);
   });
 });
 

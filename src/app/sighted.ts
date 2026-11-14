@@ -5,6 +5,24 @@ import type { Sight } from '../sim/sight.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { Alert } from './alerts.ts';
 
+/**
+ * The pick to keep once a day has passed: an army that joined another army is picked as
+ * the army that holds its formations now, and any other pick stays as it was.
+ */
+export function followJoin(
+  before: DeepReadonly<GameState> | undefined,
+  after: DeepReadonly<GameState>,
+  pick: Pick | undefined,
+): Pick | undefined {
+  if (!before || pick?.kind !== 'army' || Object.hasOwn(after.armies, pick.army)) return pick;
+  const was = Object.hasOwn(before.armies, pick.army) ? before.armies[pick.army] : undefined;
+  const into = was?.formations
+    .map((id) => (Object.hasOwn(after.formations, id) ? after.formations[id]?.army : undefined))
+    .find((army): army is ArmyId => army !== undefined && Object.hasOwn(after.armies, army));
+  const owner = into && after.armies[into]?.owner;
+  return into && owner === was?.owner ? { kind: 'army', army: into } : pick;
+}
+
 /** Whether the player sees what a pick points at. Provinces and their cities are always known. */
 export function seesPick(sight: Sight, pick: Pick | undefined): boolean {
   if (pick?.kind === 'army') return sight.armies.has(pick.army);
