@@ -11,7 +11,15 @@ import type { GameMap, MultiPolygon } from '../../sim/map.ts';
 import { coversView, fitTexture } from '../cached-texture.ts';
 import { fillLand, landOutline } from '../land-outline.ts';
 import { visibleRect, type Camera, type Size } from '../camera.ts';
-import { BuildQueue, chunkKey, chunkRect, chunkRow, chunksNear, OVERHANG } from './chunks.ts';
+import {
+  BuildQueue,
+  chunkKey,
+  chunkRect,
+  chunkRow,
+  chunksNear,
+  chunksToFree,
+  OVERHANG,
+} from './chunks.ts';
 import { DETAIL, detailAlpha, type Band } from './detail.ts';
 import { PAPER } from '../palette.ts';
 import { createLakes } from './lakes.ts';
@@ -51,10 +59,17 @@ const CHUNK_FADE_MS = 260;
 const BUILD_SLICE_MS = 12;
 const PREFETCH_AFTER_MS = 250;
 const PREFETCH_ZOOM = 1.6;
+/**
+ * A tier keeps the chunks of this many views, each counted at the widest zoom the tier
+ * shows at, and frees those shown longest ago beyond them. Kept for good, the chunks of
+ * a long session at the closest zoom held over a gigabyte.
+ */
+const KEPT_VIEWS = 3;
 
 interface Chunk {
   readonly graphics: Container;
   bornAt: number;
+  usedAt: number;
 }
 
 interface Layer {
@@ -218,7 +233,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       for (let i = 0; i * wide.size < map.width; i++) {
         const key = chunkKey(i, j);
         const chunk = wide.build(chunkRect(wide.size, key));
-        wide.chunks.set(key, { graphics: chunk, bornAt: -Infinity });
+        wide.chunks.set(key, { graphics: chunk, bornAt: -Infinity, usedAt: Infinity });
         wide.container.addChild(chunk);
       }
     }
@@ -229,7 +244,8 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       const graphics = layer.build(chunkRect(layer.size, key));
       graphics.alpha = 0;
       graphics.visible = needed;
-      layer.chunks.set(key, { graphics, bornAt: performance.now() });
+      const now = performance.now();
+      layer.chunks.set(key, { graphics, bornAt: now, usedAt: now });
       const row = chunkRow(key);
       let before = 0;
       for (const other of layer.chunks.keys())
@@ -309,11 +325,34 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
           );
           missing.push({ layer, key, distance, needed });
         }
+        if (layer !== wide) {
+          const widest = { centre: camera.centre, scale: Math.max(layer.band.in[0], 0.1) };
+          const keep =
+            KEPT_VIEWS *
+            chunksNear(
+              visibleRect(widest, viewport),
+              size,
+              layer.overhang,
+              size,
+              map.width,
+              map.height,
+            ).length;
+          const usedAt = new Map(
+            layer.chunks.size > keep
+              ? [...layer.chunks].map(([key, chunk]) => [key, chunk.usedAt])
+              : [],
+          );
+          for (const key of chunksToFree(usedAt, wanted, keep)) {
+            layer.chunks.get(key)?.graphics.destroy({ children: true, context: true });
+            layer.chunks.delete(key);
+          }
+        }
         for (const [key, chunk] of layer.chunks) {
           const shown = wanted.has(key);
           if (chunk.graphics.visible !== shown) changed = true;
           chunk.graphics.visible = shown;
           if (!shown) continue;
+          chunk.usedAt = now;
           const age = Math.min(1, (now - chunk.bornAt) / CHUNK_FADE_MS);
           if (chunk.graphics.alpha !== age) changed = true;
           chunk.graphics.alpha = age;
