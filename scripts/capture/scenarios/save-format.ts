@@ -23,10 +23,8 @@ export default defineScenario({
         mimeType: 'application/json',
         buffer: Buffer.from(JSON.stringify({ format, state })),
       });
-      const notice = page.getByTestId('notice');
+      const notice = page.getByTestId('notice').filter({ hasText: change });
       await notice.waitFor();
-      if (!(await notice.textContent())?.includes(change))
-        throw new Error(`notice did not name ${change}`);
       await shot(name, `The import refusal names ${change}; the running game is not replaced`);
     }
   },

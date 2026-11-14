@@ -47,7 +47,7 @@ Total pairwise file incidences: **114 → 90**. This does not imply a proportion
 | `src/sim/save.ts`                          |        4 | Version bump/assertion contention removed with named change files; real parser tests remain.                  |
 | `docs/design.md`                           |        3 | Agreed design remains one document; splitting decisions would hide cross-area tradeoffs.                      |
 | `e2e/panels.spec.ts`                       |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
-| `package.json`                             |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
+| `package.json`                             |        3 | New simulation commands use file discovery; existing aliases remain compatible.                               |
 | `scripts/capture/scenarios/stage-three.ts` |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
 | `src/app/clock.ts`                         |        3 | Slots generated from independent typed order registrations; actual clock behavior remains.                    |
 | `src/app/fates.test.ts`                    |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
@@ -59,7 +59,7 @@ Total pairwise file incidences: **114 → 90**. This does not imply a proportion
 | `src/ui/Hud.svelte`                        |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
 | `src/ui/describe.test.ts`                  |        3 | Real UI, scenario, fixture, or behavior changes remain shared; splitting is not a small registration cleanup. |
 
-`package.json` and `orders/orders.ts` were below the three-PR threshold in this ten-PR sample, but their named extension points were fixed as explicitly requested.
+`package.json` reached three PRs after world news landed. `orders/orders.ts` remains below the three-PR threshold, but its named extension point was fixed as explicitly requested.
 
 ## Documentation replay assignments
 
