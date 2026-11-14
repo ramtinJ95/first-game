@@ -60,11 +60,12 @@ const BUILD_SLICE_MS = 12;
 const PREFETCH_AFTER_MS = 250;
 const PREFETCH_ZOOM = 1.6;
 /**
- * A tier keeps the chunks of this many views, each counted at the widest zoom the tier
- * shows at, and frees those shown longest ago beyond them. Kept for good, the chunks of
- * a long session at the closest zoom held over a gigabyte.
+ * A tier keeps as many chunks as this many views like the current one hold, with the
+ * ring built ahead, and frees those shown longest ago beyond them, so a pan back or a
+ * zoom out and in again finds its chunks built, and a session that looks at the whole
+ * map does not keep the whole map.
  */
-const KEPT_VIEWS = 3;
+const KEPT_VIEWS = 2;
 
 interface Chunk {
   readonly graphics: Container;
@@ -326,17 +327,8 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
           missing.push({ layer, key, distance, needed });
         }
         if (layer !== wide) {
-          const widest = { centre: camera.centre, scale: Math.max(layer.band.in[0], 0.1) };
-          const keep =
-            KEPT_VIEWS *
-            chunksNear(
-              visibleRect(widest, viewport),
-              size,
-              layer.overhang,
-              size,
-              map.width,
-              map.height,
-            ).length;
+          const near = chunksNear(view, size, layer.overhang, size, map.width, map.height);
+          const keep = KEPT_VIEWS * near.length;
           const usedAt = new Map(
             layer.chunks.size > keep
               ? [...layer.chunks].map(([key, chunk]) => [key, chunk.usedAt])
