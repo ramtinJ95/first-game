@@ -1,13 +1,22 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { ASSETS_BRANCH, fetchAssetsTip, git, gitBuffer, remoteRepo, resolveBranch } from './git.ts';
 import {
+  ASSETS_BRANCH,
+  fetchAssetsTip,
+  git,
+  gitBuffer,
+  remoteRepo,
+  resolveBranch,
+  withAssetsClone,
+} from './git.ts';
+import {
+  assetUrl,
   declareNexusOutputs,
+  imageMarkdown,
   isImage,
   MANIFEST_FILE,
   readManifest,
-  renderMarkdown,
   type ScenarioCapture,
 } from './manifest.ts';
 
@@ -25,30 +34,45 @@ export interface FetchResult {
 }
 
 export function fetchCaptures(options: FetchOptions): FetchResult {
-  const commit = fetchAssetsTip(options.cwd, options.remote);
-  if (!commit) throw new Error(`${options.remote} has no ${ASSETS_BRANCH} branch`);
-  const prefix = `${options.branch}/`;
-  const paths = git(options.cwd, ['ls-tree', '-r', '-z', '--name-only', commit, '--', prefix])
-    .split('\0')
-    .filter(Boolean);
-  if (paths.length === 0) throw new Error(`${ASSETS_BRANCH} has no captures for ${options.branch}`);
+  return withAssetsClone(options.cwd, options.remote, (clone) => {
+    const commit = fetchAssetsTip(clone);
+    if (!commit) throw new Error(`${options.remote} has no ${ASSETS_BRANCH} branch`);
+    const prefix = `${options.branch}/`;
+    const paths = git(clone, ['ls-tree', '-r', '-z', '--name-only', commit, '--', prefix])
+      .split('\0')
+      .filter(Boolean)
+      .map((path) => path.slice(prefix.length));
+    if (paths.length === 0) {
+      throw new Error(`${ASSETS_BRANCH} has no captures for ${options.branch}`);
+    }
 
-  rmSync(options.capturesDir, { recursive: true, force: true });
-  const scenarios = new Set<string>();
-  for (const path of paths) {
-    const relative = path.slice(prefix.length);
-    const target = join(options.capturesDir, relative);
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, gitBuffer(options.cwd, ['cat-file', 'blob', `${commit}:${path}`]));
-    if (relative.endsWith(`/${MANIFEST_FILE}`)) scenarios.add(dirname(relative));
-  }
+    rmSync(options.capturesDir, { recursive: true, force: true });
+    for (const path of paths) {
+      const target = join(options.capturesDir, path);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, gitBuffer(clone, ['cat-file', 'blob', `${commit}:${prefix}${path}`]));
+    }
 
-  const captures = [...scenarios].sort().map((scenario) => ({
-    scenario,
-    entries: readManifest(join(options.capturesDir, scenario)),
-  }));
-  const repo = remoteRepo(options.cwd, options.remote);
-  return { commit, captures, markdown: renderMarkdown(repo, commit, options.branch, captures) };
+    const captures = paths
+      .filter((path) => path.endsWith(`/${MANIFEST_FILE}`))
+      .map(dirname)
+      .sort()
+      .map((scenario) => ({
+        scenario,
+        entries: readManifest(join(options.capturesDir, scenario)).filter((entry) =>
+          paths.includes(`${scenario}/${entry.file}`),
+        ),
+      }));
+    const repo = remoteRepo(options.cwd, options.remote);
+    const markdown = captures
+      .flatMap(({ scenario, entries }) =>
+        entries.map((entry) =>
+          imageMarkdown(entry.title, assetUrl(repo, options.branch, scenario, entry.file)),
+        ),
+      )
+      .join('\n\n');
+    return { commit, captures, markdown: markdown + '\n' };
+  });
 }
 
 if (import.meta.main) {

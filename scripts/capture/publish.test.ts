@@ -13,9 +13,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fetchCaptures } from './fetch.ts';
 import { git, parseGitHubRemote } from './git.ts';
 import type { ManifestEntry } from './manifest.ts';
-import { publishCaptures } from './publish.ts';
+import { picture, texture } from './png-fixture.ts';
+import { publishCaptures, stageNumber, type PublishOptions } from './publish.ts';
 
 const REMOTE_URL = 'https://github.com/acme/strategy-game.git';
+const RAW = 'https://raw.githubusercontent.com/acme/strategy-game/refs/heads/pr-assets';
+const REFERENCE = { commit: 'c0ffee', runUrl: 'https://ci.example/runs/7', exact: true };
+
+const field = picture();
+const recoloured = picture((x, y) => (x < 10 && y < 10 ? texture(x, y) + 40 : texture(x, y)));
 
 let root: string;
 let work: string;
@@ -26,6 +32,7 @@ function setupRepo() {
   bare = join(root, 'remote.git');
   work = join(root, 'work');
   git(root, ['init', '--quiet', '--bare', bare]);
+  git(bare, ['config', 'uploadpack.allowFilter', 'true']);
   git(root, ['init', '--quiet', '-b', 'main', work]);
   git(work, ['config', 'user.name', 'Capture Test']);
   git(work, ['config', 'user.email', 'capture@example.test']);
@@ -35,11 +42,9 @@ function setupRepo() {
   git(work, ['add', 'game.txt']);
   git(work, ['commit', '--quiet', '-m', 'initial']);
   writeFileSync(join(work, 'game.txt'), 'edited, unstaged\n');
-  writeFileSync(join(work, 'staged.txt'), 'staged\n');
-  git(work, ['add', 'staged.txt']);
 }
 
-function writeCaptures(dir: string, scenarios: Record<string, Record<string, string>>): void {
+function writeCaptures(dir: string, scenarios: Record<string, Record<string, string | Buffer>>) {
   rmSync(dir, { recursive: true, force: true });
   for (const [scenario, shots] of Object.entries(scenarios)) {
     mkdirSync(join(dir, scenario), { recursive: true });
@@ -53,11 +58,24 @@ function writeCaptures(dir: string, scenarios: Record<string, Record<string, str
   }
 }
 
+function publish(branch: string, options: Partial<PublishOptions> = {}) {
+  return publishCaptures({
+    cwd: work,
+    capturesDir: join(root, 'captures'),
+    branch,
+    remote: 'origin',
+    head: 'head-1',
+    reference: null,
+    named: [],
+    openBranches: [],
+    ...options,
+  });
+}
+
 function assetsTree(): Record<string, string> {
-  const tip = git(bare, ['rev-parse', 'pr-assets']);
-  const paths = git(bare, ['ls-tree', '-r', '--name-only', tip]).split('\n');
+  const paths = git(bare, ['ls-tree', '-r', '--name-only', 'pr-assets']).split('\n');
   return Object.fromEntries(
-    paths.map((path) => [path, git(bare, ['cat-file', 'blob', `${tip}:${path}`])]),
+    paths.map((path) => [path, git(bare, ['cat-file', 'blob', `pr-assets:${path}`])]),
   );
 }
 
@@ -65,172 +83,242 @@ function assetsCommitCount(): number {
   return Number(git(bare, ['rev-list', '--count', 'pr-assets']));
 }
 
-function workState() {
-  return {
-    head: git(work, ['rev-parse', 'HEAD']),
-    branch: git(work, ['branch', '--show-current']),
-    status: git(work, ['status', '--porcelain']),
-    staged: git(work, ['diff', '--cached', '--name-only']),
-    localBranches: git(work, ['branch', '--format=%(refname:short)']),
-    files: readdirSync(work).sort(),
-  };
+/** Commits files straight onto the remote's pr-assets, as a tester's push does. */
+function pushToAssets(files: Record<string, string>): void {
+  const env = { GIT_INDEX_FILE: join(root, 'seed-index') };
+  const tip = git(bare, ['for-each-ref', '--format=%(objectname)', 'refs/heads/pr-assets']);
+  if (tip) git(bare, ['read-tree', tip], { env });
+  for (const [path, content] of Object.entries(files)) {
+    const blob = git(bare, ['hash-object', '-w', '--stdin'], { input: content });
+    git(bare, ['update-index', '--add', '--cacheinfo', `100644,${blob},${path}`], { env });
+  }
+  const tree = git(bare, ['write-tree'], { env });
+  const commit = git(bare, ['commit-tree', tree, ...(tip ? ['-p', tip] : []), '-m', 'seed'], {
+    env,
+  });
+  git(bare, ['update-ref', 'refs/heads/pr-assets', commit]);
 }
 
-describe('publishCaptures and fetchCaptures', () => {
+/** Moves pr-assets while a publish is being received, as a rival push would. */
+function raceOnReceive(rival: 'publisher' | 'tester', times: 'once' | 'always'): void {
+  const script = [
+    '#!/bin/sh',
+    'cat >/dev/null',
+    ...(times === 'once' ? [`[ -e "${root}/raced" ] && exit 0`, `touch "${root}/raced"`] : []),
+    'unset GIT_QUARANTINE_PATH GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES',
+    `export GIT_DIR="${bare}" GIT_INDEX_FILE="${root}/rival-index"`,
+    'export GIT_AUTHOR_NAME=rival GIT_AUTHOR_EMAIL=rival@example.test',
+    'export GIT_COMMITTER_NAME=rival GIT_COMMITTER_EMAIL=rival@example.test',
+    'git read-tree pr-assets',
+    rival === 'publisher'
+      ? 'path=feat/rival/fog/dark.png parent='
+      : 'path=playtest/stage-six/notes.md parent="-p pr-assets"',
+    'blob=$(date +%s%N | git hash-object -w --stdin)',
+    'git update-index --add --cacheinfo "100644,$blob,$path"',
+    'git update-ref refs/heads/pr-assets "$(git commit-tree "$(git write-tree)" $parent -m rival)"',
+  ].join('\n');
+  const hook = join(bare, 'hooks', 'pre-receive');
+  writeFileSync(hook, script + '\n');
+  chmodSync(hook, 0o755);
+}
+
+describe('publishCaptures', () => {
   beforeEach(setupRepo);
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-  const publish = (branch: string) =>
-    publishCaptures({ cwd: work, capturesDir: join(root, 'captures'), branch, remote: 'origin' });
-
-  // These are real git integration checks, not a wait on a timer. Keep one operation
-  // under test per case instead of charging five publishes and a fetch to one deadline.
-  describe('with a published branch', () => {
-    let first: ReturnType<typeof publishCaptures>;
-    let before: ReturnType<typeof workState>;
-    beforeEach(() => {
-      before = workState();
-      writeCaptures(join(root, 'captures'), {
-        placeholder: {
-          'start.png': 'start v1',
-          'later.png': 'later v1',
-          'clip.gif': 'gif v1',
-          'video.webm': 'webm',
-        },
-      });
-      first = publish('feat/map');
+  const changedFromMain = () => {
+    writeCaptures(join(root, 'reference'), {
+      armies: { 'march.png': field, 'camp.png': field },
+      fog: { 'dark.png': field },
     });
-    afterEach(() => expect(workState()).toEqual(before));
+    writeCaptures(join(root, 'captures'), {
+      armies: { 'march.png': recoloured, 'camp.png': field, 'clip.gif': 'gif armies' },
+      fog: { 'dark.png': field, 'clip.gif': 'gif fog' },
+      map: { 'start.png': 'start', 'clip.gif': 'gif map', 'video.webm': 'webm' },
+    });
+    return { dir: join(root, 'reference'), info: REFERENCE };
+  };
 
-    it('publishes images and a manifest with immutable Markdown links', () => {
+  describe('against a reference from main', () => {
+    let first: ReturnType<typeof publishCaptures>;
+    beforeEach(() => {
+      first = publish('feat/map', { reference: changedFromMain() });
+    });
+
+    it('pushes one parentless commit with only the changed and new media', () => {
       expect(first.changed).toBe(true);
-      expect(assetsTree()).toEqual({
-        'feat/map/placeholder/start.png': 'start v1',
-        'feat/map/placeholder/later.png': 'later v1',
-        'feat/map/placeholder/clip.gif': 'gif v1',
-        'feat/map/placeholder/manifest.json': expect.stringContaining('video.webm'),
-      });
-      expect(first.markdown).toBe(
-        [
-          `![placeholder start.png](https://raw.githubusercontent.com/acme/strategy-game/${first.commit}/feat/map/placeholder/start.png)`,
-          `![placeholder later.png](https://raw.githubusercontent.com/acme/strategy-game/${first.commit}/feat/map/placeholder/later.png)`,
-          `![placeholder clip.gif](https://raw.githubusercontent.com/acme/strategy-game/${first.commit}/feat/map/placeholder/clip.gif)`,
-        ].join('\n\n') + '\n',
+      expect(assetsCommitCount()).toBe(1);
+      expect(Object.keys(assetsTree()).sort()).toEqual([
+        'feat/map/README.md',
+        'feat/map/armies/clip.gif',
+        'feat/map/armies/manifest.json',
+        'feat/map/armies/march.png',
+        'feat/map/map/clip.gif',
+        'feat/map/map/manifest.json',
+        'feat/map/map/start.png',
+      ]);
+      expect(assetsTree()['feat/map/map/manifest.json']).toContain('video.webm');
+    });
+
+    it('names the head and the left-out media in the README and the Markdown', () => {
+      const readme = assetsTree()['feat/map/README.md'];
+      expect(readme).toContain('Head: `head-1`');
+      expect(readme).toContain('main `c0ffee` from https://ci.example/runs/7');
+      expect(readme).toContain('![armies march.png](armies/march.png)');
+      expect(readme).toContain(
+        '## Left out (unchanged from main)\n\n- `armies`: `camp.png`\n- `fog`',
+      );
+
+      const lines = first.markdown.split('\n');
+      expect(lines[0]).toBe('Captures of head-1 (compared with main c0ffee)');
+      expect(first.markdown).toContain(
+        `![armies march.png](${RAW}/feat/map/armies/march.png)\n\n![armies clip.gif](${RAW}/feat/map/armies/clip.gif)`,
+      );
+      expect(first.markdown).toContain(`![map start.png](${RAW}/feat/map/map/start.png)`);
+      expect(first.markdown).not.toContain('camp.png)');
+      expect(first.markdown).toContain(
+        '## Left out (unchanged from main)\n\n- `armies`: `camp.png`\n- `fog`',
       );
     });
 
-    it('replaces changed files and removes stale files from only that branch', () => {
-      writeCaptures(join(root, 'captures'), {
-        placeholder: { 'start.png': 'start v2', 'clip.gif': 'gif v2' },
+    it('replaces the branch folder on the next publish and keeps a single commit', () => {
+      const second = publish('feat/map', {
+        reference: changedFromMain(),
+        head: 'head-2',
+        named: ['fog'],
       });
-      const second = publish('feat/map');
       expect(second.commit).not.toBe(first.commit);
-      expect(git(bare, ['rev-parse', 'pr-assets^'])).toBe(first.commit);
-      expect(Object.keys(assetsTree()).sort()).toEqual([
-        'feat/map/placeholder/clip.gif',
-        'feat/map/placeholder/manifest.json',
-        'feat/map/placeholder/start.png',
-      ]);
-    });
-
-    it('preserves another branch when publishing a new branch', () => {
-      writeCaptures(join(root, 'captures'), { armies: { 'march.png': 'march' } });
-      const other = publish('feat/armies');
-      expect(other.changed).toBe(true);
+      expect(assetsCommitCount()).toBe(1);
       expect(assetsTree()).toMatchObject({
-        'feat/map/placeholder/start.png': 'start v1',
-        'feat/map/placeholder/clip.gif': 'gif v1',
-        'feat/armies/armies/march.png': 'march',
+        'feat/map/fog/dark.png': expect.any(String),
+        'feat/map/fog/clip.gif': 'gif fog',
+        'feat/map/README.md': expect.stringContaining('Head: `head-2`'),
       });
     });
 
-    it('does not commit or push when the branch captures have not changed', () => {
-      const commits = assetsCommitCount();
-      const rerun = publish('feat/map');
+    it('does not push when the folder already holds this publish', () => {
+      const rerun = publish('feat/map', { reference: changedFromMain() });
       expect(rerun).toMatchObject({ changed: false, commit: first.commit });
-      expect(assetsCommitCount()).toBe(commits);
-    });
-
-    describe('after updates and another branch advance the remote tip', () => {
-      let latest: ReturnType<typeof publishCaptures>;
-      beforeEach(() => {
-        writeCaptures(join(root, 'captures'), {
-          placeholder: { 'start.png': 'start v2', 'clip.gif': 'gif v2' },
-        });
-        publish('feat/map');
-        writeCaptures(join(root, 'captures'), { armies: { 'march.png': 'march' } });
-        latest = publish('feat/armies');
-      });
-
-      it('fetches the requested branch at the latest tip and removes stale local captures', () => {
-        const fetched = join(root, 'fetched');
-        mkdirSync(join(fetched, 'stale'), { recursive: true });
-        const result = fetchCaptures({
-          cwd: work,
-          capturesDir: fetched,
-          branch: 'feat/map',
-          remote: 'origin',
-        });
-        expect(result.commit).toBe(latest.commit);
-        expect(readdirSync(fetched)).toEqual(['placeholder']);
-        expect(readFileSync(join(fetched, 'placeholder', 'start.png'), 'utf8')).toBe('start v2');
-        expect(result.captures).toEqual([
-          {
-            scenario: 'placeholder',
-            entries: [
-              { file: 'start.png', title: 'placeholder start.png', kind: 'screenshot' },
-              { file: 'clip.gif', title: 'placeholder clip.gif', kind: 'clip' },
-            ],
-          },
-        ]);
-        expect(result.markdown).toContain(
-          `https://raw.githubusercontent.com/acme/strategy-game/${latest.commit}/feat/map/placeholder/clip.gif`,
-        );
-      });
+      expect(git(bare, ['rev-parse', 'pr-assets'])).toBe(first.commit);
     });
   });
 
-  it('rebuilds on the newer tip when another publisher pushes first', () => {
-    const captures = join(root, 'captures');
-    writeCaptures(captures, { placeholder: { 'start.png': 'start' } });
-    publishCaptures({ cwd: work, capturesDir: captures, branch: 'feat/map', remote: 'origin' });
+  it('leaves the work repository as it was', () => {
+    const state = () => ({
+      head: git(work, ['rev-parse', 'HEAD']),
+      status: git(work, ['status', '--porcelain']),
+      refs: git(work, ['for-each-ref']),
+      files: readdirSync(work).sort(),
+    });
+    const before = state();
+    writeCaptures(join(root, 'captures'), { map: { 'start.png': 'start' } });
+    publish('feat/map');
+    expect(state()).toEqual(before);
+  });
 
-    const rival = [
-      '#!/bin/sh',
-      `[ -e "${root}/raced" ] && exit 0`,
-      `touch "${root}/raced"`,
-      `export GIT_DIR="${bare}" GIT_INDEX_FILE="${root}/rival-index"`,
-      'export GIT_AUTHOR_NAME=rival GIT_AUTHOR_EMAIL=rival@example.test',
-      'export GIT_COMMITTER_NAME=rival GIT_COMMITTER_EMAIL=rival@example.test',
-      'git read-tree pr-assets',
-      'blob=$(printf rival | git hash-object -w --stdin)',
-      'git update-index --add --cacheinfo "100644,$blob,feat/rival/placeholder/start.png"',
-      'git update-ref refs/heads/pr-assets "$(git commit-tree "$(git write-tree)" -p pr-assets -m rival)"',
-    ].join('\n');
-    const hook = join(work, '.git', 'hooks', 'pre-push');
-    writeFileSync(hook, rival + '\n');
-    chmodSync(hook, 0o755);
+  it('keeps open pull requests and the newest playtest stage, and drops the rest', () => {
+    pushToAssets({
+      'feat/open/fog/dark.png': 'open',
+      'feat/closed/fog/dark.png': 'closed',
+      'playtest/stage-four/notes.md': 'four',
+    });
+    pushToAssets({ 'playtest/stage-five/notes.md': 'five', 'playtest/stage-two/notes.md': 'two' });
+    const openTree = git(bare, ['rev-parse', 'pr-assets:feat/open']);
 
-    writeCaptures(captures, { placeholder: { 'start.png': 'start v2' } });
-    const result = publishCaptures({
+    writeCaptures(join(root, 'captures'), { map: { 'start.png': 'start' } });
+    publish('feat/map', { openBranches: ['feat/open', 'feat/map', 'feat/never-published'] });
+
+    expect(assetsCommitCount()).toBe(1);
+    expect(git(bare, ['rev-parse', 'pr-assets:feat/open'])).toBe(openTree);
+    expect(Object.keys(assetsTree()).sort()).toEqual([
+      'feat/map/README.md',
+      'feat/map/map/manifest.json',
+      'feat/map/map/start.png',
+      'feat/open/fog/dark.png',
+      'playtest/stage-five/notes.md',
+    ]);
+  });
+
+  it('rebuilds on the rival publish that landed first and keeps its folder', () => {
+    writeCaptures(join(root, 'captures'), { map: { 'start.png': 'start' } });
+    publish('feat/map');
+    raceOnReceive('publisher', 'once');
+
+    publish('feat/map', { head: 'head-2', openBranches: ['feat/rival'] });
+
+    expect(assetsCommitCount()).toBe(1);
+    expect(Object.keys(assetsTree()).sort()).toEqual([
+      'feat/map/README.md',
+      'feat/map/map/manifest.json',
+      'feat/map/map/start.png',
+      'feat/rival/fog/dark.png',
+    ]);
+    expect(assetsTree()['feat/map/README.md']).toContain('head-2');
+  });
+
+  it('keeps a playtest stage pushed while it published as the newest stage', () => {
+    pushToAssets({ 'playtest/stage-five/notes.md': 'five' });
+    raceOnReceive('tester', 'once');
+    writeCaptures(join(root, 'captures'), { map: { 'start.png': 'start' } });
+
+    publish('feat/map');
+
+    expect(assetsCommitCount()).toBe(1);
+    expect(Object.keys(assetsTree()).filter((path) => path.startsWith('playtest/'))).toEqual([
+      'playtest/stage-six/notes.md',
+    ]);
+  });
+
+  it('gives up when the branch moves under every attempt', () => {
+    pushToAssets({ 'playtest/stage-five/notes.md': 'five' });
+    raceOnReceive('tester', 'always');
+    writeCaptures(join(root, 'captures'), { map: { 'start.png': 'start' } });
+
+    expect(() => publish('feat/map')).toThrow('pr-assets moved under each of 5 publishes');
+  });
+});
+
+describe('fetchCaptures', () => {
+  beforeEach(setupRepo);
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('fetches the published folder of a branch and drops stale local captures', () => {
+    writeCaptures(join(root, 'captures'), {
+      placeholder: { 'start.png': 'start', 'clip.gif': 'gif', 'video.webm': 'webm' },
+    });
+    publish('feat/map');
+    writeCaptures(join(root, 'captures'), { armies: { 'march.png': 'march' } });
+    const latest = publish('feat/armies', { openBranches: ['feat/map'] });
+
+    const fetched = join(root, 'fetched');
+    mkdirSync(join(fetched, 'stale'), { recursive: true });
+    const result = fetchCaptures({
       cwd: work,
-      capturesDir: captures,
+      capturesDir: fetched,
       branch: 'feat/map',
       remote: 'origin',
     });
 
-    expect(git(bare, ['log', '-1', '--format=%an', 'pr-assets^'])).toBe('rival');
-    expect(git(bare, ['rev-parse', 'pr-assets'])).toBe(result.commit);
-    expect(assetsTree()).toMatchObject({
-      'feat/map/placeholder/start.png': 'start v2',
-      'feat/rival/placeholder/start.png': 'rival',
-    });
+    expect(result.commit).toBe(latest.commit);
+    expect(readdirSync(fetched).sort()).toEqual(['README.md', 'placeholder']);
+    expect(readFileSync(join(fetched, 'placeholder', 'start.png'), 'utf8')).toBe('start');
+    expect(result.captures).toEqual([
+      {
+        scenario: 'placeholder',
+        entries: [
+          { file: 'start.png', title: 'placeholder start.png', kind: 'screenshot' },
+          { file: 'clip.gif', title: 'placeholder clip.gif', kind: 'clip' },
+        ],
+      },
+    ]);
+    expect(result.markdown).toBe(
+      `![placeholder start.png](${RAW}/feat/map/placeholder/start.png)\n\n![placeholder clip.gif](${RAW}/feat/map/placeholder/clip.gif)\n`,
+    );
   });
 
   it('refuses to fetch a branch that has no captures', () => {
-    const captures = join(root, 'captures');
-    writeCaptures(captures, { placeholder: { 'start.png': 'start' } });
-    publishCaptures({ cwd: work, capturesDir: captures, branch: 'feat/map', remote: 'origin' });
+    writeCaptures(join(root, 'captures'), { placeholder: { 'start.png': 'start' } });
+    publish('feat/map');
 
     expect(() =>
       fetchCaptures({
@@ -240,6 +328,19 @@ describe('publishCaptures and fetchCaptures', () => {
         remote: 'origin',
       }),
     ).toThrow(/no captures for feat\/none/);
+  });
+});
+
+describe('stageNumber', () => {
+  it.each([
+    ['stage-five', 5],
+    ['stage-twenty', 20],
+    ['stage-12', 12],
+    ['stage-Three', 3],
+    ['stage-final', null],
+    ['notes', null],
+  ])('reads %s as %s', (name, number) => {
+    expect(stageNumber(name)).toBe(number);
   });
 });
 
