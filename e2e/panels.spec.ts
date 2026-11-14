@@ -391,18 +391,6 @@ test.describe('the panels', () => {
     );
   });
 
-  test('the reason for a refused order shows for a few seconds', async ({ page }) => {
-    const view = camera(page);
-    await page.mouse.click(view.banner(cityPoint('roma')).x, view.banner(cityPoint('roma')).y);
-    // The open sea farthest on screen from every city at the opening zoom, 136 px, so no
-    // city's symbol or name reaches the click wherever its name is placed.
-    const sea = view.screen({ x: 5457, y: 1694 });
-    await page.mouse.click(sea.x, sea.y, { button: 'right' });
-    const notice = page.getByTestId('notice');
-    await expect(notice).toHaveText('Order refused. The destination is in the sea.');
-    await expect(notice).toHaveCount(0, { timeout: 6000 });
-  });
-
   test("a foreign army's panel shows a war under way with its owner", async ({ page }) => {
     const state = startGame();
     declareWar(state, rome, carthage);
@@ -413,5 +401,38 @@ test.describe('the panels', () => {
     const capua = view.banner(cityPoint('capua'));
     await page.mouse.click(capua.x, capua.y);
     await expect(page.getByTestId('war-status')).toHaveText(/At war with Carthage since day 1/);
+  });
+});
+
+test.describe('a refused order', () => {
+  test('its reason shows for a few seconds', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') errors.push(message.text());
+    });
+    page.on('pageerror', (error) => errors.push(error.message));
+    // The notice's timer runs on the page's clock, which a busy machine delays past any wait in
+    // real time, so the test moves that clock itself. It stops the page's clock an hour after
+    // it starts, later than any run reaches, and stops the game first so the jump plays no day.
+    const start = new Date('2026-01-01T00:00:00Z').getTime();
+    await page.clock.install({ time: start });
+    await openGame(page);
+    const view = camera(page);
+    await page.mouse.click(view.banner(cityPoint('roma')).x, view.banner(cityPoint('roma')).y);
+    await pause(page);
+    await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible();
+    await page.clock.pauseAt(start + 3_600_000);
+    // The open sea farthest on screen from every city at the opening zoom, 136 px, so no
+    // city's symbol or name reaches the click wherever its name is placed.
+    const sea = view.screen({ x: 5457, y: 1694 });
+    await page.mouse.click(sea.x, sea.y, { button: 'right' });
+    const notice = page.getByTestId('notice');
+    await page.clock.runFor(200);
+    await expect(notice).toHaveText('Order refused. The destination is in the sea.');
+    await page.clock.runFor(3500);
+    await expect(notice).toBeVisible();
+    await page.clock.runFor(500);
+    await expect(notice).toHaveCount(0);
+    expect(errors).toEqual([]);
   });
 });
