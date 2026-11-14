@@ -1,7 +1,9 @@
 import {
+  BigPool,
   BufferImageSource,
   Container,
   Graphics,
+  GraphicsContextRenderData,
   RenderTexture,
   Sprite,
   Texture,
@@ -334,10 +336,14 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
               ? [...layer.chunks].map(([key, chunk]) => [key, chunk.usedAt])
               : [],
           );
-          for (const key of chunksToFree(usedAt, wanted, keep)) {
+          const freed = chunksToFree(usedAt, wanted, keep);
+          for (const key of freed) {
             layer.chunks.get(key)?.graphics.destroy({ children: true, context: true });
             layer.chunks.delete(key);
           }
+          // Pixi pools a destroyed drawing's vertex buffers for the next one, at their
+          // largest size, so freed chunks still held their memory in the pool.
+          if (freed.length > 0) BigPool.getPool(GraphicsContextRenderData).clear();
         }
         for (const [key, chunk] of layer.chunks) {
           const shown = wanted.has(key);
