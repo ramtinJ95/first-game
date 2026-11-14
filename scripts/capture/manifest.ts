@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const MANIFEST_FILE = 'manifest.json';
@@ -26,6 +26,14 @@ export function readManifest(scenarioDir: string): ManifestEntry[] {
     throw new Error(`${path} is not an array of { file, title, kind } entries`);
   }
   return raw;
+}
+
+export function readCaptures(capturesDir: string): ScenarioCapture[] {
+  return readdirSync(capturesDir, { withFileTypes: true })
+    .filter((dirent) => dirent.isDirectory())
+    .map((dirent) => dirent.name)
+    .sort()
+    .map((scenario) => ({ scenario, entries: readManifest(join(capturesDir, scenario)) }));
 }
 
 function isManifestEntry(value: unknown): value is ManifestEntry {
