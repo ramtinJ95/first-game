@@ -18,8 +18,8 @@ const world = fixtureWorld();
 const key = warKey(f.rome, f.carthage);
 
 /** Equal troops/general/morale: 1,500 besiegers against a realm with 3,000 soldiers elsewhere. */
-function standOff(day: number, lost = 0) {
-  const state = buildFixture();
+function standOff(day: number, lost = 0, seed = 1) {
+  const state = buildFixture(seed);
   changeCityOwner(state, f.syracusae, f.carthage);
   const roman = state.armies[f.romanArmy];
   const enemy = state.armies[f.punicArmy];
@@ -49,7 +49,114 @@ function standOff(day: number, lost = 0) {
   return state;
 }
 
+function twoFronts(romanLoss: number, punicLoss: number, otherLoss = 0) {
+  const state = standOff(62, punicLoss, 30);
+  const army = state.armies[f.romanArmy];
+  const side = state.wars[key]?.sides[f.rome];
+  const foot = state.formations[f.hastati];
+  const punic = state.factions[f.carthage];
+  if (!army || !side || !foot || !punic) throw new Error('fixture');
+  leaveSiege(state, army);
+  side.lost = romanLoss;
+  foot.men -= romanLoss;
+  const egypt = 'egypt' as FactionId;
+  state.factions[egypt] = {
+    ...punic,
+    id: egypt,
+    name: 'Egypt',
+    stores: { gold: 1000, food: 1000, manpower: 1000 },
+  };
+  changeCityOwner(state, f.syracusae, egypt);
+  const other = newWar(egypt, f.carthage, 1 as Day);
+  const losses = other.sides[f.carthage];
+  const spears = state.formations[f.citizenSpears];
+  if (!losses || !spears) throw new Error('fixture');
+  losses.lost = otherLoss;
+  spears.men -= otherLoss;
+  state.wars[warKey(f.carthage, egypt)] = other;
+  expectConsistent(state);
+  return state;
+}
+
 describe('peace cannot turn a token war into a free truce shield', () => {
+  test.each([0, 72])(
+    'a winning second-front AI still charges after 151 Roman losses and %i of its own',
+    (lost) => {
+      for (const roman of [150, 151]) {
+        const state = twoFronts(roman, lost);
+        const answer = peaceAnswer(state, f.carthage, f.rome, AS_THINGS_STAND);
+        expect(answer?.accepts).toBe(false);
+        expect(answer?.short).toBeGreaterThan(0);
+        expectConsistent(state);
+      }
+      const state = twoFronts(151, lost);
+      expect(peaceAnswer(state, f.carthage, f.rome, AS_THINGS_STAND)?.verdict).toContain(
+        'worth 1 point more',
+      );
+      expect(peaceAnswer(state, f.carthage, f.rome, AS_THINGS_STAND)?.wish.factors).toContainEqual(
+        expect.objectContaining({ kind: 'otherWars', text: 'Carthage is also at war with Egypt' }),
+      );
+      const payment = { kind: 'payment', payer: f.rome, gold: 100, cities: [] } as const;
+      expect(peaceAnswer(state, f.carthage, f.rome, payment)?.accepts).toBe(true);
+      expect(peaceAnswer(state, f.carthage, f.rome, { ...payment, gold: 99 })?.accepts).toBe(false);
+    },
+  );
+
+  test('only real losses on the other front remove the early positive-price floor', () => {
+    for (const losses of [0, 300, 301]) {
+      const state = twoFronts(0, 0, losses);
+      expect(peaceAnswer(state, f.carthage, f.rome, AS_THINGS_STAND)?.accepts).toBe(losses > 300);
+      expectConsistent(state);
+    }
+  });
+
+  test('a held city loss on the other front can justify free peace, but equal battle losses cannot', () => {
+    const state = twoFronts(151, 72);
+    const egypt = 'egypt' as FactionId;
+    changeCityOwner(state, f.capua, egypt);
+    changeCityOwner(state, f.syracusae, f.carthage);
+    changeCityOwner(state, f.carthago, egypt);
+    expect(peaceAnswer(state, f.carthage, f.rome, AS_THINGS_STAND)?.accepts).toBe(true);
+    expectConsistent(state);
+    const even = twoFronts(151, 0, 301);
+    const other = even.wars[warKey(f.carthage, egypt)]?.sides[egypt];
+    if (!other) throw new Error('fixture');
+    other.lost = 301;
+    expect(peaceAnswer(even, f.carthage, f.rome, AS_THINGS_STAND)?.accepts).toBe(false);
+    expectConsistent(even);
+  });
+
+  test('the seed-30 casualty record buys a truce for 100 gold, not for the player’s 151 casualties alone', () => {
+    const state = twoFronts(151, 72);
+    const before = state.factions[f.rome]?.stores.gold;
+    const terms = { kind: 'payment', payer: f.rome, gold: 100, cities: [] } as const;
+    const sent = tick(
+      state,
+      [{ kind: 'offerPeace', faction: f.rome, to: f.carthage, terms: { ...terms, cities: [] } }],
+      world,
+      [advanceDay],
+    );
+    const made = tick(
+      sent.state,
+      [
+        {
+          kind: 'acceptPeace',
+          faction: f.carthage,
+          from: f.rome,
+          terms: { ...terms, cities: [] },
+          reckon: true,
+        },
+      ],
+      world,
+      [advanceDay],
+    );
+    expect(sent.rejected).toEqual([]);
+    expect(made.rejected).toEqual([]);
+    expect(made.state.factions[f.rome]?.stores.gold).toBe((before ?? 0) - 100);
+    expect(made.state.truces[key]).toEqual({ since: 63, endsOn: 428 });
+    expectConsistent(made.state);
+  });
+
   test('an exposed city under siege is provisional pressure, not a real defeat', () => {
     const state = standOff(69);
     const own = state.armies[f.romanArmy];
