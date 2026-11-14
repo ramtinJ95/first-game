@@ -32,7 +32,19 @@ async function beaten(page: Page, power: PowerId, enemy: PowerId, at: string) {
     (a) => a.owner === power && a.activity.kind === 'retreating',
   );
   if (army?.activity.kind !== 'retreating') throw new Error(`no army of ${power} retreats`);
-  await selectArmy(page, army.activity.position, /^(Retreating to|Falling back into the field)/);
+  // A retreat can pass behind a city's symbol at a wide zoom; Overview reaches the
+  // force without clicking through the city that now wins that overlapping hit.
+  await page.getByRole('button', { name: 'Overview', exact: true }).click();
+  await page
+    .getByTestId('overview-armies')
+    .getByRole('button')
+    .filter({ hasText: army.name })
+    .click();
+  await page
+    .getByTestId('army-activity')
+    .filter({ hasText: /^(Retreating to|Falling back into the field)/ })
+    .waitFor();
+  await page.getByRole('button', { name: 'Overview', exact: true }).click();
 }
 
 export default defineScenario({
