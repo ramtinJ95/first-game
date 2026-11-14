@@ -1,0 +1,42 @@
+[
+  {
+    "file": "whole-map-no-fog.png",
+    "title": "The same map with the fog layer hidden, for comparison",
+    "kind": "screenshot"
+  },
+  {
+    "file": "whole-map.png",
+    "title": "The whole map as Rome, with the fog marking where Roman sight ends. Wash brightness, 0 to 255: persia 146 clear and 144 fogged, 1.3 % darker; egypt 139 clear and 135 fogged, 3.0 % darker",
+    "kind": "screenshot"
+  },
+  {
+    "file": "army-in-sight.png",
+    "title": "Day 9: the Punic army has just come into Roman sight north of Arretium, and the Roman army's sight reaches past the Alps toward Carnuntum",
+    "kind": "screenshot"
+  },
+  {
+    "file": "fog-edge.png",
+    "title": "The edge of the fog at 1.2 px per km: a band of pen hatching marks where Roman sight ends and fades away from it",
+    "kind": "screenshot"
+  },
+  {
+    "file": "pan-frame-time.png",
+    "title": "Pan with the fog on while both armies march at speed 3, 1.2 px per km: 174 frames, frame interval median 16.7 ms, p95 16.7 ms, main thread busy 4.5 ms per frame",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Fog of war as Rome: a Punic army marches on Roma out of the north-west and appears at the edge of sight, while a Roman army marches from Ariminum toward Carnuntum and the fog follows it",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Fog of war as Rome: a Punic army marches on Roma out of the north-west and appears at the edge of sight, while a Roman army marches from Ariminum toward Carnuntum and the fog follows it (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Fog of war as Rome: a Punic army marches on Roma out of the north-west and appears at the edge of sight, while a Roman army marches from Ariminum toward Carnuntum and the fog follows it (Playwright trace)",
+    "kind": "trace"
+  }
+]
