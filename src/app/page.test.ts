@@ -50,13 +50,14 @@ function keptPage(): Page {
 
 describe('the page a save keeps', () => {
   it.each([true, false])(
-    'keeps the paused clock owner, automatic-resume=%s, through a save and load',
+    'keeps the paused clock through a save and load, and reads an older page that kept automatic-resume=%s',
     (resumeOnClose) => {
-      const page = { ...keptPage(), paused: true, resumeOnClose };
-      const loaded = loadGame(saveGame(buildFixture(), pageData(page)));
+      const page = { ...(pageData(keptPage()) as object), paused: true, resumeOnClose };
+      const loaded = loadGame(saveGame(buildFixture(), page));
       if (!loaded.ok) throw new Error(loaded.error);
       const parsed = parsePage(loaded.page);
-      expect(parsed).toMatchObject({ ok: true, page: { paused: true, resumeOnClose } });
+      expect(parsed).toMatchObject({ ok: true, page: { paused: true } });
+      expect(parsed.ok && parsed.page && 'resumeOnClose' in parsed.page).toBe(false);
     },
   );
 

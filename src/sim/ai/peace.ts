@@ -253,8 +253,28 @@ export function peaceAnswer(
       ? `${name} will not talk of peace before day ${wish.talksFrom}.`
       : accepts
         ? `${name} would accept.`
-        : `${name} would refuse. It wants terms worth ${short} ${short === 1 ? 'point' : 'points'} more, such as ${gold(short * GOLD_PER_POINT)} more.`;
+        : `${name} would refuse. ${wantedText(state, faction, enemy, terms, short)}`;
   return { accepts, problem, wish, terms: termsFactor, short, verdict };
+}
+
+/**
+ * What a refusing faction wants changed, the right way round for its side: a payer that
+ * refuses wants to give less, and a side that is paid or paid nothing wants more.
+ */
+function wantedText(
+  state: State,
+  faction: FactionId,
+  enemy: FactionId,
+  terms: DeepReadonly<PeaceTerms>,
+  short: number,
+): string {
+  const points = (n: number) => `${n} ${n === 1 ? 'point' : 'points'}`;
+  if (terms.kind !== 'payment' || terms.payer !== faction)
+    return `It wants terms worth ${points(short)} more, such as ${gold(short * GOLD_PER_POINT)} more.`;
+  const given = Math.floor(-termsPoints(state, terms, faction));
+  if (short <= given)
+    return `It would give terms worth ${points(short)} less, such as ${gold(short * GOLD_PER_POINT)} less.`;
+  return `It would give nothing, and wants terms worth ${points(short - given)} from ${nameOf(state, enemy)}, such as ${gold((short - given) * GOLD_PER_POINT)}.`;
 }
 
 /** A payer's cities it could hand over: neither its capital nor its last, besieged by the receiver first, then nearest the receiver. */

@@ -8,6 +8,7 @@
   import type { Actions } from './actions.ts';
   import { truceDaysLeft } from '../sim/peace/truce.ts';
   import { pendingOrder } from './describe.ts';
+  import { declarationFacts } from './war-room.ts';
 
   let {
     game,
@@ -48,8 +49,11 @@
         )}.
       </p>
     {:else if confirming}
+      <p><strong>Declare war on {name}?</strong></p>
+      <ul class="facts" data-testid="war-consequences">
+        {#each declarationFacts(game, owner) as fact (fact)}<li>{fact}</li>{/each}
+      </ul>
       <div class="row">
-        <span>Declare war on {name}?</span>
         <button
           type="button"
           class="danger"
@@ -71,6 +75,11 @@
 </div>
 
 <style>
+  .facts {
+    margin: 2px 0 4px;
+    padding-left: 1.1em;
+  }
+
   .war {
     margin-top: 8px;
     padding-top: 6px;

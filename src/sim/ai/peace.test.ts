@@ -120,6 +120,26 @@ describe("the AI's answer", () => {
     expectConsistent(state);
   });
 
+  test('a refusing payer asks to give less, and one asked to pay that wants paying says so', () => {
+    const state = warOn(200);
+    changeCityOwner(state, f.capua, f.carthage);
+    const treasury = state.factions[f.rome];
+    if (!treasury) throw new Error('no Rome');
+    treasury.stores.gold = 20_000;
+    const wish = peaceWish(state, f.rome, f.carthage)?.wish ?? 0;
+    expect(wish).toBeGreaterThan(0);
+    const tooMuch = peaceAnswer(state, f.rome, f.carthage, gold(f.rome, (wish + 3) * 100));
+    expect(tooMuch?.verdict).toBe(
+      'Rome would refuse. It would give terms worth 3 points less, such as 300 gold less.',
+    );
+    const early = warOn(1 + WEARY_DAYS * (PEACE_RESOLVE - 5));
+    expect(peaceAnswer(early, f.carthage, f.rome, gold(f.carthage, 300))?.verdict).toBe(
+      'Carthage would refuse. It would give nothing, and wants terms worth 5 points from Rome, such as 500 gold.',
+    );
+    expectConsistent(state);
+    expectConsistent(early);
+  });
+
   test('does not talk of peace in a war younger than MIN_WAR_DAYS', () => {
     const state = warOn(MIN_WAR_DAYS);
     const answer = peaceAnswer(state, f.carthage, f.rome, gold(f.rome, 3000));

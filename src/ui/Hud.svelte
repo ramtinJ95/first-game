@@ -77,17 +77,13 @@
       <TopBar {view} {actions} {frame} />
     </div>
     <div class="slot main">
-      {#if view.current.panel === 'wars' || modal?.kind === 'peaceOffer'}
+      {#if view.current.panel === 'wars'}
         <WarsPanel
           {game}
           pending={view.current.pending}
+          paused={view.current.paused}
           {actions}
-          prompted={modal?.kind === 'peaceOffer' ? modal.from : undefined}
-          answered={frame.closeModal}
-          close={() => {
-            if (view.current.panel === 'wars') actions.togglePanel('wars');
-            if (modal?.kind === 'peaceOffer') frame.closeModal();
-          }}
+          close={() => actions.togglePanel('wars')}
         />
       {:else if view.current.panel === 'overview'}
         <OverviewPanel {game} {sight} {actions} openWars={() => actions.togglePanel('wars')} />

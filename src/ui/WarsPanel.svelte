@@ -9,23 +9,20 @@
   import type { GameState } from '../sim/state/game-state.ts';
   import type { PeaceTerms } from '../sim/state/peace.ts';
   import type { Actions } from './actions.ts';
-  import { peaceVerdict, warRoomOf, type WarRow } from './war-room.ts';
+  import { unansweredOffer } from '../app/modals.ts';
+  import { PEACE_TEXT, peaceVerdict, warRoomOf, type WarRow } from './war-room.ts';
 
   let {
     game,
     pending,
+    paused,
     actions,
-    prompted,
-    answered,
     close,
   }: {
     game: DeepReadonly<GameState>;
     pending: readonly Order[];
+    paused: boolean;
     actions: Actions;
-    /** The enemy whose offer paused the game and waits for an answer. */
-    prompted: FactionId | undefined;
-    /** Closes the pause the offer opened, once the player has answered it. */
-    answered: () => void;
     close: () => void;
   } = $props();
 
@@ -37,7 +34,9 @@
   let gold = $state(0);
   let cities = $state<CityId[]>([]);
 
-  const shown = $derived(room.wars.find((war) => war.enemy === (prompted ?? open)) ?? room.wars[0]);
+  /** The enemy whose offer waits for the player's answer. */
+  const waiting = $derived(unansweredOffer(game, pending));
+  const shown = $derived(room.wars.find((war) => war.enemy === (open ?? waiting)) ?? room.wars[0]);
 
   function payerOf(war: WarRow, who: Payer): FactionId | undefined {
     return who === 'us' ? game.player : who === 'them' ? war.enemy : undefined;
@@ -83,7 +82,6 @@
         ? { kind: 'acceptPeace', faction: game.player, from: war.enemy, terms }
         : { kind: 'refusePeace', faction: game.player, from: war.enemy },
     );
-    if (prompted === war.enemy) answered();
   }
 
   function points(value: number): string {
@@ -106,12 +104,20 @@
     <h2>Wars and peace</h2>
     <button type="button" class="close" aria-label="Close" onclick={close}>×</button>
   </div>
-  {#if prompted && shown?.enemy === prompted}
-    <p class="muted" data-testid="peace-paused">The game is paused for your answer.</p>
+  {#if waiting && shown?.enemy === waiting}
+    <p class="muted" data-testid="peace-paused">
+      {paused
+        ? 'The game is paused for your answer. It runs again only when you resume it.'
+        : `The game runs while ${shown.name}'s offer waits for your answer.`}
+    </p>
   {/if}
 
   {#if room.wars.length === 0}
-    <p>You are at war with no one.</p>
+    <div data-testid="wars-at-peace">
+      <p>You are at war with no one.</p>
+      <p>{PEACE_TEXT.start}</p>
+      <p>{PEACE_TEXT.end}</p>
+    </div>
   {:else}
     <div class="tabs">
       {#each room.wars as war (war.enemy)}
@@ -154,21 +160,40 @@
           {#if war.theirOffer.problem}
             <p class="bad">These terms cannot be met: {war.theirOffer.problem}.</p>
           {/if}
-          <p class="muted">{war.theirOffer.refusing}</p>
-          <div class="row">
-            <button
-              type="button"
-              data-testid="accept-peace"
-              disabled={war.theirOffer.problem !== undefined}
-              onclick={() => answer(war, true)}>Accept peace</button
-            >
-            <button
-              type="button"
-              class="danger"
-              data-testid="refuse-peace"
-              onclick={() => answer(war, false)}>Refuse</button
-            >
-          </div>
+          {#if war.theirOffer.answered}
+            <p data-testid="peace-answered">{war.theirOffer.answered}</p>
+          {:else if !war.ourOffer}
+            {#if war.theirOffer.counter}
+              {@const counter = war.theirOffer.counter}
+              <div class="counter" data-testid="peace-counter">
+                <p>{counter.text}</p>
+                <button
+                  type="button"
+                  data-testid="send-counter"
+                  onclick={() => offer(war, counter.terms)}
+                >
+                  Send offer — {counter.terms.kind === 'payment'
+                    ? termsText(game, counter.terms, game.player)
+                    : 'peace as things stand'}
+                </button>
+              </div>
+            {/if}
+            <p class="muted">{war.theirOffer.refusing}</p>
+            <div class="row">
+              <button
+                type="button"
+                data-testid="accept-peace"
+                disabled={war.theirOffer.problem !== undefined}
+                onclick={() => answer(war, true)}>Accept peace</button
+              >
+              <button
+                type="button"
+                class="danger"
+                data-testid="refuse-peace"
+                onclick={() => answer(war, false)}>Refuse</button
+              >
+            </div>
+          {/if}
         </div>
       {/if}
 
@@ -258,7 +283,9 @@
       {/each}
     </ul>
   {/if}
-  <p class="muted small">A point of the reckoning is {whole(GOLD_PER_POINT)} gold.</p>
+  {#if room.wars.length > 0}
+    <p class="muted small">A point of the reckoning is {whole(GOLD_PER_POINT)} gold.</p>
+  {/if}
 </section>
 
 <style>
@@ -318,6 +345,16 @@
     padding: 6px 8px;
     border: 1px solid var(--rule);
     border-radius: 3px;
+  }
+
+  .counter {
+    margin: 4px 0;
+    padding: 4px 6px;
+    border-left: 3px solid var(--good);
+  }
+
+  .counter button {
+    text-align: left;
   }
 
   .row {

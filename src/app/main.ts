@@ -36,7 +36,7 @@ import { fateChoices, type FateChoice } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
 import { refusalText } from './names.ts';
 import { alertsInSight, followJoin, seesPick, sightOfAll } from './sighted.ts';
-import { enqueue, keepOpen, restoreModalResume, type Modal } from './modals.ts';
+import { enqueue, keepOpen, unansweredOffer, type Modal } from './modals.ts';
 import { CHRONICLE_KEPT, pageData, parsePage, type Page, type Panel } from './page.ts';
 import { readPauses, stopsOfDay, writePauses, type PauseSettings } from './pauses.ts';
 import {
@@ -50,7 +50,6 @@ import {
   type Slot,
 } from './saves.ts';
 import { turningPoints } from './turning-points.ts';
-import { standingOffer } from '../sim/peace/offer.ts';
 import { worldNewsOfDay } from './world-news.ts';
 import {
   createView,
@@ -148,8 +147,11 @@ let toldOnce = new Set<string>();
 let announced = false;
 /** A turning point asked for a stop. The clock stops after the frame's days, not inside one. */
 let stopAsked = false;
-/** A modal stopped a running game, so closing the last of them runs it again. */
-let resumeOnClose = false;
+/**
+ * The player asked for the game to run once the modals close: they were running it when
+ * they asked to leave and chose Stay, or chose Play on after the win.
+ */
+let resumeWhenClear = false;
 
 function readPauseOnFate(): boolean {
   try {
@@ -256,17 +258,19 @@ const clock = createClock({
     // The clock runs no further day once paused, so the game stops on the day of the news.
     if (stops.stop) clock.pause();
     for (const point of turningPoints(before, after, world)) {
+      if (point.kind === 'peaceOffer') {
+        // The offer is answered in the wars panel, so the game stops on the day it came.
+        clock.pause();
+        panel = 'wars';
+        continue;
+      }
       if (point.kind === 'fate' && !pauseOnFate) continue;
       if (point.kind === 'won' && announced) continue;
       if (point.kind === 'won') announced = true;
       modals = enqueue(modals, point);
       stopAsked = true;
     }
-    modals = keepOpen(
-      modals,
-      (city) => fateOpen(after, city),
-      (from) => standingOffer(after, after.player, from)?.from === from,
-    );
+    modals = keepOpen(modals, (city) => fateOpen(after, city));
     if (startsMonth(after.day) && after.factions[after.player]?.defeatedOn === null) {
       save('auto', after);
     }
@@ -392,10 +396,7 @@ function loop() {
   if (clock.state !== shown) view.refresh();
   if (stopAsked) {
     stopAsked = false;
-    if (!clock.paused) {
-      clock.pause();
-      resumeOnClose = true;
-    }
+    clock.pause();
     view.refresh();
   }
   const followed = followJoin(checked, clock.state, selection);
@@ -438,8 +439,7 @@ function homeOf(state: DeepReadonly<GameState>): MapPoint | undefined {
 /** What the page keeps beside the game in a save. */
 function pageNow(): Page {
   return {
-    paused: clock.paused,
-    resumeOnClose: resumeOnClose || (stopAsked && !clock.paused),
+    paused: clock.paused || stopAsked,
     pendingPeace: clock.pending.filter(
       (order): order is Extract<Order, { kind: 'offerPeace' | 'acceptPeace' | 'refusePeace' }> =>
         ['offerPeace', 'acceptPeace', 'refusePeace'].includes(order.kind),
@@ -486,28 +486,10 @@ function enter(
     outcome.kind === 'lost'
       ? [{ kind: 'lost', on: outcome.on, city: undefined, by: undefined }]
       : openFates(state);
-  if (outcome.kind !== 'lost') {
-    for (const offer of Object.values(state.peaceOffers)) {
-      if (
-        offer.from === state.player ||
-        standingOffer(state, state.player, offer.from)?.from !== offer.from
-      )
-        continue;
-      const answered = page?.pendingPeace?.some(
-        (order) =>
-          (order.kind === 'acceptPeace' || order.kind === 'refusePeace') &&
-          order.from === offer.from,
-      );
-      if (!answered) modals = enqueue(modals, { kind: 'peaceOffer', from: offer.from });
-    }
-  }
-  resumeOnClose = restoreModalResume({
-    saved: page,
-    hasModal: modals.length > 0,
-    paused: clock.paused,
-    forcePause: pause,
-  });
-  if (pause || page?.paused || modals.length > 0) clock.pause();
+  const waiting = outcome.kind !== 'lost' && unansweredOffer(state, clock.pending);
+  if (waiting) panel = 'wars';
+  resumeWhenClear = false;
+  if (pause || page?.paused || modals.length > 0 || waiting) clock.pause();
   else if (page?.paused === false) clock.resume();
   const home = focus && !page?.camera ? homeOf(state) : undefined;
   view.refresh();
@@ -562,8 +544,8 @@ function loadText(text: string, how: { pause: boolean; focus: boolean }) {
 
 function closeModal() {
   modals = modals.slice(1);
-  if (modals.length === 0 && resumeOnClose) {
-    resumeOnClose = false;
+  if (modals.length === 0 && resumeWhenClear) {
+    resumeWhenClear = false;
     clock.resume();
   }
   view.refresh();
@@ -591,7 +573,7 @@ const frame: FrameActions = {
   showStart() {
     clock.pause();
     modals = enqueue(modals, { kind: 'start' });
-    resumeOnClose = false;
+    resumeWhenClear = false;
     menu = undefined;
     view.refresh();
   },
@@ -600,7 +582,7 @@ const frame: FrameActions = {
       frame.showStart();
       return;
     }
-    if (!clock.paused) resumeOnClose = true;
+    resumeWhenClear = !clock.paused;
     clock.pause();
     modals = [{ kind: 'leave' }, ...modals];
     menu = undefined;
@@ -619,9 +601,13 @@ const frame: FrameActions = {
     view.refresh();
   },
   closeModal,
+  playOn() {
+    resumeWhenClear = true;
+    closeModal();
+  },
   watchOn() {
     modals = [];
-    resumeOnClose = false;
+    resumeWhenClear = false;
     clock.resume();
     view.refresh();
   },
@@ -690,8 +676,6 @@ function held(): boolean {
 const actions: Actions = {
   togglePause() {
     if (held()) return;
-    // A deliberate clock action supersedes a modal's automatic resume.
-    resumeOnClose = false;
     clock.togglePause();
     view.refresh();
   },

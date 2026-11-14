@@ -57,7 +57,6 @@ const AlertSchema = v.object({
 const PageSchema = v.object({
   desertion: v.optional(DesertionSchema),
   paused: v.optional(v.boolean()),
-  resumeOnClose: v.optional(v.boolean()),
   pendingPeace: v.optional(
     v.array(
       v.variant('kind', [
@@ -112,7 +111,6 @@ const PageSchema = v.object({
 export interface Page {
   readonly desertion?: Desertion;
   readonly paused?: boolean;
-  readonly resumeOnClose?: boolean;
   readonly pendingPeace?: readonly Extract<
     Order,
     { kind: 'offerPeace' | 'acceptPeace' | 'refusePeace' }
@@ -163,14 +161,12 @@ export function parsePage(
     weakSieges,
     paused,
     pendingPeace,
-    resumeOnClose,
   } = parsed.output;
   return {
     ok: true,
     page: {
       desertion,
       paused,
-      resumeOnClose,
       pendingPeace,
       chronicle,
       camera,

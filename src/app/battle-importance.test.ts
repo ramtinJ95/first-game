@@ -8,22 +8,44 @@ import { alertsOfDay, cornerAlerts } from './alerts.ts';
 import { ALL_PAUSES, stopsOfDay } from './pauses.ts';
 import { pageData, parsePage } from './page.ts';
 
-it.each([50, 100, 150, 499, 500])(
-  'a battle involving %i men pauses only at the 500-man line when a large reserve exists',
-  (men) => {
-    const state = facing(men, 50, men === 50);
+it.each([
+  [50, false],
+  [68, false],
+  [160, false],
+  [499, false],
+  [500, true],
+])(
+  'a battle against %i enemy men pauses only at the 500-man line when 1,900 of ours stand in it beside a large reserve',
+  (enemyMen, pauses) => {
+    const state = facing(1900, enemyMen, enemyMen === 50);
     const result = tick(state, [], fixtureWorld());
     const news = alertsOfDay(state, result.state, result.events);
     const began = news.find((a) => a.kind === 'battleBegan');
     expect(began).toBeDefined();
-    expect(stopsOfDay(news, ALL_PAUSES, new Set()).stop).toBe(men >= 500);
-    if (men < 500)
-      expect(cornerAlerts(news, 10).filter((a) => a.kind === 'battleBegan')).toEqual([]);
-    if (men === 50) {
+    expect(stopsOfDay(news, ALL_PAUSES, new Set()).stop).toBe(pauses);
+    if (!pauses) expect(cornerAlerts(news, 10).filter((a) => a.kind === 'battleBegan')).toEqual([]);
+    if (enemyMen === 50) {
       expect(Object.keys(result.state.battles)).toHaveLength(0);
       expect(cornerAlerts(news, 10).filter((a) => a.kind === 'battleEnded')).toHaveLength(1);
       expect(cornerAlerts(news, 10)).toHaveLength(1);
     }
+    expectConsistent(result.state);
+  },
+);
+
+it.each([
+  [160, 1900, false],
+  [499, 1900, false],
+  [150, 400, false],
+  [200, 400, true],
+])(
+  'with no reserve, %i enemy men against an army of %i pause only when they have half its men',
+  (enemyMen, men, pauses) => {
+    const state = facing(men, enemyMen, false, 0);
+    const result = tick(state, [], fixtureWorld());
+    const news = alertsOfDay(state, result.state, result.events);
+    expect(news.find((a) => a.kind === 'battleBegan')).toBeDefined();
+    expect(stopsOfDay(news, ALL_PAUSES, new Set()).stop).toBe(pauses);
     expectConsistent(result.state);
   },
 );
@@ -87,7 +109,7 @@ function required<T>(value: T | undefined): T {
   return value;
 }
 
-function facing(men: number, enemyMen: number, broken = false) {
+function facing(men: number, enemyMen: number, broken = false, reserve = 10_000) {
   const state = buildFixture();
   const roman = required(state.armies[f.romanArmy]);
   const enemy = required(state.armies[f.punicArmy]);
@@ -101,6 +123,8 @@ function facing(men: number, enemyMen: number, broken = false) {
     if (broken) formation.morale = 0.001;
   }
   required(state.formations[f.citizenSpears]).men = enemyMen;
+  state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);
+  if (reserve === 0) return state;
   const id = allocateId(state, 'army');
   const fid = allocateId(state, 'formation');
   state.armies[id] = {
@@ -110,7 +134,6 @@ function facing(men: number, enemyMen: number, broken = false) {
     formations: [fid],
     activity: { kind: 'idle', position: required(state.cities[f.capua]).position },
   };
-  state.formations[fid] = { id: fid, army: id, troop: 'spearmen', men: 10_000, morale: 1 };
-  state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);
+  state.formations[fid] = { id: fid, army: id, troop: 'spearmen', men: reserve, morale: 1 };
   return state;
 }

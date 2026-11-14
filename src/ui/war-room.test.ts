@@ -4,7 +4,7 @@ import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import { executeOrder, type Order } from '../sim/orders/orders.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { peaceChoices, peaceVerdict, warRoomOf } from './war-room.ts';
+import { declarationFacts, peaceChoices, peaceVerdict, warRoomOf } from './war-room.ts';
 import { peaceAnswer } from '../sim/ai/peace.ts';
 import { tick } from '../sim/tick.ts';
 import { expectConsistent } from '../sim/references.ts';
@@ -125,6 +125,8 @@ describe('the wars panel', () => {
       change: undefined,
       problem: undefined,
       refusing: 'Refuse, and the war goes on. Carthage makes no new offer for 90 days.',
+      answered: undefined,
+      counter: undefined,
     });
     const queued: Order = {
       kind: 'offerPeace',
@@ -135,6 +137,65 @@ describe('the wars panel', () => {
     expect(warRoomOf(state, [queued]).wars[0]?.ourOffer).toBe(
       'You offer Carthage peace: you give 300 gold. Carthage hears it with the next day.',
     );
+  });
+
+  test('a demand above what the enemy would take offers the cheaper terms as a counter', () => {
+    const state = warOn(201);
+    changeCityOwner(state, f.capua, f.carthage);
+    const rome = state.factions[f.rome];
+    if (!rome) throw new Error('fixture');
+    rome.stores.gold = 5000;
+    run(state, {
+      kind: 'offerPeace',
+      faction: f.carthage,
+      to: f.rome,
+      terms: { kind: 'payment', payer: f.rome, gold: 3000, cities: [] },
+    });
+    const offer = warRoomOf(state, []).wars[0]?.theirOffer;
+    expect(offer?.counter?.terms).toEqual({
+      kind: 'payment',
+      payer: f.rome,
+      gold: 1700,
+      cities: [],
+    });
+    expect(offer?.counter?.answer.accepts).toBe(true);
+    expect(offer?.counter?.text).toBe(
+      'Carthage asks more than it would take. By its reckoning today it would accept peace in which you give 1,700 gold. A counter-offer replaces its demand, and Carthage answers with the next day.',
+    );
+    const atFloor = warOn(201);
+    changeCityOwner(atFloor, f.capua, f.carthage);
+    const purse = atFloor.factions[f.rome];
+    if (!purse) throw new Error('fixture');
+    purse.stores.gold = 5000;
+    run(atFloor, {
+      kind: 'offerPeace',
+      faction: f.carthage,
+      to: f.rome,
+      terms: { kind: 'payment', payer: f.rome, gold: 1700, cities: [] },
+    });
+    expect(warRoomOf(atFloor, []).wars[0]?.theirOffer?.counter).toBeUndefined();
+    const refused = warRoomOf(state, [{ kind: 'refusePeace', faction: f.rome, from: f.carthage }])
+      .wars[0]?.theirOffer?.answered;
+    expect(refused).toBe('You refuse. Carthage hears it with the next day.');
+    expectConsistent(state);
+    expectConsistent(atFloor);
+  });
+
+  test('the war confirmation names a league partner, closed routes, and when talks open', () => {
+    const state = buildFixture();
+    expect(declarationFacts(state, f.carthage)).toEqual([
+      'The war begins with the next day, and Carthage may march on your cities.',
+      'Carthage will not talk of peace for 60 days. A peace starts a truce of 365 days.',
+    ]);
+    const carthage = state.factions[f.carthage];
+    const syracusae = state.factions[f.syracusaeFaction];
+    if (!carthage || !syracusae) throw new Error('fixture');
+    carthage.league = f.syracusaeFaction;
+    syracusae.league = f.carthage;
+    expect(declarationFacts(state, f.syracusaeFaction)).toContain(
+      'Carthage is leagued with Syracusae. It declares war on you too, and marches to lift any siege of Syracusae.',
+    );
+    expectConsistent(state);
   });
 
   test('lists each truce with the days left', () => {

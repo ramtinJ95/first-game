@@ -20,6 +20,7 @@
 | `npm run sim:buildings`                       | Print the building table, each building's payback by city, and four Romes at peace that idle, recruit, build, or both                                       |
 | `npm run sim:peace`                           | Play the new game under the AI and print how wars end, how long they run, and the days each power spends at peace                                           |
 | `npm run sim:news [-- --seeds 5 --years 3]`   | Play the new game as Rome, idle and under the AI, and count the lines of news a year in the corner and in the chronicle                                     |
+| `node scripts/sim.ts sallies [-- --men 1900]` | Rome besieges Mediolanum and prints each battle there with whether it stops the game under the old and the new battle pause                                 |
 | `npm run capture [-- <scenario>]`             | Build, then write screenshots, `clip.gif`, video, and trace to `captures/<scenario>/`                                                                       |
 | `npm run capture:publish`                     | Push the PNG and GIF files to the `pr-assets` branch and print Markdown for the pull request                                                                |
 | `npm run capture:fetch`                       | Pull this branch's media from `pr-assets` into `captures/`, declare it as Nexus outputs, and print the Markdown                                             |
