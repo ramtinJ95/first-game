@@ -171,3 +171,91 @@ The price safeguard reduces white peaces and increases gold settlements; this is
 The fresh reviewer initially required two changes: the new other-front city test accidentally defeated its test faction, and treasury-only price increases lacked their real constraint. The test now keeps that faction alive; the saved treasury snapshot and an actual-proposal failing-before regression fix the second point. The reviewer subsequently approved with no further reachable findings, independently passing 137 focused tests and repeating the actual AI treasury escalation through save/load. It did not claim the full browser/build/campaign runs.
 
 Implementation-lane checks include all 898 unit tests, check/build, 19 peace browser cases and both affected capture scenarios. A final affordability edge preserves a signed treasury instead of clamping debt to zero: the shortfall includes the debt, and city-only terms ask no gold. The reviewer approved this correction and independently passed 81 affected tests, including negative-treasury save/load. An initial browser run reached another builder's preview on shared port 4173 and could not load this branch's save format. It is not counted as product verification. The successful run used this checkout's own rebuilt preview on port 4185 with unchanged timeouts, retries and assertions. The temporary configuration is not committed. CI remains the full-suite check of record; the pull request records its final head, green checks and exact published media commit. The optional installed legacy Nexus CLI still lacks output registration, so no Nexus preview URL is claimed.
+
+## Paid truce and a nearer opening price
+
+Base: main `c02aec7`. Main `c40d8c7` (PR 58) then changed only renderer, capture, and e2e files, so these baselines also hold for the rebased branch. All runs use the commands named in each table, seeds 1 to 20 unless stated, on a two-core pylon shared with other work. Wall-clock times are not comparisons.
+
+### Rule
+
+- A peace's truce is `truceLength(paid)`: `TRUCE_DAYS` (365) plus `TRUCE_DAYS_PER_POINT` (30) for each point the terms were worth to the receiver, at most `MAX_PAID_TRUCE_DAYS` (730) more. 1,400 gold is 14 points, so it buys 785 days, not 365. Peace as things stand still gives a year. The length lives in the truce's existing `endsOn`, so the save shape is unchanged.
+- A winning AI opens at the least it would take plus `OPENING_MARGIN` (5 points, 500 gold), or halfway from that least to the most the enemy would give, whichever is less. Before, it opened at that most, capped only by the enemy's treasury. The opening stays above the least whenever the enemy would give more, so a counter-offer is still cheaper.
+
+### Candidates
+
+`npm run sim -- truce` (`scripts/sim/truce.ts`) plays Rome with no orders of its own. Under "pays", Rome accepts every offer made to it that it can meet. Under "refuses", it refuses every offer. The three truce candidates were run on main's rules without the opening change:
+
+| Seeds 1 to 20, 10 years                                 | Main          | Scaled truce (chosen) | Flat two-year paid truce | AI needs double odds for a year after a paid truce ends |
+| ------------------------------------------------------- | ------------- | --------------------- | ------------------------ | ------------------------------------------------------- |
+| Paid peace to the same power's next declaration, median | 437           | 995                   | 742                      | 510                                                     |
+| The same, with no re-declaration counted as never       | 526           | 1,120                 | 822                      | 590                                                     |
+| Shortest                                                | 365           | 395                   | 730                      | 365                                                     |
+| Day Rome falls, pays / refuses, median                  | 2,399 / 1,045 | 2,638 / 1,047         | 2,436 / 1,047            | 2,348 / 1,045                                           |
+| Rome survives ten years, pays                           | 2             | 3                     | 1                        | 3                                                       |
+| Median days gained by paying                            | 1,233         | 1,579                 | 1,500                    | 1,331                                                   |
+
+The scaled truce was best on every row. The AI-odds candidate leaves the shortest return at 365: a twice-as-strong neighbour still declares the day the truce ends. It also needed a new saved field.
+
+### Before/after, the branch rule (scaled truce and opening margin)
+
+| `npm run sim -- truce`, 10 years                              | Main 1–20     | Branch 1–20 | Main 21–40    | Branch 21–40   | Main 1–40     | Branch 1–40   |
+| ------------------------------------------------------------- | ------------- | ----------- | ------------- | -------------- | ------------- | ------------- |
+| Paid peaces                                                   | 74            | 62          | 67            | 66             | 141           | 128           |
+| Median truce after a paid peace                               | 365           | 1,040       | 365           | 1,010          | 365           | about 1,030   |
+| Paid peace to the same power's next declaration, median       | 437           | 1,040       | 430           | 1,040          | 435           | 1,040         |
+| The same, with none counted as never                          | 526           | 1,202       | 458           | 1,200          | 464           | 1,200         |
+| Day Rome falls, pays / refuses, median                        | 2,399 / 1,045 | 2,304 / 998 | 2,456 / 1,074 | 2,666 / 1,066  | 2,438 / 1,063 | 2,304 / 1,037 |
+| Rome survives ten years, pays / refuses                       | 2 / 0         | 0 / 0       | 3 / 0         | 3 / 0          | 5 / 0         | 3 / 0         |
+| Seeds where paying lives longer                               | 20 / 20       | 20 / 20     | 20 / 20       | 20 / 20        | 40 / 40       | 40 / 40       |
+| Median days gained by paying                                  | 1,233         | 1,291       | 1,428         | 1,140          | 1,331         | 1,224         |
+| Priced offers to Rome, asked / least taken, median points     | 31 / 20       | 22.5 / 22   | 29 / 17       | 22.5 / 20      |               |               |
+| Ask above that least: median / 90th percentile / most, points | 5 / 41 / 67   | 0.5 / 5 / 6 | 8 / 40 / 74.5 | 4.5 / 5 / 17.5 |               |               |
+| Offers more than 500 gold above that least                    | 87 of 177     | 6 of 159    | 90 of 178     | 8 of 184       |               |               |
+
+The 40-seed columns are recomputed from the per-seed lines. The few asks above the margin come from the script reading the least on the day after the offer, when the war's facts had moved.
+
+What this shows:
+
+- A paid truce now holds. The same power's return after a paid peace moved from a median of 435 days to 1,040, and a return in the first year after the truce is gone.
+- Paying still saves an idle Rome in every seed, by 1,224 days at the median, but not by more than on main. The day Rome falls when paying moves by up to 1,500 days in either direction between rule variants on the same seed, so 20 or 40 seeds cannot separate 2,438 from 2,304. Measured cause: an idle Rome raises no men during the truce, while its enemy grows. The war that follows the last re-declaration kills Rome in a median 149 days on the branch and 181 on main, and that re-declaration comes later (median day 2,058 against 1,949). So the truce buys a player who uses it about three years. It cannot save a player who does nothing.
+- The opening price is now near the floor. On main half the priced offers asked more than 500 gold above what the AI would take, and a tenth asked 4,000 gold more. On the branch the 90th percentile is the 500-gold margin.
+
+### World, AI and peace
+
+| `npm run sim:world`, 10 years                     | Main                    | Branch         |
+| ------------------------------------------------- | ----------------------- | -------------- |
+| Largest power at most half the 80 cities          | 20/20, met              | 20/20, met     |
+| At least three powers alive                       | 20/20, met              | 20/20, met     |
+| Seeds each power is largest, none more than 8     | 0/11/0/1/8, **not met** | 3/6/0/4/7, met |
+| Armies idle beside an enemy over 30 days          | 0                       | 0              |
+| Armies idle overseas over 30 days / no route home | 0 / 0                   | 0 / 0          |
+| Repeated nearby losing attacks                    | 164                     | 128            |
+| Longest quiet-war stretch, median / longest       | 77 / 145 days           | 50 / 135 days  |
+
+| `npm run sim:ai`, 5 years                    | Main                   | Branch                 |
+| -------------------------------------------- | ---------------------- | ---------------------- |
+| All AI: minors at year 2 (≥30)               | 43, min 34, 20/20, met | 44, min 34, 20/20, met |
+| All AI: minors at year 5 (≥12)               | 31, min 20, 20/20, met | 24, min 15, 20/20, met |
+| All AI: unopposed growth                     | 67/70, met             | 108/118 (91.5%), met   |
+| All AI: contact every year from year 2       | 20/20, met             | 19/20, met             |
+| Passive Rome: minors at year 2               | 42, min 36, 20/20, met | 42, min 36, 20/20, met |
+| Passive Rome: minors at year 5               | 30, min 23, 20/20, met | 26, min 20, 20/20, met |
+| Passive Rome: unopposed growth               | 115/119, met           | 144/147, met           |
+| Passive Rome: contact every year from year 2 | 20/20, met             | 19/20, met             |
+| A power wiped out before year 3, both modes  | 0/20, met              | 0/20, met              |
+| A power over half the cities, both modes     | 0/20                   | 0/20                   |
+| A power declares war on passive Rome         | 20/20                  | 20/20                  |
+| Seed 1 replays identically                   | yes                    | yes                    |
+
+| `npm run sim:peace`, 10 years                                       | Main                        | Branch                      |
+| ------------------------------------------------------------------- | --------------------------- | --------------------------- |
+| Great-power wars: begun / peace / death / running                   | 884 / 826 / 20 / 38         | 623 / 581 / 17 / 25         |
+| Great-power peace share                                             | 93.4%, met                  | 93.3%, met                  |
+| Great-power median / longest war                                    | 143 / 332 days              | 157 / 1,037 days            |
+| Great-power pairs at war all ten years                              | 0, met                      | 0, met                      |
+| Peace to the pair's next war: shortest / median                     | 365 / 394, met              | 365 / 779, met              |
+| Great-power peace as things stand / gold / cities                   | 54 / 716 / 56               | 40 / 492 / 49               |
+| Minor wars: begun / peace / death / running                         | 991 / 178 / 803 / 10        | 1,263 / 199 / 1,049 / 15    |
+| Median days with no war: Rome / Carthage / Macedon / Egypt / Persia | 570 / 486 / 389 / 536 / 573 | 813 / 794 / 725 / 992 / 966 |
+
+Every target that main meets is still met. The leadership spread that main missed is met on the branch, which these runs do not claim as a fix. Tradeoffs: the powers fight each other about 30% less and spend more time at peace, so they turn on the minors sooner. Minors left at year 5 fall from 31 to 24 under the AI, still twice the printed threshold of 12 but below the design's "about half". Unopposed growth is at 91.5%, close to its 90% line. One great-power war ran 1,037 days. That is far under the ten-year limit, but no war on main ran past 332.
