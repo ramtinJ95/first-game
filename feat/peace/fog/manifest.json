@@ -21,7 +21,7 @@
   },
   {
     "file": "pan-frame-time.png",
-    "title": "Pan with the fog on while both armies march at speed 3, 1.2 px per km: 182 frames, frame interval median 16.7 ms, p95 16.8 ms, main thread busy 3.2 ms per frame",
+    "title": "Pan with the fog on while both armies march at speed 3, 1.2 px per km: 167 frames, frame interval median 16.7 ms, p95 16.7 ms, main thread busy 3.6 ms per frame",
     "kind": "screenshot"
   },
   {
