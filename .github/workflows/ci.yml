@@ -92,7 +92,7 @@ jobs:
           --args="--enable-gpu --ignore-gpu-blocklist --use-angle=vulkan --enable-features=Vulkan"
           >> "$GITHUB_STEP_SUMMARY"
   capture-shards:
-    timeout-minutes: 15
+    timeout-minutes: 12
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
