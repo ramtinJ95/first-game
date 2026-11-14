@@ -77,13 +77,21 @@
     {#each groups as { group, heading, options } (group)}
       <div class="group" role="group" aria-labelledby="command-menu-{group}">
         <p class="heading" id="command-menu-{group}" role="presentation">{heading}</p>
-        {#each options as option (option.label)}
-          <button type="button" role="menuitem" onclick={() => choose(option)}>
-            <span class="way"
-              ><span>{option.label}</span> <span class="days">{option.detail}</span></span
+        {#each options as option, index (option.label)}
+          <div class="option">
+            <button
+              type="button"
+              role="menuitem"
+              aria-describedby={option.notice ? `command-warning-${group}-${index}` : undefined}
+              onclick={() => choose(option)}
             >
-            {#if option.notice}<span class="warning">{option.notice}</span>{/if}
-          </button>
+              <span>{option.label}</span>
+              <span class="days">{option.detail}</span>
+            </button>
+            {#if option.notice}<p class="warning" id="command-warning-{group}-{index}">
+                {option.notice}
+              </p>{/if}
+          </div>
         {/each}
       </div>
     {/each}
@@ -134,15 +142,15 @@
 
   .menu button {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    gap: 16px;
+    justify-content: space-between;
     text-align: left;
   }
 
-  .way {
+  .option {
     display: flex;
-    gap: 16px;
-    justify-content: space-between;
+    flex-direction: column;
+    gap: 2px;
   }
 
   .warning {

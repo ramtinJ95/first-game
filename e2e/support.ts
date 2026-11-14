@@ -291,10 +291,10 @@ export function camera(page: Page) {
     city(id: string) {
       return this.screen(cityPoint(id));
     },
-    /** A point on the flag of a banner whose foot stands at the map point. */
+    /** The flag's outer upper edge, clear of city symbols that now win an overlapping click. */
     banner(point: MapPoint) {
       const foot = this.screen(point);
-      return { x: foot.x + BANNER.flagWidth / 2, y: foot.y - BANNER.pole + 5 };
+      return { x: foot.x + BANNER.flagWidth - 2, y: foot.y - BANNER.pole + 2 };
     },
     async zoom(screen: MapPoint, notches: number, pauseMs = 60) {
       await page.mouse.move(screen.x, screen.y);
