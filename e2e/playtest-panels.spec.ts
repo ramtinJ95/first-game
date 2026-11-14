@@ -297,7 +297,7 @@ test.describe('the panels after the playtest', () => {
     declareWar(state, rome, carthage);
     await load(page, state);
     await expect(overview.getByTestId('overview-wars')).toHaveText(
-      'At war with Carthage since Year 1, day 1',
+      /^\s*At war with Carthage\s+Since Year 1, day 1\s*$/,
     );
 
     await armies.first().click();
