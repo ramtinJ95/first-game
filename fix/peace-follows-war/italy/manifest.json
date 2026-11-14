@@ -1,0 +1,32 @@
+[
+  {
+    "file": "italy-widest.png",
+    "title": "The whole map: the woods of Italy among those of Europe",
+    "kind": "screenshot"
+  },
+  {
+    "file": "italy-middle.png",
+    "title": "Italy at the middle zoom: the Apennine, Italian, and Tyrrhenian woods under Rome's wash",
+    "kind": "screenshot"
+  },
+  {
+    "file": "italy-closest.png",
+    "title": "The hills of Tuscany at the closest zoom: trees in the woods",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Italy's woods from the map data at the widest, the middle, and the closest zoom",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Italy's woods from the map data at the widest, the middle, and the closest zoom (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Italy's woods from the map data at the widest, the middle, and the closest zoom (Playwright trace)",
+    "kind": "trace"
+  }
+]

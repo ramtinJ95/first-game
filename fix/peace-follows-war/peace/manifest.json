@@ -1,0 +1,42 @@
+[
+  {
+    "file": "peace-two-wars.png",
+    "title": "Rome in year 2 with five cities, at war with Carthage and Macedon: how the war with Carthage stands, the terms ready to offer with Carthage’s answer to each, and the reckoning behind it",
+    "kind": "screenshot"
+  },
+  {
+    "file": "peace-refused.png",
+    "title": "An offer of 800 gold to Macedon: Macedon would refuse, wants 16 points more, and lists each reason with its points",
+    "kind": "screenshot"
+  },
+  {
+    "file": "peace-narrow.png",
+    "title": "The wars panel on a 390 px wide screen",
+    "kind": "screenshot"
+  },
+  {
+    "file": "peace-offer.png",
+    "title": "Carthage offers to pay 1,000 gold for peace: the game pauses, and the panel says what refusing means",
+    "kind": "screenshot"
+  },
+  {
+    "file": "peace-day-after.png",
+    "title": "Just after the peace: the siege camp round Carthago is gone and the Roman army gathers ships on the shore to sail home",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Peace: the wars panel with two wars, an offer refused with its reason, an offer from Carthage, and the map the day after a peace",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Peace: the wars panel with two wars, an offer refused with its reason, an offer from Carthage, and the map the day after a peace (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Peace: the wars panel with two wars, an offer refused with its reason, an offer from Carthage, and the map the day after a peace (Playwright trace)",
+    "kind": "trace"
+  }
+]
