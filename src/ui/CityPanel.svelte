@@ -34,7 +34,7 @@
     weakSiegeText,
   } from './describe.ts';
   import WarStatus from './WarStatus.svelte';
-  import { recruitForecast } from './recruit-forecast.ts';
+  import { recruitForecast, RECRUIT_WARNING_DAYS } from './recruit-forecast.ts';
 
   let {
     game,
@@ -60,6 +60,14 @@
   let chosen = $state<CityId | undefined>();
   let storming = $state(false);
   let confirming = $state<Troop | undefined>();
+  const outlook = $derived(
+    recruitForecast(
+      game,
+      pending,
+      confirming,
+      confirming ? trainingDaysAt(city, TROOPS[confirming].recruit.days) : 0,
+    ),
+  );
 
   function raise(troop: Troop) {
     if (
@@ -271,20 +279,23 @@
   {#if own}
     <h3>Raise</h3>
     <p class="muted small">
-      Forecast at today's yields, after all training and waiting recruits muster; no growth or
-      losses predicted. Store runway includes payment now and upkeep from each muster day.
+      Today's yields; payment now, upkeep from each muster day. No growth or losses predicted. Warn
+      and confirm only within {RECRUIT_WARNING_DAYS} days: forecasts years ahead are too uncertain.
     </p>
+    <div data-testid="recruit-forecast">
+      <p>
+        Realm after all recruits muster{confirming ? `, with ${TROOP_NAMES[confirming]}` : ''}: {outlook.balanceText}.
+      </p>
+      {#each outlook.runway as store (store.key)}
+        <p class:bad={store.urgent} data-testid="recruit-runway-{store.key}">
+          {store.name}: {store.text}
+        </p>
+      {/each}
+    </div>
     {#if confirming}
       {@const troop = confirming}
-      {@const forecast = recruitForecast(
-        game,
-        pending,
-        troop,
-        trainingDaysAt(city, TROOPS[troop].recruit.days),
-      )}
       <div data-testid="recruit-warning">
-        <p class="bad">{TROOP_NAMES[troop]}: {forecast.warning}</p>
-        <p>{forecast.text}</p>
+        {#if outlook.warning}<p class="bad">{TROOP_NAMES[troop]}: {outlook.warning}</p>{/if}
         <div class="row">
           <button
             type="button"
@@ -292,13 +303,13 @@
             onclick={() => {
               actions.issue({ kind: 'recruit', faction: game.player, city: city.id, troop });
               confirming = undefined;
-            }}>Raise anyway</button
+            }}>{outlook.warning ? 'Raise anyway' : 'Raise troops'}</button
           >
           <button type="button" onclick={() => (confirming = undefined)}>Cancel raising</button>
         </div>
       </div>
     {/if}
-    <div class="troops">
+    <div class="troops" data-testid="recruit-cards">
       {#each Object.keys(TROOPS) as Troop[] as troop (troop)}
         {@const why = refusal(troop)}
         {@const cost = TROOPS[troop].recruit}
@@ -308,8 +319,7 @@
           <span class="cost"
             >{whole(cost.gold)} gold · {whole(cost.men)} men · {trainingDaysAt(city, cost.days)} days</span
           >
-          <span class="cost">{forecast.text}</span>
-          {#if forecast.warning}<span class="why">Shortfall — review before raising</span>{/if}
+          <span class="cost">{forecast.upkeepText}</span>
           {#if why}<span class="why">{why}</span>{/if}
         </button>
       {/each}

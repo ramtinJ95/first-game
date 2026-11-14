@@ -32,7 +32,7 @@ export default defineScenario({
     await page.getByTestId('recruit-warning').scrollIntoViewIfNeeded();
     await shot(
       'recruit-shortfall',
-      'Before an order: upkeep, the final realm balances and how long current stores cover a food shortfall, with a deliberate Raise anyway choice',
+      'One realm forecast above compact troop cards: the 9-day food shortfall warns and asks Raise anyway, while 821 days of gold stays in plain ink beyond the one-year warning horizon',
     );
 
     const hungry = foodShortfall();

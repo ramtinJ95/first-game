@@ -7,17 +7,20 @@ import { whole } from '../app/names.ts';
 import { afterWaiting } from './buildings-text.ts';
 import { signed } from './describe.ts';
 
+/** Today's yields justify a near-term decision, not a red alarm years ahead. */
+export const RECRUIT_WARNING_DAYS = 365;
+
 export function recruitForecast(
   game: DeepReadonly<GameState>,
   pending: readonly Order[],
-  troop: Troop,
-  daysToMuster = TROOPS[troop].recruit.days,
+  troop?: Troop,
+  daysToMuster = troop ? TROOPS[troop].recruit.days : 0,
 ) {
   const waiting = afterWaiting(game, pending);
   const balance = dailyBalances(waiting).get(game.player);
   const stores = waiting.factions[game.player]?.stores;
   if (!balance || !stores) throw new Error('Recruit forecast needs the player faction');
-  const cost = TROOPS[troop].recruit;
+  const cost = troop ? TROOPS[troop].recruit : { men: 0, gold: 0 };
   const schedule = Object.values(waiting.cities)
     .filter((city) => city.owner === game.player)
     .flatMap((city) =>
@@ -26,7 +29,7 @@ export function recruitForecast(
         men: TROOPS[r.troop].recruit.men,
       })),
     );
-  schedule.push({ inDays: daysToMuster, men: cost.men });
+  if (troop) schedule.push({ inDays: daysToMuster, men: cost.men });
   schedule.sort((a, b) => a.inDays - b.inDays);
   const training = schedule.reduce((sum, recruit) => sum + recruit.men, 0);
   const upkeep = {
@@ -58,19 +61,30 @@ export function recruitForecast(
     ),
   };
   const warnings = (['food', 'gold'] as const).flatMap((key) => {
-    if (after[key] >= 0) return [];
+    const days = lasts[key];
+    if (days === undefined || days > RECRUIT_WARNING_DAYS) return [];
     return [
-      `${key === 'food' ? 'Food' : 'Gold'} shortfall: stores run short in about ${whole(lasts[key] ?? 0)} days with this order.`,
+      `${key === 'food' ? 'Food' : 'Gold'} shortfall: stores run short in about ${whole(days)} days with this order.`,
     ];
   });
   return {
     upkeep,
     after,
     lasts,
+    runway: (['food', 'gold'] as const).map((key) => {
+      const days = lasts[key];
+      return {
+        key,
+        name: key === 'food' ? 'Food' : 'Gold',
+        urgent: days !== undefined && days <= RECRUIT_WARNING_DAYS,
+        text: days === undefined ? 'not running short' : `about ${whole(days)} days left`,
+      };
+    }),
     warning: warnings.length
       ? `${warnings.join(' ')} Formations desert when stores run out. Raise fewer troops or improve income first.`
       : undefined,
-    text: `Upkeep ${signed(-upkeep.food)} food, ${signed(-upkeep.gold)} gold/day. Realm after all recruits muster: ${signed(after.food)} food, ${signed(after.gold)} gold/day.`,
+    upkeepText: `Upkeep ${signed(-upkeep.food)} food, ${signed(-upkeep.gold)} gold/day`,
+    balanceText: `${signed(after.food)} food, ${signed(after.gold)} gold/day`,
   };
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { changeCityOwner, FATE_DAYS } from '../sim/cities.ts';
 import { defeatFaction } from '../sim/defeat.ts';
+import { expectConsistent } from '../sim/references.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
@@ -66,6 +67,38 @@ function facingOff(romanMen: number, punicMen: number) {
 const ofKind = (alerts: Alert[], kind: Alert['kind']) => alerts.filter((a) => a.kind === kind);
 
 describe('alertsOfDay', () => {
+  it.each([f.syracusae, f.roma])(
+    'names a city-state battle side as people and only calls its own city theirs (%s)',
+    (id) => {
+      const before = buildFixture();
+      atWar(before, f.rome, f.syracusaeFaction);
+      const city = before.cities[id];
+      const roman = before.armies[f.romanArmy];
+      const enemy = before.armies[f.punicArmy];
+      if (!city || !roman || !enemy) throw new Error('fixture changed');
+      enemy.owner = f.syracusaeFaction;
+      enemy.activity = { kind: 'idle', position: city.position };
+      roman.activity = { kind: 'idle', position: { x: city.position.x + 12, y: city.position.y } };
+      for (const fid of roman.formations) {
+        const formation = before.formations[fid];
+        if (!formation) throw new Error('fixture changed');
+        formation.men = 50;
+        formation.morale = 0.001;
+      }
+      const result = tick(before, [], world);
+      const text = alertsOfDay(before, result.state, result.events).find(
+        (alert) => alert.kind === 'battleEnded',
+      )?.text;
+      expect(text).toMatch(
+        new RegExp(
+          `^The men of Syracusae held the field ${id === f.syracusae ? 'at their city' : 'at Roma'} after 1 day\\.`,
+        ),
+      );
+      expect(text).toContain('the men of Syracusae lost');
+      expectConsistent(before);
+      expectConsistent(result.state);
+    },
+  );
   it('tells of a battle that began against the player, and selects it', () => {
     const { state, alerts } = play(facingOff(1500, 1500), [], () => true);
     const [battle] = Object.values(state.battles);
@@ -203,7 +236,7 @@ describe('alertsOfDay', () => {
     }
     const [battle] = told;
     expect(battle?.text).toMatch(
-      /^Carthage beat Syracusae .+ after \d+ days?\. Carthage lost \d+, Syracusae lost \d+\.$/,
+      /^Carthage beat the men of Syracusae .+ after \d+ days?\. Carthage lost \d+, the men of Syracusae lost \d+\.$/,
     );
     expect(
       battle && sightOf(current, world, f.rome).sees(battle.focus?.at ?? roman.activity.position),
@@ -243,7 +276,7 @@ describe('alertsOfDay', () => {
       },
     ]);
     expect(alerts.map((a) => a.text)).toEqual([
-      'The battle at Carthago ended with neither side holding the field after 4 days. Carthage lost 700, Syracusae lost 650.',
+      'The battle at Carthago ended with neither side holding the field after 4 days. Carthage lost 700, the men of Syracusae lost 650.',
     ]);
   });
 
