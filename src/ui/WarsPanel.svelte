@@ -173,6 +173,7 @@
           {#if war.theirOffer.change}
             <p data-testid="peace-price-rise">{war.theirOffer.change}</p>
           {/if}
+          <p data-testid="peace-truce">{war.theirOffer.truce}</p>
           {#if war.theirOffer.problem}
             <p class="bad">These terms cannot be met: {war.theirOffer.problem}.</p>
           {/if}

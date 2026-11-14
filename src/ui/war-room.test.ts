@@ -131,6 +131,7 @@ describe('the wars panel', () => {
       change: undefined,
       problem: undefined,
       refusing: 'Refuse, and the war goes on. Carthage makes no new offer for 90 days.',
+      truce: 'This peace starts a truce of 365 days, until Year 2, day 201.',
       answered: undefined,
       counter: undefined,
     });
@@ -166,7 +167,7 @@ describe('the wars panel', () => {
     });
     expect(offer?.counter?.answer.accepts).toBe(true);
     expect(offer?.counter?.text).toBe(
-      'Carthage asks more than it would take. By its reckoning today it would accept peace in which you give 1,700 gold. A counter-offer replaces its demand, and Carthage answers with the next day.',
+      'Carthage asks more than it would take. By its reckoning today it would accept peace in which you give 1,700 gold. A counter-offer replaces its demand, and Carthage answers with the next day. This peace starts a truce of 875 days, until Year 3, day 346.',
     );
     const atFloor = warOn(201);
     changeCityOwner(atFloor, f.capua, f.carthage);
@@ -191,7 +192,7 @@ describe('the wars panel', () => {
     const state = buildFixture();
     expect(declarationFacts(state, f.carthage)).toEqual([
       'The war begins with the next day, and Carthage may march on your cities.',
-      'Carthage will not talk of peace for 60 days. A peace starts a truce of 365 days.',
+      'Carthage will not talk of peace for 60 days. A peace starts a truce of 365 days, and 30 more for each 100 gold, or its worth in cities, that one side pays, up to 730 more.',
     ]);
     const carthage = state.factions[f.carthage];
     const syracusae = state.factions[f.syracusaeFaction];
