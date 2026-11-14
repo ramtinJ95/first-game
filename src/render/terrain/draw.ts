@@ -12,6 +12,8 @@ import {
   type Wood,
 } from './marks.ts';
 import { stream, valueNoise } from './random.ts';
+import { drawRural } from './rural-draw.ts';
+import type { RuralMark } from './rural.ts';
 
 export function mix(from: number, to: number, t: number): number {
   const channel = (shift: number) => {
@@ -248,22 +250,29 @@ function fold(g: GraphicsContext, m: Extract<Mark, { kind: 'fold' }>, tier: Tier
 
 function hill(g: GraphicsContext, m: Extract<Mark, { kind: 'hill' }>, tier: Tier) {
   const { x, y, width: w, height: h } = m;
-  const left = x - w / 2;
-  const right = x + w / 2;
+  const random = stream(m.seed);
+  const skew = (random() - 0.5) * w * 0.25;
+  const at = (u: number, v: number): [number, number] => [
+    x + Math.cos(m.angle) * u - Math.sin(m.angle) * v,
+    y + Math.sin(m.angle) * u + Math.cos(m.angle) * v,
+  ];
   const ink = INK_KM[tier] * 0.75;
-  g.moveTo(x, y - h)
-    .quadraticCurveTo(x + w * 0.4, y - h * 0.8, right, y)
-    .quadraticCurveTo(x + w * 0.2, y - h * 0.3, x, y - h)
+  g.moveTo(...at(skew, -h))
+    .quadraticCurveTo(...at(w * 0.4, -h * 0.8), ...at(w / 2, 0))
+    .quadraticCurveTo(...at(w * 0.2, -h * 0.3), ...at(skew, -h))
     .fill(TERRAIN_COLOURS.hillShade);
-  g.moveTo(left, y)
-    .bezierCurveTo(x - w * 0.3, y - h * 1.3, x + w * 0.25, y - h * 1.35, right, y)
+  g.moveTo(...at(-w / 2, 0))
+    .bezierCurveTo(
+      ...at(-w * 0.3 + skew, -h * 1.3),
+      ...at(w * 0.25 + skew, -h * 1.35),
+      ...at(w / 2, 0),
+    )
     .stroke({ width: ink, color: TERRAIN_COLOURS.reliefInk, alpha: 0.7, cap: 'round' });
   if (tier === 'close') {
-    const random = stream(m.seed);
     for (let n = 0; n < 3; n++) {
-      const px = x + w * (0.1 + 0.11 * n);
-      const py = y - h * (0.95 - 0.22 * n);
-      g.moveTo(px, py).lineTo(px + w * 0.03, py + h * (0.35 + 0.15 * random()));
+      const px = w * (0.1 + 0.11 * n);
+      const py = -h * (0.95 - 0.22 * n);
+      g.moveTo(...at(px, py)).lineTo(...at(px + w * 0.03, py + h * (0.35 + 0.15 * random())));
     }
     g.stroke({ width: ink * 0.6, color: TERRAIN_COLOURS.reliefInk, alpha: 0.5, cap: 'round' });
   }
@@ -708,9 +717,23 @@ export function drawMarks(marks: readonly Mark[], tier: Tier): GraphicsContext {
       case 'stream':
       case 'tumulus':
       case 'crack':
+      case 'channel':
+      case 'wetland':
+      case 'grassland':
+      case 'pastoralCamp':
         break;
     }
   }
+  drawRural(
+    g,
+    marks.filter(
+      (m): m is RuralMark =>
+        m.kind === 'channel' ||
+        m.kind === 'wetland' ||
+        m.kind === 'grassland' ||
+        m.kind === 'pastoralCamp',
+    ),
+  );
   return g;
 }
 
