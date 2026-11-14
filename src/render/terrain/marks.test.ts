@@ -375,6 +375,23 @@ function crossings(ring: readonly Point[]): [Point, Point][] {
   return found;
 }
 
+function boundsOf(outline: MultiPolygon): {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+} {
+  const points = outline.flat(2);
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  return {
+    left: Math.min(...xs),
+    top: Math.min(...ys),
+    right: Math.max(...xs),
+    bottom: Math.max(...ys),
+  };
+}
+
 describe("the desert's edge", () => {
   const drawn = () => land.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline);
   const original = map.terrain.filter((a) => a.kind === 'desert').map((a) => a.outline);
@@ -446,7 +463,18 @@ describe("the desert's edge", () => {
       ...chunks(edge, 'close').flatMap((rect) => placeRelief(land, rect, 'close')),
     ].filter((m) => m.kind === 'dune' || m.kind === 'stipple');
     expect(marks.length).toBeGreaterThan(1000);
-    const off = marks.filter((m) => !drawn().some((outline) => insideOutline(outline, m.x, m.y)));
+    const deserts = drawn().map((outline) => ({ outline, box: boundsOf(outline) }));
+    const off = marks.filter(
+      (m) =>
+        !deserts.some(
+          ({ outline, box }) =>
+            m.x >= box.left &&
+            m.x <= box.right &&
+            m.y >= box.top &&
+            m.y <= box.bottom &&
+            insideOutline(outline, m.x, m.y),
+        ),
+    );
     expect(off.map((m) => `${m.kind} at ${m.x},${m.y}`)).toEqual([]);
   });
 });
