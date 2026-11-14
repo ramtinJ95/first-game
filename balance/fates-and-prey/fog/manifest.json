@@ -6,7 +6,7 @@
   },
   {
     "file": "whole-map.png",
-    "title": "The whole map as Rome, with the fog marking where Roman sight ends. Wash brightness, 0 to 255: persia 144 clear and 141 fogged, 1.8 % darker; egypt 159 clear and 155 fogged, 2.6 % darker",
+    "title": "The whole map as Rome, with the fog marking where Roman sight ends. Wash brightness, 0 to 255: persia 153 clear and 151 fogged, 1.6 % darker; egypt 166 clear and 160 fogged, 3.6 % darker",
     "kind": "screenshot"
   },
   {
@@ -21,7 +21,7 @@
   },
   {
     "file": "pan-frame-time.png",
-    "title": "Pan with the fog on while both armies march at speed 3, 1.2 px per km: 216 frames, frame interval median 16.7 ms, p95 16.7 ms, main thread busy 9.2 ms per frame",
+    "title": "Pan with the fog on while both armies march at speed 3, 1.2 px per km: 168 frames, frame interval median 16.7 ms, p95 16.8 ms, main thread busy 3.1 ms per frame",
     "kind": "screenshot"
   },
   {
