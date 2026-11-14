@@ -40,7 +40,7 @@ test('a beaten army beside its own city retreats to safety, is alive 30 days on,
     }),
   ).toBeVisible();
   const retreat = alerts.getByRole('button', {
-    name: /Your army broke (at|near) Capua, losing \d+ men to the pursuit, and falls back to Roma/,
+    name: /First Legion broke (at|near) Capua, losing \d+ men to the pursuit, and falls back to Roma/,
   });
   await expect(retreat).toBeVisible();
 

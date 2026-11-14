@@ -3,13 +3,23 @@ import type { DeepReadonly } from './deep-readonly.ts';
 import { findBrokenReferences } from './references.ts';
 import { GameStateSchema, type GameState } from './state/game-state.ts';
 
-/** Raise this when a change to the state makes older saves unreadable. */
-export const SAVE_FORMAT = 11;
+/**
+ * Raise this when a change to the state makes older saves unreadable. Format 12 added
+ * each army's name, the faction's count of armies raised, and the page beside the state.
+ */
+export const SAVE_FORMAT = 12;
 
-export type LoadResult = { ok: true; state: GameState } | { ok: false; error: string };
+/**
+ * `page` is what the page kept beside the game, such as its chronicle and where the
+ * player was looking. The rules never read it, so the page checks it.
+ */
+export type LoadResult =
+  { ok: true; state: GameState; page: unknown } | { ok: false; error: string };
 
-export function saveGame(state: DeepReadonly<GameState>): string {
-  return JSON.stringify({ format: SAVE_FORMAT, state });
+export function saveGame(state: DeepReadonly<GameState>, page?: unknown): string {
+  return JSON.stringify(
+    page === undefined ? { format: SAVE_FORMAT, state } : { format: SAVE_FORMAT, state, page },
+  );
 }
 
 /** The one place that checks outside data. Rules code trusts the state it returns. */
@@ -43,5 +53,5 @@ export function loadGame(text: string): LoadResult {
   if (broken.length > 0) {
     return { ok: false, error: `The save's records disagree: ${broken.join('; ')}.` };
   }
-  return { ok: true, state: parsed.output };
+  return { ok: true, state: parsed.output, page: 'page' in data ? data.page : undefined };
 }

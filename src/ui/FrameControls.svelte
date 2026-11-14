@@ -1,5 +1,7 @@
 <script lang="ts">
   import { dateText } from '../app/names.ts';
+  import { PAUSE_KINDS } from '../app/alerts.ts';
+  import { PAUSE_LABELS } from '../app/pauses.ts';
   import { SLOTS, type Slot } from '../app/saves.ts';
   import type { Frame } from '../app/view.svelte.ts';
   import type { FrameActions } from './frame-actions.ts';
@@ -57,6 +59,30 @@
       <button type="button" role="menuitem" onclick={() => picker?.click()}
         >Import from a file</button
       >
+      <hr />
+      <fieldset class="pauses" data-testid="pause-settings">
+        <legend class="muted">Pause the game when</legend>
+        {#each PAUSE_KINDS as kind (kind)}
+          <label>
+            <input
+              type="checkbox"
+              data-testid="pause-{kind}"
+              checked={frame.pauses[kind]}
+              onchange={(event) => actions.setPause(kind, event.currentTarget.checked)}
+            />
+            {PAUSE_LABELS[kind]}
+          </label>
+        {/each}
+        <label>
+          <input
+            type="checkbox"
+            data-testid="pause-fate"
+            checked={frame.pauseOnFate}
+            onchange={(event) => actions.setPauseOnFate(event.currentTarget.checked)}
+          />
+          A city falls to you
+        </label>
+      </fieldset>
       <hr />
       <button type="button" role="menuitem" onclick={() => act(() => actions.askToLeave())}
         >Start screen</button
@@ -125,6 +151,22 @@
     margin: 3px 0;
     border: 0;
     border-top: 1px solid rgb(122 75 42 / 40%);
+  }
+
+  .pauses {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0 2px;
+    font-size: 13px;
+    border: 0;
+  }
+
+  .pauses label {
+    display: flex;
+    gap: 6px;
+    align-items: center;
   }
 
   .hint {

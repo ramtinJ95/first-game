@@ -90,7 +90,7 @@ test.describe('the map', () => {
     const roma = onScreen(page, cityPoint('roma'));
     await page.mouse.click(roma.x + BANNER.flagWidth / 2, roma.y - BANNER.pole + 5);
     const panel = page.getByTestId('army-panel');
-    await expect(panel.getByRole('heading', { level: 2 })).toHaveText('Army of Rome');
+    await expect(panel.getByRole('heading', { level: 2 })).toHaveText('First Legion');
     await expect(panel.getByTestId('army-men')).toHaveText('1,500 men');
   });
 

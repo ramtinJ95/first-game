@@ -3,7 +3,17 @@ import { decideAll } from '../src/sim/ai/decide.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { tick } from '../src/sim/tick.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
-import { camera, cityPoint, day, map, openGame, pause, startGame } from './support.ts';
+import {
+  camera,
+  cityPoint,
+  day,
+  dropSave,
+  map,
+  openGame,
+  pause,
+  resume,
+  startGame,
+} from './support.ts';
 
 const FOREIGN_POWERS = ['Carthage', 'Macedon', 'Egypt', 'Persia'];
 const MINORS = new Set<string>(
@@ -58,9 +68,15 @@ test('at the highest speed the page plays on until a foreign army has marched an
   });
   page.on('pageerror', (error) => errors.push(error.message));
   await openGame(page);
+  // The page opens a game of a random seed, and the minor cities differ by seed, so it
+  // plays the game of seed 1 that firstForeignConquest played.
+  await pause(page);
+  await dropSave(page, startGame());
+  await expect(page.getByTestId('time-controls-day')).toHaveAttribute('data-day', '1');
 
   const conquest = firstForeignConquest();
   await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
+  await resume(page);
   await expect
     .poll(() => day(page), { timeout: 240_000, intervals: [1000] })
     .toBeGreaterThanOrEqual(conquest.day);
@@ -70,9 +86,13 @@ test('at the highest speed the page plays on until a foreign army has marched an
   const panel = page.getByTestId('city-panel');
   const owners: string[] = [];
   for (const province of map.provinces.filter((p) => p.owner === 'independent')) {
+    // The open sheet covers the bottom of this small page, so it is closed before each click.
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
     const at = view.city(province.id);
     await page.mouse.click(at.x, at.y);
     const name = panel.getByTestId('city-name');
+    await name.waitFor({ timeout: 1000 }).catch(() => undefined);
     if ((await name.count()) === 0 || (await name.textContent()) !== province.name) continue;
     owners.push((await panel.getByTestId('city-owner').textContent())?.trim() ?? '');
   }

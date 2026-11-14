@@ -1,3 +1,4 @@
+import { unrestPaceOf } from '../sim/buildings/buildings.ts';
 import {
   AT_CITY_KM,
   factionName,
@@ -42,11 +43,13 @@ import { SACK } from '../sim/cities.ts';
 import type { Siege } from '../sim/state/siege.ts';
 import type { Stores } from '../sim/state/faction.ts';
 import {
+  adminShareOf,
   dailyBalances,
   FOOD_PER_PERSON,
   GRANARY_DAYS,
   MANPOWER_SHARE,
   menOf,
+  TREASURY_DAYS,
 } from '../sim/systems/economy.ts';
 import { stormOdds } from '../sim/ai/situation.ts';
 import { BLOCKADE_ODDS, defendersAt } from '../sim/systems/sieges.ts';
@@ -359,6 +362,7 @@ export interface CityRow extends Shown {
 
 export interface ArmyRow extends Shown {
   readonly army: ArmyId;
+  readonly name: string;
   readonly activity: string;
   readonly men: number;
 }
@@ -419,7 +423,7 @@ export function cityStatus(state: State, sight: Sight, city: DeepReadonly<City>)
     const by = owners.size > 0 ? ` by ${[...owners].join(' and ')}` : '';
     parts.push(`Besieged${by} since day ${siege.startedOn}`);
   }
-  if (city.unrestDays > 0) parts.push(`In unrest for ${city.unrestDays} more days`);
+  if (city.unrestDays > 0) parts.push(`In unrest for ${unrestDaysLeft(state, city)} more days`);
   if (city.recruits.length > 0) parts.push(`Training ${troopsText(city.recruits)}`);
   return parts.length > 0 ? parts.join(' · ') : 'Calm';
 }
@@ -459,6 +463,7 @@ export function overviewOf(state: State, sight: Sight): Overview {
       return [
         {
           army: army.id,
+          name: army.name,
           activity: activityText(state, army),
           men: menOf(state, army),
           pick: { kind: 'army', army: army.id } as const,
@@ -486,10 +491,54 @@ export function overviewOf(state: State, sight: Sight): Overview {
   return { kind: 'standing', cities, armies, columns, wars: warsOf(state, state.player) };
 }
 
-/** What the city adds to its owner's stores each day: the economy's own balance of a realm of this city alone. */
+/**
+ * What a minor city holds for whoever goes to war with it, in plain words: its walls and
+ * wealth (`fortified`), the partner of its league, which joins its wars, and the men of
+ * its own armies at the city that the player sees. Nothing for a plain city or a great
+ * power's.
+ */
+export function minorText(
+  state: State,
+  sight: Sight,
+  city: DeepReadonly<City>,
+): string | undefined {
+  const owner = state.factions[city.owner];
+  if (owner?.kind !== 'minor') return undefined;
+  const parts: string[] = [];
+  if (city.fortified > 1) parts.push('Rich and walled: strong walls and a large granary');
+  if (city.fortified < 1) parts.push('Poor and open: weak walls and little food');
+  const partner = owner.league ? state.factions[owner.league] : undefined;
+  if (partner) parts.push(`Leagued with ${partner.name}, which joins its wars`);
+  const men = armiesAt(state, sight, city.position)
+    .filter((army) => army.owner === city.owner)
+    .reduce((sum, army) => sum + menOf(state, army), 0);
+  if (men > 0) parts.push(`Keeps an army of ${whole(men)} men at the city`);
+  return parts.length > 0 ? parts.join('. ') : undefined;
+}
+
+/**
+ * The days until the city is calm, at the pace the rules count its unrest down today:
+ * faster within reach of its owner's temple (`unrestPaceOf`).
+ */
+export function unrestDaysLeft(state: State, city: DeepReadonly<City>): number {
+  return Math.ceil(city.unrestDays / unrestPaceOf(state, city));
+}
+
+/** How long a city's unrest lasts from today, as the city panel and the fate prompt both say it. */
+export function unrestText(days: number): string {
+  return days > 0 ? `${days} days left` : 'Calm';
+}
+
+/**
+ * What the city adds to its owner's stores each day: the economy's own balance of a realm
+ * of this city alone, with its gold and manpower cut to the share a city of its owner's
+ * realm yields for the realm's size.
+ */
 export function cityBalance(state: State, city: DeepReadonly<City>): Stores {
   const alone = { ...state, cities: { [city.id]: city }, armies: {} };
-  return dailyBalances(alone).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
+  const balance = dailyBalances(alone).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
+  const share = adminShareOf(state, city.owner);
+  return { gold: balance.gold * share, food: balance.food, manpower: balance.manpower * share };
 }
 
 /** What the city's fields grow and its people eat each day, and the difference. */
@@ -544,10 +593,15 @@ export function storeNote(
       bad: days <= WARN_DAYS,
     };
   }
-  if (store === 'gold' || limit === undefined || change <= 0 || amount + change <= limit) {
-    return undefined;
-  }
+  if (limit === undefined || change <= 0 || amount + change <= limit) return undefined;
   const when = amount >= limit ? '' : ' tomorrow';
+  if (store === 'gold') {
+    return {
+      text: `Full${when}`,
+      why: `Treasury full${when}. It holds ${TREASURY_DAYS} days of the gold your people pay. More gold is lost: spend it on troops.`,
+      bad: false,
+    };
+  }
   return store === 'food'
     ? {
         text: `Full${when}`,

@@ -20,6 +20,9 @@
   import {
     armiesAt,
     cityBalance,
+    minorText,
+    unrestDaysLeft,
+    unrestText,
     cityFoodText,
     cssColour,
     ownerLine,
@@ -95,7 +98,7 @@
 
   function refusal(troop: Troop): string | undefined {
     const { gold, men } = TROOPS[troop].recruit;
-    if (city.unrestDays > 0) return `In unrest for ${city.unrestDays} more days`;
+    if (city.unrestDays > 0) return `In unrest for ${unrestDaysLeft(game, city)} more days`;
     if (available.gold < gold) return `Needs ${whole(gold - available.gold)} more gold`;
     if (available.manpower < men) return `Needs ${whole(men - available.manpower)} more manpower`;
     return undefined;
@@ -122,6 +125,9 @@
     <span class="muted" data-testid="city-rank">{rankText(game, map, city)}</span>
   </div>
   <p data-testid="city-owner">{ownerLine(game, city.owner)}</p>
+  {#if minorText(game, sight, city)}
+    <p class="muted" data-testid="city-minor">{minorText(game, sight, city)}</p>
+  {/if}
   <table>
     <tbody>
       <tr>
@@ -165,7 +171,7 @@
     <p class="bad" data-testid="city-sacked">{sacked}</p>
   {/if}
   <p data-testid="city-unrest" class:bad={city.unrestDays > 0}>
-    {city.unrestDays > 0 ? `Unrest · ${city.unrestDays} days left` : 'Calm'}
+    {city.unrestDays > 0 ? `Unrest · ${unrestText(unrestDaysLeft(game, city))}` : 'Calm'}
   </p>
   {#if siege}
     <p class="bad" data-testid="city-siege">

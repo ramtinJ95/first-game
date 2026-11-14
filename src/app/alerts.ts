@@ -15,29 +15,40 @@ import type { Troop } from '../sim/troops.ts';
 import { BLOCKADE_ODDS } from '../sim/systems/sieges.ts';
 import { areAtWar } from '../sim/wars.ts';
 import type { World } from '../sim/world/world.ts';
-import { buildingList, factionName, placeName, TROOP_NAMES, whole } from './names.ts';
+import { armyTitle, buildingList, factionName, placeName, TROOP_NAMES, whole } from './names.ts';
+import { warKey } from '../sim/state/war.ts';
 
-export type AlertKind =
-  | 'battleBegan'
-  | 'battleEnded'
-  | 'armyRetreated'
-  | 'armyDestroyed'
-  | 'armyDeserted'
-  | 'warDeclared'
-  | 'armyArrived'
-  | 'formationMustered'
-  | 'musteredEarly'
-  | 'cityChangedOwner'
-  | 'siegeBegan'
-  | 'storeRanOut'
-  | 'fateLapsed'
-  | 'enemySighted'
-  | 'siegeTooWeak'
-  | 'siegeBled'
-  | 'columnLeft'
-  | 'columnArrived'
-  | 'buildingFinished'
-  | 'buildingsLost';
+export const ALERT_KINDS = [
+  'battleBegan',
+  'battleEnded',
+  'armyRetreated',
+  'armyDestroyed',
+  'armyDeserted',
+  'warDeclared',
+  'armyArrived',
+  'formationMustered',
+  'musteredEarly',
+  'cityChangedOwner',
+  'siegeBegan',
+  'storeRanOut',
+  'fateLapsed',
+  'enemySighted',
+  'siegeTooWeak',
+  'siegeBled',
+  'columnLeft',
+  'columnArrived',
+  'buildingFinished',
+  'buildingsLost',
+] as const;
+export type AlertKind = (typeof ALERT_KINDS)[number];
+
+/**
+ * The news that can stop the game for the player to decide: a battle of theirs begins,
+ * a siege of theirs is too weak to starve the city, and an enemy army comes near their
+ * land. The Game menu turns each on or off.
+ */
+export const PAUSE_KINDS = ['battle', 'weakSiege', 'sighted'] as const;
+export type PauseKind = (typeof PAUSE_KINDS)[number];
 
 export interface Alert {
   readonly kind: AlertKind;
@@ -51,6 +62,13 @@ export interface Alert {
   readonly seenAs?: Pick;
   /** How many alerts of the same kind, text, and place on the day this one line stands for. */
   readonly count?: number;
+  /**
+   * The pause this news asks for, and a key for news that stops the game only the first
+   * time, such as the first enemy seen near the player's land in a war.
+   */
+  readonly pause?: { readonly kind: PauseKind; readonly once?: string };
+  /** The game paused for this news. */
+  readonly paused?: true;
 }
 
 type State = DeepReadonly<GameState>;
@@ -110,14 +128,14 @@ export function alertsOfDay(
       add({
         kind: 'armyArrived',
         tone: 'neutral',
-        text: `Your army landed ${placeName(after, at)}`,
+        text: `${army.name} landed ${placeName(after, at)}`,
         focus: { at, select },
       });
     } else if (!isOnTheMove(army.activity) && arrived(was.activity, at)) {
       add({
         kind: 'armyArrived',
         tone: 'neutral',
-        text: `Your army arrived ${placeName(after, at)}`,
+        text: `${army.name} arrived ${placeName(after, at)}`,
         focus: { at, select },
       });
     }
@@ -190,7 +208,10 @@ export function alertsOfDay(
       kind: 'siegeBegan',
       tone: ours ? 'neutral' : 'bad',
       text: ours
-        ? `Your army besieges ${city.name}`
+        ? `${namesOfArmies(
+            after,
+            siege.besiegers.filter((id) => after.armies[id]?.owner === player),
+          )} besieges ${city.name}`
         : `${ownersOf(after, siege.besiegers)} besieges ${city.name}`,
       focus: { at: city.position, select: { kind: 'province', province: city.province } },
     });
@@ -305,6 +326,7 @@ export function weakSiegeNews(
         tone: 'bad',
         text: `Your siege of ${city.name} is too weak to starve it: ${whole(total)} men against a garrison of ${whole(city.garrison)}, whose sallies kill besiegers each day`,
         focus,
+        pause: { kind: 'weakSiege' },
       });
       next.set(siege.id, { men, killed: 0, bled: false });
       continue;
@@ -377,11 +399,12 @@ export function sightingsOfDay(
       kind: 'enemySighted',
       day,
       tone: 'bad',
-      text: `A fleet of ${factionName(after, convoy.owner)} with ${whole(men)} men is sailing for ${target(to)}`,
+      text: `A fleet of ${factionName(after, convoy.owner)} with ${namesOfArmies(after, convoy.armies)}, ${whole(men)} men, is sailing for ${target(to)}`,
       focus: {
         at: convoy.position,
         ...(first && { select: { kind: 'army', army: first } as const }),
       },
+      pause: { kind: 'sighted', once: warOnce(after, convoy.owner) },
     });
   }
 
@@ -395,8 +418,9 @@ export function sightingsOfDay(
       kind: 'enemySighted',
       day,
       tone: 'bad',
-      text: `An army of ${factionName(after, army.owner)} with ${whole(menOf(after, army))} men is marching on ${target(to)}`,
+      text: `${armyTitle(after, army)} with ${whole(menOf(after, army))} men is marching on ${target(to)}`,
       focus: { at: army.activity.position, select: { kind: 'army', army: army.id } },
+      pause: { kind: 'sighted', once: warOnce(after, army.owner) },
     });
   }
   return alerts;
@@ -461,6 +485,7 @@ function eventAlert(
           tone: 'neutral',
           text: `Battle ${where} against ${namesOf(after, enemies)}`,
           focus,
+          pause: { kind: 'battle' },
         };
       }
       return {
@@ -531,7 +556,7 @@ function eventAlert(
       return {
         kind: 'armyRetreated',
         tone: 'bad',
-        text: `Your army ${event.ordered ? 'withdrew' : 'broke'} ${placeName(before, event.from)}${lost}, and falls back ${destinationText(after, event.to)}`,
+        text: `${calledOf(before, after, event.army)} ${event.ordered ? 'withdrew' : 'broke'} ${placeName(before, event.from)}${lost}, and falls back ${destinationText(after, event.to)}`,
         focus: {
           at: event.from,
           ...(after.armies[event.army] && {
@@ -547,7 +572,7 @@ function eventAlert(
         return {
           kind: 'armyDestroyed',
           tone: areAtWar(after, player, event.owner) ? 'good' : 'neutral',
-          text: `An army of ${factionName(after, event.owner)} ${LOSS_TEXT[event.cause]} ${where}`,
+          text: `${calledOf(before, after, event.army, event.owner)} ${LOSS_TEXT[event.cause]} ${where}`,
           focus,
         };
       }
@@ -556,8 +581,8 @@ function eventAlert(
         tone: 'bad',
         text:
           event.cause === 'surrender'
-            ? `Your army of ${event.men} men had nowhere to retreat and surrendered ${where}`
-            : `Your army ${LOSS_TEXT[event.cause]} ${where}`,
+            ? `${calledOf(before, after, event.army)}, ${event.men} men, had nowhere to retreat and surrendered ${where}`
+            : `${calledOf(before, after, event.army)} ${LOSS_TEXT[event.cause]} ${where}`,
         focus,
       };
     }
@@ -567,7 +592,7 @@ function eventAlert(
       return {
         kind: 'armyDeserted',
         tone: ours ? 'bad' : 'neutral',
-        text: `${event.men} men deserted ${ours ? 'your army' : `an army of ${factionName(after, event.owner)}`} ${placeName(after, event.position)}`,
+        text: `${event.men} men deserted ${calledOf(before, after, event.army, event.owner)} ${placeName(after, event.position)}`,
         focus: {
           at: event.position,
           ...(after.armies[event.army] && {
@@ -687,6 +712,39 @@ function isOnTheMove(
 
 function distanceKm(a: MapPoint, b: MapPoint): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+/**
+ * An army by its name, from the day it was last seen, since a lost army is gone by the
+ * end of the day. One raised and lost within the day is "your army" or "an army of" its owner.
+ */
+function calledOf(
+  before: State,
+  after: State,
+  id: ArmyId,
+  owner: FactionId = after.player,
+): string {
+  const army = after.armies[id] ?? before.armies[id];
+  if (army) return armyTitle(after, army);
+  return owner === after.player ? 'Your army' : `An army of ${factionName(after, owner)}`;
+}
+
+/** The armies by name, such as "First Legion and Second Legion". */
+function namesOfArmies(state: State, ids: readonly ArmyId[]): string {
+  const names = ids.flatMap((id) => {
+    const army = state.armies[id];
+    return army ? [armyTitle(state, army)] : [];
+  });
+  if (names.length === 0) return 'an army';
+  return names.length === 1
+    ? (names[0] ?? '')
+    : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
+/** The war of the player with the faction, as a key that a new war after a peace changes. */
+function warOnce(state: State, faction: FactionId): string {
+  const key = warKey(state.player, faction);
+  return `${key}@${state.wars[key]?.since ?? ''}`;
 }
 
 function namesOf(state: State, factions: readonly FactionId[]): string {

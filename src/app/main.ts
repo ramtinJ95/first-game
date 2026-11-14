@@ -36,6 +36,8 @@ import { showFrameMeter } from './frame-meter.ts';
 import { refusalText } from './names.ts';
 import { alertsInSight, seesPick, sightOfAll } from './sighted.ts';
 import { enqueue, keepOpen, type Modal } from './modals.ts';
+import { CHRONICLE_KEPT, pageData, parsePage, type Page, type Panel } from './page.ts';
+import { readPauses, stopsOfDay, writePauses, type PauseSettings } from './pauses.ts';
 import {
   browserStorage,
   latestSaved,
@@ -55,8 +57,6 @@ import {
   type ShownModal,
 } from './view.svelte.ts';
 
-/** The alerts the list keeps, newest first. */
-const ALERTS_KEPT = 30;
 /** How long a refused order's reason stays on screen. */
 const NOTICE_MS = 4000;
 /** Local storage keeps the player's choice not to stop for a fate under this key. */
@@ -73,6 +73,13 @@ function playQuery(): PowerId | undefined {
   return POWERS.find((power) => power === asked);
 }
 const entry = playQuery();
+
+/**
+ * `?pauses=off` keeps the news from stopping the game, whatever the Game menu says.
+ * Browser tests and capture scenarios that play through battles open the game this way.
+ */
+const newsPauses = new URLSearchParams(location.search).get('pauses') !== 'off';
+const NO_PAUSES: PauseSettings = { battle: false, weakSiege: false, sighted: false };
 
 const host = document.getElementById('app');
 if (!host) throw new Error('#app element missing from index.html');
@@ -109,7 +116,9 @@ const powers: PowerCard[] = POWERS.map((power) => {
 });
 
 let selection: Pick | undefined;
-let alerts: readonly Alert[] = [];
+/** Every alert of the game, newest first, up to CHRONICLE_KEPT. */
+let chronicle: readonly Alert[] = [];
+let panel: Panel | undefined;
 let notice: Notice | undefined;
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 let menu: CommandMenu | undefined;
@@ -122,6 +131,9 @@ for (const slot of SLOTS) {
 }
 let modals: Modal[] = entry ? [] : [{ kind: 'start' }];
 let pauseOnFate = readPauseOnFate();
+let pauses = readPauses(storage);
+/** The keys of news that stops the game once, such as a war's first enemy in sight, already told. */
+let toldOnce = new Set<string>();
 /** The win is announced once a game, so a game loaded already won is not announced. */
 let announced = false;
 /** A turning point asked for a stop. The clock stops after the frame's days, not inside one. */
@@ -162,7 +174,7 @@ function occupy(id: CityId) {
 
 /** Writes the day to a browser slot, or tells the player why the browser refused it. */
 function save(slot: Slot, state: DeepReadonly<GameState>): boolean {
-  const saved = writeSaved(storage, slot, state, Date.now());
+  const saved = writeSaved(storage, slot, state, Date.now(), pageData(pageNow()));
   if (typeof saved === 'string') {
     showNotice(`The game was not saved. ${saved}`);
     return false;
@@ -212,12 +224,21 @@ const clock = createClock({
     const sees = sightFor(after);
     const weak = weakSiegeNews(before, after, weakSieges);
     weakSieges = weak.watched;
-    const news = groupAlerts([
-      ...alertsInSight(alertsOfDay(before, after, events, occupied), saw, sees),
-      ...sightingsOfDay(before, after, saw, sees, world),
-      ...weak.alerts,
-    ]);
-    if (news.length > 0) alerts = [...news.reverse(), ...alerts].slice(0, ALERTS_KEPT);
+    const stops = stopsOfDay(
+      groupAlerts([
+        ...alertsInSight(alertsOfDay(before, after, events, occupied), saw, sees),
+        ...sightingsOfDay(before, after, saw, sees, world),
+        ...weak.alerts,
+      ]),
+      newsPauses ? pauses : NO_PAUSES,
+      toldOnce,
+    );
+    toldOnce = stops.told;
+    if (stops.news.length > 0) {
+      chronicle = [...stops.news.reverse(), ...chronicle].slice(0, CHRONICLE_KEPT);
+    }
+    // The clock runs no further day once paused, so the game stops on the day of the news.
+    if (stops.stop) clock.pause();
     for (const point of turningPoints(before, after, world)) {
       if (point.kind === 'fate' && !pauseOnFate) continue;
       if (point.kind === 'won' && announced) continue;
@@ -252,7 +273,8 @@ const view = createView(
     paused: clock.paused,
     selection,
     pending: clock.pending,
-    alerts,
+    alerts: chronicle,
+    panel,
     notice,
     menu,
     sight: sightFor(clock.state),
@@ -262,6 +284,7 @@ const view = createView(
       modal: shownModal(),
       saves,
       pauseOnFate,
+      pauses,
       standing: standingOf(clock.state, world, clock.state.player),
     },
   }),
@@ -386,15 +409,41 @@ function homeOf(state: DeepReadonly<GameState>): MapPoint | undefined {
   return (capital ?? largest)?.position;
 }
 
+/** What the page keeps beside the game in a save. */
+function pageNow(): Page {
+  return {
+    chronicle,
+    camera: renderer.camera(),
+    selection,
+    panel,
+    occupied,
+    told: toldOnce,
+    weakSieges,
+  };
+}
+
 /**
  * Replaces the game. `pause` stops the clock for a player who just arrived, and
  * `focus` brings the camera to their land. A dropped file changes neither, as before.
+ * A save's `page` puts back the chronicle, the open panel, the selection, and the
+ * camera, so a loaded game opens where the player left it. A save without one, such as
+ * a test's, keeps the selection and the panel.
  */
-function enter(state: GameState, { pause, focus }: { pause: boolean; focus: boolean }) {
+function enter(
+  state: GameState,
+  { pause, focus }: { pause: boolean; focus: boolean },
+  page?: Page,
+) {
   clock.load(state);
-  alerts = [];
-  occupied = new Map();
-  weakSieges = new Map();
+  chronicle = page?.chronicle ?? [];
+  toldOnce = new Set(page?.told);
+  occupied = new Map(page?.occupied);
+  if (page) {
+    panel = page.panel;
+    selection =
+      page.selection && seesPick(sightFor(state), page.selection) ? page.selection : undefined;
+  }
+  weakSieges = new Map(page?.weakSieges);
   menu = undefined;
   stopAsked = false;
   const outcome = outcomeOf(state, world, state.player);
@@ -405,9 +454,10 @@ function enter(state: GameState, { pause, focus }: { pause: boolean; focus: bool
       : openFates(state);
   resumeOnClose = modals.length > 0 && !pause && !clock.paused;
   if (pause || modals.length > 0) clock.pause();
-  const home = focus ? homeOf(state) : undefined;
+  const home = focus && !page?.camera ? homeOf(state) : undefined;
   view.refresh();
-  if (home) focusClear(home);
+  if (page?.camera) renderer.lookAt(page.camera);
+  else if (home) focusClear(home);
 }
 
 /** The screen px that the open panels cover along each edge of the map. */
@@ -418,7 +468,7 @@ function covered(): Insets {
     return element && element.childElementCount > 0 ? element.getBoundingClientRect() : undefined;
   };
   const bar = box('[data-testid="top-bar"]');
-  const overview = box('[data-testid="overview"]');
+  const overview = box('[data-testid="overview"]') ?? box('[data-testid="chronicle"]');
   const side = box('aside[aria-label="Selection"]');
   // Below 720 px the side column is a sheet along the bottom.
   const narrow = window.innerWidth < 720;
@@ -446,12 +496,13 @@ function openFates(state: DeepReadonly<GameState>): Modal[] {
 
 function loadText(text: string, how: { pause: boolean; focus: boolean }) {
   const loaded = loadGame(text);
-  if (!loaded.ok) {
-    showNotice(`The save did not load. ${loaded.error}`);
+  const page = loaded.ok ? parsePage(loaded.page) : loaded;
+  if (!loaded.ok || !page.ok) {
+    showNotice(`The save did not load. ${loaded.ok ? (page.ok ? '' : page.error) : loaded.error}`);
     view.refresh();
     return;
   }
-  enter(loaded.state, how);
+  enter(loaded.state, how, page.page);
 }
 
 function closeModal() {
@@ -535,6 +586,11 @@ const frame: FrameActions = {
     }
     view.refresh();
   },
+  setPause(kind, on) {
+    pauses = { ...pauses, [kind]: on };
+    writePauses(storage, pauses);
+    view.refresh();
+  },
   saveToBrowser() {
     save('manual', clock.state);
     view.refresh();
@@ -547,7 +603,9 @@ const frame: FrameActions = {
     const state = clock.state;
     const realm = state.factions[state.player]?.name ?? state.player;
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([saveGame(state)], { type: 'application/json' }));
+    link.href = URL.createObjectURL(
+      new Blob([saveGame(state, pageData(pageNow()))], { type: 'application/json' }),
+    );
     link.download = `${realm.toLowerCase()}-day-${state.day}.json`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 0);
@@ -615,6 +673,10 @@ const actions: Actions = {
   },
   closeMenu() {
     menu = undefined;
+    view.refresh();
+  },
+  togglePanel(next) {
+    panel = panel === next ? undefined : next;
     view.refresh();
   },
   occupy(city) {

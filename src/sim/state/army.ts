@@ -53,6 +53,8 @@ export type ArmyActivity = v.InferOutput<typeof ArmyActivitySchema>;
 export const ArmySchema = v.object({
   id: ArmyIdSchema,
   owner: FactionIdSchema,
+  /** Given when the army is raised, in its owner's manner (`nameNewArmy`), and kept for life. */
+  name: v.pipe(v.string(), v.nonEmpty()),
   formations: v.array(FormationIdSchema),
   stance: StanceSchema,
   /** The general's skill, from 0 for none to 10 for the best. */

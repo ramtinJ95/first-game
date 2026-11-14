@@ -133,7 +133,7 @@ test.describe('fog of war', () => {
     const flag = camera(page).banner(IN_SIGHT);
     await page.mouse.click(flag.x, flag.y);
     const heading = page.getByTestId('army-panel').getByRole('heading', { level: 2 });
-    await expect(heading).toHaveText('Army of Carthage');
+    await expect(heading).toHaveText("Carthage's Host of Hanno");
     expect(await punicPixels(page, IN_SIGHT)).toBeGreaterThan(20);
   });
 
@@ -145,7 +145,7 @@ test.describe('fog of war', () => {
     const flag = camera(page).banner(IN_SIGHT);
     await page.mouse.click(flag.x, flag.y);
     const panel = page.getByTestId('army-panel');
-    await expect(panel.getByRole('heading', { level: 2 })).toHaveText('Army of Carthage');
+    await expect(panel.getByRole('heading', { level: 2 })).toHaveText("Carthage's Host of Hanno");
 
     const leaving = romeWithPunicArmyAt(IN_SIGHT);
     leaving.day = (state.day + 1) as Day;

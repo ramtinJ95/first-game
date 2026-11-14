@@ -67,6 +67,7 @@ function raise(state: GameState, owner: FactionId, tag: string, at: MapPoint): A
   const army: Army = {
     id,
     owner,
+    name: 'Test Army',
     formations,
     stance: 'holdTheLine',
     generalSkill: 3,

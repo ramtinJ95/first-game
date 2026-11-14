@@ -163,7 +163,7 @@ export default defineScenario({
 
     await page
       .getByTestId('battle-panel')
-      .getByRole('button', { name: /^Rome ·/ })
+      .getByRole('button', { name: /^First Legion ·/ })
       .click();
 
     await page.getByTestId('army-panel').waitFor();

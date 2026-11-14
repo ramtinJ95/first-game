@@ -120,6 +120,10 @@ export interface Renderer {
    * part of the map they leave clear.
    */
   focus(point: MapPoint, covered?: Insets): void;
+  /** Where the view looks now, which a save keeps. */
+  camera(): Camera;
+  /** Puts the view where a save left it, kept inside the map. */
+  lookAt(camera: Camera): void;
   destroy(): void;
 }
 
@@ -990,6 +994,15 @@ export async function createRenderer({
       if (event.pointerId !== drag?.pointer) return;
       if (!drag.moved) {
         const screen = local(event);
+        // Men and tents stand clear of a city's symbol, so a click on the symbol itself
+        // means the city, though a camp's edge reaches over it.
+        const onSymbol = drawnCities.some(
+          ({ symbol }) =>
+            screen.x >= symbol.left &&
+            screen.x <= symbol.right &&
+            screen.y >= symbol.top &&
+            screen.y <= symbol.bottom,
+        );
         const pick = pickAt(
           map,
           camera,
@@ -997,7 +1010,7 @@ export async function createRenderer({
           bannersShown(),
           screen,
           battlesShown(),
-          figuresShown(),
+          onSymbol ? [] : figuresShown(),
         );
         // A city's name can stand over a neighbouring province, so a click on it, or on
         // its symbol, picks the city's own province.
@@ -1262,6 +1275,11 @@ export async function createRenderer({
         y: point.y - (covered.top - covered.bottom) / 2 / scale,
       };
       camera = clampCamera({ centre, scale }, viewport(), map);
+      cameraMoved = true;
+    },
+    camera: () => camera,
+    lookAt(next) {
+      camera = clampCamera(next, viewport(), map);
       cameraMoved = true;
     },
     destroy() {

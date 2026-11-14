@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { factionName, STANCE_NAMES, whole } from '../app/names.ts';
+  import { armyTitle, STANCE_NAMES, whole } from '../app/names.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { Order } from '../sim/orders/orders.ts';
   import type { Sight } from '../sim/sight.ts';
@@ -35,6 +35,8 @@
   } = $props();
 
   const own = $derived(army.owner === game.player);
+  /** The battle panel below shows an army in battle with its men and stance, so this panel does not repeat them. */
+  const fighting = $derived(army.activity.kind === 'inBattle');
   const base = $derived({ faction: game.player, army: army.id });
   const here = $derived.by(() => {
     const at = armyPosition(game, army);
@@ -50,7 +52,7 @@
 <section class="panel" data-testid="army-panel" aria-label="Army">
   <div class="head">
     <span class="swatch" style:background={cssColour(game, army.owner)}></span>
-    <h2>Army of {factionName(game, army.owner)}</h2>
+    <h2 data-testid="army-name">{armyTitle(game, army)}</h2>
     <span class="muted" data-testid="army-men">{whole(menOf(game, army))} men</span>
   </div>
   <p data-testid="army-activity">{activityText(game, army)}</p>
@@ -71,10 +73,18 @@
   <p class="muted" data-testid="army-general">
     General's skill {army.generalSkill} of 10 · {STANCE_NAMES[army.stance]}
   </p>
-  <Formations {game} ids={army.formations} />
+  {#if fighting}
+    <p class="muted hint" data-testid="army-in-battle">
+      Its men, stance, and retreat are in the battle below.
+    </p>
+  {:else}
+    <Formations {game} ids={army.formations} />
+  {/if}
   {#if own}
-    <h3>Stance</h3>
-    <StanceControls {game} {army} {pending} {actions} />
+    {#if !fighting}
+      <h3>Stance</h3>
+      <StanceControls {game} {army} {pending} {actions} />
+    {/if}
     {#if army.activity.kind === 'marching'}
       <div class="row">
         <button type="button" onclick={() => actions.issue({ kind: 'halt', ...base })}>Halt</button>
@@ -90,7 +100,9 @@
       <WarStatus {game} owner={army.owner} {pending} {actions} />
     {/key}
   {/if}
-  <ArmiesHere {game} armies={here} {actions} />
+  {#if !fighting}
+    <ArmiesHere {game} armies={here} {actions} />
+  {/if}
 </section>
 
 <style>

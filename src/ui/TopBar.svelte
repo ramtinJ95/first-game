@@ -13,14 +13,10 @@
     view,
     actions,
     frame,
-    overview,
-    toggleOverview,
   }: {
     view: View;
     actions: Actions;
     frame: FrameActions;
-    overview: boolean;
-    toggleOverview: () => void;
   } = $props();
 
   const STORES: { key: keyof Stores; name: string }[] = [
@@ -49,12 +45,7 @@
   {:else if stores && balance}
     <span class="stores">
       {#each STORES as { key, name } (key)}
-        {@const note = storeNote(
-          key,
-          stores[key],
-          balance[key],
-          key === 'gold' ? undefined : limits?.[key],
-        )}
+        {@const note = storeNote(key, stores[key], balance[key], limits?.[key])}
         <span class="store" class:falling={note?.bad} data-testid="store-{key}" title={note?.why}>
           <span class="line">
             <span class="muted">{name}</span>
@@ -76,8 +67,11 @@
     </span>
   {/if}
   <span class="end">
-    <button type="button" aria-expanded={overview} aria-controls="overview" onclick={toggleOverview}
-      >Overview</button
+    <button
+      type="button"
+      aria-expanded={view.current.panel === 'overview'}
+      aria-controls="overview"
+      onclick={() => actions.togglePanel('overview')}>Overview</button
     >
     <FrameControls frame={view.current.frame} actions={frame} />
   </span>

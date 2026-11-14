@@ -88,7 +88,7 @@ test.describe('the panels', () => {
     const view = camera(page);
     await page.mouse.click(view.banner(cityPoint('roma')).x, view.banner(cityPoint('roma')).y);
     const panel = page.getByTestId('army-panel');
-    await expect(panel.getByRole('heading', { level: 2 })).toHaveText('Army of Rome');
+    await expect(panel.getByRole('heading', { level: 2 })).toHaveText('First Legion');
     await expect(panel.getByTestId('army-activity')).toHaveText('Idle at Roma');
 
     const target = view.city('mediolanum');
@@ -191,7 +191,7 @@ test.describe('the panels', () => {
     const capua = view.banner(cityPoint('capua'));
     await page.mouse.click(capua.x, capua.y);
     const panel = page.getByTestId('army-panel');
-    await expect(panel.getByRole('heading', { level: 2 })).toHaveText('Army of Carthage');
+    await expect(panel.getByRole('heading', { level: 2 })).toHaveText("Carthage's Host of Hanno");
     await expect(panel.getByTestId('formation')).toHaveCount(2);
     await expect(panel.getByRole('group', { name: 'Stance' })).toHaveCount(0);
     await expect(panel.getByRole('button', { name: 'Halt' })).toHaveCount(0);
@@ -291,15 +291,15 @@ test.describe('the panels', () => {
     await expect(page.getByTestId('city-panel')).toHaveCount(0);
     await expect(page.getByTestId('army-panel')).toHaveCount(0);
 
-    await battle.getByRole('button', { name: /^Rome ·/ }).click();
+    await battle.getByRole('button', { name: /^First Legion ·/ }).click();
     const army = page.getByTestId('army-panel');
     await expect(army.getByTestId('army-activity')).toHaveText(
       /^In battle (at|near) Mediolanum · day \d+$/,
     );
-    await army.getByRole('button', { name: /^Retreat/ }).click();
+    await expect(army.getByRole('button', { name: /^Retreat/ })).toHaveCount(0);
+    await battle.getByRole('button', { name: /^Retreat/ }).click();
     await resume(page);
     await expect(army.getByTestId('army-activity')).toHaveText(/^Retreating to /);
-    await expect(army.getByRole('button', { name: /^Retreat/ })).toHaveCount(0);
     await expect(battle).toHaveCount(0);
   });
 
@@ -381,7 +381,7 @@ test.describe('the panels', () => {
     await page.mouse.click(capua.x, capua.y, { button: 'right' });
     await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
     await resume(page);
-    const alert = page.getByTestId('alerts').getByRole('button', { name: /Your army arrived/ });
+    const alert = page.getByTestId('alerts').getByRole('button', { name: /First Legion arrived/ });
     await expect(alert).toBeVisible({ timeout: 15_000 });
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('army-panel')).toHaveCount(0);
@@ -394,7 +394,9 @@ test.describe('the panels', () => {
   test('the reason for a refused order shows for a few seconds', async ({ page }) => {
     const view = camera(page);
     await page.mouse.click(view.banner(cityPoint('roma')).x, view.banner(cityPoint('roma')).y);
-    const sea = view.screen({ x: 2400, y: 2500 });
+    // The open sea farthest on screen from every city at the opening zoom, 136 px, so no
+    // city's symbol or name reaches the click wherever its name is placed.
+    const sea = view.screen({ x: 5457, y: 1694 });
     await page.mouse.click(sea.x, sea.y, { button: 'right' });
     const notice = page.getByTestId('notice');
     await expect(notice).toHaveText('Order refused. The destination is in the sea.');

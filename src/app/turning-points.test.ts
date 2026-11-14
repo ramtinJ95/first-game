@@ -1,4 +1,3 @@
-import { cityBalance } from '../ui/describe.ts';
 import { describe, expect, it } from 'vitest';
 import { changeCityOwner } from '../sim/cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
@@ -8,7 +7,7 @@ import { expectConsistent } from '../sim/references.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { warKey } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
-import { dailyText, fateChoices, forgoneText } from './fates.ts';
+import { fateChoices } from './fates.ts';
 import { turningPoints } from './turning-points.ts';
 
 const world = fixtureWorld();
@@ -107,26 +106,6 @@ describe('fateChoices', () => {
         expect(has && had && has.manpower - had.manpower).toBeGreaterThanOrEqual(choice.manpower);
       }
     }
-  });
-
-  it('gives what the city yields a day after each fate, which a sack and an enslavement cut', () => {
-    const state = tick(syracusaeFalls(), [], world).state;
-    const [occupy, sack, enslave] = fateChoices(state, world, f.syracusae);
-    if (!occupy || !sack || !enslave) throw new Error('three fates');
-    for (const choice of [occupy, sack, enslave]) {
-      const played = tick(state, choice.order ? [choice.order] : [], world).state;
-      const city = played.cities[f.syracusae];
-      if (!city) throw new Error('no Syracusae');
-      expect(choice.daily.gold).toBeCloseTo(cityBalance(played, city).gold, 1);
-    }
-    expect(sack.daily.gold).toBeLessThan(occupy.daily.gold);
-    expect(enslave.daily.gold).toBeLessThan(occupy.daily.gold);
-    expect(enslave.daily.manpower).toBeLessThan(occupy.daily.manpower);
-    expect(dailyText({ gold: 2.14, food: -0.4, manpower: 120 })).toBe(
-      '+2.1 gold, −0.4 food, +120 manpower a day',
-    );
-    expect(forgoneText(occupy, occupy)).toBeUndefined();
-    expect(forgoneText(sack, occupy)).toMatch(/^−[\d.]+ gold.* a day against occupying$/);
   });
 
   it('gives the reason a fate is refused once no army of the player stands at the city', () => {

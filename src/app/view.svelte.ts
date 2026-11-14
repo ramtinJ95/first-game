@@ -12,6 +12,8 @@ import type { Speed } from './clock.ts';
 import type { OrderMenu } from './command.ts';
 import type { FateChoice } from './fates.ts';
 import type { Modal } from './modals.ts';
+import type { Panel } from './page.ts';
+import type { PauseSettings } from './pauses.ts';
 import type { Saved, Slot } from './saves.ts';
 
 /** A choice of orders offered at a right click, at its place on the screen. */
@@ -47,6 +49,8 @@ export interface Frame {
   readonly modal: ShownModal | undefined;
   readonly saves: Readonly<Partial<Record<Slot, Saved>>>;
   readonly pauseOnFate: boolean;
+  /** Which news stops the game, as the Game menu sets it. */
+  readonly pauses: PauseSettings;
   readonly standing: Standing;
 }
 
@@ -58,8 +62,10 @@ export interface Snapshot {
   selection: Pick | undefined;
   /** Orders waiting for the next tick, which a pause holds back. */
   pending: readonly Order[];
-  /** The latest alerts, newest first. They are page state, worked out from the days. */
+  /** Every alert of the game, newest first: the chronicle. It is page state, worked out from the days. */
   alerts: readonly Alert[];
+  /** The panel open over the map's left side. */
+  panel: Panel | undefined;
   notice: Notice | undefined;
   menu: CommandMenu | undefined;
   /** What the player sees. A panel or an alert shows nothing outside it. */

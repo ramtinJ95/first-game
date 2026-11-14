@@ -6,6 +6,7 @@ import type { ArmyId, BattleId, CityId, ConvoyId, FactionId, SiegeId } from '../
 import { newGame } from '../sim/new-game.ts';
 import { executeOrder, type Order } from '../sim/orders/orders.ts';
 import { sightOf } from '../sim/sight.ts';
+import { dailyBalances } from '../sim/systems/economy.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { warKey } from '../sim/state/war.ts';
@@ -32,6 +33,8 @@ import {
   shownBattles,
   stanceEffectText,
   whyNotBesieging,
+  minorText,
+  cityBalance,
 } from './describe.ts';
 
 const world = fixtureWorld();
@@ -430,6 +433,11 @@ describe('storeNote', () => {
     });
     expect(storeNote('food', 400, 5, 500)).toBeUndefined();
     expect(storeNote('gold', 400, 5, undefined)).toBeUndefined();
+    expect(storeNote('gold', 1000, 5, 1000)).toMatchObject({
+      text: 'Full',
+      why: expect.stringMatching(/^Treasury full\. /) as string,
+    });
+    expect(storeNote('gold', 400, 5, 1000)).toBeUndefined();
   });
 });
 
@@ -636,5 +644,38 @@ describe('the stance texts', () => {
     });
     roman.stanceChangedOn = state.day;
     expect(choice('allOutAssault').cost).toBe(`re-forms ${REFORM_DAYS} days again`);
+  });
+});
+
+describe('cityBalance and minorText', () => {
+  it("gives each city's share of its realm's yield, so the cities add up to the realm", () => {
+    const state = newGame(fixtureWorld().map, { seed: 1, player: 'rome' });
+    const minors = Object.values(state.cities)
+      .filter((city) => city.rank === 'minorCity')
+      .sort((a, b) => (a.id < b.id ? -1 : 1))
+      .slice(0, 10);
+    for (const city of minors) changeCityOwner(state, city.id, f.rome);
+    for (const city of Object.values(state.cities)) city.unrestDays = 0;
+    const unarmed = { ...state, armies: {} };
+    const own = Object.values(state.cities).filter((city) => city.owner === f.rome);
+    const sum = own.reduce((total, city) => total + cityBalance(unarmed, city).gold, 0);
+    expect(own.length).toBeGreaterThan(8);
+    expect(sum).toBeCloseTo(dailyBalances(unarmed).get(f.rome)?.gold ?? 0, 6);
+  });
+
+  it("names a minor city's walls and wealth, its league, and its army in sight", () => {
+    const state = buildFixture();
+    const syracusae = state.cities[f.syracusae];
+    const minor = state.factions[f.syracusaeFaction];
+    if (!syracusae || !minor) throw new Error('fixture changed');
+    const sight = () => sightOf(state, fixtureWorld(), f.rome);
+    expect(minorText(state, sight(), syracusae)).toBeUndefined();
+    syracusae.fortified = 1.5;
+    minor.league = f.syracusaeFaction;
+    expect(minorText(state, sight(), syracusae)).toBe(
+      'Rich and walled: strong walls and a large granary. Leagued with Syracusae, which joins its wars',
+    );
+    const roma = state.cities[f.roma];
+    if (roma) expect(minorText(state, sight(), roma)).toBeUndefined();
   });
 });

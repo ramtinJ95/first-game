@@ -69,7 +69,7 @@ export default defineScenario({
       'The days run at speed 3: the army marches along its inked path and the skirmishers train in Roma',
     );
 
-    const arrived = page.getByTestId('alerts').getByRole('button', { name: /Your army arrived/ });
+    const arrived = page.getByTestId('alerts').getByRole('button', { name: /Legion arrived/ });
     await arrived.waitFor({ timeout: 20_000 });
     await pause(page);
     await settle(page, 300);

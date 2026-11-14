@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { factionName, placeName, STANCE_NAMES, whole } from '../app/names.ts';
+  import { armyTitle, placeName, STANCE_NAMES, whole } from '../app/names.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { Order } from '../sim/orders/orders.ts';
   import type { Battle } from '../sim/state/battle.ts';
@@ -54,7 +54,7 @@
         >
           <span class="swatch" style:background={cssColour(game, army.owner)}></span>
           <span class="who"
-            >{factionName(game, army.owner)} · {STANCE_NAMES[army.stance]}{reformingText(game, army)
+            >{armyTitle(game, army)} · {STANCE_NAMES[army.stance]}{reformingText(game, army)
               ? ` · ${reformingText(game, army)?.toLowerCase()}`
               : ''} · {whole(menOf(game, army))} men</span
           >

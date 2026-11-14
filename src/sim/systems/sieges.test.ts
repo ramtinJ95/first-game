@@ -76,6 +76,7 @@ function addArmy(
   state.armies[armyId] = {
     id: armyId,
     owner,
+    name: 'Test Army',
     formations: [formation],
     stance: 'holdTheLine',
     generalSkill: 3,

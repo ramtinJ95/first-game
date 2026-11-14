@@ -2,11 +2,12 @@ import type { BuildingKind } from '../sim/buildings/buildings.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { CityId } from '../sim/ids.ts';
 import { executeOrder, type Order } from '../sim/orders/orders.ts';
-import type { Stores } from '../sim/state/faction.ts';
 import type { City } from '../sim/state/city.ts';
+import type { Day } from '../sim/state/day.ts';
+import type { Stores } from '../sim/state/faction.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { World } from '../sim/world/world.ts';
-import { cityBalance, signed } from '../ui/describe.ts';
+import { cityBalance, signed, unrestDaysLeft } from '../ui/describe.ts';
 
 /** One way to settle a captured city, with what it gives and costs today. */
 export interface FateChoice {
@@ -19,12 +20,18 @@ export interface FateChoice {
   readonly peopleLost: number;
   /** Captives who settle in the player's other cities. */
   readonly peopleMoved: number;
+  /** The days until the city is calm, at the pace the rules count its unrest down. */
   readonly unrestDays: number;
   /** The buildings the city keeps, and those the fate destroys with the one at work. */
   readonly buildingsKept: readonly BuildingKind[];
   readonly buildingsLost: readonly BuildingKind[];
-  /** What the city then adds to the player's stores each day, by the economy's own balance. */
-  readonly daily: Stores;
+  /**
+   * What the city adds to the player's stores each day at first, in the depth of its
+   * unrest, by the economy's own balance. It rises to `calm` over the last days of unrest.
+   */
+  readonly unrest: Stores;
+  /** What the city adds each day once its unrest is over, as it stands then. */
+  readonly calm: Stores;
   /** Why the rules refuse it today, or undefined. */
   readonly refusal: string | undefined;
 }
@@ -49,10 +56,11 @@ export function fateChoices(
     manpower: 0,
     peopleLost: 0,
     peopleMoved: 0,
-    unrestDays: city.unrestDays,
+    unrestDays: unrestDaysLeft(state, city),
     buildingsKept: city.buildings,
     buildingsLost: [],
-    daily: cityBalance(state, city),
+    unrest: cityBalance(state, city),
+    calm: calmBalance(state, city),
     refusal: undefined,
   };
   const others = (s: DeepReadonly<GameState>) =>
@@ -76,10 +84,11 @@ export function fateChoices(
       manpower: has.manpower - stores.manpower,
       peopleLost: city.population - after.population,
       peopleMoved: others(copy) - others(state),
-      unrestDays: after.unrestDays,
+      unrestDays: unrestDaysLeft(copy, after),
       buildingsKept: after.buildings,
       buildingsLost: standing(city).filter((kind) => !standing(after).includes(kind)),
-      daily: cityBalance(copy, after),
+      unrest: cityBalance(copy, after),
+      calm: calmBalance(copy, after),
       refusal: undefined,
     };
   });
@@ -91,19 +100,18 @@ function standing(city: DeepReadonly<City>): BuildingKind[] {
   return [...city.buildings, ...(city.construction ? [city.construction.building] : [])];
 }
 
-const STORE_ORDER = ['gold', 'food', 'manpower'] as const;
-
-/** What a city adds to the stores each day after a fate, such as "+2.1 gold, −0.4 food a day". */
-export function dailyText(daily: Stores): string {
-  return `${STORE_ORDER.map((store) => `${signed(daily[store])} ${store}`).join(', ')} a day`;
+/**
+ * The city's daily yield on the day its unrest ends, by the economy's own balance: the
+ * same city on that day with no unrest left, so a sack's poor years still count.
+ */
+function calmBalance(state: DeepReadonly<GameState>, city: DeepReadonly<City>): Stores {
+  const day = (state.day + unrestDaysLeft(state, city)) as Day;
+  return cityBalance({ ...state, day }, { ...city, unrestDays: 0 });
 }
 
-/** What a fate takes from the city's daily yield against occupying it, or nothing. */
-export function forgoneText(choice: FateChoice, occupy: FateChoice): string | undefined {
-  const lost = STORE_ORDER.filter((store) => choice.daily[store] < occupy.daily[store] - 0.05);
-  if (lost.length === 0) return undefined;
-  const parts = lost.map(
-    (store) => `${signed(choice.daily[store] - occupy.daily[store])} ${store}`,
-  );
-  return `${parts.join(', ')} a day against occupying`;
+const STORE_ORDER = ['gold', 'food', 'manpower'] as const;
+
+/** A day's yield, such as "+2.1 gold, −0.4 food, +0.3 manpower". */
+export function dailyText(daily: Stores): string {
+  return STORE_ORDER.map((store) => `${signed(daily[store])} ${store}`).join(', ');
 }

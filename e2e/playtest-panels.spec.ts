@@ -20,14 +20,21 @@ import {
   untilDrawn,
 } from './support.ts';
 
-/** A click picks among the banners last drawn, so this waits for a frame of the loaded day. */
+/**
+ * A click picks among the banners last drawn, so this waits for a frame of the loaded day.
+ * The save loads into a paused game, because a running one can pass its day before the
+ * page is read, and the game runs on after if it was running.
+ */
 async function load(page: Page, state: GameState) {
+  const running = await page.getByRole('button', { name: 'Pause', exact: true }).isVisible();
+  await pause(page);
   await dropSave(page, state);
   await expect(page.getByTestId('time-controls-day')).toHaveAttribute(
     'data-day',
     String(state.day),
   );
   await untilDrawn(page);
+  if (running) await resume(page);
 }
 
 async function clickCity(page: Page, id: string) {
@@ -167,10 +174,14 @@ test.describe('the panels after the playtest', () => {
     await expect(stances).toContainText('Deals and takes 25% more');
 
     const army = page.getByTestId('army-panel');
-    await battle.getByRole('button', { name: /^Mediolanum · Hold the line · [\d,]+ men$/ }).click();
+    await battle
+      .getByRole('button', { name: /^Army of Mediolanum · Hold the line · [\d,]+ men$/ })
+      .click();
     await expect(army.getByRole('heading', { level: 2 })).toHaveText('Army of Mediolanum');
-    await battle.getByRole('button', { name: /^Rome · Hold the line · [\d,]+ men$/ }).click();
-    await expect(army.getByRole('heading', { level: 2 })).toHaveText('Army of Rome');
+    await battle
+      .getByRole('button', { name: /^First Legion · Hold the line · [\d,]+ men$/ })
+      .click();
+    await expect(army.getByRole('heading', { level: 2 })).toHaveText('First Legion');
     await expect(army.getByTestId('army-activity')).toHaveText(
       /^In battle (at|near) Mediolanum · day \d+$/,
     );
@@ -198,17 +209,17 @@ test.describe('the panels after the playtest', () => {
     const city = page.getByTestId('city-panel');
     const here = city.getByTestId('armies-here').getByRole('button');
     await expect(here).toHaveText([
-      /^\s*Rome · Hold the line · [\d,]+ men\s*Idle at Roma$/,
-      /^\s*Carthage · Hold the line · [\d,]+ men\s*Idle at Roma$/,
+      /^\s*First Legion · Hold the line · [\d,]+ men\s*Idle at Roma$/,
+      /^\s*Carthage's Host of Hanno · Hold the line · [\d,]+ men\s*Idle at Roma$/,
     ]);
     await here.filter({ hasText: 'Carthage' }).click();
     const army = page.getByTestId('army-panel');
-    await expect(army.getByRole('heading', { level: 2 })).toHaveText('Army of Carthage');
+    await expect(army.getByRole('heading', { level: 2 })).toHaveText("Carthage's Host of Hanno");
     await army
       .getByTestId('armies-here')
-      .getByRole('button', { name: /^Rome ·/ })
+      .getByRole('button', { name: /^First Legion ·/ })
       .click();
-    await expect(army.getByRole('heading', { level: 2 })).toHaveText('Army of Rome');
+    await expect(army.getByRole('heading', { level: 2 })).toHaveText('First Legion');
   });
 
   test('your army at a foreign city says why it does not besiege it, and besieges once at war', async ({
@@ -277,7 +288,7 @@ test.describe('the panels after the playtest', () => {
     await expect(cities).toHaveCount(4);
     await expect(cities.first()).toHaveText(/^\s*Roma [\d,]+ people\s*Calm$/);
     const armies = overview.getByTestId('overview-armies').getByRole('button');
-    await expect(armies).toHaveText([/^\s*Idle at Roma\s*[\d,]+ men$/]);
+    await expect(armies).toHaveText([/^\s*First Legion [\d,]+ men\s*Idle at Roma$/]);
     await expect(overview.getByTestId('overview-wars')).toHaveText('At peace with everyone');
 
     const state = startGame();
@@ -289,7 +300,7 @@ test.describe('the panels after the playtest', () => {
 
     await armies.first().click();
     await expect(page.getByTestId('army-panel').getByRole('heading', { level: 2 })).toHaveText(
-      'Army of Rome',
+      'First Legion',
     );
     await cities.filter({ hasText: 'Capua' }).click();
     await expect(page.getByTestId('city-panel').getByTestId('city-name')).toHaveText('Capua');
@@ -324,7 +335,7 @@ for (const viewport of [
   test.describe(`the layout at ${viewport.width} px`, () => {
     test.use({ viewport });
 
-    test('no panel covers the clock, the stores, or the speed buttons, and the alerts scroll in a bounded list', async ({
+    test('no panel covers the clock, the stores, or the speed buttons, and the chronicle keeps the news the corner leaves out', async ({
       page,
     }) => {
       await openGame(page);
@@ -335,9 +346,16 @@ for (const viewport of [
       await untilDay(page, 13);
       await pause(page);
 
+      const phone = viewport.width < 720;
       const alerts = page.getByTestId('alerts');
-      await expect(alerts.getByRole('listitem')).not.toHaveCount(0);
-      expect(await alerts.getByRole('listitem').count()).toBeGreaterThanOrEqual(13);
+      if (phone) {
+        await expect(alerts, 'the open sheet takes the place of the alerts').toBeHidden();
+      } else {
+        await expect(alerts.getByRole('listitem')).toHaveCount(5);
+      }
+      await page.getByRole('button', { name: 'Chronicle' }).click();
+      const chronicle = page.getByTestId('chronicle');
+      expect(await chronicle.getByRole('listitem').count()).toBeGreaterThanOrEqual(13);
 
       const bar = page.getByTestId('top-bar');
       const uncovered = [
@@ -359,8 +377,8 @@ for (const viewport of [
         'the side column',
         page.getByRole('complementary', { name: 'Selection' }),
       );
-      const list = await box('the alert list', alerts);
-      const covering = [side, list];
+      const kept = await box('the chronicle', chronicle);
+      const covering = [side, kept, ...(phone ? [] : [await box('the alert list', alerts)])];
 
       const offScreen = [...uncovered, ...covering]
         .filter(
@@ -378,18 +396,17 @@ for (const viewport of [
           .map((other) => `${other.name} covers ${item.name}`),
       );
       expect(covered).toEqual([]);
-      expect(overlaps(side, list), 'the side column covers the alert list').toBe(false);
+      for (const other of covering.slice(1)) {
+        expect(overlaps(side, other), `the side column and ${other.name}`).toBe(false);
+      }
+      if (!phone) {
+        expect((await box('the alert list', alerts)).height).toBeLessThanOrEqual(
+          viewport.height * 0.3,
+        );
+      }
+      expect(side.height).toBeLessThanOrEqual(phone ? viewport.height * 0.5 : viewport.height);
 
-      expect(list.height).toBeLessThanOrEqual(viewport.height * 0.3);
-      expect(
-        await alerts.evaluate((element) => element.scrollHeight > element.clientHeight),
-        'the alert list scrolls',
-      ).toBe(true);
-      expect(side.height).toBeLessThanOrEqual(
-        viewport.width < 720 ? viewport.height * 0.5 : viewport.height,
-      );
-
-      const old = alerts
+      const old = chronicle
         .getByRole('button')
         .filter({ hasText: /^Year 1, day 1\b/ })
         .first();

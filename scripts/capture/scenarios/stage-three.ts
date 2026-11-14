@@ -1,3 +1,4 @@
+import { nameNewArmy } from '../../../src/sim/army-names.ts';
 import {
   armyOf,
   camera,
@@ -49,6 +50,7 @@ function mediolanumAtRest(): GameState {
   const marching: Army = {
     id,
     owner: rome,
+    name: nameNewArmy(state, rome),
     formations: [],
     stance: 'holdTheLine',
     generalSkill: 0,

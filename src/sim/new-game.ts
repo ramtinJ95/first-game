@@ -1,3 +1,4 @@
+import { nameNewArmy } from './army-names.ts';
 import { allocateId, type CityId, type FactionId } from './ids.ts';
 import { POWERS, type GameMap, type PowerId, type Province } from './map.ts';
 import { serialOf } from './references.ts';
@@ -227,6 +228,7 @@ function addArmy(
   state.armies[army] = {
     id: army,
     owner,
+    name: nameNewArmy(state, owner),
     formations,
     stance: 'holdTheLine',
     generalSkill: STARTING_GENERAL_SKILL,

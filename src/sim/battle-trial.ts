@@ -1,3 +1,4 @@
+import { nameNewArmy } from './army-names.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from './fixture.ts';
 import { allocateId, type ArmyId, type FactionId } from './ids.ts';
 import type { Stance } from './state/army.ts';
@@ -70,6 +71,7 @@ function addArmy(
   state.armies[id] = {
     id,
     owner,
+    name: nameNewArmy(state, owner),
     formations,
     stance: spec.stance ?? 'holdTheLine',
     generalSkill: spec.generalSkill ?? 3,

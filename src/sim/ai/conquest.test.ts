@@ -28,6 +28,7 @@ function addArmy(state: GameState, owner: FactionId, men: number, at: MapPoint):
   state.armies[id] = {
     id,
     owner,
+    name: 'Test Army',
     formations: [formation],
     stance: 'holdTheLine',
     generalSkill: 3,

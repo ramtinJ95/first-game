@@ -10,6 +10,7 @@ import {
   type Camera,
 } from '../src/render/camera.ts';
 import { BANNER } from '../src/render/markers.ts';
+import { nameNewArmy } from '../src/sim/army-names.ts';
 import { decideAll } from '../src/sim/ai/decide.ts';
 import { changeCityOwner } from '../src/sim/cities.ts';
 import {
@@ -55,7 +56,9 @@ export const carthage = 'carthage' as FactionId;
  * The one way a browser test or a capture scenario enters a game: a running game as
  * `power`, at the widest zoom, with no start screen and no guide, by the page's
  * `?play=` query. `query` adds to it, such as `draw=full`, and `base` names another
- * server than the test's own.
+ * server than the test's own. The news does not stop the game (`pauses=off`) unless
+ * `pauses` asks for the Game menu's settings, so a test that plays through a battle at
+ * speed sees it play out, and a test of the pauses says so.
  */
 export async function openGame(
   page: Page,
@@ -63,9 +66,11 @@ export async function openGame(
     query = '',
     power = 'rome',
     base = '',
-  }: { query?: string; power?: PowerId; base?: string } = {},
+    pauses = false,
+  }: { query?: string; power?: PowerId; base?: string; pauses?: boolean } = {},
 ) {
-  await page.goto(`${base}/?play=${power}${query ? `&${query}` : ''}`);
+  const asked = [query, pauses ? '' : 'pauses=off'].filter(Boolean).join('&');
+  await page.goto(`${base}/?play=${power}${asked ? `&${asked}` : ''}`);
   await page.getByTestId('top-bar').waitFor({ state: 'visible' });
 }
 
@@ -142,6 +147,7 @@ export function battleAt(state: GameState, city: string) {
   state.armies[defenders] = {
     id: defenders,
     owner: target.owner,
+    name: nameNewArmy(state, target.owner),
     formations: formations.map(({ id }) => id),
     stance: 'holdTheLine',
     generalSkill: 3,
@@ -181,6 +187,7 @@ export function outnumberedAt(state: GameState, city: string, enemyMen: number) 
   state.armies[invaders] = {
     id: invaders,
     owner: carthage,
+    name: nameNewArmy(state, carthage),
     formations: formations.map(({ id }) => id),
     stance: 'holdTheLine',
     generalSkill: 3,
@@ -315,14 +322,14 @@ export function camera(page: Page) {
 }
 
 export async function pause(page: Page) {
-  if (await page.getByRole('button', { name: 'Pause' }).isVisible()) {
-    await page.getByRole('button', { name: 'Pause' }).click();
+  if (await page.getByRole('button', { name: 'Pause', exact: true }).isVisible()) {
+    await page.getByRole('button', { name: 'Pause', exact: true }).click();
   }
 }
 
 export async function resume(page: Page) {
-  if (await page.getByRole('button', { name: 'Resume' }).isVisible()) {
-    await page.getByRole('button', { name: 'Resume' }).click();
+  if (await page.getByRole('button', { name: 'Resume', exact: true }).isVisible()) {
+    await page.getByRole('button', { name: 'Resume', exact: true }).click();
   }
 }
 
@@ -462,7 +469,8 @@ export function hundredArmies(): GameState {
   const roma = cityPoint('roma');
   for (let i = 0; i < 100; i++) {
     const id = (i === 0 ? first.id : allocateId(state, 'army')) as ArmyId;
-    const army: Army = i === 0 ? first : { ...first, id, formations: [] };
+    const army: Army =
+      i === 0 ? first : { ...first, id, name: nameNewArmy(state, rome), formations: [] };
     state.armies[id] = army;
     withFormations(state, army, ROMAN_FOUR);
     army.activity = {

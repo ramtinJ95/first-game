@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { nameNewArmy } from '../src/sim/army-names.ts';
 import { allocateId, type ArmyId, type CityId, type FactionId } from '../src/sim/ids.ts';
 import { parseMap } from '../src/sim/map.ts';
 import { newGame, STARTING_FORMATIONS, STARTING_GENERAL_SKILL } from '../src/sim/new-game.ts';
@@ -117,6 +118,7 @@ function addArmy(state: GameState, owner: FactionId, troops: Troops, position: M
   state.armies[id] = {
     id,
     owner,
+    name: nameNewArmy(state, owner),
     formations,
     stance: 'holdTheLine',
     generalSkill: STARTING_GENERAL_SKILL,
