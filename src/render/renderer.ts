@@ -15,6 +15,7 @@ import type { City, CityRank } from '../sim/state/city.ts';
 import type { Sight } from '../sim/sight.ts';
 import type { Battle } from '../sim/state/battle.ts';
 import type { GameState } from '../sim/state/game-state.ts';
+import type { TradeRoute } from '../sim/state/trade-route.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { routesAt } from '../sim/trade/routes.ts';
 import { tradeCityLabel, tradePose } from './trade.ts';
@@ -69,6 +70,7 @@ import { toPixels } from './lines.ts';
 import { FramePacer } from './frame-pacer.ts';
 import { cityAt, commandIslet, pickAt, type DrawnCity, type FigureHit, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
+import { routeDashes, type RouteBounds } from './route-dashes.ts';
 import { cityDrawingView, citySymbols, fitCitySymbol } from './symbols.ts';
 import { createLife } from './terrain/life.ts';
 import { createPlaces } from './terrain/places-layer.ts';
@@ -208,7 +210,6 @@ const FOCUS_SCALE = 0.8;
 const ALIVE_MS = 90;
 /** How far a pan may move the built scene before it is built again. */
 const PAN_REBUILD_PX = 200;
-const ROUTE_DASH = { dash: 7, gap: 5 } as const;
 
 function mix(from: number, to: number, t: number): number {
   const channel = (shift: number) => {
@@ -310,30 +311,9 @@ function sameArmies(
 }
 
 /** Strokes a dashed line through screen points, carrying the dash across corners. */
-function dashLine(g: Graphics, points: readonly MapPoint[]): Graphics {
-  const period = ROUTE_DASH.dash + ROUTE_DASH.gap;
-  let along = 0;
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1] as MapPoint;
-    const b = points[i] as MapPoint;
-    const length = Math.hypot(b.x - a.x, b.y - a.y);
-    let t = 0;
-    while (t < length) {
-      const phase = along % period;
-      const step = Math.min(
-        length - t,
-        phase < ROUTE_DASH.dash ? ROUTE_DASH.dash - phase : period - phase,
-      );
-      if (phase < ROUTE_DASH.dash) {
-        g.moveTo(a.x + ((b.x - a.x) * t) / length, a.y + ((b.y - a.y) * t) / length);
-        g.lineTo(
-          a.x + ((b.x - a.x) * (t + step)) / length,
-          a.y + ((b.y - a.y) * (t + step)) / length,
-        );
-      }
-      t += step;
-      along += step;
-    }
+function dashLine(g: Graphics, dashes: readonly (readonly [MapPoint, MapPoint])[]): Graphics {
+  for (const [a, b] of dashes) {
+    g.moveTo(a.x, a.y).lineTo(b.x, b.y);
   }
   return g;
 }
@@ -483,6 +463,18 @@ export async function createRenderer({
   const life = createLife(map, terrain.land, lifeLayer);
 
   const routes = new Graphics();
+  const tradePaths = new Graphics();
+  const tradeInk = cacheDrawing(tradePaths, app.renderer, SEA_MARGIN);
+  const tradePathLayer = new Container({ label: 'trade-paths' });
+  tradePathLayer.addChild(tradeInk.sprite);
+  worldLayers.push(tradePathLayer);
+  tradeInk.sprite.visible = false;
+  let tradeDrawn:
+    | {
+        scale: number;
+        paths: readonly DeepReadonly<TradeRoute>[];
+      }
+    | undefined;
   const battleLayer = new Container({ label: 'battles' });
   const bannerLayer = new Container({ label: 'banners' });
   const armyLayer = createArmyLayer(app.renderer.resolution, () => {
@@ -493,7 +485,7 @@ export async function createRenderer({
   layers.settlements.addChild(armyLayer.root);
   const columnLayer = new Container({ label: 'columns' });
   const columnMarks = new Map<RefugeeColumnId, { graphics: Graphics; colour: number }>();
-  layers.markers.addChild(routes, battleLayer, columnLayer, bannerLayer);
+  layers.markers.addChild(routes, tradePathLayer, battleLayer, columnLayer, bannerLayer);
 
   const highlight = new Graphics();
   const armyRing = new Graphics();
@@ -1087,10 +1079,24 @@ export async function createRenderer({
     const view = viewport();
     const toScreen = (point: MapPoint) => mapToScreen(camera, view, point);
     routes.clear();
-    const stroke = (points: MapPoint[], width: number, alpha: number) => {
+    // Include the round halo caps outside the view so clipping never shows an end.
+    const bounds: RouteBounds = {
+      left: -4,
+      top: -4,
+      right: view.width + 4,
+      bottom: view.height + 4,
+    };
+    const stroke = (
+      g: Graphics,
+      points: MapPoint[],
+      width: number,
+      alpha: number,
+      clip: RouteBounds | undefined,
+    ) => {
       if (points.length < 2) return;
-      dashLine(routes, points).stroke({ width: width + 3, color: LABEL_HALO, alpha, cap: 'round' });
-      dashLine(routes, points).stroke({ width, color: INK, alpha, cap: 'round' });
+      const dashes = routeDashes(points, clip);
+      dashLine(g, dashes).stroke({ width: width + 3, color: LABEL_HALO, alpha, cap: 'round' });
+      dashLine(g, dashes).stroke({ width, color: INK, alpha, cap: 'round' });
     };
     for (const army of armies) {
       const record = state.armies[army.id];
@@ -1104,14 +1110,48 @@ export async function createRenderer({
             : undefined;
       if (!ahead) continue;
       const selected = selection?.kind === 'army' && selection.army === army.id;
-      stroke([army.position, ...ahead].map(toScreen), selected ? 2.4 : 1.6, selected ? 0.95 : 0.7);
+      stroke(
+        routes,
+        [army.position, ...ahead].map(toScreen),
+        selected ? 2.4 : 1.6,
+        selected ? 0.95 : 0.7,
+        bounds,
+      );
     }
-    for (const path of planned ?? []) stroke(path.map(toScreen), 1.6, 0.45);
+    for (const path of planned ?? []) stroke(routes, path.map(toScreen), 1.6, 0.45, bounds);
     const city =
       selection?.kind === 'province' ? state.provinces[selection.province]?.city : undefined;
     const tradeRoutes = city ? routesAt(state, city).filter((r) => r.status === 'running') : [];
-    for (const route of tradeRoutes)
-      stroke(route.path.map(toScreen), 1.4, route.blocked ? 0.35 : 0.75);
+    const samePaths =
+      tradeDrawn?.paths.length === tradeRoutes.length &&
+      tradeRoutes.every((route, i) => {
+        const old = tradeDrawn?.paths[i];
+        return (
+          old !== undefined &&
+          old.id === route.id &&
+          old.blocked === route.blocked &&
+          old.path.length === route.path.length &&
+          old.path.every((p, j) => p.x === route.path[j]?.x && p.y === route.path[j]?.y)
+        );
+      });
+    if (tradeDrawn?.scale !== camera.scale || !samePaths) {
+      tradePaths.clear();
+      // Like coast ink, use world art with pixel-sized strokes. The bounded cache
+      // handles pans/resizes; do not clip its source art to an earlier view.
+      tradePaths.scale.set(1 / camera.scale);
+      for (const route of tradeRoutes)
+        stroke(
+          tradePaths,
+          route.path.map((p) => ({ x: p.x * camera.scale, y: p.y * camera.scale })),
+          1.4,
+          route.blocked ? 0.35 : 0.75,
+          undefined,
+        );
+      tradeDrawn = { scale: camera.scale, paths: tradeRoutes };
+      tradeInk.invalidate();
+    }
+    tradeInk.sprite.visible = tradeRoutes.length > 0;
+    if (tradeRoutes.length > 0) tradeInk.render(camera, view);
     canvas.dataset['tradePaths'] = String(tradeRoutes.length);
   }
 
@@ -1364,6 +1404,7 @@ export async function createRenderer({
     () => {
       // Restored render textures are empty, even when their view still fits.
       ink.invalidate();
+      tradeInk.invalidate();
       moveCamera();
     },
     { signal: listening.signal },
@@ -1686,6 +1727,7 @@ export async function createRenderer({
     destroy() {
       terrain.destroy();
       ink.destroy();
+      tradeInk.destroy();
       listening.abort();
       app.renderer.off('resize', onResize);
       seaRoot.destroy({ children: true });
