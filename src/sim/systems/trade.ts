@@ -2,6 +2,7 @@ import { emit } from '../events.ts';
 import { removeRecord } from '../records.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { Day } from '../state/day.ts';
+import type { FactionId } from '../ids.ts';
 import { adminShareOf, limitsOf, menOf } from './economy.ts';
 import { areAtWar } from '../wars.ts';
 import { distanceToRoute, RAID_KM, routePoint } from '../trade/routes.ts';
@@ -11,7 +12,14 @@ export function trade(state: GameState): void {
   let limits: ReturnType<typeof limitsOf> | undefined;
   const sieged = new Set(Object.values(state.sieges).map((s) => s.city));
   const armies = Object.values(state.armies);
-  for (const route of Object.values(state.tradeRoutes)) {
+  const routes = Object.values(state.tradeRoutes);
+  const ends = new Set(routes.flatMap((r) => [r.owner, r.partner]));
+  const armyOwners = new Set(armies.map((army) => army.owner));
+  // Ask the canonical war rule once per pair, not once per road and army.
+  const threats = new Map<FactionId, Set<FactionId>>();
+  for (const end of ends)
+    threats.set(end, new Set([...armyOwners].filter((owner) => areAtWar(state, end, owner))));
+  for (const route of routes) {
     const from = state.cities[route.from];
     const to = state.cities[route.to];
     const cause =
@@ -43,8 +51,8 @@ export function trade(state: GameState): void {
             const a = army.activity;
             return (
               (a.kind === 'idle' || a.kind === 'besieging' || a.kind === 'marching') &&
-              (areAtWar(state, army.owner, route.owner) ||
-                areAtWar(state, army.owner, route.partner)) &&
+              (threats.get(route.owner)?.has(army.owner) ||
+                threats.get(route.partner)?.has(army.owner)) &&
               menOf(state, army) > 0 &&
               distanceToRoute(a.position, route) <= RAID_KM
             );

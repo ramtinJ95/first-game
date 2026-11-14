@@ -3,9 +3,9 @@ import type { FactionId } from '../ids.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
 import type { GameState } from '../state/game-state.ts';
 import { mostNeeded } from './budget.ts';
-import { reserveOf } from './situation.ts';
+import { reserveOf, sorted } from './situation.ts';
 import { TROOPS } from '../troops.ts';
-import { freeSlots, tradeForecast, tradeProblem, type TradeMode } from '../trade/routes.ts';
+import { routeSlots, tradeForecast, tradeProblem, type TradeMode } from '../trade/routes.ts';
 import { distance } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 
@@ -17,7 +17,11 @@ export function bestTrade(
   reserve = 0,
 ): Order | undefined {
   const cities = Object.values(state.cities).sort((a, b) => a.id.localeCompare(b.id));
-  const slots = new Map(cities.map((city) => [city.id, freeSlots(state, city, world)]));
+  const slots = new Map(cities.map((city) => [city.id, routeSlots(city, world)]));
+  for (const route of Object.values(state.tradeRoutes)) {
+    if (route.status !== 'running') continue;
+    for (const end of [route.from, route.to]) slots.set(end, (slots.get(end) ?? 0) - 1);
+  }
   let best: { order: Order; worth: number; income: number } | undefined;
   for (const from of cities) {
     if (from.owner !== faction || (slots.get(from.id) ?? 0) <= 0 || from.unrestDays > 0) continue;
@@ -55,7 +59,7 @@ export function trading(
   prior: readonly Order[] = [],
 ): Order[] {
   let state = current;
-  const index = Object.keys(state.factions).sort().indexOf(faction);
+  const index = sorted(state.factions).findIndex((record) => record.id === faction);
   if (state.day % 30 !== index % 30) return [];
   if (prior.some((order) => order.kind === 'declareWar')) return [];
   const spending = prior.filter((order) =>
