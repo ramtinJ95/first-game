@@ -5,7 +5,7 @@ import { fillLand } from '../land-outline.ts';
 import { INK, SEA, WATER_LINE } from '../palette.ts';
 import { mix } from './draw.ts';
 import type { Rect } from './scatter.ts';
-import { naturalLakeOutline } from './lake-shore.ts';
+import { naturalShore } from '../shore.ts';
 
 /** Lake water lines in screen pixels from the shore, like the sea's but closer. */
 const LAKE_LINES = [
@@ -40,7 +40,7 @@ export interface Lakes {
 }
 
 function lakeOf(source: MultiPolygon): Lake {
-  const outline = naturalLakeOutline(source);
+  const outline = naturalShore(source);
   const points = outline.flat(2);
   const xs = points.map(([px]) => px);
   const ys = points.map(([, py]) => py);

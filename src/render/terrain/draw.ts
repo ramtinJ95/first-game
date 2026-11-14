@@ -108,7 +108,7 @@ export function groundTint(land: Land, width: number, height: number): GroundTin
  */
 const RELIEF_LIGHT = { color: TERRAIN_COLOURS.reliefLight, alpha: 0.55 } as const;
 
-const CROP_COLOURS: Record<Crop, number> = {
+export const CROP_COLOURS: Record<Crop, number> = {
   grain: mix(PAPER, 0xd4a63c, 0.78),
   stubble: mix(PAPER, 0xa9824a, 0.62),
   green: mix(PAPER, 0x7f9a45, 0.8),

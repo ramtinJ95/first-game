@@ -5,7 +5,7 @@ import { LABEL_PRIORITY, type Box, type LabelRequest } from '../labels.ts';
 import { INK, LABEL_HALO, PAPER } from '../palette.ts';
 import { DETAIL, detailAlpha } from './detail.ts';
 import { mix } from './draw.ts';
-import { approach, claimSymbols, peakName } from './places.ts';
+import { approach, claimSymbols, peakName, SETTLEMENT_NAME } from './places.ts';
 
 type Rank = 'town' | 'village';
 
@@ -153,8 +153,9 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
         fontSize: peak ? 11 : d.kind === 'town' ? 11 : 10,
         fontStyle: 'italic',
         letterSpacing: peak ? 0.6 : 0.2,
-        fill: peak ? mix(INK, 0x6b4a2a, 0.5) : d.kind === 'town' ? INK : mix(INK, PAPER, 0.25),
+        fill: peak ? mix(INK, 0x6b4a2a, 0.5) : INK,
         stroke: { color: LABEL_HALO, width: 3, join: 'round' },
+        ...(peak ? {} : SETTLEMENT_NAME),
       },
     });
     d.label.alpha = 0;

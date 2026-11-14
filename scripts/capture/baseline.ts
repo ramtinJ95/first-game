@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -21,6 +21,9 @@ export async function withBaseline(
     const archive = execFileSync('git', ['archive', commit], { maxBuffer: 16 * 1024 * 1024 });
     execFileSync('tar', ['-x', '-C', root], { input: archive });
     symlinkSync(resolve('node_modules'), join(root, 'node_modules'), 'dir');
+    // Newer pinned revisions generate their registries before importing save helpers.
+    if (existsSync(join(root, 'scripts/registries.ts')))
+      execFileSync(process.execPath, ['scripts/registries.ts'], { cwd: root });
     // The pinned revision writes its own save envelope. Never teach the current
     // game to accept legacy formats just to make a historical screenshot load.
     const historical = (await import(pathToFileURL(join(root, 'e2e/watch.ts')).href)) as {
