@@ -5,6 +5,7 @@ import { POWERS } from '../src/sim/map.ts';
 import { POWER_NAMES } from '../src/sim/new-game.ts';
 import { outcomeOf } from '../src/sim/outcome.ts';
 import { loadGame, SAVE_FORMAT, saveGame } from '../src/sim/save.ts';
+import baseline from '../src/sim/save-changes/baseline-format-12.json' with { type: 'json' };
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 import {
@@ -351,7 +352,7 @@ test.describe('the frame round the game', () => {
     await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
 
     const old = JSON.stringify({
-      format: SAVE_FORMAT.slice(1),
+      format: SAVE_FORMAT.filter((name) => name !== 'baseline-format-12'),
       state: JSON.parse(saveGame(state)).state,
     });
     await page.getByTestId('import-file').setInputFiles({
@@ -359,8 +360,8 @@ test.describe('the frame round the game', () => {
       mimeType: 'application/json',
       buffer: Buffer.from(old),
     });
-    await expect(page.getByTestId('notice')).toContainText(
-      `The save did not load. The save lacks changes: ${SAVE_FORMAT[0]}`,
+    await expect(page.getByTestId('notice')).toHaveText(
+      `The save did not load. The save lacks changes: baseline-format-12 (${baseline.adds}).`,
     );
     expect(await day(page)).toBe(exported);
   });

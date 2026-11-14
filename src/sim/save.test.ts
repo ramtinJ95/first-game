@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { MAX_UNREST_DAYS } from './cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from './fixture.ts';
 import { loadGame, SAVE_FORMAT, saveGame } from './save.ts';
+import baseline from './save-changes/baseline-format-12.json' with { type: 'json' };
 import { warKey, newWar } from './state/war.ts';
 import { tick } from './tick.ts';
 
@@ -65,11 +66,10 @@ describe('save and load', () => {
         state: buildFixture(),
       }),
     );
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain('lacks changes: baseline-format-12');
-      expect(result.error).toContain('army names');
-    }
+    expect(result).toEqual({
+      ok: false,
+      error: `The save lacks changes: baseline-format-12 (${baseline.adds}).`,
+    });
   });
 
   test('treats the format as a set, not an ordered version sequence', () => {
