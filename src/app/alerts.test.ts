@@ -933,7 +933,7 @@ describe('peace', () => {
       {
         kind: 'peaceMade',
         tone: 'good',
-        text: `Peace with Carthage as things stand. The truce holds until day ${4 + 365}`,
+        text: `Peace with Carthage as things stand. The truce holds until Year 2, day 4`,
       },
     ]);
   });

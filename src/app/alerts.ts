@@ -17,7 +17,15 @@ import { peaceText, termsText } from '../sim/ai/peace.ts';
 import { warKey } from '../sim/state/war.ts';
 import { areAtWar } from '../sim/wars.ts';
 import type { World } from '../sim/world/world.ts';
-import { armyTitle, buildingList, factionName, placeName, TROOP_NAMES, whole } from './names.ts';
+import {
+  armyTitle,
+  buildingList,
+  dateText,
+  factionName,
+  placeName,
+  TROOP_NAMES,
+  whole,
+} from './names.ts';
 
 import { ALERT_KINDS } from './alert-kinds.generated.ts';
 export { ALERT_KINDS };
@@ -125,7 +133,10 @@ export function alertsOfDay(
         text: `${army.name} landed ${placeName(after, at)}`,
         focus: { at, select },
       });
-    } else if (!isOnTheMove(army.activity) && arrived(was.activity, at)) {
+    } else if (
+      (army.activity.kind === 'idle' || army.activity.kind === 'besieging') &&
+      arrived(was.activity, at)
+    ) {
       add({
         kind: 'armyArrived',
         tone: 'neutral',
@@ -198,6 +209,10 @@ export function alertsOfDay(
     if (!city) continue;
     const ours = siege.besiegers.some((id) => after.armies[id]?.owner === player);
     if (!ours && city.owner !== player) continue;
+    const named = ours
+      ? siege.besiegers.filter((id) => after.armies[id]?.owner === player)
+      : [...new Set(siege.besiegers.flatMap((id) => after.armies[id]?.owner ?? []))];
+    const verb = named.length > 1 ? 'besiege' : 'besieges';
     add({
       kind: 'siegeBegan',
       tone: ours ? 'neutral' : 'bad',
@@ -205,8 +220,8 @@ export function alertsOfDay(
         ? `${namesOfArmies(
             after,
             siege.besiegers.filter((id) => after.armies[id]?.owner === player),
-          )} besieges ${city.name}`
-        : `${ownersOf(after, siege.besiegers)} besieges ${city.name}`,
+          )} ${verb} ${city.name}`
+        : `${ownersOf(after, siege.besiegers)} ${verb} ${city.name}`,
       focus: { at: city.position, select: { kind: 'province', province: city.province } },
     });
   }
@@ -348,8 +363,9 @@ export function weakSiegeNews(
 /**
  * The enemies that came into the player's sight today on their way to the player's land:
  * a convoy or a marching army of a faction at war with the player, which the player did
- * not see the day before. Each is one alert with its men, and with the place it heads for
- * when the player sees that place.
+ * not see the day before. With the page's `told` keys, an unchanged force is not retold
+ * after fog flicker: only a changed target or strength above its last report warrants
+ * another alert. The mutable set is page state, already saved with the news.
  */
 export function sightingsOfDay(
   before: State,
@@ -357,6 +373,7 @@ export function sightingsOfDay(
   saw: Sight,
   sees: Sight,
   world: World,
+  told?: Set<string>,
 ): Alert[] {
   const player = after.player;
   const day = before.day;
@@ -380,9 +397,26 @@ export function sightingsOfDay(
       : { name: 'your land', key: `${to.x},${to.y}` };
   };
   const seen: Sighting[] = [];
+  // Keep one high-water mark per force in the existing page news keys. Fog flicker,
+  // casualties, and a reload do not retell an unchanged approach; a new target or
+  // strength above the last report does, even if the force never left sight.
+  const tell = (id: string, owner: FactionId, to: MapPoint, men: number, wasSeen: boolean) => {
+    if (!told) return !wasSeen;
+    const prefix = `approach:${warOnce(after, owner)}:${id}:`;
+    const last = [...told].find((key) => key.startsWith(prefix));
+    const destination = `${to.x},${to.y}`;
+    const next = `${prefix}${destination}|${men}`;
+    if (last) {
+      const [target, strength] = last.slice(prefix.length).split('|');
+      if (target === destination && men <= Number(strength)) return false;
+      told.delete(last);
+    }
+    told.add(next);
+    return true;
+  };
 
   for (const convoy of Object.values(after.convoys)) {
-    if (!sees.convoys.has(convoy.id) || saw.convoys.has(convoy.id)) continue;
+    if (!sees.convoys.has(convoy.id)) continue;
     if (!areAtWar(after, convoy.owner, player)) continue;
     const to = convoy.waypoints[convoy.waypoints.length - 1];
     if (!to || !threatens(to)) continue;
@@ -390,6 +424,7 @@ export function sightingsOfDay(
       const army = after.armies[id];
       return sum + (army ? menOf(after, army) : 0);
     }, 0);
+    if (!tell(convoy.id, convoy.owner, to, men, saw.convoys.has(convoy.id))) continue;
     const first = convoy.armies[0];
     const place = target(to);
     seen.push({
@@ -407,11 +442,12 @@ export function sightingsOfDay(
 
   for (const army of Object.values(after.armies)) {
     if (army.activity.kind !== 'marching') continue;
-    if (!sees.armies.has(army.id) || saw.armies.has(army.id)) continue;
+    if (!sees.armies.has(army.id)) continue;
     if (!areAtWar(after, army.owner, player)) continue;
     const to = army.activity.waypoints[army.activity.waypoints.length - 1];
     if (!to || !threatens(to)) continue;
     const men = menOf(after, army);
+    if (!tell(army.id, army.owner, to, men, saw.armies.has(army.id))) continue;
     const place = target(to);
     seen.push({
       by: 'land',
@@ -719,7 +755,7 @@ function eventAlert(
       const other = a === player ? b : b === player ? a : undefined;
       if (other) {
         const truce = after.truces[warKey(a, b)];
-        const until = truce ? `. The truce holds until day ${truce.endsOn}` : '';
+        const until = truce ? `. The truce holds until ${dateText(truce.endsOn)}` : '';
         return {
           kind: 'peaceMade',
           tone: 'good',
@@ -787,15 +823,11 @@ function positionOf(state: State, army: DeepReadonly<Army>): MapPoint | undefine
  */
 function arrived(was: DeepReadonly<ArmyActivity>, at: MapPoint): boolean {
   if (was.kind === 'embarked') return false;
-  if (!isOnTheMove(was)) return distanceKm(was.position, at) > ARRIVED_KM;
-  const end = was.waypoints.at(-1);
-  return !!end && distanceKm(end, at) <= ARRIVED_KM;
-}
-
-function isOnTheMove(
-  activity: DeepReadonly<ArmyActivity>,
-): activity is DeepReadonly<ArmyActivity & { kind: 'marching' | 'retreating' }> {
-  return activity.kind === 'marching' || activity.kind === 'retreating';
+  // A redirected march can finish today somewhere other than yesterday's destination.
+  if (distanceKm(was.position, at) > ARRIVED_KM) return true;
+  const end =
+    was.kind === 'marching' || was.kind === 'retreating' ? was.waypoints.at(-1) : undefined;
+  return !!end && distanceKm(end, at) <= ARRIVED_KM && distanceKm(was.position, at) > 0;
 }
 
 function distanceKm(a: MapPoint, b: MapPoint): number {
