@@ -32,6 +32,9 @@ const { values } = parseArgs({
     root: { type: 'string' },
     out: { type: 'string' },
     snapshot: { type: 'string' },
+    query: { type: 'string', default: '' },
+    armies: { type: 'boolean', default: false },
+    sites: { type: 'boolean', default: false },
   },
 });
 
@@ -127,6 +130,7 @@ async function sample(page: Page, step: string) {
   const textures = await page.evaluate(() =>
     (window as unknown as { textureReport(): { count: number; bytes: number } }).textureReport(),
   );
+  if (values.sites) await printSites(page);
   await session.detach();
   return {
     step,
@@ -137,10 +141,51 @@ async function sample(page: Page, step: string) {
     textureMb: Math.round(textures.bytes / 2 ** 20),
     rendererMb: residentMb('renderer'),
     gpuMb: residentMb('gpu-process'),
-    freeMb:
-      Number(/MemAvailable:\s+(\d+)/.exec(readFileSync('/proc/meminfo', 'utf8'))?.[1] ?? 0) >> 10,
+    peakMb: peak.tabMb,
+    leastFreeMb: peak.freeMb,
+    freeMb: availableMb(),
   };
 }
+
+const availableMb = () =>
+  Number(/MemAvailable:\s+(\d+)/.exec(readFileSync('/proc/meminfo', 'utf8'))?.[1] ?? 0) >> 10;
+
+/** The most the renderer and GPU processes held, and the least the machine had left, since the run began. */
+const peak = { tabMb: 0, freeMb: Infinity, phaseMb: 0 };
+setInterval(() => {
+  const tab = residentMb('renderer') + residentMb('gpu-process');
+  peak.tabMb = Math.max(peak.tabMb, tab);
+  peak.phaseMb = Math.max(peak.phaseMb, tab);
+  peak.freeMb = Math.min(peak.freeMb, availableMb());
+}, 250).unref();
+
+interface SamplingNode {
+  callFrame: { functionName: string; url: string; lineNumber: number };
+  selfSize: number;
+  children: SamplingNode[];
+}
+
+/** The live sampled allocations by the function that made them and its caller, largest first. */
+async function printSites(page: Page) {
+  const session = sampler.get(page);
+  if (!session) return;
+  const { profile } = (await session.send('HeapProfiler.getSamplingProfile')) as unknown as {
+    profile: { head: SamplingNode };
+  };
+  const sites = new Map<string, number>();
+  const frame = (n: SamplingNode) =>
+    `${n.callFrame.functionName || '(anonymous)'} ${n.callFrame.url.split('/').pop()}:${n.callFrame.lineNumber}`;
+  const walk = (node: SamplingNode, parent: string) => {
+    const key = `${frame(node)} < ${parent}`;
+    sites.set(key, (sites.get(key) ?? 0) + node.selfSize);
+    for (const child of node.children) walk(child, frame(node));
+  };
+  walk(profile.head, '');
+  for (const [site, bytes] of [...sites].sort((a, b) => b[1] - a[1]).slice(0, 12)) {
+    console.error(`    ${Math.round(bytes / 2 ** 20)} MB ${site}`);
+  }
+}
+const sampler = new Map<Page, import('@playwright/test').CDPSession>();
 
 async function waitTerrain(page: Page) {
   const busy = page.locator('canvas[data-terrain="busy"]');
@@ -157,8 +202,14 @@ async function zoomCycle(page: Page, at: MapPoint) {
     await page.mouse.move(screen.x, screen.y);
     await page.mouse.wheel(0, deltaY);
     camera = zoomAt(camera, screen, wheelFactor(deltaY), VIEWPORT, map);
+    peak.phaseMb = 0;
+    const start = performance.now();
     await delay(300);
     await waitTerrain(page);
+    const figures = await page.locator('canvas[data-renderer]').getAttribute('data-figures');
+    console.error(
+      `  zoom ${scale}: peak ${peak.phaseMb} MB, renderer ${residentMb('renderer')} gpu ${residentMb('gpu-process')} MB at rest, figures ${figures}, ${Math.round((performance.now() - start) / 1000)} s`,
+    );
   };
   await wheelTo(MIDDLE, at);
   await wheelTo(CLOSEST, at);
@@ -182,18 +233,29 @@ try {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('crash', () => errors.push('the page crashed'));
-  await openGame(page, { base, query: `draw=${values.draw}` });
+  await openGame(page, { base, query: [`draw=${values.draw}`, values.query].filter(Boolean).join('&') });
   const print = (row: Awaited<ReturnType<typeof sample>>) => {
     rows.push(row);
     console.log(Object.values(row).join(','));
   };
-  console.log('step,heapMb,nodes,listeners,textures,textureMb,rendererMb,gpuMb,freeMb');
+  console.log('step,heapMb,nodes,listeners,textures,textureMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb');
+  if (values.sites) {
+    const session = await page.context().newCDPSession(page);
+    await session.send('HeapProfiler.startSampling', { samplingInterval: 65536 });
+    sampler.set(page, session);
+  }
   print(await sample(page, 'open'));
   if (values.loads) {
     const days = 1 + Number(values.days);
     let game = startGame();
     while (game.day < days) game = tick(game, decideAll(game, world), world).state;
     const save = saveGame(game);
+    if (values.armies) {
+      const at = Object.values(game.armies).flatMap((army) =>
+        'position' in army.activity ? [army.activity.position] : [],
+      );
+      PLACES.splice(0, PLACES.length, ...at);
+    }
     for (let load = 1; load <= Number(values.loads); load++) {
       await dropSave(page, save);
       await page
@@ -239,7 +301,7 @@ try {
   await browser.close();
   await server.close();
   if (values.out) {
-    const header = 'step,heapMb,nodes,listeners,textures,textureMb,rendererMb,gpuMb,freeMb';
+    const header = 'step,heapMb,nodes,listeners,textures,textureMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb';
     writeFileSync(values.out, [header, ...rows.map((r) => Object.values(r).join(','))].join('\n'));
   }
 }
