@@ -37,17 +37,17 @@
   /** The enemy whose offer waits for the player's answer. */
   const waiting = $derived(unansweredOffer(game, pending));
   const shown = $derived(room.wars.find((war) => war.enemy === (open ?? waiting)) ?? room.wars[0]);
-  /** Offers made to the player that the panel has shown, as `<from>@<day>`. */
-  const seen = new Set<string>();
+  /** The day of the latest offer to the player that the panel has shown. */
+  let shownUpTo = -1;
   // A new offer shows its own war, whichever war the player had open, and the panel stays
   // on it once answered, so the answer and a counter show there.
   $effect(() => {
-    const fresh = Object.values(game.peaceOffers)
-      .filter((offer) => offer.from !== game.player && !seen.has(`${offer.from}@${offer.madeOn}`))
+    const [latest] = Object.values(game.peaceOffers)
+      .filter((offer) => offer.from !== game.player && offer.madeOn > shownUpTo)
       .sort((a, b) => b.madeOn - a.madeOn);
-    for (const offer of fresh) seen.add(`${offer.from}@${offer.madeOn}`);
-    const [latest] = fresh;
-    if (latest && room.wars.some((war) => war.enemy === latest.from)) open = latest.from;
+    if (!latest) return;
+    shownUpTo = latest.madeOn;
+    if (room.wars.some((war) => war.enemy === latest.from)) open = latest.from;
   });
 
   function payerOf(war: WarRow, who: Payer): FactionId | undefined {
