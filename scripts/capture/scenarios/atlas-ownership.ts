@@ -1,9 +1,8 @@
-import { map, openGame, pause, startGame, untilDrawn } from '../../../e2e/support.ts';
+import { map, pause, startGame } from '../../../e2e/support.ts';
 import { decideAll } from '../../../src/sim/ai/decide.ts';
 import { tick } from '../../../src/sim/tick.ts';
 import { buildWorld } from '../../../src/sim/world/world.ts';
-import { loadSave } from '../../../e2e/watch.ts';
-import { withBaseline } from '../baseline.ts';
+import { currentHelpers, withBaseline } from '../baseline.ts';
 import { defineScenario } from '../scenario.ts';
 
 const BEFORE = 'bfb56179a57b5878f26bd297cc0420a30e2e889c';
@@ -24,15 +23,15 @@ export default defineScenario({
     if (!observer) throw new Error('ten-year campaign has no surviving power');
     opening.player = observer.id;
     decade.player = observer.id;
-    const views = async (stage: string, base = '', load = loadSave) => {
-      await openGame(page, { base });
+    const views = async (stage: string, base = '', helpers = currentHelpers) => {
+      await helpers.openGame(page, { base });
       await pause(page);
       for (const [name, state] of [
         ['opening', opening],
         ['ten-years', decade],
       ] as const) {
-        await load(page, state);
-        await untilDrawn(page);
+        await helpers.loadSave(page, state);
+        await helpers.untilDrawn(page);
         await page.locator('canvas[data-terrain="ready"]').waitFor();
         await shot(
           `${stage}-${name}`,
@@ -40,7 +39,7 @@ export default defineScenario({
         );
       }
     };
-    await withBaseline(BEFORE, (base, load) => views('before', base, load));
+    await withBaseline(BEFORE, (base, helpers) => views('before', base, helpers));
     await views('after');
   },
 });

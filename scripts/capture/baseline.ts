@@ -4,12 +4,16 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build, preview } from 'vite';
-import type { loadSave } from '../../e2e/watch.ts';
+import { camera, openGame, untilDrawn } from '../../e2e/support.ts';
+import { loadSave } from '../../e2e/watch.ts';
+
+export const currentHelpers = { camera, openGame, untilDrawn, loadSave };
+export type CaptureHelpers = typeof currentHelpers;
 
 /** A pinned, unmodified build for before/after captures; never fetches media history. */
 export async function withBaseline(
   commit: string,
-  use: (base: string, load: typeof loadSave) => Promise<void>,
+  use: (base: string, helpers: CaptureHelpers) => Promise<void>,
 ) {
   const root = mkdtempSync(join(tmpdir(), 'map-baseline-'));
   try {
@@ -26,9 +30,14 @@ export async function withBaseline(
       execFileSync(process.execPath, ['scripts/registries.ts'], { cwd: root });
     // The pinned revision writes its own save envelope. Never teach the current
     // game to accept legacy formats just to make a historical screenshot load.
-    const historical = (await import(pathToFileURL(join(root, 'e2e/watch.ts')).href)) as {
-      loadSave: typeof loadSave;
-    };
+    const historical = (await import(pathToFileURL(join(root, 'e2e/watch.ts')).href)) as Pick<
+      CaptureHelpers,
+      'loadSave'
+    >;
+    const support = (await import(pathToFileURL(join(root, 'e2e/support.ts')).href)) as Omit<
+      CaptureHelpers,
+      'loadSave'
+    >;
     await build({ root, logLevel: 'error' });
     const server = await preview({
       root,
@@ -38,7 +47,12 @@ export async function withBaseline(
     try {
       const address = server.httpServer.address();
       if (!address || typeof address === 'string') throw new Error('baseline server has no port');
-      await use(`http://127.0.0.1:${address.port}`, historical.loadSave);
+      await use(`http://127.0.0.1:${address.port}`, {
+        camera: support.camera,
+        openGame: support.openGame,
+        untilDrawn: support.untilDrawn,
+        loadSave: historical.loadSave,
+      });
     } finally {
       await new Promise<void>((done, reject) =>
         server.httpServer.close((error) => (error ? reject(error) : done())),

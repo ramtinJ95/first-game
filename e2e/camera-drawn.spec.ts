@@ -1,0 +1,392 @@
+import { expect, test } from '@playwright/test';
+import { planCommand } from '../src/app/command.ts';
+import { panBy, zoomAt, wheelFactor } from '../src/render/camera.ts';
+import { BANNER } from '../src/render/markers.ts';
+import { buildWorld } from '../src/sim/world/world.ts';
+import {
+  armyOf,
+  camera,
+  cityPoint,
+  idleBesideEnemyCity,
+  map,
+  openGame,
+  pause,
+  rome,
+  untilDrawn,
+} from './support.ts';
+import { loadSave } from './watch.ts';
+
+const errors: string[] = [];
+test.beforeEach(({ page }) => {
+  errors.length = 0;
+  page.on('pageerror', (error) => errors.push(error.message));
+});
+test.afterEach(() => expect(errors).toEqual([]));
+
+test('draw readiness does not accept missing renderer metadata', async ({ page }) => {
+  await page.setContent('<canvas data-renderer="probe"></canvas>');
+  let returned = false;
+  const drawn = untilDrawn(page).then(() => {
+    returned = true;
+  });
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+  );
+  expect(returned).toBe(false);
+  await page.locator('canvas').evaluate((canvas) => {
+    Object.assign(canvas.dataset, { latestState: '1', latestView: '1' });
+  });
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+  );
+  expect(returned).toBe(false);
+  await page.locator('canvas').evaluate((canvas) => {
+    Object.assign(canvas.dataset, { drawnState: '1', drawnView: '1' });
+  });
+  await drawn;
+});
+
+test('fractional input coordinates keep the helper model aligned with native events', async ({
+  page,
+}) => {
+  await openGame(page);
+  await pause(page);
+  await page.evaluate(() => {
+    const points: { kind: string; x: number; y: number }[] = [];
+    Reflect.set(window, 'cameraInputs', points);
+    for (const kind of ['wheel', 'pointerdown', 'pointerup']) {
+      document.addEventListener(kind, (event) => {
+        const mouse = event as MouseEvent;
+        points.push({ kind, x: mouse.clientX, y: mouse.clientY });
+      });
+    }
+  });
+  const view = camera(page);
+  let expected = view.camera;
+  await view.zoom({ x: 416.44, y: 482.78967 }, 10);
+  await view.drag({ x: 512.8, y: 460.7 }, { x: 621.2, y: 380.3 }, 3);
+  const beforeTinyDrag = view.camera;
+  await view.drag({ x: 512.8, y: 460.7 }, { x: 514.1, y: 461.1 });
+  expect(view.camera).toEqual(beforeTinyDrag);
+  const inputs = await page.evaluate(
+    () => Reflect.get(window, 'cameraInputs') as { kind: string; x: number; y: number }[],
+  );
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error('no viewport');
+  const wheels = inputs.filter(({ kind }) => kind === 'wheel');
+  expect(wheels).toHaveLength(10);
+  for (const point of wheels) expected = zoomAt(expected, point, wheelFactor(-100), viewport, map);
+  const down = inputs.find(({ kind }) => kind === 'pointerdown');
+  const up = inputs.find(({ kind }) => kind === 'pointerup');
+  if (!down || !up) throw new Error('drag did not reach map');
+  expected = panBy(expected, up.x - down.x, up.y - down.y, viewport, map);
+  expect(view.camera.scale).toBeCloseTo(expected.scale, 10);
+  expect(view.camera.centre.x).toBeCloseTo(expected.centre.x, 8);
+  expect(view.camera.centre.y).toBeCloseTo(expected.centre.y, 8);
+});
+
+test('opening a game waits for its first completed map before a map click', async ({ page }) => {
+  await page.addInitScript(() => {
+    let held = true;
+    Reflect.set(window, 'releaseFirstFrame', () => {
+      held = false;
+    });
+    const status = WebGL2RenderingContext.prototype.getSyncParameter;
+    WebGL2RenderingContext.prototype.getSyncParameter = function (sync, name) {
+      if (held && name === this.SYNC_STATUS) {
+        document.querySelector('canvas')?.setAttribute('data-test-first-frame-held', 'yes');
+        return this.UNSIGNALED;
+      }
+      return status.call(this, sync, name);
+    };
+  });
+  let returned = false;
+  const opened = openGame(page).then(() => {
+    returned = true;
+  });
+  await expect(page.getByTestId('map')).toHaveAttribute('data-test-first-frame-held', 'yes');
+  expect(returned).toBe(false);
+  await page.evaluate(() => {
+    const release = Reflect.get(window, 'releaseFirstFrame') as () => void;
+    release();
+  });
+  await opened;
+  const city = camera(page).screen(cityPoint('mediolanum'));
+  await page.mouse.click(city.x, city.y);
+  await expect(page.getByTestId('city-name')).toHaveText('Mediolanum');
+});
+
+test('the order-paths close-up waits for its first sheet and keeps a pickable flag meanwhile', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const decode = HTMLImageElement.prototype.decode;
+    let first = true;
+    HTMLImageElement.prototype.decode = async function () {
+      await decode.call(this);
+      if (first) {
+        first = false;
+        await new Promise<void>((done) => {
+          Reflect.set(window, 'releaseSheet', done);
+        });
+      }
+    };
+  });
+  await openGame(page);
+  await pause(page);
+  const state = idleBesideEnemyCity('mediolanum');
+  await loadSave(page, state);
+  const view = camera(page);
+  const army = armyOf(state, rome);
+  if (army.activity.kind !== 'idle') throw new Error('no idle army');
+  const position = army.activity.position;
+  let returned = false;
+  const move = view.jumpTo(position, 2).then(() => {
+    returned = true;
+  });
+  const canvas = page.getByTestId('map');
+  await page.waitForFunction(() => Reflect.has(window, 'releaseSheet'));
+  await expect(canvas).toHaveAttribute('data-zoom', '2.0000');
+  expect(returned).toBe(false);
+  const pending = await canvas.evaluate((element) => ({
+    latest: Number(element.dataset['latestView']),
+    drawn: Number(element.dataset['drawnView']),
+  }));
+  expect(pending.drawn).toBeLessThan(pending.latest);
+  const flag = view.banner(position);
+  await page.mouse.click(flag.x, flag.y);
+  await expect(page.getByTestId('army-name')).toHaveText('First Legion');
+  await page.keyboard.press('Escape');
+
+  await page.evaluate(() => {
+    const release = Reflect.get(window, 'releaseSheet') as () => void;
+    release();
+  });
+  await move;
+  const centred = view.banner(position);
+  await page.mouse.click(centred.x, centred.y);
+  await expect(page.getByTestId('army-name')).toHaveText('First Legion');
+  await expect(page.getByTestId('army-besiege')).toBeVisible();
+});
+
+for (const scale of [0.6, 2]) {
+  for (const movement of ['zoom', 'pan'] as const) {
+    test(`${movement} followed by a click before drawing still picks the visible army at ${scale} px/km`, async ({
+      page,
+    }) => {
+      await openGame(page);
+      await pause(page);
+      const state = idleBesideEnemyCity('mediolanum');
+      await loadSave(page, state);
+      const view = camera(page);
+      const army = armyOf(state, rome);
+      if (army.activity.kind !== 'idle') throw new Error('no idle army');
+      await view.jumpTo(army.activity.position, scale);
+      const point = view.banner(army.activity.position);
+      // Verify that the target really selects the visible army before moving the camera.
+      await page.mouse.click(point.x, point.y);
+      await expect(page.getByTestId('army-name')).toHaveText('First Legion');
+      await page.keyboard.press('Escape');
+      await page.mouse.move(point.x, point.y);
+      await page.mouse.down();
+      // One task makes the input/frame ordering deterministic; the real mouse press
+      // provides an active pointer, so pointer capture follows the player's path too.
+      await page.locator('canvas').evaluate(
+        (canvas, { point, movement }) => {
+          const pointer = (type: string, x = point.x, y = point.y) =>
+            canvas.dispatchEvent(
+              new PointerEvent(type, {
+                clientX: x,
+                clientY: y,
+                pointerId: 1,
+                button: 0,
+                buttons: 1,
+                bubbles: true,
+              }),
+            );
+          if (movement === 'zoom') {
+            canvas.dispatchEvent(
+              new WheelEvent('wheel', {
+                clientX: 800,
+                clientY: 500,
+                deltaY: -800,
+                bubbles: true,
+                cancelable: true,
+              }),
+            );
+          } else {
+            pointer('pointermove', point.x + 150, point.y);
+            pointer('pointerup', point.x + 150, point.y);
+            pointer('pointerdown');
+          }
+          pointer('pointerup');
+        },
+        { point, movement },
+      );
+      await page.mouse.up();
+      await expect(page.getByTestId('army-name')).toHaveText('First Legion');
+    });
+  }
+}
+
+test('a right click during a held GPU frame orders the visible map point, not the pending view', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    let held = false;
+    Reflect.set(window, 'holdGpu', (value: boolean) => {
+      held = value;
+    });
+    const original = WebGL2RenderingContext.prototype.getSyncParameter;
+    WebGL2RenderingContext.prototype.getSyncParameter = function (sync, name) {
+      if (held && name === this.SYNC_STATUS) {
+        document.querySelector('canvas')?.setAttribute('data-test-gpu-held', 'yes');
+        return this.UNSIGNALED;
+      }
+      return original.call(this, sync, name);
+    };
+  });
+  await openGame(page);
+  await pause(page);
+  const state = idleBesideEnemyCity('mediolanum');
+  await loadSave(page, state);
+  const army = armyOf(state, rome);
+  if (army.activity.kind !== 'idle') throw new Error('no idle army');
+  const position = army.activity.position;
+  const view = camera(page);
+  await view.jumpTo(position, 0.6);
+  const flag = view.banner(position);
+  await page.mouse.click(flag.x, flag.y);
+  await expect(page.getByTestId('army-name')).toHaveText('First Legion');
+  const target = { x: position.x + 100, y: position.y + 100 };
+  const plan = planCommand(state, buildWorld(map), army, { kind: 'point', point: target });
+  if (plan.kind !== 'issue') throw new Error('expected a march into open land');
+  const screen = view.screen(target);
+  await page.evaluate(() => {
+    const hold = Reflect.get(window, 'holdGpu') as (value: boolean) => void;
+    hold(true);
+  });
+  const canvas = page.getByTestId('map');
+  await canvas.evaluate((element) =>
+    element.dispatchEvent(
+      new WheelEvent('wheel', {
+        clientX: 800,
+        clientY: 500,
+        deltaY: 600,
+        bubbles: true,
+        cancelable: true,
+      }),
+    ),
+  );
+  await expect(canvas).toHaveAttribute('data-test-gpu-held', 'yes');
+  await expect(canvas).toHaveAttribute('data-zoom', '0.6000');
+  await canvas.evaluate(
+    (element, point) =>
+      element.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          clientX: point.x,
+          clientY: point.y,
+          button: 2,
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    screen,
+  );
+  await expect(page.getByTestId('notice')).toHaveText(plan.info);
+  await page.evaluate(() => {
+    const hold = Reflect.get(window, 'holdGpu') as (value: boolean) => void;
+    hold(false);
+  });
+  await untilDrawn(page);
+  await expect(canvas).not.toHaveAttribute('data-zoom', '0.6000');
+});
+
+test('a frame that finishes between draw polls is pickable immediately', async ({ page }) => {
+  await page.addInitScript(() => {
+    let armed = false;
+    let held = false;
+    let pending: WebGLSync | null = null;
+    let finishSubmitted: (() => void) | undefined;
+    Reflect.set(window, 'armFrame', () => {
+      armed = true;
+    });
+    Reflect.set(window, 'finishFrame', () => {
+      finishSubmitted?.();
+      held = false;
+    });
+    const fence = WebGL2RenderingContext.prototype.fenceSync;
+    WebGL2RenderingContext.prototype.fenceSync = function (condition, flags) {
+      const sync = fence.call(this, condition, flags);
+      if (armed) {
+        armed = false;
+        held = true;
+        pending = sync;
+        finishSubmitted = this.finish.bind(this);
+        document.querySelector('canvas')?.setAttribute('data-test-frame-submitted', 'yes');
+      }
+      return sync;
+    };
+    const status = WebGL2RenderingContext.prototype.getSyncParameter;
+    WebGL2RenderingContext.prototype.getSyncParameter = function (sync, name) {
+      if (sync === pending && name === this.SYNC_STATUS) {
+        // Native sync status may stay cached until the next task. Release just this
+        // submitted fence explicitly, so same-task input tests the polling boundary.
+        return held ? this.UNSIGNALED : this.SIGNALED;
+      }
+      return status.call(this, sync, name);
+    };
+  });
+  await openGame(page);
+  await pause(page);
+  const state = idleBesideEnemyCity('mediolanum');
+  await loadSave(page, state);
+  const army = armyOf(state, rome);
+  if (army.activity.kind !== 'idle') throw new Error('no idle army');
+  const view = camera(page);
+  await view.jumpTo(army.activity.position, 0.6);
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error('no viewport');
+  const anchor = { x: 800, y: 500 };
+  const next = zoomAt(view.camera, anchor, wheelFactor(100), viewport, map);
+  const foot = {
+    x: (army.activity.position.x - next.centre.x) * next.scale + viewport.width / 2,
+    y: (army.activity.position.y - next.centre.y) * next.scale + viewport.height / 2,
+  };
+  const point = { x: foot.x + BANNER.flagWidth - 2, y: foot.y - BANNER.pole + 2 };
+  const canvas = page.getByTestId('map');
+  await canvas.evaluate((element, anchor) => {
+    const arm = Reflect.get(window, 'armFrame') as () => void;
+    arm();
+    element.dispatchEvent(
+      new WheelEvent('wheel', {
+        clientX: anchor.x,
+        clientY: anchor.y,
+        deltaY: 100,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }, anchor);
+  await expect(canvas).toHaveAttribute('data-test-frame-submitted', 'yes');
+  await expect(canvas).toHaveAttribute('data-zoom', '0.6000');
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await canvas.evaluate((element, point) => {
+    const finish = Reflect.get(window, 'finishFrame') as () => void;
+    finish();
+    element.dispatchEvent(
+      new PointerEvent('pointerup', {
+        clientX: point.x,
+        clientY: point.y,
+        pointerId: 1,
+        button: 0,
+        bubbles: true,
+      }),
+    );
+  }, point);
+  await page.mouse.up();
+  await expect(page.getByTestId('army-name')).toHaveText('First Legion');
+});

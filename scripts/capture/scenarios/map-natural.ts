@@ -1,6 +1,5 @@
-import { camera, openGame, pause, startGame } from '../../../e2e/support.ts';
-import { loadSave } from '../../../e2e/watch.ts';
-import { withBaseline } from '../baseline.ts';
+import { pause, startGame } from '../../../e2e/support.ts';
+import { currentHelpers, withBaseline } from '../baseline.ts';
 import { defineScenario, type CaptureContext } from '../scenario.ts';
 
 const BEFORE = 'bfb56179a57b5878f26bd297cc0420a30e2e889c';
@@ -21,12 +20,12 @@ export async function captureNaturalViews(
   { page, shot }: CaptureContext,
   stage: string,
   base = '',
-  load = loadSave,
+  helpers = currentHelpers,
 ) {
-  await openGame(page, { base });
+  await helpers.openGame(page, { base });
   await pause(page);
-  await load(page, startGame());
-  const view = camera(page);
+  await helpers.loadSave(page, startGame());
+  const view = helpers.camera(page);
   for (const { name, title, at } of NATURAL_VIEWS) {
     await view.jumpTo(at, 4);
     await page.waitForFunction(
@@ -49,7 +48,9 @@ export default defineScenario({
   title:
     'Natural shores, varied relief, and all seven regions at the closest zoom, before and after',
   async run(context) {
-    await withBaseline(BEFORE, (base, load) => captureNaturalViews(context, 'before', base, load));
+    await withBaseline(BEFORE, (base, helpers) =>
+      captureNaturalViews(context, 'before', base, helpers),
+    );
     await captureNaturalViews(context, 'after');
   },
 });

@@ -72,6 +72,7 @@ export async function openGame(
   const asked = [query, pauses ? '' : 'pauses=off'].filter(Boolean).join('&');
   await page.goto(`${base}/?play=${power}${asked ? `&${asked}` : ''}`);
   await page.getByTestId('top-bar').waitFor({ state: 'visible' });
+  await untilDrawn(page);
 }
 
 /**
@@ -81,22 +82,33 @@ export async function openGame(
  * the latest it drew. One animation frame first, so the draw loop has been handed the
  * page's state, then wait until the drawn number reaches it. Counting animation frames
  * is not enough, because a frame is held while the GPU still draws the one before.
+ * Camera revisions also cover zooms, pans, focus and resize while the state is paused.
  */
 export async function untilDrawn(page: Page) {
-  await page.waitForFunction(
+  await page.waitForFunction(() => {
+    const data = document.querySelector<HTMLCanvasElement>('canvas[data-renderer]')?.dataset;
+    return data?.['latestState'] !== undefined && data['latestView'] !== undefined;
+  });
+  const requested = await page.evaluate(
     () =>
-      new Promise<boolean>((done) => {
+      new Promise<{ state: number; view: number }>((done, reject) => {
         requestAnimationFrame(() => {
           const canvas = document.querySelector<HTMLCanvasElement>('canvas[data-renderer]');
-          const latest = Number(canvas?.dataset['latestState'] ?? 0);
-          const check = () => {
-            if (Number(canvas?.dataset['drawnState'] ?? 0) >= latest) done(true);
-            else requestAnimationFrame(check);
-          };
-          check();
+          if (!canvas) {
+            reject(new Error('map disappeared before drawing'));
+            return;
+          }
+          done({
+            state: Number(canvas.dataset['latestState']),
+            view: Number(canvas.dataset['latestView']),
+          });
         });
       }),
   );
+  await page.waitForFunction(({ state, view }) => {
+    const data = document.querySelector<HTMLCanvasElement>('canvas[data-renderer]')?.dataset;
+    return Number(data?.['drawnState']) >= state && Number(data?.['drawnView']) >= view;
+  }, requested);
 }
 
 /** A new game like the one `openGame` starts, with Rome as the player. */
@@ -286,6 +298,8 @@ export function camera(page: Page) {
   const viewport = page.viewportSize();
   if (!viewport) throw new Error('no viewport');
   let at: Camera = fitCamera(viewport, map);
+  // Native wheel events quantize CSS coordinates; use the same anchor in our model.
+  const input = ({ x, y }: MapPoint) => ({ x: Math.round(x), y: Math.round(y) });
   return {
     get camera(): Camera {
       return at;
@@ -299,21 +313,30 @@ export function camera(page: Page) {
       const foot = this.screen(point);
       return { x: foot.x + BANNER.flagWidth - 2, y: foot.y - BANNER.pole + 2 };
     },
-    async zoom(screen: MapPoint, notches: number, pauseMs = 60) {
+    async zoom(screen: MapPoint, notches: number) {
+      screen = input(screen);
       await page.mouse.move(screen.x, screen.y);
       for (let i = 0; i < Math.abs(notches); i++) {
         const deltaY = notches > 0 ? -100 : 100;
         await page.mouse.wheel(0, deltaY);
         at = zoomAt(at, screen, wheelFactor(deltaY), viewport, map);
-        await page.waitForTimeout(pauseMs);
       }
+      await untilDrawn(page);
     },
     async drag(from: MapPoint, to: MapPoint, steps = 12) {
+      from = input(from);
+      to = input(to);
+      // The renderer treats movement below four pixels as a click, not a pan.
+      if (Math.hypot(to.x - from.x, to.y - from.y) < 4) {
+        await untilDrawn(page);
+        return;
+      }
       await page.mouse.move(from.x, from.y);
       await page.mouse.down();
       await page.mouse.move(to.x, to.y, { steps });
       await page.mouse.up();
       at = panBy(at, to.x - from.x, to.y - from.y, viewport, map);
+      await untilDrawn(page);
     },
     /** Zooms in on a map point and brings it to the middle of the view. */
     async closeUp(point: MapPoint, notches: number) {
@@ -326,12 +349,12 @@ export function camera(page: Page) {
      * recorded clip starts on its subject this way.
      */
     async jumpTo(point: MapPoint, scale: number) {
-      const screen = this.screen(point);
+      const screen = input(this.screen(point));
       const deltaY = -Math.log(scale / at.scale) / 0.002;
       await page.mouse.move(screen.x, screen.y);
       await page.mouse.wheel(0, deltaY);
       at = zoomAt(at, screen, wheelFactor(deltaY), viewport, map);
-      await page.waitForTimeout(200);
+      await untilDrawn(page);
       await this.drag(this.screen(point), { x: viewport.width / 2, y: viewport.height / 2 }, 3);
     },
   };
