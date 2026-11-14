@@ -194,7 +194,7 @@ describe("the AI's answer", () => {
     expect(peaceAnswer(state, f.rome, f.carthage, AS_THINGS_STAND)?.wish.factors).toContainEqual({
       kind: 'otherWars',
       points: OTHER_WAR_POINTS,
-      text: 'Rome also fights Egypt',
+      text: 'Rome is also at war with Egypt',
     });
   });
 });

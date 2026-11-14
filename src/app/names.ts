@@ -4,6 +4,7 @@ import type { CityId, FactionId } from '../sim/ids.ts';
 import type { Stance } from '../sim/state/army.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
+import type { PeaceTerms } from '../sim/state/peace.ts';
 import { SIEGE_DISTANCE } from '../sim/systems/sieges.ts';
 import type { Troop } from '../sim/troops.ts';
 
@@ -30,6 +31,23 @@ export const AT_CITY_KM = SIEGE_DISTANCE;
 
 export function factionName(state: DeepReadonly<GameState>, faction: FactionId): string {
   return state.factions[faction]?.name ?? faction;
+}
+
+/** The player's present treasury against an incoming price, not its balance when sent. */
+export function peaceFundsText(
+  state: DeepReadonly<GameState>,
+  terms: DeepReadonly<PeaceTerms>,
+): string | undefined {
+  if (terms.kind !== 'payment' || terms.payer !== state.player || terms.gold === 0)
+    return undefined;
+  const held = Math.floor(state.factions[state.player]?.stores.gold ?? 0);
+  const treasury =
+    held < 0 ? `Your treasury is ${whole(held)} gold.` : `You hold ${whole(held)} gold.`;
+  return `${treasury} ${
+    held >= terms.gold
+      ? `You can pay the ${whole(terms.gold)} gold asked.`
+      : `You need ${whole(terms.gold - held)} gold more to pay the ${whole(terms.gold)} asked.`
+  }`;
 }
 
 /**

@@ -121,6 +121,9 @@ describe('the wars panel', () => {
     expect(war?.theirOffer).toEqual({
       terms: { kind: 'asThingsStand' },
       text: 'Carthage offers peace as things stand.',
+      funds: undefined,
+      change: undefined,
+      problem: undefined,
       refusing: 'Refuse, and the war goes on. Carthage makes no new offer for 90 days.',
     });
     const queued: Order = {
@@ -160,5 +163,27 @@ describe('the wars panel', () => {
         },
       ],
     });
+  });
+
+  test('already formats every absolute peace date as year/day, while durations remain day counts', () => {
+    const state = warOn(900);
+    const war = state.wars[warKey(f.rome, f.carthage)];
+    if (!war) throw new Error('fixture');
+    war.since = 885 as Day;
+    const answer = peaceAnswer(state, f.carthage, f.rome, { kind: 'asThingsStand' });
+    if (!answer) throw new Error('no answer');
+    expect(peaceVerdict(state, answer)).toBe(
+      'Carthage will not talk of peace before Year 3, day 215.',
+    );
+    expect(warRoomOf(state, []).wars[0]?.facts).toContain(
+      'You declared it on Year 3, day 155, 15 days ago.',
+    );
+    state.wars = {};
+    state.truces[warKey(f.rome, f.carthage)] = { since: 3549 as Day, endsOn: 3914 as Day };
+    state.day = 3900 as Day;
+    expect(warRoomOf(state, []).truces[0]?.text).toBe(
+      'Truce with Carthage: 14 days left. Neither side may declare war before Year 11, day 264.',
+    );
+    expectConsistent(state);
   });
 });

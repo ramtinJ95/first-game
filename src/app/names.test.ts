@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildFixture } from '../sim/fixture.ts';
-import { dateText, reasonText } from './names.ts';
+import { buildFixture, FIXTURE as f } from '../sim/fixture.ts';
+import { dateText, peaceFundsText, reasonText } from './names.ts';
 
 describe('reasonText', () => {
   const state = buildFixture();
@@ -35,5 +35,29 @@ describe('dateText', () => {
     expect(dateText(1)).toBe('Year 1, day 1');
     expect(dateText(365)).toBe('Year 1, day 365');
     expect(dateText(366)).toBe('Year 2, day 1');
+  });
+});
+
+describe('an incoming peace price against the present treasury', () => {
+  it('says what the player holds and whether the offered gold is affordable', () => {
+    const state = buildFixture();
+    const treasury = state.factions[f.rome];
+    if (!treasury) throw new Error('fixture');
+    treasury.stores.gold = 8940;
+    const terms = { kind: 'payment', payer: f.rome, gold: 8900, cities: [] } as const;
+    expect(peaceFundsText(state, terms)).toBe(
+      'You hold 8,940 gold. You can pay the 8,900 gold asked.',
+    );
+    treasury.stores.gold = 8899.9;
+    expect(peaceFundsText(state, terms)).toBe(
+      'You hold 8,899 gold. You need 1 gold more to pay the 8,900 asked.',
+    );
+    expect(peaceFundsText(state, { ...terms, payer: f.carthage })).toBeUndefined();
+    expect(peaceFundsText(state, { kind: 'asThingsStand' })).toBeUndefined();
+    treasury.stores.gold = -20.4;
+    expect(peaceFundsText(state, terms)).toBe(
+      'Your treasury is -21 gold. You need 8,921 gold more to pay the 8,900 asked.',
+    );
+    expect(peaceFundsText(state, { ...terms, gold: 0, cities: [f.capua] })).toBeUndefined();
   });
 });

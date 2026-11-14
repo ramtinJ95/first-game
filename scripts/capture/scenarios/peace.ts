@@ -60,7 +60,11 @@ export default defineScenario({
 
     await resizeTo(page, { width: 390, height: 844 });
     await expect(panel).toBeVisible();
-    await shot('peace-narrow', 'The wars panel on a 390 px wide screen');
+    await panel.getByTestId('offer-peace').scrollIntoViewIfNeeded();
+    await shot(
+      'peace-narrow',
+      'The wars panel scrolls on a 390 px screen: the draft and Send remain reachable',
+    );
     await resizeTo(page, { width: 1280, height: 720 });
     await panel.getByRole('button', { name: 'Close' }).click();
 
@@ -76,8 +80,8 @@ export default defineScenario({
 
     await load(page, siegeToEndInPeace());
     const wars = await openWars(page);
-    await wars.getByRole('button', { name: 'Peace as things stand' }).click();
-    await wars.getByTestId('offer-peace').click();
+    await wars.getByRole('button', { name: 'Send offer — Peace as things stand' }).click();
+    await expect(wars.getByTestId('our-offer')).toBeVisible();
     await wars.getByRole('button', { name: 'Close' }).click();
     const carthago = cityPoint('carthago');
     await camera(page).jumpTo({ x: carthago.x + 10, y: carthago.y - 10 }, 2.2);

@@ -65,18 +65,6 @@
     cities = [];
   }
 
-  function fill(terms: PeaceTerms, war: WarRow) {
-    if (terms.kind === 'asThingsStand') {
-      payer = 'nobody';
-      gold = 0;
-      cities = [];
-      return;
-    }
-    payer = terms.payer === war.enemy ? 'them' : 'us';
-    gold = terms.gold;
-    cities = [...terms.cities];
-  }
-
   function offer(war: WarRow, terms: PeaceTerms) {
     actions.issue({
       kind: 'offerPeace',
@@ -157,10 +145,22 @@
       {#if war.theirOffer}
         <div class="offer" data-testid="their-offer">
           <p><strong>{war.theirOffer.text}</strong></p>
+          {#if war.theirOffer.funds}
+            <p data-testid="peace-funds">{war.theirOffer.funds}</p>
+          {/if}
+          {#if war.theirOffer.change}
+            <p data-testid="peace-price-rise">{war.theirOffer.change}</p>
+          {/if}
+          {#if war.theirOffer.problem}
+            <p class="bad">These terms cannot be met: {war.theirOffer.problem}.</p>
+          {/if}
           <p class="muted">{war.theirOffer.refusing}</p>
           <div class="row">
-            <button type="button" data-testid="accept-peace" onclick={() => answer(war, true)}
-              >Accept peace</button
+            <button
+              type="button"
+              data-testid="accept-peace"
+              disabled={war.theirOffer.problem !== undefined}
+              onclick={() => answer(war, true)}>Accept peace</button
             >
             <button
               type="button"
@@ -180,8 +180,12 @@
       <ul class="choices">
         {#each war.choices as choice (choice.label)}
           <li data-testid="peace-choice">
-            <button type="button" onclick={() => fill(choice.terms, war)}>
-              {choice.label}{choice.terms.kind === 'payment'
+            <button
+              type="button"
+              disabled={choice.answer.problem !== undefined || war.ourOffer !== undefined}
+              onclick={() => offer(war, choice.terms)}
+            >
+              Send offer — {choice.label}{choice.terms.kind === 'payment'
                 ? `: ${termsText(game, choice.terms, game.player)}`
                 : ''}
             </button>
@@ -236,7 +240,7 @@
             type="button"
             data-testid="offer-peace"
             disabled={draftAnswer.problem !== undefined || war.ourOffer !== undefined}
-            onclick={() => offer(war, draft)}>Offer these terms</button
+            onclick={() => offer(war, draft)}>Send these terms</button
           >
         </div>
         <p class="muted">

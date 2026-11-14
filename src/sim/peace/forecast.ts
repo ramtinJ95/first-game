@@ -1,10 +1,11 @@
-import { peaceAnswer, warDamage } from '../ai/peace.ts';
+import { peaceAnswer, termsText, warDamage } from '../ai/peace.ts';
 import { SMALL_LOSS_SHARE } from '../ai/thresholds.ts';
 import type { DeepReadonly } from '../deep-readonly.ts';
 import type { FactionId } from '../ids.ts';
 import type { GameState } from '../state/game-state.ts';
-import type { PeaceForecast, PeaceTerms } from '../state/peace.ts';
+import type { PeaceForecast, PeaceOffer, PeaceTerms } from '../state/peace.ts';
 import { warStanding } from './standing.ts';
+import { termsPoints } from './terms.ts';
 
 type State = DeepReadonly<GameState>;
 
@@ -40,6 +41,7 @@ export function forecastChanges(
   before: DeepReadonly<PeaceForecast>,
   after: PeaceForecast,
   state: State,
+  unchanged = 'the available terms or the day of talks changed',
 ): string {
   const changes: string[] = [];
   const names = (ids: readonly string[]) =>
@@ -83,5 +85,52 @@ export function forecastChanges(
     )
       changes.push(`no longer: ${factor.text}`);
   }
-  return changes.length ? changes.join('; ') : 'the available terms or the day of talks changed';
+  return changes.length ? changes.join('; ') : unchanged;
+}
+
+/** Compare this sender's own last offer, not the other side's counter-offer. */
+export function offerPriceRise(
+  state: State,
+  previous: DeepReadonly<PeaceOffer> | null,
+  current: PeaceOffer,
+  receiver: FactionId,
+): string | undefined {
+  if (
+    !previous ||
+    current.terms.kind !== 'payment' ||
+    current.terms.payer !== receiver ||
+    termsPoints(state, current.terms, current.from) <=
+      termsPoints(state, previous.terms, current.from)
+  )
+    return undefined;
+  const reasons: string[] = [];
+  if (
+    previous.receiverGold !== undefined &&
+    current.receiverGold !== undefined &&
+    previous.receiverGold !== current.receiverGold
+  ) {
+    reasons.push(
+      `Your treasury ${current.receiverGold > previous.receiverGold ? 'rose' : 'fell'} from ${previous.receiverGold.toLocaleString('en')} to ${current.receiverGold.toLocaleString('en')} gold.`,
+    );
+    if (
+      previous.terms.kind === 'payment' &&
+      previous.terms.payer === receiver &&
+      previous.terms.gold > 0 &&
+      previous.terms.gold === previous.receiverGold
+    )
+      reasons.push('The previous gold demand reached all the gold you held.');
+  }
+  if (previous.ownForecast && current.ownForecast) {
+    const changed = forecastChanges(previous.ownForecast, current.ownForecast, state, '');
+    if (changed) reasons.push(`Changes since the last offer: ${changed}.`);
+  }
+  if (previous.forecast && current.forecast) {
+    for (const kind of ['otherWars', 'shortage']) {
+      const before = previous.forecast.factors.find((factor) => factor.kind === kind);
+      const after = current.forecast.factors.find((factor) => factor.kind === kind);
+      if (before?.points !== after?.points)
+        reasons.push(after ? `${after.text}.` : `No longer: ${before?.text}.`);
+    }
+  }
+  return `The price rose: last time ${termsText(state, previous.terms, receiver)}; now ${termsText(state, current.terms, receiver)}. ${reasons.length ? reasons.join(' ') : 'No change in the recorded war facts explains this higher demand.'}`;
 }

@@ -1,5 +1,5 @@
 import { armyOf, cityPoint, playDays, startGame, withFormations } from './support.ts';
-import type { FactionId } from '../src/sim/ids.ts';
+import type { CityId, FactionId } from '../src/sim/ids.ts';
 import { newWar, warKey } from '../src/sim/state/war.ts';
 import type { Day } from '../src/sim/state/day.ts';
 import { expectConsistent } from '../src/sim/references.ts';
@@ -8,6 +8,76 @@ import { tick } from '../src/sim/tick.ts';
 import { peaceAnswer } from '../src/sim/ai/peace.ts';
 import { peaceForecast } from '../src/sim/peace/forecast.ts';
 import { AS_THINGS_STAND, GOLD_PER_POINT } from '../src/sim/peace/terms.ts';
+import { executeOrder, type Order } from '../src/sim/orders/orders.ts';
+import { changeCityOwner } from '../src/sim/cities.ts';
+import { advanceDay } from '../src/sim/systems/advance-day.ts';
+import { saveGame } from '../src/sim/save.ts';
+import { alertsOfDay } from '../src/app/alerts.ts';
+
+/** Real offer/refusal orders and an intervening conquest, staged for readable amounts. */
+export function risingPeacePrice(price = 5100) {
+  const state = startGame();
+  const carthage = 'carthage' as FactionId;
+  const treasury = state.factions[state.player];
+  if (!treasury) throw new Error('no player');
+  treasury.stores.gold = 4500;
+  state.day = 700 as Day;
+  state.wars[warKey(state.player, carthage)] = newWar(carthage, state.player, 386 as Day);
+  const offer = (gold: number): Order => ({
+    kind: 'offerPeace',
+    faction: carthage,
+    to: state.player,
+    terms: { kind: 'payment', payer: state.player, gold, cities: [] },
+  });
+  const world = fixtureWorld();
+  for (const order of [
+    offer(4500),
+    { kind: 'refusePeace', faction: state.player, from: carthage } as const,
+  ]) {
+    const rejected = executeOrder(state, order, world);
+    if (rejected) throw new Error(rejected.reason);
+  }
+  state.day = 790 as Day;
+  treasury.stores.gold = 8940;
+  changeCityOwner(state, 'capua' as CityId, carthage);
+  const result = tick(state, [offer(price)], world, [advanceDay]);
+  if (result.rejected.length) throw new Error('the staged price must be affordable when sent');
+  const news = alertsOfDay(state, result.state, result.events);
+  expectConsistent(result.state);
+  return {
+    state: result.state,
+    news,
+    save: saveGame(result.state, {
+      paused: true,
+      chronicle: news,
+      occupied: [],
+      told: [],
+      weakSieges: [],
+    }),
+  };
+}
+
+/** The reviewer's seed-30 casualty record: the stronger winner also fights Egypt. */
+export function winningSecondFront() {
+  const state = startGame();
+  const carthage = 'carthage' as FactionId;
+  const egypt = 'egypt' as FactionId;
+  const roman = withFormations(state, armyOf(state, state.player), [['spearmen', 1349]]);
+  const punic = withFormations(state, armyOf(state, carthage), [['spearmen', 2928]]);
+  roman.activity = { kind: 'idle', position: cityPoint('roma') };
+  punic.activity = { kind: 'idle', position: cityPoint('carthago') };
+  state.day = 62 as Day;
+  const war = newWar(carthage, state.player, 1 as Day);
+  const own = war.sides[state.player];
+  const enemy = war.sides[carthage];
+  if (!own || !enemy) throw new Error('no sides');
+  own.lost = 151;
+  enemy.lost = 72;
+  state.wars[warKey(state.player, carthage)] = war;
+  state.wars[warKey(carthage, egypt)] = newWar(carthage, egypt, 1 as Day);
+  expectConsistent(state);
+  return state;
+}
 
 /** Controlled war records, with no hidden armies or scripted diplomatic answers. */
 export function peaceStanding(enemy: 'mediolanum' | 'macedon', score: -2 | 0 | 2) {
