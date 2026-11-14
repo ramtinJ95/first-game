@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
 import { preview } from 'vite';
 import { encodeGif, type GifFrame } from './gif.ts';
 import {
@@ -17,6 +18,8 @@ import {
 } from './manifest.ts';
 import { SOFTWARE_GL } from '../../playwright.config.ts';
 import type { Scenario } from './scenario.ts';
+import { shardScenarios } from './shard.ts';
+import measuredSeconds from './scenario-seconds.json' with { type: 'json' };
 
 const CAPTURES_DIR = resolve('captures');
 const SCENARIOS_DIR = join(import.meta.dirname, 'scenarios');
@@ -180,8 +183,15 @@ async function captureScenario(
   return { failures, outputs };
 }
 
-async function main(names: string[]): Promise<number> {
-  const scenarios = await loadScenarios(names);
+async function main(names: string[], shard: string | undefined): Promise<number> {
+  const all = await loadScenarios(names);
+  const durations: Readonly<Record<string, number>> = measuredSeconds;
+  const scenarios = shardScenarios(all, shard, (scenario) => {
+    const measured = durations[scenario.name];
+    if (measured === undefined)
+      console.log(`no CI duration for ${scenario.name}; scheduling as 60s`);
+    return measured ?? 60;
+  });
   if (names.length === 0) rmSync(CAPTURES_DIR, { recursive: true, force: true });
 
   const port = await freePort();
@@ -195,7 +205,11 @@ async function main(names: string[]): Promise<number> {
     try {
       for (const scenario of scenarios) {
         console.log(`capturing ${scenario.name}`);
+        const started = performance.now();
         const result = await captureScenario(browser, `http://127.0.0.1:${port}`, scenario);
+        console.log(
+          `captured ${scenario.name} in ${((performance.now() - started) / 1000).toFixed(1)}s`,
+        );
         for (const failure of result.failures) {
           console.error(`::error::${scenario.name}: ${failure.replaceAll('\n', ' | ')}`);
         }
@@ -214,7 +228,12 @@ async function main(names: string[]): Promise<number> {
   return 0;
 }
 
-process.exitCode = await main(process.argv.slice(2)).catch((error: unknown) => {
+const { values, positionals } = parseArgs({
+  options: { shard: { type: 'string' } },
+  allowPositionals: true,
+});
+
+process.exitCode = await main(positionals, values.shard).catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : error);
   return 1;
 });

@@ -9,12 +9,17 @@ export const SOFTWARE_GL = ['--use-angle=swiftshader', '--enable-unsafe-swiftsha
 export default defineConfig({
   testDir: 'e2e',
   forbidOnly: !!process.env['CI'],
+  fullyParallel: true,
   // Each Chromium draws with SwiftShader on the CPU. Two at once on a 2-core pylon were
   // not clearly faster (3.8 against 4.5 minutes) and starved a page for over 5 s.
   workers: 1,
   reporter: [
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['list'],
+    ['./e2e/startup-reporter.ts'],
+    ...(process.env['CI']
+      ? [['json', { outputFile: 'playwright-report/results.json' }] as const]
+      : []),
     ...(process.env['CI'] ? [['github'] as const] : []),
   ],
   use: {
