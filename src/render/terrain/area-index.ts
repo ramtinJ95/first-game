@@ -27,6 +27,7 @@ export class AreaIndex {
   readonly #bands = new Map<number, Edge[]>();
   /** Each band's edges again, by the strips of `STRIP` km their x spans. */
   readonly #strips = new Map<number, Edge[]>();
+  readonly #levels = new Map<number, Set<number>>();
   readonly #left: number;
   readonly #top: number;
   readonly #columns: number;
@@ -55,6 +56,10 @@ export class AreaIndex {
           for (let i = 0; i < ring.length; i++) {
             const [ax, ay] = ring[i] as readonly [number, number];
             const [bx, by] = ring[(i + 1) % ring.length] as readonly [number, number];
+            const band = Math.floor(ay / BAND);
+            let levels = this.#levels.get(band);
+            if (!levels) this.#levels.set(band, (levels = new Set()));
+            levels.add(ay);
             edges.push([ax, ay, bx, by]);
             bounds.left = Math.min(bounds.left, ax);
             bounds.right = Math.max(bounds.right, ax);
@@ -283,6 +288,31 @@ export class AreaIndex {
       // Conforming province seams occur twice and do not change the surface.
       if ((end - i) % 2 !== 0) return false;
       i = end;
+    }
+    return true;
+  }
+
+  /** Every row of a contact strip, including horizontal shores and enclosed holes. */
+  boxInside(left: number, right: number, top: number, bottom: number, wanted = true): boolean {
+    const rows = new Set([top, bottom]);
+    const edges = new Set<Edge>();
+    for (let band = Math.floor(top / BAND); band <= Math.floor(bottom / BAND); band++) {
+      for (const y of this.#levels.get(band) ?? []) if (y > top && y < bottom) rows.add(y);
+      for (let strip = Math.floor(left / STRIP); strip <= Math.floor(right / STRIP); strip++)
+        for (const edge of this.#strips.get(band * BAND_ROW + strip) ?? []) edges.add(edge);
+    }
+    for (const [ax, ay, bx, by] of edges)
+      for (const x of [left, right]) {
+        if (ax === bx || x < Math.min(ax, bx) || x > Math.max(ax, bx)) continue;
+        const y = ay + ((by - ay) * (x - ax)) / (bx - ax);
+        if (y > top && y < bottom) rows.add(y);
+      }
+    const sorted = [...rows].sort((a, b) => a - b);
+    for (let i = 0; i < sorted.length; i++) {
+      const y = sorted[i] as number;
+      if (!this.spanInside(left, right, y, wanted)) return false;
+      const next = sorted[i + 1];
+      if (next !== undefined && !this.spanInside(left, right, (y + next) / 2, wanted)) return false;
     }
     return true;
   }

@@ -62,7 +62,7 @@ import { toPixels } from './lines.ts';
 import { FramePacer } from './frame-pacer.ts';
 import { cityAt, pickAt, type DrawnCity, type FigureHit, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
-import { citySymbols } from './symbols.ts';
+import { cityDrawingView, citySymbols, fitCitySymbol } from './symbols.ts';
 import { createLife } from './terrain/life.ts';
 import { createPlaces } from './terrain/places-layer.ts';
 import { createTerrain } from './terrain/terrain-layer.ts';
@@ -493,6 +493,7 @@ export async function createRenderer({
   let armies: DrawnArmy[] = [];
   let columns: DrawnColumn[] = [];
   let drawnCities: DrawnCity[] = [];
+  let cityAnchors: DrawnCity[] = [];
   // All hit geometry and its transform belong to one completed frame. Mixing the live
   // camera with old figures or city boxes can select the land behind a visible army.
   interface DrawnView {
@@ -504,6 +505,7 @@ export async function createRenderer({
     /** The `data-still` request this frame was drawn in the still pose for. */
     still: string | undefined;
     cities: readonly DrawnCity[];
+    cityAnchors: readonly DrawnCity[];
     armies: readonly DrawnArmy[];
     battles: readonly DrawnBattle[];
     figures: readonly FigureHit[];
@@ -751,6 +753,34 @@ export async function createRenderer({
     return boxes;
   }
 
+  const cityContacts = new Map<
+    CityId,
+    { scale: number; rank: CityRank; position: MapPoint; offset: MapPoint; growth: number }
+  >();
+  function placedCity(city: DeepReadonly<City>) {
+    const at = mapToScreen(camera, viewport(), city.position);
+    if (coastOutline === landOutline(map)) return { ...at, growth: symbolGrowth(camera.scale) };
+    let placed = cityContacts.get(city.id);
+    if (
+      !placed ||
+      placed.scale !== camera.scale ||
+      placed.rank !== city.rank ||
+      placed.position.x !== city.position.x ||
+      placed.position.y !== city.position.y
+    ) {
+      const fitted = fitCitySymbol(at, city.rank, onLand, camera.scale);
+      placed = {
+        scale: camera.scale,
+        rank: city.rank,
+        position: city.position,
+        offset: { x: fitted.x - at.x, y: fitted.y - at.y },
+        growth: fitted.growth,
+      };
+      cityContacts.set(city.id, placed);
+    }
+    return { x: at.x + placed.offset.x, y: at.y + placed.offset.y, growth: placed.growth };
+  }
+
   function layoutCities(state: DeepReadonly<GameState>) {
     const view = viewport();
     const requests: LabelRequest[] = [];
@@ -759,11 +789,10 @@ export async function createRenderer({
       const drawn = cities.get(city.id);
       if (!drawn) continue;
       const { symbol, label, rank } = drawn;
-      const grow = symbolGrowth(camera.scale);
-      const halfWidth = extents[rank].halfWidth * grow;
-      const halfHeight = extents[rank].halfHeight * grow;
-      symbol.scale.set(grow);
-      const at = mapToScreen(camera, view, city.position);
+      let grow = symbolGrowth(camera.scale);
+      let halfWidth = extents[rank].halfWidth * grow;
+      let halfHeight = extents[rank].halfHeight * grow;
+      let at = mapToScreen(camera, view, city.position);
       label.visible = false;
       symbol.visible =
         at.x > -halfWidth &&
@@ -771,6 +800,14 @@ export async function createRenderer({
         at.x < view.width + halfWidth &&
         at.y < view.height + halfHeight;
       if (!symbol.visible) continue;
+      if (coastOutline !== landOutline(map)) {
+        const fitted = placedCity(city);
+        at = fitted;
+        grow = fitted.growth;
+        halfWidth = extents[rank].halfWidth * grow;
+        halfHeight = extents[rank].halfHeight * grow;
+      }
+      symbol.scale.set(grow);
       symbol.position.set(at.x, at.y);
       symbolBoxes.push({
         left: at.x - halfWidth,
@@ -814,6 +851,25 @@ export async function createRenderer({
       symbol: symbolBoxes[i] as Box,
       label: placed.get(id),
     }));
+    cityAnchors = requests.map(({ id }) => {
+      const city = state.cities[id as CityId];
+      if (!city) throw new Error(`Missing drawn city ${id}`);
+      const at = mapToScreen(camera, view, city.position);
+      const size = extents[city.rank];
+      const grow = symbolGrowth(camera.scale);
+      // Keep the original city target as well as its inset glyph: a physical city
+      // anchor must still open city orders, not become an ordinary land destination.
+      return {
+        id: city.id,
+        symbol: {
+          left: at.x - size.halfWidth * grow,
+          right: at.x + size.halfWidth * grow,
+          top: at.y - size.halfHeight * grow,
+          bottom: at.y + size.halfHeight * grow,
+        },
+        label: undefined,
+      };
+    });
     const side = (from: number, to: number) => (Math.abs(to - from) < 1 ? 0 : Math.sign(to - from));
     nameSides = requests
       .map(({ id, anchor }) => {
@@ -1126,7 +1182,10 @@ export async function createRenderer({
         );
         // A city's name can stand over a neighbouring province, so a click on it, or on
         // its symbol, picks the city's own province.
-        const city = !pick || pick.kind === 'province' ? cityAt(view.cities, screen) : undefined;
+        const city =
+          !pick || pick.kind === 'province'
+            ? cityAt(view.cities, screen, view.cityAnchors, pick)
+            : undefined;
         const province = city && map.provinces.find((p) => (p.id as string) === city)?.id;
         onPick(province ? { kind: 'province', province } : pick);
       }
@@ -1151,10 +1210,19 @@ export async function createRenderer({
       if (!onCommand || !displayed) return;
       const view = displayed;
       const screen = local(event);
+      const pick = pickAt(
+        map,
+        view.camera,
+        view.size,
+        view.armies,
+        screen,
+        view.battles,
+        view.figures,
+      );
       onCommand({
         point: screenToMap(view.camera, view.size, screen),
-        pick: pickAt(map, view.camera, view.size, view.armies, screen, view.battles, view.figures),
-        city: cityAt(view.cities, screen),
+        pick,
+        city: cityAt(view.cities, screen, view.cityAnchors, pick),
         screen,
       });
     },
@@ -1343,14 +1411,18 @@ export async function createRenderer({
         (stale || newDay || (moving && due))
       ) {
         const start = performance.now();
+        const cityPosition = (city: DeepReadonly<City>) =>
+          screenToMap(camera, view, placedCity(city));
+        const was = cityDrawingView(previous, previousSight, cityPosition);
+        const is = cityDrawingView(current, sight, cityPosition);
         scene = buildScene({
-          previous,
-          current,
+          previous: was.state,
+          current: is.state,
           progress,
           camera,
           viewport: view,
-          previousSight,
-          sight,
+          previousSight: was.sight,
+          sight: is.sight,
           motion: still ? 0 : motion,
           now: clock / 1000,
           growth: symbolGrowth(camera.scale),
@@ -1394,7 +1466,10 @@ export async function createRenderer({
         }
       }
       if (!dirty) return false;
-      life.update(camera, viewport(), clock, sight, onDrawnLand);
+      life.update(camera, viewport(), clock, sight, onDrawnLand, (id) => {
+        const city = current.cities[id as CityId];
+        return city ? placedCity(city) : undefined;
+      });
       moveSwell(clock);
       // A cold figure sheet paints asynchronously. Keep visible, pickable flags until
       // the replacement art is drawn, rather than letting armies vanish during a zoom.
@@ -1449,6 +1524,7 @@ export async function createRenderer({
         ready: sceneReady,
         still: stillRequest,
         cities: drawnCities,
+        cityAnchors,
         armies: bannersShown(),
         battles: battlesShown(),
         figures: figuresShown(),

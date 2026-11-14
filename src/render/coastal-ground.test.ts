@@ -24,6 +24,9 @@ import { atlasLand } from './atlas-coast.ts';
 import { buildScene, type Scene, type Sprite } from './armies/scene.ts';
 import { mapToScreen, screenToMap, symbolGrowth } from './camera.ts';
 import { coastalSurface, fitCoastalScene, groundFits } from './coastal-ground.ts';
+import { cityDrawingView, fitCitySymbol } from './symbols.ts';
+import type { CityRank } from '../sim/state/city.ts';
+import type { Day } from '../sim/state/day.ts';
 import { Land } from './terrain/marks.ts';
 
 const map = parseMap(
@@ -73,6 +76,128 @@ const world = buildWorld(map);
 const physical = new Land(map);
 const drawn = atlasLand(map);
 const viewport = { width: 1280, height: 720 };
+
+test.each([0.6, 0.66, 1, 4])(
+  'all city ranks stand on complete dry ground contacts at %s px/km',
+  (scale) => {
+    const state = newGame(map, { seed: 1, player: 'rome' });
+    const original = JSON.stringify(state);
+    const contacts: Record<CityRank, { halfWidth: number; y: number }> = {
+      capital: { halfWidth: 16.6, y: 9 },
+      greatPowerCity: { halfWidth: 11.1, y: 7 },
+      minorCity: { halfWidth: 7.1, y: 6 },
+    };
+    const wet: string[] = [];
+    let carthagoMoved = false;
+    for (const city of Object.values(state.cities)) {
+      const camera = { centre: city.position, scale };
+      const land = coastalSurface(
+        () => drawn,
+        physical.lakes,
+        (p) => screenToMap(camera, viewport, p),
+        physical.land,
+      );
+      for (const rank of Object.keys(contacts) as CityRank[]) {
+        const at = mapToScreen(camera, viewport, city.position);
+        let fitted;
+        try {
+          fitted = fitCitySymbol(at, rank, land, scale);
+        } catch (cause) {
+          throw new Error(`${city.name}/${rank}/${scale} has no city contact`, { cause });
+        }
+        if (city.id === 'carthago' && scale === 4 && rank === 'capital')
+          carthagoMoved = fitted.x !== at.x || fitted.y !== at.y;
+        const { halfWidth, y } = contacts[rank];
+        expect(fitted.growth).toBe(symbolGrowth(scale));
+        const steps = Math.ceil(halfWidth * fitted.growth * 8);
+        for (let row = -0.6; row <= 0.6; row += 0.1)
+          for (let i = 0; i <= steps; i++) {
+            const point = {
+              x: fitted.x + (-halfWidth + (2 * halfWidth * i) / steps) * fitted.growth,
+              y: fitted.y + (y + row) * fitted.growth,
+            };
+            if (!land(point)) wet.push(`${city.name}/${rank}/${scale}: ${point.x},${point.y}`);
+          }
+      }
+    }
+    if (scale === 4) expect(carthagoMoved).toBe(true);
+    expect(wet).toEqual([]);
+    expect(JSON.stringify(state)).toBe(original);
+  },
+);
+
+test('damaged and burning Carthago effects follow its displayed city, without moving rules or sight boundaries', () => {
+  const state = newGame(map, { seed: 1, player: 'rome' });
+  const id = 'carthago' as CityId;
+  const city = state.cities[id];
+  if (!city) throw new Error('missing Carthago');
+  city.walls *= 0.5;
+  city.fellOn = state.day;
+  city.sackedOn = (state.day - 1) as Day;
+  const original = JSON.stringify(state);
+  const camera = { centre: city.position, scale: 4 };
+  const land = coastalSurface(
+    () => drawn,
+    physical.lakes,
+    (p) => screenToMap(camera, viewport, p),
+    physical.land,
+  );
+  const at = mapToScreen(camera, viewport, city.position);
+  const fitted = fitCitySymbol(at, city.rank, land, 4);
+  const position = (c: { id: CityId; position: MapPoint }) =>
+    c.id === id ? screenToMap(camera, viewport, fitted) : c.position;
+  const sight = { ...seeAll(state), armies: new Set<ArmyId>(), sees: () => true };
+  const view = cityDrawingView(state, sight, position);
+  const input = {
+    previous: state,
+    current: state,
+    progress: 0.5,
+    camera,
+    viewport,
+    previousSight: sight,
+    sight,
+    growth: symbolGrowth(4),
+    motion: 0,
+    now: 0,
+  };
+  const before = buildScene(input);
+  const after = fitCoastalScene(
+    buildScene({
+      ...input,
+      previous: view.state,
+      current: view.state,
+      previousSight: view.sight,
+      sight: view.sight,
+    }),
+    land,
+    4,
+  );
+  const breach = after.breaches.find((b) => b.city === id);
+  expect(breach?.x).toBeCloseTo(fitted.x, 9);
+  expect(breach?.y).toBeCloseTo(fitted.y, 9);
+  expect(breach?.growth).toBe(fitted.growth);
+  expect(before.sprites.length).toBeGreaterThan(4);
+  expect(after.sprites).toHaveLength(before.sprites.length);
+  for (const [i, sprite] of after.sprites.entries()) {
+    const was = before.sprites[i];
+    if (!was) throw new Error('missing city effect');
+    expect(sprite.key).toBe(was.key);
+    expect(sprite.x - was.x).toBeCloseTo(fitted.x - at.x);
+    expect(sprite.y - was.y).toBeCloseTo(fitted.y - at.y);
+    expect(sprite.size).toBe(was.size);
+  }
+  for (const visible of [false, true]) {
+    const edgeSight = {
+      ...sight,
+      sees: (p: MapPoint) => (p === city.position ? visible : !visible),
+    };
+    const edgeView = cityDrawingView(state, edgeSight, position);
+    const drawnCity = edgeView.state.cities[id];
+    if (!drawnCity) throw new Error('missing displayed Carthago');
+    expect(edgeView.sight.sees(drawnCity.position)).toBe(visible);
+  }
+  expect(JSON.stringify(state)).toBe(original);
+});
 
 function sceneWith(sprite: Sprite): Scene {
   return {
@@ -130,6 +255,14 @@ test('an impossible surface is an explicit failure, never a hidden figure', () =
   expect(() => fitCoastalScene(sceneWith(sprite), () => false, 4)).toThrow(
     'No safe drawing surface',
   );
+});
+
+test('an unowned battlefield victory standard is still grounded, unlike its taller rooftop counterpart', () => {
+  const flag = { ...sprite, key: 'standard.0@0', army: undefined, size: 54 * 1.3 };
+  const land = (p: MapPoint) => p.x >= 40;
+  const placed = fitCoastalScene(sceneWith(flag), land, 4).sprites[0];
+  expect(placed).not.toBe(flag);
+  expect(placed && groundFits(placed, land)).toBe(true);
 });
 
 function seeAll(state: GameState): Sight {

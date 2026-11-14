@@ -2,6 +2,57 @@ import { describe, expect, it } from 'vitest';
 import type { MultiPolygon, Point } from '../../sim/map.ts';
 import { AreaIndex } from './area-index.ts';
 
+it('checks the continuous thickness of a contact, including a horizontal water slit between its edges', () => {
+  const outline: MultiPolygon = [
+    [
+      [
+        [-10, -10],
+        [20, -10],
+        [20, 20],
+        [-10, 20],
+      ],
+      [
+        [-5, 0.2],
+        [15, 0.2],
+        [15, 0.25],
+        [-5, 0.25],
+      ],
+    ],
+  ];
+  const index = new AreaIndex([outline], 0, { seams: false });
+  expect(index.spanInside(0, 1, 0)).toBe(true);
+  expect(index.spanInside(0, 1, 1)).toBe(true);
+  expect(index.boxInside(0, 1, 0, 1)).toBe(false);
+  expect(index.boxInside(0, 1, 0.3, 1)).toBe(true);
+});
+
+it('a conforming province seam does not split a solid contact strip', () => {
+  const provinces: MultiPolygon[] = [
+    [
+      [
+        [
+          [-10, -10],
+          [0, -10],
+          [0, 20],
+          [-10, 20],
+        ],
+      ],
+    ],
+    [
+      [
+        [
+          [0, -10],
+          [20, -10],
+          [20, 20],
+          [0, 20],
+        ],
+      ],
+    ],
+  ];
+  const index = new AreaIndex(provinces, 0, { seams: false });
+  expect(index.boxInside(-1, 1, 0, 1)).toBe(true);
+});
+
 /** The even-odd rule over every edge, the answer `inside` must give. */
 function exact(outline: MultiPolygon, [x, y]: Point): boolean {
   let inside = false;

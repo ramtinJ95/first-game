@@ -54,9 +54,18 @@ function nearest(
  * that, the city whose name is. A name can end beside another city's symbol, and the
  * symbol is what a player aims at. Among symbols that overlap, the one centred nearer wins.
  */
-export function cityAt(cities: readonly DrawnCity[], screen: MapPoint): CityId | undefined {
+export function cityAt(
+  cities: readonly DrawnCity[],
+  screen: MapPoint,
+  anchors: readonly DrawnCity[] = [],
+  picked?: Pick,
+): CityId | undefined {
   return (
-    nearest(cities, screen, (city) => city.symbol) ?? nearest(cities, screen, (city) => city.label)
+    nearest(cities, screen, (city) => city.symbol) ??
+    nearest(cities, screen, (city) => city.label) ??
+    (!picked || picked.kind === 'province'
+      ? nearest(anchors, screen, (city) => city.symbol)
+      : undefined)
   );
 }
 

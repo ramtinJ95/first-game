@@ -6,7 +6,7 @@ import type { AreaIndex } from './terrain/area-index.ts';
 type Land = ((point: MapPoint) => boolean) & {
   span?: (left: number, right: number, y: number, wanted: boolean) => boolean;
 };
-const AIR = new Set(['smoke', 'dust', 'arrow', 'javelin']);
+const AIR = new Set(['smoke', 'dust', 'arrow', 'javelin', 'blaze']);
 
 /** The rendered surface and its exact continuous ground-contact query. */
 export function coastalSurface(
@@ -14,7 +14,7 @@ export function coastalSurface(
   lakes: AreaIndex,
   toMap: (screen: MapPoint) => MapPoint,
   physical?: AreaIndex,
-): Land {
+): Land & { box(left: number, right: number, top: number, bottom: number): boolean } {
   return Object.assign(
     (screen: MapPoint) => {
       const p = toMap(screen);
@@ -25,6 +25,15 @@ export function coastalSurface(
       );
     },
     {
+      box(left: number, right: number, top: number, bottom: number) {
+        const a = toMap({ x: left, y: top }),
+          b = toMap({ x: right, y: bottom });
+        return (
+          coast().boxInside(a.x, b.x, a.y, b.y) &&
+          lakes.boxInside(a.x, b.x, a.y, b.y, false) &&
+          (!physical || physical.boxInside(a.x, b.x, a.y, b.y))
+        );
+      },
       span(left: number, right: number, y: number, wanted: boolean) {
         const a = toMap({ x: left, y }),
           b = toMap({ x: right, y });
@@ -98,19 +107,22 @@ export function fitCoastalSprite(
   scale: number,
   walkable: Land = land,
   anchor?: MapPoint,
+  allowShrink = true,
+  reachKm = 12,
 ): Sprite {
   const fits = (sprite: Sprite) =>
-    groundFits(sprite, land) && (sprite.key.startsWith('ship.') || groundFits(sprite, walkable));
+    groundFits(sprite, land) &&
+    (sprite.key.startsWith('ship.') || walkable === land || groundFits(sprite, walkable));
   if (fits(sprite)) return sprite;
   // A ship's atlas symbol is much wider than a real narrow channel. Shrink only
   // when the full symbol cannot fit locally; never hide a convoy or put it on land.
-  for (const shrink of [1, 0.75, 0.5, 0.25, 0.125, 0.0625, 0.03125]) {
+  for (const shrink of allowShrink ? [1, 0.75, 0.5, 0.25, 0.125, 0.0625, 0.03125] : [1]) {
     for (const origin of anchor ? [sprite, anchor] : [sprite]) {
       for (let ring = 0; ring <= 24; ring++) {
         for (let k = 0; k < (ring ? 24 : 1); k++) {
           const angle = (k * Math.PI) / 12;
-          const dx = Math.cos(angle) * ring * 0.5 * scale;
-          const dy = Math.sin(angle) * ring * 0.5 * scale;
+          const dx = Math.cos(angle) * ring * (reachKm / 24) * scale;
+          const dy = Math.sin(angle) * ring * (reachKm / 24) * scale;
           const candidate = {
             ...sprite,
             x: origin.x + dx,
@@ -149,6 +161,11 @@ export function fitCoastalScene(
 ): Scene {
   let moved = false;
   const placed = scene.sprites.map((sprite) => {
+    // The scene gives rooftop standards 1.5 men's heights, field victories 1.3.
+    // Keep that existing distinction here rather than editing the owned army scene.
+    // The real burning/captured-city regression exercises the complete postfit path.
+    if (!sprite.army && sprite.key.startsWith('standard.') && sprite.size === scene.height * 1.5)
+      return sprite;
     const fitted = fitCoastalSprite(sprite, land, scale, walkable, anchor?.(sprite));
     moved ||= fitted !== sprite;
     return fitted;
