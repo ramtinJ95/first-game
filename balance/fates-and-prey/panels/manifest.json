@@ -46,7 +46,7 @@
   },
   {
     "file": "battle-and-army.png",
-    "title": "Panel refresh with the top bar, the army panel, the battle panel, and the alerts open: 40 refreshes, median 0.40 ms, p95 1.40 ms, max 2.40 ms",
+    "title": "Panel refresh with the top bar, the army panel, the battle panel, and the alerts open: 40 refreshes, median 0.30 ms, p95 0.40 ms, max 0.40 ms",
     "kind": "screenshot"
   },
   {
