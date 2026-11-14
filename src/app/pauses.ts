@@ -6,12 +6,18 @@ export type PauseSettings = Readonly<Record<PauseKind, boolean>>;
 
 /** What each setting says in the Game menu. */
 export const PAUSE_LABELS: Record<PauseKind, string> = {
-  battle: 'A battle of yours begins',
+  battle: 'A battle begins with 500 of your men or a tenth of your field army',
   weakSiege: 'Your siege is too weak to starve the city',
   sighted: 'An enemy army first nears your land in a war',
+  ownCity: 'Your city is besieged, in danger, or falls',
 };
 
-export const ALL_PAUSES: PauseSettings = { battle: true, weakSiege: true, sighted: true };
+export const ALL_PAUSES: PauseSettings = {
+  battle: true,
+  weakSiege: true,
+  sighted: true,
+  ownCity: true,
+};
 
 /** Local storage keeps the settings under this key, across games. */
 const KEY = 'pauses';

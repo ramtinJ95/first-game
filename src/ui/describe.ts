@@ -1,6 +1,7 @@
 import { unrestPaceOf } from '../sim/buildings/buildings.ts';
 import {
   AT_CITY_KM,
+  armyTitle,
   dateText,
   factionName,
   nearestCity,
@@ -229,6 +230,31 @@ export interface JoinChoice {
   order: JoinArmyOrder;
   /** Why the rules refuse the join now, in words, or undefined when they allow it. */
   refusal: string | undefined;
+}
+
+/** Both the army being joined and its receiver acknowledge a paused order. */
+export function joinOrderedText(
+  state: State,
+  pending: readonly Order[],
+  army: DeepReadonly<Army>,
+): string | undefined {
+  const joins = pending.filter(
+    (order) =>
+      order.kind === 'joinArmy' &&
+      order.faction === state.player &&
+      (order.army === army.id || order.into === army.id),
+  );
+  const lines = joins.flatMap((order) => {
+    if (order.kind !== 'joinArmy') return [];
+    const other = state.armies[order.army === army.id ? order.into : order.army];
+    if (!other) return [];
+    return [
+      order.army === army.id
+        ? `Join ${armyTitle(state, other)} ordered for the next day`
+        : `${armyTitle(state, other)} ordered to join this army next day`,
+    ];
+  });
+  return lines.length ? lines.join('. ') : undefined;
 }
 
 /**

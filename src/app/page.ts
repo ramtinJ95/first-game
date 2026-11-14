@@ -14,6 +14,7 @@ import { DaySchema } from '../sim/state/day.ts';
 import { MapPointSchema } from '../sim/state/map-point.ts';
 import { PeaceForecastSchema, PeaceTermsSchema } from '../sim/state/peace.ts';
 import type { Order } from '../sim/orders/orders.ts';
+import { DesertionSchema, type Desertion } from './desertion.ts';
 import {
   ALERT_KINDS,
   PAUSE_KINDS,
@@ -54,6 +55,7 @@ const AlertSchema = v.object({
 });
 
 const PageSchema = v.object({
+  desertion: v.optional(DesertionSchema),
   paused: v.optional(v.boolean()),
   resumeOnClose: v.optional(v.boolean()),
   pendingPeace: v.optional(
@@ -108,6 +110,7 @@ const PageSchema = v.object({
  * them again nor stops for them twice.
  */
 export interface Page {
+  readonly desertion?: Desertion;
   readonly paused?: boolean;
   readonly resumeOnClose?: boolean;
   readonly pendingPeace?: readonly Extract<
@@ -150,6 +153,7 @@ export function parsePage(
     };
   }
   const {
+    desertion,
     chronicle,
     camera,
     selection,
@@ -164,6 +168,7 @@ export function parsePage(
   return {
     ok: true,
     page: {
+      desertion,
       paused,
       resumeOnClose,
       pendingPeace,
