@@ -11,13 +11,8 @@ import {
   withAssetsClone,
   type GitHubRepo,
 } from './git.ts';
-import {
-  MANIFEST_FILE,
-  assetUrl,
-  imageMarkdown,
-  readCaptures,
-  type ScenarioCapture,
-} from './manifest.ts';
+import { MANIFEST_FILE, readCaptures } from './manifest.ts';
+import { renderReadme, renderSummary, type Report } from './report.ts';
 import {
   combineNamed,
   parseNamedScenarios,
@@ -25,7 +20,6 @@ import {
   selectCaptures,
   type NamedScenarios,
   type ReferenceInfo,
-  type ScenarioVerdict,
   type Selection,
 } from './selection.ts';
 
@@ -52,13 +46,6 @@ export interface PublishResult {
 
 export const MAX_ATTEMPTS = 5;
 
-interface Report {
-  repo: GitHubRepo;
-  options: PublishOptions;
-  captures: ScenarioCapture[];
-  selection: Selection;
-}
-
 interface TreeEntry {
   mode: '100644' | '040000';
   type: 'blob' | 'tree';
@@ -74,14 +61,21 @@ export function publishCaptures(options: PublishOptions): PublishResult {
   };
   const report: Report = {
     repo: remoteRepo(options.cwd, options.remote),
-    options,
-    captures,
-    selection,
+    branch: options.branch,
+    head: options.head,
+    base: options.base,
+    runUrl: options.runUrl,
+    reference: selection.reference,
+    scenarios: selection.verdicts.map((verdict) => {
+      const entries = captures.find(({ scenario }) => scenario === verdict.scenario)?.entries ?? [];
+      const files = publishedFiles(verdict, entries);
+      return { verdict, images: entries.filter((entry) => files.includes(entry.file)) };
+    }),
   };
   const markdown = renderSummary(report);
 
   return withAssetsClone(options.cwd, options.remote, (clone) => {
-    const folder = writeBranchFolder(clone, report);
+    const folder = writeBranchFolder(clone, options.capturesDir, report);
     for (let attempt = 1; ; attempt++) {
       const tip = fetchAssetsTip(clone);
       const tree = writeTree(clone, keptFolders(clone, tip, options, folder));
@@ -118,16 +112,15 @@ export function publishCaptures(options: PublishOptions): PublishResult {
   });
 }
 
-function writeBranchFolder(clone: string, report: Report): TreeEntry {
-  const { options, captures, selection } = report;
-  const files = selection.verdicts.flatMap((verdict) => {
-    const published = publishedFiles(verdict, captureOf(captures, verdict).entries);
-    if (published.length === 0) return [];
-    return [MANIFEST_FILE, ...published].map((file) => ({
-      path: `${verdict.scenario}/${file}`,
-      source: join(options.capturesDir, verdict.scenario, file),
-    }));
-  });
+function writeBranchFolder(clone: string, capturesDir: string, report: Report): TreeEntry {
+  const files = report.scenarios.flatMap(({ verdict: { scenario }, images }) =>
+    images.length === 0
+      ? []
+      : [MANIFEST_FILE, ...images.map((image) => image.file)].map((file) => ({
+          path: `${scenario}/${file}`,
+          source: join(capturesDir, scenario, file),
+        })),
+  );
   const blobs = files.length
     ? git(clone, ['hash-object', '-w', '--stdin-paths'], {
         input: files.map(({ source }) => source).join('\n') + '\n',
@@ -250,87 +243,6 @@ function writeTree(clone: string, entries: Map<string, TreeEntry>): string {
 
 function hasParent(clone: string, commit: string): boolean {
   return /^parent /m.test(git(clone, ['cat-file', 'commit', commit]));
-}
-
-function captureOf(captures: ScenarioCapture[], verdict: ScenarioVerdict): ScenarioCapture {
-  const capture = captures.find(({ scenario }) => scenario === verdict.scenario);
-  if (!capture) throw new Error(`no capture for ${verdict.scenario}`);
-  return capture;
-}
-
-const VERDICT_LABELS: Record<ScenarioVerdict['kind'], string> = {
-  new: 'new, main has no captures of it',
-  named: 'named for publishing',
-  changed: 'changed from main',
-  unchanged: 'unchanged from main',
-};
-
-function comparedWith(reference: ReferenceInfo | null): string {
-  if (!reference) return 'no main run, so every scenario is published whole';
-  const which = reference.exact ? 'the base commit' : 'the newest main run with captures';
-  return `main \`${reference.commit}\` from ${reference.runUrl} (${which})`;
-}
-
-function leftOut(selection: Selection): string[] {
-  const lines = selection.verdicts.flatMap((verdict) => {
-    if (verdict.kind === 'unchanged') return [`- \`${verdict.scenario}\``];
-    if (verdict.kind === 'changed' && verdict.unchanged.length > 0) {
-      return [
-        `- \`${verdict.scenario}\`: ${verdict.unchanged.map((file) => `\`${file}\``).join(', ')}`,
-      ];
-    }
-    return [];
-  });
-  return lines.length ? ['## Left out (unchanged from main)', '', ...lines, ''] : [];
-}
-
-function fullSet(runUrl: string | undefined): string {
-  return runUrl
-    ? `The full set is in the run's artifacts, ${runUrl}#artifacts, for the repository's artifact retention.`
-    : 'The full set is in the local `captures/` folder of the machine that published.';
-}
-
-function renderReadme({ options, captures, selection }: Report): string {
-  const lines = [
-    `# Captures of ${options.branch}`,
-    '',
-    `- Head: \`${options.head}\``,
-    ...(options.base ? [`- Base: \`${options.base}\``] : []),
-    `- Compared with: ${comparedWith(selection.reference)}`,
-    ...(options.runUrl ? [`- CI run: ${options.runUrl}`] : []),
-    '',
-  ];
-  for (const verdict of selection.verdicts) {
-    const { entries } = captureOf(captures, verdict);
-    const published = publishedFiles(verdict, entries);
-    if (published.length === 0) continue;
-    lines.push(`## \`${verdict.scenario}\`, ${VERDICT_LABELS[verdict.kind]}`, '');
-    for (const entry of entries.filter((entry) => published.includes(entry.file))) {
-      const path = [verdict.scenario, entry.file].map(encodeURIComponent).join('/');
-      lines.push(imageMarkdown(entry.title, path), '');
-    }
-  }
-  lines.push(...leftOut(selection), fullSet(options.runUrl), '');
-  return lines.join('\n');
-}
-
-function renderSummary({ repo, options, captures, selection }: Report): string {
-  const against = selection.reference
-    ? `compared with main ${selection.reference.commit}`
-    : 'no main run to compare with';
-  const images = selection.verdicts.flatMap((verdict) => {
-    const { entries } = captureOf(captures, verdict);
-    const published = publishedFiles(verdict, entries);
-    return entries
-      .filter((entry) => published.includes(entry.file))
-      .map((entry) =>
-        imageMarkdown(entry.title, assetUrl(repo, options.branch, verdict.scenario, entry.file)),
-      );
-  });
-  const lines = [`Captures of ${options.head} (${against})`, ''];
-  for (const image of images) lines.push(image, '');
-  lines.push(...leftOut(selection), fullSet(options.runUrl), '');
-  return lines.join('\n');
 }
 
 const OpenPulls = v.array(

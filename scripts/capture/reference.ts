@@ -17,7 +17,7 @@ const Artifacts = v.object({
 export type WorkflowRun = v.InferOutput<typeof Runs>['workflow_runs'][number];
 export type Artifact = v.InferOutput<typeof Artifacts>['artifacts'][number];
 
-/** Picks the run of the base commit, else the newest; `runs` comes newest first. */
+// GitHub lists `runs` newest first.
 export function chooseReferenceRun(
   runs: WorkflowRun[],
   base: string,
