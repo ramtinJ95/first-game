@@ -35,6 +35,8 @@ const { values } = parseArgs({
   },
 });
 
+/** A run stops once the machine has less than this left, before the tab or the run is killed. */
+const LOW_MB = 450;
 const VIEWPORT = { width: 1280, height: 720 };
 /**
  * A long session looks at many places, so each zoom goes in over the next of these:
@@ -201,6 +203,10 @@ try {
       await zoomCycle(page, PLACES[(load - 1) % PLACES.length] as MapPoint);
       print(await sample(page, `load ${load}`));
       if (errors.length > 0) throw new Error(errors.join('; '));
+      if ((rows.at(-1)?.freeMb ?? Infinity) < LOW_MB) {
+        console.log(`stopped: the machine has under ${LOW_MB} MB left`);
+        break;
+      }
     }
   } else {
     const years = Number(values.years ?? 10);
