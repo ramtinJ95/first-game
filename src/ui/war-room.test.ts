@@ -345,6 +345,22 @@ describe('the truce shown before terms are sent is the truce they buy', () => {
     expect(choice.truce).toBe(made(sent(state, choice.terms)));
   });
 
+  test('a one-click suggestion in which the enemy pays, as the tester sent it', () => {
+    const state = warOn(226);
+    const losses = state.wars[key]?.sides[f.carthage];
+    const carthage = state.factions[f.carthage];
+    if (!losses || !carthage) throw new Error('fixture');
+    losses.lost = 1000;
+    carthage.stores.gold = 5_000;
+    const choice = warRoomOf(state, []).wars[0]?.choices.find(
+      (c) => c.terms.kind === 'payment' && c.terms.payer === f.carthage,
+    );
+    if (!choice) throw new Error('no suggestion in which Carthage pays');
+    expect(choice.label).toBe('The most Carthage gives');
+    expect(choice.truce).toBe(made(sent(state, choice.terms)));
+    expect(choice.truce).not.toContain('365 days');
+  });
+
   test('terms written on the form', () => {
     const state = carthageAhead();
     const terms: PeaceTerms = { kind: 'payment', payer: f.rome, gold: 4_000, cities: [] };
