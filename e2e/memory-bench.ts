@@ -357,6 +357,9 @@ if (values.bound) {
   const third = rows.find((row) => row.step === 'load 3');
   const last = rows.at(-1);
   if (!third || !last || last === third) throw new Error('--bound needs more than three loads');
+  if (last.step !== `load ${values.loads}`) {
+    throw new Error(`--bound: the run stopped after ${last.step} of ${values.loads} loads`);
+  }
   const tab = (row: typeof third) => row.rendererMb + row.gpuMb;
   const checks = [
     ['the renderer and GPU processes', tab(third), tab(last)],
