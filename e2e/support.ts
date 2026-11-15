@@ -624,6 +624,42 @@ export function storesAtTheirLimits(): GameState {
   return state;
 }
 
+/**
+ * Carthage holds eight minor cities west of Carthago beside its homeland, twelve in all,
+ * keeps a truce with every minor, and has 5,300 spearmen, beside a Rome of 4,000 spearmen
+ * whose treasury is full, so tomorrow Carthage nears the strength it needs to declare war
+ * on Rome and the news tells it.
+ */
+export function carthageNearsWar(): GameState {
+  const state = startGame();
+  const west = [
+    'caralis',
+    'cirta',
+    'iol-caesarea',
+    'cidamus',
+    'tarraco',
+    'carthago-nova',
+    'numantia',
+    'burdigala',
+  ] as CityId[];
+  for (const id of west) changeCityOwner(state, id, carthage);
+  for (const faction of Object.values(state.factions))
+    if (faction.kind === 'minor')
+      state.truces[warKey(carthage, faction.id)] = {
+        since: state.day,
+        endsOn: (state.day + 365) as Day,
+      };
+  const punic = state.formations[armyOf(state, carthage).formations[0] as FormationId];
+  const roman = state.formations[armyOf(state, rome).formations[0] as FormationId];
+  const limit = limitsOf(state).get(rome);
+  const stores = state.factions[rome]?.stores;
+  if (!punic || !roman || !limit || !stores) throw new Error('no armies or Roman stores');
+  punic.men = 5300;
+  roman.men = 4000;
+  stores.gold = limit.gold;
+  return state;
+}
+
 /** Rome's army of 600 spearmen began the siege of Mediolanum's 1,200 today, too few to cut its food. */
 export function weakSiegeOfMediolanum(): GameState {
   const state = startGame();

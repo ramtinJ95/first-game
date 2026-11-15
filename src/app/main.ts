@@ -52,6 +52,7 @@ import {
   type Slot,
 } from './saves.ts';
 import { turningPoints } from './turning-points.ts';
+import { threatNewsOfDay } from './threat-news.ts';
 import { leaderNews, leadingPower, worldNewsOfDay } from './world-news.ts';
 import {
   createView,
@@ -259,6 +260,7 @@ const clock = createClock({
         // The world's news reaches every power, whether it sees the place or not.
         ...worldNewsOfDay(before, after, events, world),
         ...leader.alerts,
+        ...threatNewsOfDay(before, after, world, toldOnce),
       ]),
       newsPauses ? pauses : NO_PAUSES,
       toldOnce,

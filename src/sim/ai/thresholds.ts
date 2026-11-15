@@ -38,6 +38,17 @@ export const RIVAL_PRESSURE_ODDS = 2;
  */
 export const LEADER_SHARE = 0.2;
 export const COALITION_ODDS = 0.8;
+/**
+ * Against a rival great power whose treasury is at its limit, a power past ADMIN_CITIES
+ * needs this share less of its odds, times the share of its cities past ADMIN_CITIES,
+ * and in proportion for a treasury part full: a realm of 16 cities needs three eighths
+ * less against a full treasury. Past that number of cities a realm's gold arms no more
+ * men than a smaller rival's, so a rich rival is weighed by what a peace would make it
+ * pay. With the cautious Rome of `npm run sim -- threat -- --peaceful`, seeds 1 to 20
+ * over ten years, a great power declared war on Rome in 13 seeds at 0.75, every first
+ * war in years 6 to 10, and in 18 at 1, where Rome ended four seeds on one or two cities.
+ */
+export const HOARD_ODDS_SHARE = 0.75;
 /** The odds a power at peace with everyone needs, whatever the distance, so that a long peace can end. */
 export const PEACE_WAR_ODDS = 1.6;
 /**
