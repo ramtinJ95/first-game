@@ -236,18 +236,41 @@ function fillOutline(
   return g;
 }
 
-/** Traces open lines, `scale` pixels per km, with points at least `minStep` px apart. */
+/**
+ * Traces open lines, `scale` pixels per km, with points at least `minStep` px apart.
+ * Given `clip`, in the same pixels, it leaves out every segment that misses it and
+ * starts the line again past the gap.
+ */
 function traceLines(
   g: Graphics,
   lines: readonly MapLine[],
   scale: number,
   minStep: number,
+  clip?: Box,
 ): Graphics {
   for (const line of lines) {
     const flat = toPixels(line, scale, minStep);
     if (flat.length < 4) continue;
-    g.moveTo(flat[0] as number, flat[1] as number);
-    for (let i = 2; i < flat.length; i += 2) g.lineTo(flat[i] as number, flat[i + 1] as number);
+    let open = false;
+    for (let i = 2; i < flat.length; i += 2) {
+      const ax = flat[i - 2] as number,
+        ay = flat[i - 1] as number,
+        bx = flat[i] as number,
+        by = flat[i + 1] as number;
+      if (
+        clip &&
+        (Math.max(ax, bx) < clip.left ||
+          Math.min(ax, bx) > clip.right ||
+          Math.max(ay, by) < clip.top ||
+          Math.min(ay, by) > clip.bottom)
+      ) {
+        open = false;
+        continue;
+      }
+      if (!open) g.moveTo(ax, ay);
+      g.lineTo(bx, by);
+      open = true;
+    }
   }
   return g;
 }
@@ -579,10 +602,65 @@ export async function createRenderer({
   let motion = 0;
   let clockAt: { day: number; now: number } | undefined;
 
+  /**
+   * The world pixels the sea's water lines and the coast and river ink are stroked for.
+   * Only the cached textures show them, and each covers the view and SEA_MARGIN, so the
+   * strokes reach a margin further and are stroked again once the view leaves them.
+   */
+  let strokedRect: Box = { left: 0, right: 0, top: 0, bottom: 0 };
+  let strokedCoast: readonly MapLine[] = map.coastline;
+  const STROKE_REACH = WATER_LINES[0].distance + WATER_LINE_WIDTH;
+  /** The view and `reach` screen pixels round it, in the pixels of the strokes. */
+  function viewRect(reach: number): Box {
+    const { width, height } = viewport();
+    const k = strokedAt / camera.scale;
+    const x = camera.centre.x * strokedAt,
+      y = camera.centre.y * strokedAt;
+    return {
+      left: x - (width / 2 + reach) * k,
+      right: x + (width / 2 + reach) * k,
+      top: y - (height / 2 + reach) * k,
+      bottom: y + (height / 2 + reach) * k,
+    };
+  }
+  function strokeCoast() {
+    const scale = strokedAt;
+    const round = { cap: 'round', join: 'round' } as const;
+    const flat = { cap: 'butt', join: 'bevel' } as const;
+    strokedRect = viewRect(2 * SEA_MARGIN);
+    const clip = viewRect(2 * SEA_MARGIN + STROKE_REACH);
+    waterLines.clear();
+    for (const { distance, strength } of WATER_LINES) {
+      const step = Math.max(1, distance / 4);
+      traceLines(waterLines, strokedCoast, scale, step, clip).stroke({
+        width: 2 * distance + WATER_LINE_WIDTH,
+        color: mix(SEA, WATER_LINE, strength),
+        ...flat,
+      });
+      traceLines(waterLines, strokedCoast, scale, step, clip).stroke({
+        width: 2 * distance - WATER_LINE_WIDTH,
+        color: SEA,
+        ...flat,
+      });
+    }
+    inkLines.clear();
+    traceLines(
+      inkLines,
+      map.rivers.map((river) => river.line),
+      scale,
+      0.75,
+      clip,
+    ).stroke({ width: 1.1, color: RIVER, alpha: 0.9, ...round });
+    traceLines(inkLines, strokedCoast, scale, 0.75, clip).stroke({
+      width: 1.5,
+      color: INK,
+      ...round,
+    });
+  }
+
   function restroke(scale: number) {
     strokedAt = scale;
     const round = { cap: 'round', join: 'round' } as const;
-    const flat = { cap: 'butt', join: 'bevel' } as const;
     const coast = scale >= ATLAS_COAST_SCALE ? atlasCoast(map) : undefined;
     canvas.dataset['coast'] = coast ? 'atlas' : 'physical';
     const coastline = coast?.lines ?? map.coastline;
@@ -591,34 +669,14 @@ export async function createRenderer({
       wash.clip(outline);
       coastOutline = outline;
     }
-    waterLines.clear();
-    for (const { distance, strength } of WATER_LINES) {
-      const step = Math.max(1, distance / 4);
-      traceLines(waterLines, coastline, scale, step).stroke({
-        width: 2 * distance + WATER_LINE_WIDTH,
-        color: mix(SEA, WATER_LINE, strength),
-        ...flat,
-      });
-      traceLines(waterLines, coastline, scale, step).stroke({
-        width: 2 * distance - WATER_LINE_WIDTH,
-        color: SEA,
-        ...flat,
-      });
-    }
     borders.clear();
     for (const weight of BORDER_WEIGHTS) {
       const runs = borderLines.filter((run) => run.weight === weight).map((run) => run.line);
       traceLines(borders, runs, scale, 0.5).stroke({ width: weight, color: BORDER, ...round });
     }
     terrain.repaint();
-    inkLines.clear();
-    traceLines(
-      inkLines,
-      map.rivers.map((river) => river.line),
-      scale,
-      0.75,
-    ).stroke({ width: 1.1, color: RIVER, alpha: 0.9, ...round });
-    traceLines(inkLines, coastline, scale, 0.75).stroke({ width: 1.5, color: INK, ...round });
+    strokedCoast = coastline;
+    strokeCoast();
     terrain.restroke(scale, outline);
     frame.clear();
     frame.poly(toPixels(map.extent, scale, 0)).stroke({ width: 2.5, color: INK, join: 'round' });
@@ -1055,6 +1113,15 @@ export async function createRenderer({
       camera.scale >= ATLAS_COAST_SCALE !== (coastOutline !== landOutline(map))
     ) {
       restroke(camera.scale);
+    } else {
+      const need = viewRect(SEA_MARGIN);
+      if (
+        need.left < strokedRect.left ||
+        need.right > strokedRect.right ||
+        need.top < strokedRect.top ||
+        need.bottom > strokedRect.bottom
+      )
+        strokeCoast();
     }
     if (
       !seaDrawn ||

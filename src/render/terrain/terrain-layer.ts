@@ -216,8 +216,6 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   art.addChild(paper, ground, washes, ...layers.map((layer) => layer.container), borders);
   const root = new Container();
   root.addChild(art);
-  const coastMask = new Graphics();
-  art.addChild(coastMask);
   let texture = RenderTexture.create({
     width: 1,
     height: 1,
@@ -279,8 +277,12 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       if (drawnOutline !== nextOutline) {
         fillLand(paper.clear(), nextOutline, PAPER);
         fillLand(landMask.clear(), nextOutline, 0xffffff);
-        fillLand(coastMask.clear(), nextOutline, 0xffffff);
-        art.mask = coastMask;
+        // The atlas coast cuts bays out of the physical land that relief, woods and
+        // borders stand on, so the whole art is clipped. That mask also clips the
+        // ground, and a second one of the same shape would only fill the land again.
+        const atlas = nextOutline !== outline;
+        art.mask = atlas ? landMask : null;
+        clipped.mask = atlas ? null : landMask;
         drawnOutline = nextOutline;
         repaint = true;
       }
