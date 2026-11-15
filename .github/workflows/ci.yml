@@ -119,6 +119,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - name: Memory over thirty loads
+        shell: bash
         run: node e2e/memory-bench.ts --loads 30 --draw test --bound 0.1 --out memory.csv | tee -a "$GITHUB_STEP_SUMMARY"
       # The curve as an annotation too, which the API serves to readers who cannot fetch logs.
       - name: The curve as an annotation
