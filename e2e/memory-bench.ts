@@ -10,6 +10,8 @@ import { saveGame } from '../src/sim/save.ts';
 import { tick } from '../src/sim/tick.ts';
 import type { MapPoint } from '../src/sim/state/map-point.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
+import { newGame } from '../src/sim/new-game.ts';
+import type { PowerId } from '../src/sim/map.ts';
 import { dropSave, map, openGame, startGame } from './support.ts';
 
 /**
@@ -25,6 +27,8 @@ import { dropSave, map, openGame, startGame } from './support.ts';
  * over that of loads 3 to 5, and `--process-bound` sets the share for the renderer and GPU
  * processes, whose memory in software rises for about fifty loads to a plateau.
  *
+ * `--power` and `--seed` choose the new game of `--years` (Persia on seed 2 by default).
+ *
  *   node e2e/memory-bench.ts [--loads 30 | --years 10] [--days 300] [--draw full] [--out file.csv]
  */
 const { values } = parseArgs({
@@ -39,6 +43,8 @@ const { values } = parseArgs({
     out: { type: 'string' },
     snapshot: { type: 'string' },
     query: { type: 'string', default: '' },
+    power: { type: 'string', default: 'persia' },
+    seed: { type: 'string', default: '2' },
     armies: { type: 'boolean', default: false },
     sites: { type: 'boolean', default: false },
   },
@@ -323,19 +329,46 @@ try {
     }
   } else {
     const years = Number(values.years ?? 10);
-    await page
-      .getByRole('button', { name: /^Speed \d+$/ })
-      .last()
-      .click();
+    // A player who gives no orders is taken within a few years on most seeds, and a
+    // defeat stops the clock. Played with the same rules, Persia on seed 2 lives ten.
+    await dropSave(
+      page,
+      newGame(map, { seed: Number(values.seed), player: values.power as PowerId }),
+    );
+    await page.getByTestId('time-controls-day').and(page.locator('[data-day="1"]')).waitFor();
+    const fastest = page.getByRole('button', { name: /^Speed \d+$/ }).last();
+    await fastest.click();
+    // A peace offer to the player stops the clock until it is answered, so the run
+    // refuses each one and plays on, as a player who ignores diplomacy would.
+    const playTo = async (target: number) => {
+      const deadline = Date.now() + 1_800_000;
+      while (
+        Number(await page.getByTestId('time-controls-day').getAttribute('data-day')) < target
+      ) {
+        if (Date.now() > deadline) throw new Error(`the game did not reach day ${target}`);
+        if ((await page.getByTestId('time-controls-speed').textContent()) === 'Paused') {
+          if (await page.getByTestId('defeat').isVisible()) {
+            throw new Error(`the player was defeated before day ${target}`);
+          }
+          await page
+            .getByRole('button', { name: /^Wars\b/ })
+            .click({ timeout: 2000 })
+            .catch(() => undefined);
+          for (const refuse of await page
+            .getByRole('button', { name: 'Refuse', exact: true })
+            .all())
+            await refuse.click().catch(() => undefined);
+          await page.keyboard.press('Escape');
+          await page
+            .getByRole('button', { name: 'Resume', exact: true })
+            .click({ timeout: 2000 })
+            .catch(() => undefined);
+        }
+        await delay(1000);
+      }
+    };
     for (let year = 1; year <= years; year++) {
-      await page.waitForFunction(
-        (day) =>
-          Number(
-            document.querySelector('[data-testid="time-controls-day"]')?.getAttribute('data-day'),
-          ) >= day,
-        year * 360,
-        { timeout: 1_800_000, polling: 1000 },
-      );
+      await playTo(year * 360);
       await zoomCycle(page, PLACES[(year - 1) % PLACES.length] as MapPoint);
       await zoomCycle(page, PLATEAU);
       print(await sample(page, `year ${year}`));
@@ -349,6 +382,11 @@ try {
     session.on('HeapProfiler.addHeapSnapshotChunk', ({ chunk }) => appendFileSync(file, chunk));
     await session.send('HeapProfiler.takeHeapSnapshot', { reportProgress: false });
   }
+} catch (error) {
+  if (process.env['GITHUB_ACTIONS']) {
+    console.log(`::error title=memory probe::${String(error).replace(/\n/g, '%0A')}`);
+  }
+  throw error;
 } finally {
   await browser.close();
   await server.close();
@@ -390,6 +428,29 @@ if (values.bound) {
     console.log(
       `${ok ? 'held' : 'NOT held'}: ${what} hold ${after} MB over the last three loads, against ${before} MB over loads 3 to 5 (bound ${Math.round(before * (1 + share))} MB)`,
     );
+  }
+  // The brief's own condition, load 30 against load 3, printed beside the checks above.
+  // One load swings by a fifth, so it does not fail the run.
+  const third = loads[2];
+  const last = loads.at(-1);
+  if (third && last) {
+    for (const [what, pick] of [
+      ['the JS heap', (row: (typeof loads)[number]) => row.heapMb],
+      [
+        'the live WebGL textures and buffers',
+        (row: (typeof loads)[number]) => row.textureMb + row.bufferMb,
+      ],
+      [
+        'the renderer and GPU processes',
+        (row: (typeof loads)[number]) => row.rendererMb + row.gpuMb,
+      ],
+    ] as const) {
+      const before = pick(third);
+      const after = pick(last);
+      console.log(
+        `${after <= before * 1.1 ? 'within' : 'NOT within'} a tenth, reported only: ${what} hold ${after} MB after ${last.step}, against ${before} MB after load 3`,
+      );
+    }
   }
   if (!held) process.exitCode = 1;
 }
