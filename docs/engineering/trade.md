@@ -18,14 +18,16 @@ economy, arrivals, raids, war pricing and city balances read it. A step repays i
 twice the route's own payback, so it pays only when no new route does: after the slots are
 full. The AI does not improve routes.
 
-`changeCityOwner` calls `handRoutesOver`: each running route at the city passes to the new
-owner, and the trade system closes it the same day as a war between the partners if the new
-owners of its two ends are at war. A peace that cedes a city ends its war first, so its routes
-survive the cession. An invitation at the city closes, since its inviter or its invitee
-changed. `openedBy` keeps the faction that paid to open a route and `improvedBy` the payer of
-each improvement, so the ledger charges each end only what it paid. The risk reading says a
-fall closes a route only when the taker is at war with the other end, and that a fall to a
-power at peace with it hands the route over.
+`changeCityOwner` calls `handRoutesOver`: a running route whose other end is the player's
+passes to the city's new owner, and the trade system closes it the same day as a war between
+the partners if that owner is at war with the player. A peace that cedes a city ends its war
+first, so its routes survive the cession. Every other route at the city closes, as before, and
+so do invitations. Handing routes between two other realms to their conquerors was measured and
+dropped: it broke the `sim:ai` target that a power at peace with every stronger power grows
+(112 of 129 power-years, under 90 %). `openedBy` keeps the faction that paid to open a route and `improvedBy` the payer of
+each improvement, so the ledger charges each end only what it paid. The risk reading says the
+same: the player's own city falling closes its routes, and a partner's city falling closes a
+route only to a taker at war with the player, and otherwise hands it over.
 
 Land routes reach 1,000 km at 16 km/day; sea routes require two actual ports and reach
 1,800 km at 28 km/day. Navigation uses the existing constrained mesh, and paths are
@@ -80,11 +82,12 @@ Every trade act says what it costs and risks before it is done. The rules stay a
 the reading of them is in `src/ui`, so the rules PR that changes survival changes one place.
 
 - `tradeRisk(state, sight, ends, road)` in `src/ui/trade-risk.ts` lists what could stop or
-  close a route under today's rules, gravest first: a siege of either end (deliveries stop,
-  and a fall closes the route if the besieger is at war with the other end, or hands it over
-  if not), a leagued minor that will join a war that would close the route, the partner
-  owner's wars with powers also at war with the other end (a fall to one of them closes the
-  route), and the enemies of either end who could raid a land road.
+  close a route under today's rules, gravest first: a siege of either end (deliveries stop;
+  a fall of the player's city closes the route, and a fall of the partner's closes it if the
+  besieger is at war with the player, or hands it over if not), a leagued minor that will
+  join a war that would close the route, the partner owner's wars with powers also at war
+  with the player (a fall to one of them closes the route), the enemies of either end who
+  could raid a land road, and the player's own wars (a fall of the player's city closes it).
   It names a besieger only while one of its armies is in sight and counts only enemy armies
   in sight within `RAID_KM` of the road, so it reveals nothing the fog hides. `riskText`,
   `riskMark` and `paybackText` turn it into the quote's line ("pays back in 1.1 years;

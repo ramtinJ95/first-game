@@ -556,6 +556,31 @@ describe('caravans, interruption, and saves', () => {
     expectConsistent(state);
   });
 
+  test('a route between two other realms closes when one end changes hands, so no conqueror inherits it', () => {
+    const state = buildFixture();
+    need(state.factions[f.carthage]).stores.gold = 10_000;
+    const invite = {
+      kind: 'openTrade',
+      faction: f.carthage,
+      from: f.carthago,
+      to: f.syracusae,
+      mode: 'sea',
+    } as const;
+    expect(openTrade(state, invite, world)).toBeUndefined();
+    const route = need(Object.values(state.tradeRoutes)[0]);
+    expect(route.status).toBe('running');
+    const events = recordEvents(state, () => changeCityOwner(state, f.syracusae, f.rome));
+    expect(state.tradeRoutes[route.id]).toBeUndefined();
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        kind: 'tradeClosed',
+        route: route.id,
+        cause: 'a city changed owner',
+      }),
+    );
+    expectConsistent(state);
+  });
+
   test('a route at a city ceded in a peace survives under the new owner', () => {
     const { state, route } = opened();
     state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);

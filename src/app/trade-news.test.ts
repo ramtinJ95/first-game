@@ -173,7 +173,7 @@ describe('trade news', () => {
     const { state: next, events } = tick(state, [war], world);
     const news = tradeNews(state, next, events, []);
     expect(news.alerts.map((a) => a.text)).toEqual([
-      'The siege of Syracusae stops trade: Roma to Syracusae. If Syracusae falls to a power at war with the other end, the route closes; to one at peace with it, it passes to the new owner.',
+      'The siege of Syracusae stops trade: Roma to Syracusae. If Syracusae falls to a power at war with you, the route closes; to one at peace with you, it passes to the new owner.',
     ]);
     const second = events.flatMap((e) =>
       e.kind === 'tradeRaided'
@@ -181,7 +181,7 @@ describe('trade news', () => {
         : [],
     );
     expect(tradeNews(state, next, [...events, ...second], []).alerts.map((a) => a.text)).toEqual([
-      'The siege of Syracusae stops 2 trade routes: Roma to Syracusae and Capua to Syracusae. If Syracusae falls to a power at war with the other end, they close; to one at peace with it, they pass to the new owner.',
+      'The siege of Syracusae stops 2 trade routes: Roma to Syracusae and Capua to Syracusae. If Syracusae falls to a power at war with you, they close; to one at peace with you, they pass to the new owner.',
     ]);
     const later = tick(next, [], world);
     expect(tradeNews(next, later.state, later.events, news.watched).alerts).toEqual([]);

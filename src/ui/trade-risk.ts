@@ -55,7 +55,8 @@ export function tradeRisk(
   const owners = new Set(ends.map((end) => end.owner));
   for (const end of ends) {
     const other = (end === ends[0] ? ends[1] : ends[0]).owner;
-    const closes = (taker: FactionId) => other !== state.player || areAtWar(state, taker, other);
+    const closes = (taker: FactionId) =>
+      taker === other || other !== state.player || areAtWar(state, taker, other);
     const siege = Object.values(state.sieges).find((s) => s.city === end.id);
     if (siege) {
       const by = siege.besiegers.flatMap((id) => {
