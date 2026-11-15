@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ASSETS_BRANCH, type GitHubRepo } from './git.ts';
 
 export const MANIFEST_FILE = 'manifest.json';
 
@@ -28,6 +29,14 @@ export function readManifest(scenarioDir: string): ManifestEntry[] {
   return raw;
 }
 
+export function readCaptures(capturesDir: string): ScenarioCapture[] {
+  return readdirSync(capturesDir, { withFileTypes: true })
+    .filter((dirent) => dirent.isDirectory())
+    .map((dirent) => dirent.name)
+    .sort()
+    .map((scenario) => ({ scenario, entries: readManifest(join(capturesDir, scenario)) }));
+}
+
 function isManifestEntry(value: unknown): value is ManifestEntry {
   if (typeof value !== 'object' || value === null) return false;
   const { file, title, kind } = value as Record<string, unknown>;
@@ -44,20 +53,15 @@ export function isImage(entry: ManifestEntry): boolean {
   return entry.kind === 'screenshot' || entry.kind === 'clip';
 }
 
-export function renderMarkdown(
-  repo: { owner: string; name: string },
-  commit: string,
-  branch: string,
-  captures: ScenarioCapture[],
-): string {
-  const images = captures.flatMap(({ scenario, entries }) =>
-    entries.filter(isImage).map((entry) => {
-      const path = [...branch.split('/'), scenario, entry.file].map(encodeURIComponent).join('/');
-      const url = `https://raw.githubusercontent.com/${repo.owner}/${repo.name}/${commit}/${path}`;
-      return `![${entry.title.replace(/[[\]]/g, '\\$&')}](${url})`;
-    }),
-  );
-  return images.join('\n\n') + '\n';
+export function assetUrl(repo: GitHubRepo, branch: string, scenario: string, file: string): string {
+  const path = [ASSETS_BRANCH, ...branch.split('/'), scenario, file]
+    .map(encodeURIComponent)
+    .join('/');
+  return `https://raw.githubusercontent.com/${repo.owner}/${repo.name}/refs/heads/${path}`;
+}
+
+export function imageMarkdown(title: string, url: string): string {
+  return `![${title.replace(/[[\]]/g, '\\$&')}](${url})`;
 }
 
 export interface NexusOutput {

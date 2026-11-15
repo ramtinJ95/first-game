@@ -1,118 +1,316 @@
-import { appendFileSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { ASSETS_BRANCH, fetchAssetsTip, git, remoteRepo, resolveBranch } from './git.ts';
 import {
-  MANIFEST_FILE,
-  isImage,
-  readManifest,
-  renderMarkdown,
-  type ScenarioCapture,
-} from './manifest.ts';
+  ASSETS_BRANCH,
+  fetchAssetsTip,
+  git,
+  remoteRepo,
+  resolveBranch,
+  withAssetsClone,
+  type GitHubRepo,
+} from './git.ts';
+import { MANIFEST_FILE, readCaptures } from './manifest.ts';
+import { renderReadme, renderSummary, type Report } from './report.ts';
+import {
+  combineNamed,
+  parseNamedScenarios,
+  publishedFiles,
+  selectCaptures,
+  type NamedScenarios,
+  type ReferenceInfo,
+  type Selection,
+} from './selection.ts';
 
 export interface PublishOptions {
   cwd: string;
   capturesDir: string;
   branch: string;
   remote: string;
+  head: string;
+  base?: string;
+  runUrl?: string;
+  reference: { dir: string; info: ReferenceInfo } | null;
+  named: NamedScenarios;
+  /**
+   * Head branches of this repository's open pull requests; only their folders survive.
+   * Asked again after each read of the tip, so a pull request opened meanwhile keeps its folder.
+   */
+  openBranches: () => readonly string[];
 }
 
 export interface PublishResult {
   commit: string;
   changed: boolean;
   markdown: string;
+  selection: Selection;
 }
 
-const MAX_ATTEMPTS = 5;
+export const MAX_ATTEMPTS = 5;
+
+interface TreeEntry {
+  mode: '100644' | '040000';
+  type: 'blob' | 'tree';
+  sha: string;
+}
 
 export function publishCaptures(options: PublishOptions): PublishResult {
   const captures = readCaptures(options.capturesDir);
   if (captures.length === 0) throw new Error(`no captures found in ${options.capturesDir}`);
-  const repo = remoteRepo(options.cwd, options.remote);
+  const selection: Selection = {
+    verdicts: selectCaptures(options.capturesDir, options.reference?.dir ?? null, options.named),
+    reference: options.reference?.info ?? null,
+  };
+  const report: Report = {
+    repo: remoteRepo(options.cwd, options.remote),
+    branch: options.branch,
+    head: options.head,
+    base: options.base,
+    runUrl: options.runUrl,
+    reference: selection.reference,
+    scenarios: selection.verdicts.map((verdict) => {
+      const entries = captures.find(({ scenario }) => scenario === verdict.scenario)?.entries ?? [];
+      const files = publishedFiles(verdict, entries);
+      return { verdict, images: entries.filter((entry) => files.includes(entry.file)) };
+    }),
+  };
+  const markdown = renderSummary(report);
 
-  for (let attempt = 1; ; attempt++) {
-    const tip = fetchAssetsTip(options.cwd, options.remote);
-    const { commit, changed } = commitCaptures(options, captures, tip);
-    if (changed) {
+  return withAssetsClone(options.cwd, options.remote, (clone) => {
+    const folder = writeBranchFolder(clone, options.capturesDir, report);
+    for (let attempt = 1; ; attempt++) {
+      const tip = fetchAssetsTip(clone);
+      const open = options.openBranches();
+      const tree = writeTree(clone, keptFolders(clone, tip, open, options.branch, folder));
+      if (tip && tree === git(clone, ['rev-parse', `${tip}^{tree}`]) && !hasParent(clone, tip)) {
+        return { commit: tip, changed: false, markdown, selection };
+      }
+      const commit = git(clone, [
+        'commit-tree',
+        tree,
+        '-m',
+        `Capture media for ${options.branch} at ${options.head}`,
+      ]);
       try {
-        git(options.cwd, [
+        git(clone, [
           'push',
           '--quiet',
-          options.remote,
+          `--force-with-lease=refs/heads/${ASSETS_BRANCH}:${tip ?? ''}`,
+          'origin',
           `${commit}:refs/heads/${ASSETS_BRANCH}`,
         ]);
       } catch (error) {
-        const rejected = /\brejected\b|non-fast-forward|fetch first/.test(String(error));
-        if (rejected && attempt < MAX_ATTEMPTS) continue;
-        throw error;
+        if (!/stale info|cannot lock ref|failed to update ref/.test(String(error))) throw error;
+        if (attempt >= MAX_ATTEMPTS) {
+          throw new Error(`${ASSETS_BRANCH} moved under each of ${MAX_ATTEMPTS} publishes`, {
+            cause: error,
+          });
+        }
+        // A random pause keeps two publishers that collided from colliding again.
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.random() * 200 * attempt);
+        continue;
       }
+      return { commit, changed: true, markdown, selection };
     }
-    return { commit, changed, markdown: renderMarkdown(repo, commit, options.branch, captures) };
-  }
+  });
 }
 
-function readCaptures(capturesDir: string): ScenarioCapture[] {
-  return readdirSync(capturesDir, { withFileTypes: true })
-    .filter((dirent) => dirent.isDirectory())
-    .map((dirent) => dirent.name)
-    .sort()
-    .map((scenario) => ({ scenario, entries: readManifest(join(capturesDir, scenario)) }));
+function writeBranchFolder(clone: string, capturesDir: string, report: Report): TreeEntry {
+  const files = report.scenarios.flatMap(({ verdict: { scenario }, images }) =>
+    images.length === 0
+      ? []
+      : [MANIFEST_FILE, ...images.map((image) => image.file)].map((file) => ({
+          path: `${scenario}/${file}`,
+          source: join(capturesDir, scenario, file),
+        })),
+  );
+  const blobs = files.length
+    ? git(clone, ['hash-object', '-w', '--stdin-paths'], {
+        input: files.map(({ source }) => source).join('\n') + '\n',
+      }).split('\n')
+    : [];
+  const entries = new Map<string, TreeEntry>(
+    files.map(({ path }, i) => [path, { mode: '100644', type: 'blob', sha: blobs[i] ?? '' }]),
+  );
+  const readme = git(clone, ['hash-object', '-w', '--stdin'], { input: renderReadme(report) });
+  entries.set('README.md', { mode: '100644', type: 'blob', sha: readme });
+  return { mode: '040000', type: 'tree', sha: writeTree(clone, entries) };
 }
 
-function commitCaptures(
-  options: PublishOptions,
-  captures: ScenarioCapture[],
+function keptFolders(
+  clone: string,
   tip: string | null,
-): { commit: string; changed: boolean } {
-  const scratch = mkdtempSync(join(tmpdir(), 'pr-assets-index-'));
-  try {
-    const env = { GIT_INDEX_FILE: join(scratch, 'index') };
-    const run = (args: string[], input?: string) => git(options.cwd, args, { env, input });
-
-    if (tip) run(['read-tree', tip]);
-    const stale = run(['ls-files', '-z', '--', `${options.branch}/`]);
-    if (stale) run(['update-index', '--force-remove', '-z', '--stdin'], stale);
-
-    for (const { scenario, entries } of captures) {
-      const files = [...entries.filter(isImage).map((entry) => entry.file), MANIFEST_FILE];
-      for (const file of files) {
-        const blob = run(['hash-object', '-w', '--', join(options.capturesDir, scenario, file)]);
-        run([
-          'update-index',
-          '--add',
-          '--cacheinfo',
-          `100644,${blob},${options.branch}/${scenario}/${file}`,
-        ]);
-      }
+  open: readonly string[],
+  branch: string,
+  folder: TreeEntry,
+): Map<string, TreeEntry> {
+  const kept = new Map<string, TreeEntry>();
+  if (tip) {
+    for (const branch of open) {
+      const entry = treeAt(clone, tip, branch);
+      if (entry) kept.set(branch, entry);
     }
-
-    const tree = run(['write-tree']);
-    if (tip && run(['rev-parse', `${tip}^{tree}`]) === tree) return { commit: tip, changed: false };
-    const parent = tip ? ['-p', tip] : [];
-    const commit = run([
-      'commit-tree',
-      tree,
-      ...parent,
-      '-m',
-      `Capture media for ${options.branch}`,
-    ]);
-    return { commit, changed: true };
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
+    const stage = newestStage(clone, tip);
+    if (stage) kept.set(stage.path, stage.entry);
   }
+  kept.set(branch, folder);
+  return kept;
+}
+
+function treeAt(clone: string, tip: string, path: string): TreeEntry | null {
+  const entry = listTree(clone, tip, path)[0];
+  return entry?.type === 'tree' && entry.path === path ? entry : null;
+}
+
+function listTree(clone: string, tip: string, path: string) {
+  return git(clone, ['ls-tree', '-z', tip, '--', path])
+    .split('\0')
+    .filter(Boolean)
+    .map((line) => {
+      const [meta = '', entryPath = ''] = line.split('\t');
+      const [mode, type, sha = ''] = meta.split(' ');
+      return {
+        mode: mode === '040000' ? ('040000' as const) : ('100644' as const),
+        type: type === 'tree' ? ('tree' as const) : ('blob' as const),
+        sha,
+        path: entryPath,
+      };
+    });
+}
+
+const STAGE_WORDS = [
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+  'eleven',
+  'twelve',
+  'thirteen',
+  'fourteen',
+  'fifteen',
+  'sixteen',
+  'seventeen',
+  'eighteen',
+  'nineteen',
+  'twenty',
+];
+
+export function stageNumber(name: string): number | null {
+  const stage = /^stage-(\w+)$/.exec(name)?.[1]?.toLowerCase();
+  if (stage === undefined) return null;
+  if (/^\d+$/.test(stage)) return Number(stage);
+  const index = STAGE_WORDS.indexOf(stage);
+  return index < 0 ? null : index + 1;
+}
+
+function newestStage(clone: string, tip: string): { path: string; entry: TreeEntry } | null {
+  let newest: { path: string; entry: TreeEntry; number: number } | null = null;
+  for (const entry of listTree(clone, tip, 'playtest/')) {
+    const number = stageNumber(entry.path.slice('playtest/'.length));
+    if (entry.type === 'tree' && number !== null && (!newest || number > newest.number)) {
+      newest = { path: entry.path, entry, number };
+    }
+  }
+  return newest;
+}
+
+function writeTree(clone: string, entries: Map<string, TreeEntry>): string {
+  const direct = new Map<string, TreeEntry>();
+  const nested = new Map<string, Map<string, TreeEntry>>();
+  for (const [path, entry] of entries) {
+    const slash = path.indexOf('/');
+    if (slash < 0) {
+      direct.set(path, entry);
+      continue;
+    }
+    const name = path.slice(0, slash);
+    const children = nested.get(name) ?? new Map<string, TreeEntry>();
+    children.set(path.slice(slash + 1), entry);
+    nested.set(name, children);
+  }
+  for (const [name, children] of nested) {
+    if (direct.has(name))
+      throw new Error(`${name} is both a folder and a file in ${ASSETS_BRANCH}`);
+    direct.set(name, { mode: '040000', type: 'tree', sha: writeTree(clone, children) });
+  }
+  const listing = [...direct].map(
+    ([name, entry]) => `${entry.mode} ${entry.type} ${entry.sha}\t${name}\n`,
+  );
+  return git(clone, ['mktree'], { input: listing.join('') });
+}
+
+function hasParent(clone: string, commit: string): boolean {
+  return /^parent /m.test(git(clone, ['cat-file', 'commit', commit]));
+}
+
+export function listOpenBranches(repo: GitHubRepo): string[] {
+  const fullName = `${repo.owner}/${repo.name}`;
+  const listing = execFileSync(
+    'gh',
+    [
+      'api',
+      '--paginate',
+      `repos/${fullName}/pulls?state=open&per_page=100`,
+      '--jq',
+      `.[] | select(.head.repo.full_name == "${fullName}") | .head.ref`,
+    ],
+    { encoding: 'utf8' },
+  );
+  return listing.split('\n').filter(Boolean);
+}
+
+function required(value: string | undefined, flag: string): string {
+  if (!value) throw new Error(`--reference needs ${flag}`);
+  return value;
 }
 
 if (import.meta.main) {
   const { values } = parseArgs({
-    options: { branch: { type: 'string' }, remote: { type: 'string', default: 'origin' } },
+    options: {
+      branch: { type: 'string' },
+      remote: { type: 'string', default: 'origin' },
+      head: { type: 'string' },
+      base: { type: 'string' },
+      'run-url': { type: 'string' },
+      reference: { type: 'string' },
+      'reference-branch': { type: 'string', default: 'main' },
+      'reference-commit': { type: 'string' },
+      'reference-run-url': { type: 'string' },
+      'reference-exact': { type: 'boolean', default: false },
+      scenario: { type: 'string', multiple: true, default: [] },
+      'pr-body-file': { type: 'string' },
+    },
   });
   const cwd = process.cwd();
+  const prBody = values['pr-body-file'] ? readFileSync(values['pr-body-file'], 'utf8') : '';
   const result = publishCaptures({
     cwd,
     capturesDir: resolve(cwd, 'captures'),
     branch: resolveBranch(cwd, values.branch),
     remote: values.remote,
+    head: values.head ?? git(cwd, ['rev-parse', 'HEAD']),
+    base: values.base,
+    runUrl: values['run-url'],
+    reference: values.reference
+      ? {
+          dir: resolve(cwd, values.reference),
+          info: {
+            branch: values['reference-branch'],
+            commit: required(values['reference-commit'], '--reference-commit'),
+            runUrl: required(values['reference-run-url'], '--reference-run-url'),
+            exact: values['reference-exact'],
+          },
+        }
+      : null,
+    named: combineNamed(values.scenario, parseNamedScenarios(prBody)),
+    openBranches: () => listOpenBranches(remoteRepo(cwd, values.remote)),
   });
   console.error(
     result.changed

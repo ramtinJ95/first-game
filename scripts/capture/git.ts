@@ -1,4 +1,7 @@
 import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 export const ASSETS_BRANCH = 'pr-assets';
 
@@ -55,9 +58,53 @@ export function resolveBranch(cwd: string, flag: string | undefined): string {
   return branch;
 }
 
-export function fetchAssetsTip(cwd: string, remote: string): string | null {
-  const heads = git(cwd, ['ls-remote', '--heads', remote, `refs/heads/${ASSETS_BRANCH}`]);
-  if (!heads) return null;
-  git(cwd, ['fetch', '--quiet', '--no-tags', '--depth=1', remote, `refs/heads/${ASSETS_BRANCH}`]);
-  return git(cwd, ['rev-parse', 'FETCH_HEAD']);
+/**
+ * Runs `use` in a scratch bare repository that is a blob-less partial clone of the remote,
+ * so reading the assets branch downloads its trees but no images.
+ */
+export function withAssetsClone<T>(cwd: string, remote: string, use: (clone: string) => T): T {
+  const clone = mkdtempSync(join(tmpdir(), 'pr-assets-'));
+  try {
+    git(clone, ['init', '--quiet', '--bare']);
+    const settings: [string, string][] = [
+      ['core.repositoryformatversion', '1'],
+      ['extensions.partialClone', 'origin'],
+      ['remote.origin.url', git(cwd, ['config', '--get', `remote.${remote}.url`])],
+      ['remote.origin.promisor', 'true'],
+      ['remote.origin.partialclonefilter', 'blob:none'],
+      ...carriedSettings(cwd),
+    ];
+    for (const [key, value] of settings) git(clone, ['config', '--add', key, value]);
+    return use(clone);
+  } finally {
+    rmSync(clone, { recursive: true, force: true });
+  }
+}
+
+// CI's push credentials and local insteadOf rewrites live in the work repository's own config.
+function carriedSettings(cwd: string): [string, string][] {
+  let listing: string;
+  try {
+    listing = git(cwd, [
+      'config',
+      '--local',
+      '--includes',
+      '--null',
+      '--get-regexp',
+      '^(url|http|user)\\.',
+    ]);
+  } catch {
+    return [];
+  }
+  return listing.split('\0').flatMap((entry): [string, string][] => {
+    const newline = entry.indexOf('\n');
+    return newline < 0 ? [] : [[entry.slice(0, newline), entry.slice(newline + 1)]];
+  });
+}
+
+export function fetchAssetsTip(clone: string): string | null {
+  const ref = `refs/heads/${ASSETS_BRANCH}`;
+  if (!git(clone, ['ls-remote', '--heads', 'origin', ref])) return null;
+  git(clone, ['fetch', '--quiet', '--no-tags', '--filter=blob:none', '--depth=1', 'origin', ref]);
+  return git(clone, ['rev-parse', 'FETCH_HEAD']);
 }

@@ -353,6 +353,7 @@ export async function createRenderer({
     autoStart: false,
   });
   canvas.dataset['renderer'] = app.renderer.name;
+  canvas.dataset['stillPose'] = 'on request';
   canvas.dataset['batchTextures'] = String(app.renderer.limits.maxBatchableTextures);
   performance.measure('startup:pixi-init', { start: started });
   const viewport = (): Size => ({ width: app.screen.width, height: app.screen.height });
@@ -499,6 +500,8 @@ export async function createRenderer({
     state: string;
     revision: number;
     ready: boolean;
+    /** The `data-still` request this frame was drawn in the still pose for. */
+    still: string | undefined;
     cities: readonly DrawnCity[];
     armies: readonly DrawnArmy[];
     battles: readonly DrawnBattle[];
@@ -519,6 +522,7 @@ export async function createRenderer({
   let seenBy: Sight | undefined;
   let seenBattles: DeepReadonly<Battle>[] = [];
   let swellAt = -Infinity;
+  let stillShown: string | undefined;
   let sheetPainted = false;
   let scene: Scene | undefined;
   let sceneReady = true;
@@ -537,6 +541,7 @@ export async function createRenderer({
         at: number;
         cost: number;
         nameSides: string;
+        still: boolean;
       }
     | undefined;
   /** How far the camera has panned since the scene was built, in screen px. */
@@ -1166,6 +1171,8 @@ export async function createRenderer({
       canvas.dataset['drawnState'] = view.state;
       canvas.dataset['drawnView'] = String(view.revision);
     }
+    if (view.still === undefined) delete canvas.dataset['drawnStill'];
+    else canvas.dataset['drawnStill'] = view.still;
     canvas.dataset['zoom'] = view.camera.scale.toFixed(4);
   };
   function settleFrame(): boolean {
@@ -1197,6 +1204,15 @@ export async function createRenderer({
       if (!settleFrame()) return false;
       const now = performance.now();
       let dirty = cameraMoved;
+      // A capture sets `data-still` so men at ease, fires, smoke and the swell hold one
+      // pose while it shoots, and two captures of one view match pixel for pixel.
+      const stillRequest = canvas.dataset['still'];
+      const still = stillRequest !== undefined;
+      const clock = still ? 0 : now;
+      if (stillRequest !== stillShown) {
+        stillShown = stillRequest;
+        dirty = true;
+      }
       if (washStrength(camera.scale).greatPower !== washedAt) recolour(current);
       ownershipLines(current);
       if (current !== shown) {
@@ -1274,6 +1290,7 @@ export async function createRenderer({
         // An army at a city stands clear of its name, so a name that moves round its
         // city moves the army too, where a pan alone only slides the built scene.
         built.nameSides !== nameSides ||
+        built.still !== still ||
         sheetPainted ||
         // A pan moves the built scene; once it has moved far, armies culled from it come into view.
         Math.hypot(sceneShift().x, sceneShift().y) > PAN_REBUILD_PX;
@@ -1301,8 +1318,8 @@ export async function createRenderer({
           viewport: view,
           previousSight,
           sight,
-          motion,
-          now: now / 1000,
+          motion: still ? 0 : motion,
+          now: clock / 1000,
           growth: symbolGrowth(camera.scale),
           land: onLand,
           names: new Map(drawnCities.flatMap(({ id, label }) => (label ? [[id, label]] : []))),
@@ -1324,6 +1341,7 @@ export async function createRenderer({
           at: now,
           cost: performance.now() - start,
           nameSides,
+          still,
         };
         sheetPainted = false;
         dirty = true;
@@ -1336,8 +1354,8 @@ export async function createRenderer({
         }
       }
       if (!dirty) return false;
-      life.update(camera, viewport(), now, sight);
-      moveSwell(now);
+      life.update(camera, viewport(), clock, sight);
+      moveSwell(clock);
       // A cold figure sheet paints asynchronously. Keep visible, pickable flags until
       // the replacement art is drawn, rather than letting armies vanish during a zoom.
       bannerLayer.visible = !scene || scene.height === 0 || !sceneReady;
@@ -1389,6 +1407,7 @@ export async function createRenderer({
         state: given,
         revision: viewRevision,
         ready: sceneReady,
+        still: stillRequest,
         cities: drawnCities,
         armies: bannersShown(),
         battles: battlesShown(),

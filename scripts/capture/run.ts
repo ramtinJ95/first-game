@@ -19,6 +19,7 @@ import {
 import { SOFTWARE_GL } from '../../playwright.config.ts';
 import type { Scenario } from './scenario.ts';
 import { shardScenarios } from './shard.ts';
+import { stillScreenshot } from './still.ts';
 import measuredSeconds from './scenario-seconds.json' with { type: 'json' };
 
 const CAPTURES_DIR = resolve('captures');
@@ -111,7 +112,7 @@ async function captureScenario(
     if (!/^[a-z0-9][a-z0-9-]*$/.test(name) || entries.some((entry) => entry.file === file)) {
       throw new Error(`shot name "${name}" must be unique kebab-case`);
     }
-    await page.screenshot({ path: join(dir, file) });
+    await stillScreenshot(page, join(dir, file));
     entries.push({ file, title, kind: 'screenshot' });
   };
 
