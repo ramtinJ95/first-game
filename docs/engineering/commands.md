@@ -21,6 +21,7 @@
 | `npm run sim:peace`                           | Play the new game under the AI and print how wars end, how long they run, and the days each power spends at peace                                           |
 | `npm run sim:news [-- --seeds 5 --years 3]`   | Play the new game as Rome, idle and under the AI, and count the lines of news a year in the corner and in the chronicle                                     |
 | `node scripts/sim.ts sallies [-- --men 1900]` | Rome besieges Mediolanum and prints each battle there with whether it stops the game under the old and the new battle pause                                 |
+| `npm run sim -- trade-news`                   | Play Rome idle and under the AI for ten years on 5 seeds and count its trade news lines beside the raw raids and sieges                                     |
 | `npm run capture [-- <scenario>]`             | Build, then write screenshots, `clip.gif`, video, and trace to `captures/<scenario>/`                                                                       |
 | `npm run capture:publish`                     | Replace this branch's folder on `pr-assets` with its changed, new, and named scenarios, write its `README.md`, and print Markdown for the pull request      |
 | `npm run capture:fetch`                       | Pull this branch's published folder from `pr-assets` into `captures/`, declare its images as Nexus outputs, and print the Markdown                          |
