@@ -57,12 +57,14 @@ console.log(
   'Lost gold is what Rome paid to open or improve routes that closed or left its hands before their receipts repaid it, less those receipts, valued at arrival prices: a full treasury may have kept less.\n',
 );
 console.log(
-  '| seed | routes opened | closed early | gold lost | decisions | median days between | day-1 paybacks min / median / max years |',
+  '| seed | routes opened | closed early | gold lost | decisions | median days between | longest days without one | day-1 paybacks min / median / max years |',
 );
-console.log('| ---: | ---: | ---: | ---: | ---: | ---: | --- |');
+console.log('| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |');
 const totals = { opened: 0, early: 0, lost: 0, decisions: 0 };
 const gaps: number[] = [];
 const lostBy = new Map<string, number>();
+const longests: number[] = [];
+let longestAll = 0;
 const spreads: number[][] = [];
 for (let seed = first; seed <= last; seed++) {
   const row = play(seed);
@@ -70,17 +72,25 @@ for (let seed = first; seed <= last; seed++) {
   totals.early += row.early;
   totals.lost += row.lost;
   totals.decisions += row.days.length;
-  const between = row.days.slice(1).map((day, i) => day - (row.days[i] ?? day));
+  const between = [...row.days, years * 365]
+    .map((day, i, all) => day - (i ? (all[i - 1] ?? 0) : 0))
+    .slice(1, -1);
+  const longest = Math.max(
+    0,
+    ...[...row.days, years * 365].map((day, i, all) => day - (i ? (all[i - 1] ?? 0) : 0)),
+  );
+  longestAll = Math.max(longestAll, longest);
+  longests.push(longest);
   gaps.push(...between);
   spreads.push(row.paybacks);
   const [min, mid, max] = summary(row.paybacks);
   console.log(
-    `| ${seed} | ${row.opened} | ${row.early} | ${Math.round(row.lost)} | ${row.days.length} | ${median(between)} | ${min} / ${mid} / ${max} |`,
+    `| ${seed} | ${row.opened} | ${row.early} | ${Math.round(row.lost)} | ${row.days.length} | ${median(between)} | ${longest} | ${min} / ${mid} / ${max} |`,
   );
 }
 const all = summary(spreads.flat());
 console.log(
-  `| all | ${totals.opened} | ${totals.early} | ${Math.round(totals.lost)} | ${totals.decisions} | ${median(gaps)} | ${all.join(' / ')} |`,
+  `| all | ${totals.opened} | ${totals.early} | ${Math.round(totals.lost)} | ${totals.decisions} | ${median(gaps)} | median ${median(longests)}, most ${longestAll} | ${all.join(' / ')} |`,
 );
 
 function play(seed: number) {
