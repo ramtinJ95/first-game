@@ -334,6 +334,13 @@ try {
       ) {
         if (Date.now() > deadline) throw new Error(`the game did not reach day ${target}`);
         if ((await page.getByTestId('time-controls-speed').textContent()) === 'Paused') {
+          if (await page.getByTestId('defeat').isVisible()) {
+            throw new Error(`the player was defeated before day ${target}`);
+          }
+          await page
+            .getByRole('button', { name: /^Wars\b/ })
+            .click({ timeout: 2000 })
+            .catch(() => undefined);
           for (const refuse of await page
             .getByRole('button', { name: 'Refuse', exact: true })
             .all())
@@ -362,6 +369,11 @@ try {
     session.on('HeapProfiler.addHeapSnapshotChunk', ({ chunk }) => appendFileSync(file, chunk));
     await session.send('HeapProfiler.takeHeapSnapshot', { reportProgress: false });
   }
+} catch (error) {
+  if (process.env['GITHUB_ACTIONS']) {
+    console.log(`::error title=memory probe::${String(error).replace(/\n/g, '%0A')}`);
+  }
+  throw error;
 } finally {
   await browser.close();
   await server.close();
