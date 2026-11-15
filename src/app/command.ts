@@ -1,5 +1,5 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { ArmyId, FactionId } from '../sim/ids.ts';
+import type { ArmyId, CityId, FactionId } from '../sim/ids.ts';
 import {
   CONVOY_KM_PER_DAY,
   MARCH_KM_PER_DAY,
@@ -41,7 +41,25 @@ export const FAR_LONGER = 1.5;
 /** What a right click points at: a city drawn on the map, or a point of the map. */
 export type CommandTarget =
   | { readonly kind: 'city'; readonly city: DeepReadonly<City> }
-  | { readonly kind: 'point'; readonly point: MapPoint };
+  | { readonly kind: 'point'; readonly point: MapPoint }
+  /** Drawn as land but unknown to the rules, which hold it for sea. */
+  | { readonly kind: 'islet'; readonly point: MapPoint };
+
+/**
+ * What a right click points an order at: the city whose symbol or name it is on, before
+ * anything under it; else an islet the map draws; else the map point.
+ */
+export function commandTarget(
+  state: State,
+  { point, city, islet }: { point: MapPoint; city: CityId | undefined; islet: boolean },
+): CommandTarget {
+  const clicked = city && state.cities[city];
+  if (clicked) return { kind: 'city', city: clicked };
+  return islet ? { kind: 'islet', point } : { kind: 'point', point };
+}
+
+/** The refusal of an order onto an islet the map draws and no army can reach. */
+export const ISLET_REFUSAL = 'Order refused. No army can land on that islet.';
 
 /** One way to a city that a menu offers, with how many days it takes. */
 export interface MenuOption {
@@ -417,6 +435,7 @@ export function planCommand(
   target: CommandTarget,
   pending: readonly Order[] = [],
 ): Plan {
+  if (target.kind === 'islet') return { kind: 'refuse', notice: ISLET_REFUSAL };
   const city = target.kind === 'city' ? target.city : undefined;
   const to = target.kind === 'city' ? target.city.position : target.point;
   const march: MoveArmyOrder = {

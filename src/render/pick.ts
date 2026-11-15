@@ -1,6 +1,7 @@
 import type { ArmyId, BattleId, CityId, ProvinceId } from '../sim/ids.ts';
 import type { GameMap, Ring } from '../sim/map.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
+import { ATLAS_COAST_SCALE, atlasScenery } from './atlas-coast.ts';
 import { mapToScreen, screenToMap, type Camera, type Size } from './camera.ts';
 import type { Box } from './labels.ts';
 import { BANNER_HIT, BATTLE_HIT_RADIUS, type DrawnArmy, type DrawnBattle } from './markers.ts';
@@ -166,4 +167,18 @@ export function pickAt(
   }
   const province = provinceAt(map, screenToMap(camera, viewport, screen));
   return province && { kind: 'province', province };
+}
+
+/**
+ * Whether a map point is on an islet the atlas draws but the rules do not know, so no
+ * army can land or stand there. Only the drawing's own scenery counts: a shore point
+ * the province outlines leave out can still be marched to.
+ */
+export function isletAt(map: GameMap, point: MapPoint): boolean {
+  return atlasScenery(map).inside(point.x, point.y);
+}
+
+/** Whether a right click at a map point lands on an islet, which is drawn only from the atlas zoom in. */
+export function commandIslet(map: GameMap, scale: number, point: MapPoint): boolean {
+  return scale >= ATLAS_COAST_SCALE && isletAt(map, point);
 }
