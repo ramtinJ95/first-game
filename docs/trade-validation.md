@@ -661,18 +661,18 @@ Both meet every peace target. The longest war between great powers is longer on 
 
 | Cautious Rome, seeds 1–20, ten years | routes opened | closed before repaying | gold lost | trade decisions | longest stretch without one, median / most | day-1 paybacks min / median / max |
 | ------------------------------------ | ------------: | ---------------------: | --------: | --------------: | ------------------------------------------ | --------------------------------- |
-| main, blind (the tester's case)      |         1,081 |                    693 |   732,706 |           1,177 | 330 / 1,410 days                           | 1.13 / 1.13 / 2.03 years          |
-| main, heeding #67                    |           910 |                    458 |   434,640 |           1,065 | 330 / 750 days                             | 1.13 / 1.13 / 2.03 years          |
+| main, blind (the tester's case)      |         1,082 |                    698 |   744,473 |           1,177 | 330 / 1,410 days                           | 1.13 / 1.13 / 2.03 years          |
+| main, heeding #67                    |           922 |                    472 |   452,131 |           1,078 | 330 / 750 days                             | 1.13 / 1.13 / 2.03 years          |
 | branch, heeding                      |           788 |                    322 |   308,513 |             911 | 510 / 811 days                             | 1.13 / 1.13 / 2.03 years          |
-| branch, heeding and improving        |           551 |                    317 |   403,429 |           1,400 | 390 / 907 days                             | 1.13 / 1.13 / 2.03 years          |
+| branch, heeding and improving        |           552 |                    319 |   405,771 |           1,400 | 390 / 907 days                             | 1.13 / 1.13 / 2.03 years          |
 
 | Gold lost, by what closed the route     | main, blind | main, heeding | branch, heeding | branch, improving |
 | --------------------------------------- | ----------: | ------------: | --------------: | ----------------: |
-| A city changed owner                    |     408,828 |       299,694 |         160,820 |           217,929 |
-| The partner declared war on Rome        |     192,148 |       134,946 |         132,832 |           165,306 |
-| Rome declared war on the partner        |     131,730 |             0 |               0 |                 0 |
+| A city changed owner                    |     413,150 |       307,825 |         160,820 |           217,929 |
+| The partner declared war on Rome        |     197,873 |       144,307 |         132,832 |           167,647 |
+| Rome declared war on the partner        |     133,450 |             0 |               0 |                 0 |
 | A partner city fell to an enemy of Rome |           0 |             0 |          14,860 |            20,194 |
 
-Telling the risk and heeding it cuts the gold lost from 732,706 to 434,640. Keeping the player's routes through a partner's peaceful change of owner cuts it to 308,513, 58 % below the tester's case; the losses that remain to a change of owner are Rome's own cities falling. The improving Rome loses more because it invests more in routes that later close: its lost gold includes improvements.
+Telling the risk and heeding it cuts the gold lost from 744,473 to 452,131. Keeping the player's routes through a partner's peaceful change of owner cuts it to 308,513, 59 % below the tester's case; the losses that remain to a change of owner are Rome's own cities falling. The improving Rome loses more because it invests more in routes that later close: its lost gold includes improvements.
 
 Improvements shorten the quiet stretch but do not end it. The median gap between decisions is 30 days in every run, the harness's monthly turn, and on main many of those decisions buy back a route that died. Once routes stop dying, the longest stretch without a decision grows from a median of 330 days on main to 510; improvements bring it back to 390, since each route takes only two and then nothing new comes up. The spread of paybacks on day 1 is unchanged, since prices are as on main.
