@@ -4,7 +4,7 @@ import { LAYERS } from '../src/render/renderer.ts';
 import { routePoint } from '../src/sim/trade/routes.ts';
 import { camera, openGame, pause, resizeTo, untilDrawn } from './support.ts';
 import { loadSave } from './watch.ts';
-import { raidedRome, tradeRoute, tradingRome } from './trade-game.ts';
+import { coastalRome, raidedRome, straitRome, tradeRoute, tradingRome } from './trade-game.ts';
 
 function mapColours(shot: Buffer): number {
   // An unobscured map rectangle, clear of the top bar, city panel and Chronicle.
@@ -48,6 +48,32 @@ test('a trade ship is a drawn figure at the closest zoom, not a land caravan', a
   await expect(page.locator('canvas')).toHaveAttribute('data-trade-ships', /[1-9]/);
 });
 
+for (const [name, state, mode] of [
+  ['the land caravan nine km from the sea', coastalRome(), 'land'],
+  ['the ship at Carthago’s harbour mouth', coastalRome(), 'sea'],
+  ['the ship in the Strait of Messina', straitRome(), 'sea'],
+] as const)
+  test(`${name} finds its surface on the drawn coast at middle and closest zoom`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await openGame(page);
+    await pause(page);
+    await loadSave(page, state);
+    const canvas = page.locator('canvas');
+    const view = camera(page);
+    for (const scale of [1.2, 4]) {
+      await view.jumpTo(routePoint(tradeRoute(state, mode)), scale);
+      await untilDrawn(page);
+      await expect(canvas).toHaveAttribute(
+        mode === 'sea' ? 'data-trade-ships' : 'data-trade-caravans',
+        /[1-9]/,
+      );
+    }
+    expect(errors).toEqual([]);
+  });
+
 test('a loaded road raid is marked at its saved location', async ({ page }) => {
   await openGame(page);
   await pause(page);
@@ -81,7 +107,9 @@ test('retained trade paths survive camera changes and context restoration, and c
   await untilDrawn(page);
   const before = await canvas.screenshot();
   expect(mapColours(before)).toBeGreaterThan(1);
-  await view.jumpTo({ x: at.x + 200, y: at.y + 100 }, 1.2);
+  // 100 km west and 50 km north is on the canvas at closest zoom, clear of the city panel.
+  await view.jumpTo({ x: at.x - 100, y: at.y - 50 }, 1.2);
+  await expect(canvas).toHaveAttribute('data-zoom', '1.2000');
   await untilDrawn(page);
   expect((await canvas.screenshot()).equals(before)).toBe(false);
   await view.jumpTo(at, 4);

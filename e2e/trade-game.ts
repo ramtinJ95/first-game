@@ -42,3 +42,30 @@ export function raidedRome(): GameState {
   declareWar(state, state.player, carthage);
   return playDays(state, 1);
 }
+
+/** The land caravan nine km from the sea and the ship at Carthago's harbour mouth. */
+export function coastalRome(): GameState {
+  const state = tradingRome();
+  tradeRoute(state, 'land').progress = 0.733;
+  tradeRoute(state, 'sea').progress = 0.99;
+  return state;
+}
+
+/** A home sea route round Italy whose ship is in the Strait of Messina. */
+export function straitRome(): GameState {
+  const state = startGame();
+  const rome = state.factions[state.player];
+  if (!rome) throw new Error('Rome is missing');
+  rome.stores.gold = 7000;
+  const played = playDays(state, 6, [
+    {
+      kind: 'openTrade',
+      faction: state.player,
+      from: 'roma' as CityId,
+      to: 'ariminum' as CityId,
+      mode: 'sea',
+    },
+  ]);
+  tradeRoute(played, 'sea').progress = 0.335;
+  return played;
+}

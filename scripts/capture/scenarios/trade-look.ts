@@ -1,7 +1,13 @@
 import { expect, type Page } from '@playwright/test';
 import { camera, openGame, pause, resume, untilDrawn } from '../../../e2e/support.ts';
 import { loadSave, untilDay } from '../../../e2e/watch.ts';
-import { raidedRome, tradeRoute, tradingRome } from '../../../e2e/trade-game.ts';
+import {
+  coastalRome,
+  raidedRome,
+  straitRome,
+  tradeRoute,
+  tradingRome,
+} from '../../../e2e/trade-game.ts';
 import { routePoint } from '../../../src/sim/trade/routes.ts';
 import { defineScenario } from '../scenario.ts';
 
@@ -64,7 +70,40 @@ export default defineScenario({
     await expect(page.locator('canvas')).toHaveAttribute('data-trade-ships', /[1-9]/);
     await settled(page);
     await shot('ship-closest', 'The merchant ship at closest zoom');
-    await view.jumpTo(routePoint(sea), 1.2);
+    // jumpTo wheels and drags from the target's screen point, so a far place is reached
+    // from a wide view where it is on screen.
+    let here = routePoint(sea);
+    const visit = async (point: typeof here, scale: number) => {
+      await view.jumpTo(here, 0.5);
+      await view.jumpTo(point, scale);
+      here = point;
+    };
+    const coastal = coastalRome();
+    await loadSave(page, coastal);
+    await visit(routePoint(tradeRoute(coastal, 'sea')), 4);
+    await expect(page.locator('canvas')).toHaveAttribute('data-trade-ships', /[1-9]/);
+    await settled(page);
+    await shot(
+      'ship-coast',
+      'The merchant ship at Carthago’s harbour mouth stays on the water of the drawn coast',
+    );
+    await visit(routePoint(tradeRoute(coastal, 'land')), 4);
+    await expect(page.locator('canvas')).toHaveAttribute('data-trade-caravans', /[1-9]/);
+    await settled(page);
+    await shot(
+      'caravan-coast',
+      'The caravan nine km from the sea keeps its cart and walkers on the drawn land',
+    );
+    const strait = straitRome();
+    await loadSave(page, strait);
+    await visit(routePoint(tradeRoute(strait, 'sea')), 4);
+    await expect(page.locator('canvas')).toHaveAttribute('data-trade-ships', /[1-9]/);
+    await settled(page);
+    await shot(
+      'ship-strait',
+      'A home route’s ship in the Strait of Messina, afloat between Sicily and Calabria',
+    );
+    await visit(routePoint(sea), 1.2);
     const raided = raidedRome();
     await loadSave(page, raided);
     const raid = tradeRoute(raided, 'land').raid;
