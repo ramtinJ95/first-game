@@ -11,19 +11,35 @@ type State = DeepReadonly<GameState>;
 
 /** A great power this near the odds it needs to declare war on the player is told of. */
 export const THREAT_WARN = 0.8;
-/** and told of again only once it has fallen back below this, or a war or a truce came between. */
+/** and told of again only after a war or a truce came between, or it stayed below this */
 export const THREAT_CLEAR = 0.6;
+/** for this many days in a row. */
+export const THREAT_CALM_DAYS = 365;
 
 const keyOf = (faction: string) => `threat:${faction}`;
+const calmPrefix = (faction: string) => `threat-calm:${faction}:`;
+
+/** The day a warned power fell below THREAT_CLEAR and has stayed there since, kept in the told keys. */
+function calmSince(remembered: ReadonlySet<string>, faction: string): number | undefined {
+  const prefix = calmPrefix(faction);
+  for (const key of remembered) if (key.startsWith(prefix)) return Number(key.slice(prefix.length));
+  return undefined;
+}
+
+function forgetCalm(remembered: Set<string>, faction: string) {
+  const since = calmSince(remembered, faction);
+  if (since !== undefined) remembered.delete(`${calmPrefix(faction)}${since}`);
+}
 
 /**
  * The great powers at peace with the player that have come within THREAT_WARN of the
- * odds they need to declare war on it, by the rule the AI declares by, told once until
- * the power falls back below THREAT_CLEAR or a war or a truce comes between. The news
+ * odds they need to declare war on it, by the rule the AI declares by. A power is told
+ * of once in a peace: again only after a war or a truce with the player, or after it
+ * stayed below THREAT_CLEAR for THREAT_CALM_DAYS, because its armies march off and come
+ * back within months and a warning each time teaches the player to ignore it. The news
  * names the city it weighs the player's armies at and, when the player's treasury
- * lowers the odds it needs, by how much. A power that cannot reach the player says
- * nothing and keeps what was told, so a power whose armies are all on the march
- * elsewhere for a day is not told of again.
+ * lowers the odds it needs, by how much. A day the power cannot reach the player counts
+ * as calm.
  */
 export function threatNewsOfDay(
   before: State,
@@ -38,12 +54,20 @@ export function threatNewsOfDay(
     const key = keyOf(power.id);
     if (areAtWar(after, power.id, player) || truceBetween(after, power.id, player)) {
       remembered.delete(key);
+      forgetCalm(remembered, power.id);
       continue;
     }
     const threat = warReadiness(after, world, power.id, player);
-    if (!threat) continue;
-    if (threat.readiness < THREAT_CLEAR) remembered.delete(key);
-    if (threat.readiness < THREAT_WARN || remembered.has(key)) continue;
+    const readiness = threat?.readiness ?? 0;
+    if (remembered.has(key)) {
+      const since = calmSince(remembered, power.id);
+      if (since !== undefined && before.day - since >= THREAT_CALM_DAYS) {
+        remembered.delete(key);
+        forgetCalm(remembered, power.id);
+      } else if (readiness >= THREAT_CLEAR) forgetCalm(remembered, power.id);
+      else if (since === undefined) remembered.add(`${calmPrefix(power.id)}${before.day}`);
+    }
+    if (!threat || readiness < THREAT_WARN || remembered.has(key)) continue;
     remembered.add(key);
     const front = after.cities[threat.front];
     const gold = after.factions[player]?.stores.gold ?? 0;

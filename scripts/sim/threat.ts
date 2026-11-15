@@ -46,8 +46,12 @@ interface Weighing {
 
 interface Row {
   seed: number;
-  wars: { day: number; by: string; warnedDaysBefore: number | null }[];
+  wars: { day: number; by: string; warnedDaysBefore: number | null; warnedThisPeace: boolean }[];
   warnings: number;
+  /** Warnings by power. */
+  warnedBy: Record<string, number>;
+  /** Warnings before Year 4, day 180, the day the seventh play-through counted to. */
+  warningsByY4d180: number;
   fellOn: number | null;
   citiesLost: number;
   citiesAtEnd: number;
@@ -115,6 +119,8 @@ function play(seed: number, years: number): Row {
     seed,
     wars: [],
     warnings: 0,
+    warnedBy: {},
+    warningsByY4d180: 0,
     fellOn: null,
     citiesLost: 0,
     citiesAtEnd: 0,
@@ -129,6 +135,7 @@ function play(seed: number, years: number): Row {
   let lastDecision = 0;
   const told = new Set<string>();
   const warnedOn = new Map<string, number>();
+  const warnedThisPeace = new Set<string>();
   const quiet = (day: number) => {
     if (day - lastDecision > row.longestQuiet) {
       row.longestQuiet = day - lastDecision;
@@ -142,18 +149,27 @@ function play(seed: number, years: number): Row {
       const day = before.day;
       for (const alert of threatNewsOfDay(before, after, world, told)) {
         row.warnings++;
-        warnedOn.set(alert.text.split(' could soon')[0] ?? '', day);
+        if (day < 3 * 365 + 180) row.warningsByY4d180++;
+        const name = alert.text.split(' could soon')[0] ?? '';
+        row.warnedBy[name] = (row.warnedBy[name] ?? 0) + 1;
+        warnedOn.set(name, day);
+        warnedThisPeace.add(name);
       }
       for (const event of events) {
         if (event.kind !== 'warDeclared' || event.against !== rome) continue;
         if (after.factions[event.by]?.kind !== 'greatPower') continue;
-        const warned = warnedOn.get(after.factions[event.by]?.name ?? '');
+        const name = after.factions[event.by]?.name ?? '';
+        const warned = warnedOn.get(name);
         row.wars.push({
           day,
           by: event.by,
           warnedDaysBefore: warned === undefined ? null : day - warned,
+          warnedThisPeace: warnedThisPeace.has(name),
         });
       }
+      for (const power of Object.values(after.factions))
+        if (areAtWar(after, power.id, rome) || truceBetween(after, power.id, rome))
+          warnedThisPeace.delete(power.name);
       for (const city of Object.values(before.cities))
         if (city.owner === rome && after.cities[city.id]?.owner !== rome) row.citiesLost++;
       const gold = after.factions[rome]?.stores.gold ?? 0;
@@ -203,6 +219,20 @@ function print(rows: readonly Row[]) {
   );
   console.log(
     `First wars warned of beforehand: ${firsts.filter((w) => w.warnedDaysBefore !== null).length} of ${firsts.length}, median ${median(firsts.flatMap((w) => (w.warnedDaysBefore === null ? [] : [w.warnedDaysBefore])))} days before. Warnings in all: ${rows.reduce((sum, r) => sum + r.warnings, 0)}.`,
+  );
+  const wars = rows.flatMap((r) => r.wars);
+  const perPower = rows.flatMap((r) => Object.values(r.warnedBy));
+  const counts = new Map<number, number>();
+  for (const n of perPower) counts.set(n, (counts.get(n) ?? 0) + 1);
+  console.log(
+    `Declarations on Rome by a great power with a warning from that power since the last war or truce with it: ${wars.filter((w) => w.warnedThisPeace).length} of ${wars.length}. Warnings per power that warned in a game: median ${median(perPower)}, most ${Math.max(0, ...perPower)}; games of a power by its warnings: ${[
+      ...counts,
+    ]
+      .sort((a, b) => a[0] - b[0])
+      .map(([n, games]) => `${n}×${games}`)
+      .join(
+        ', ',
+      )}. Warnings before Year 4, day 180: median ${median(rows.map((r) => r.warningsByY4d180))} a game, most ${Math.max(0, ...rows.map((r) => r.warningsByY4d180))}.`,
   );
   console.log(
     `Longest stretch without a decision: median ${median(rows.map((r) => r.longestQuiet))}, most ${Math.max(0, ...rows.map((r) => r.longestQuiet))} days. Days gold at its limit: median ${median(rows.map((r) => r.capDays))}, most ${Math.max(0, ...rows.map((r) => r.capDays))}. Guards held at the end: median ${median(rows.map((r) => r.guardsAtEnd ?? 0))}, most ${Math.max(0, ...rows.map((r) => r.guardsAtEnd ?? 0))}.`,
