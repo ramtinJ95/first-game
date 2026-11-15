@@ -93,6 +93,13 @@ export function findBrokenReferences(state: DeepReadonly<GameState>): string[] {
       );
     }
     const { activity } = army;
+    if (activity.kind === 'marching' || activity.kind === 'inBattle') {
+      const sail = activity.sail;
+      expect(
+        !sail || !!get(state.cities, sail.to),
+        `army ${army.id} is to sail for city ${sail?.to}, which does not exist`,
+      );
+    }
     if (activity.kind === 'inBattle') {
       const battle = get(state.battles, activity.battle);
       expect(

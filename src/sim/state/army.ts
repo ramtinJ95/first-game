@@ -2,6 +2,7 @@ import * as v from 'valibot';
 import {
   ArmyIdSchema,
   BattleIdSchema,
+  CityIdSchema,
   ConvoyIdSchema,
   FactionIdSchema,
   FormationIdSchema,
@@ -13,6 +14,13 @@ import { MapPointSchema } from './map-point.ts';
 export const STANCES = ['holdTheLine', 'allOutAssault', 'skirmishAndWithdraw'] as const;
 export const StanceSchema = v.picklist(STANCES);
 export type Stance = v.InferOutput<typeof StanceSchema>;
+
+/**
+ * The crossing a march ends in: on arrival the army embarks for the port `to`, and marches
+ * on to `then` once it lands, as an embark order given there would.
+ */
+export const SailOnSchema = v.object({ to: CityIdSchema, then: v.optional(MapPointSchema) });
+export type SailOn = v.InferOutput<typeof SailOnSchema>;
 
 /**
  * What an army is doing. Each activity is its own variant, so an army cannot be
@@ -27,6 +35,8 @@ export const ArmyActivitySchema = v.variant('kind', [
     position: MapPointSchema,
     /** The points still ahead on the path, in order. The last one is the destination. */
     waypoints: v.pipe(v.array(MapPointSchema), v.nonEmpty()),
+    /** The crossing the army sets out on where the march ends, absent for a march that ends there. */
+    sail: v.optional(SailOnSchema),
   }),
   v.object({
     kind: v.literal('retreating'),
@@ -39,6 +49,8 @@ export const ArmyActivitySchema = v.variant('kind', [
     battle: BattleIdSchema,
     /** The rest of the march the army was on when the battle took it, empty for none. */
     march: v.array(MapPointSchema),
+    /** The crossing that march ends in, kept with it. */
+    sail: v.optional(SailOnSchema),
   }),
   v.object({ kind: v.literal('besieging'), position: MapPointSchema, siege: SiegeIdSchema }),
   v.object({

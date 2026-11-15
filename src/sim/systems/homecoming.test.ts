@@ -121,6 +121,27 @@ describe('homecoming', () => {
     expect(untilHome(state).days).toBeLessThan(90);
   });
 
+  test('on peace an army marching to a port of its own to sail for the other side stays home', () => {
+    let state = atWar();
+    place(state, f.romanArmy, { x: 2600, y: 2400 });
+    const roma = state.cities[f.roma]?.position;
+    if (!roma) throw new Error('no Roma');
+    const sail: Order = {
+      kind: 'embark',
+      faction: f.rome,
+      army: f.romanArmy,
+      to: f.carthago,
+      from: roma,
+    };
+    expect(executeOrder(state, sail, world)).toBeUndefined();
+    state = tick(state, [PEACE], world).state;
+    for (let day = 0; day < 60; day++) state = tick(state, [], world).state;
+    const roman = state.armies[f.romanArmy]?.activity;
+    expect(roman?.kind).toBe('idle');
+    expect(roman?.kind === 'idle' && landOwnerAt(state, roman.position)).toBe(f.rome);
+    expectConsistent(state);
+  });
+
   test('on peace an army marching on the other side turns home, and a third side is left alone', () => {
     let state = atWar();
     const march: Order = { kind: 'moveArmy', faction: f.carthage, army: f.punicArmy, to: CAPUA };

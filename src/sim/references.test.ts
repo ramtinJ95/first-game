@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { buildFixture, FIXTURE } from './fixture.ts';
-import type { BattleId, ConvoyId } from './ids.ts';
+import type { BattleId, CityId, ConvoyId } from './ids.ts';
 import { expectConsistent, findBrokenReferences } from './references.ts';
 import type { Day } from './state/day.ts';
 import { warKey, type WarKey, newWar } from './state/war.ts';
@@ -22,6 +22,22 @@ test('an army in a battle that does not list it is reported', () => {
   expect(findBrokenReferences(state)).toEqual([
     'army army-roman is in battle battle-1, which does not list it',
     'battle battle-1 lists army army-punic, which is not in it',
+  ]);
+});
+
+test('an army to sail for a city that does not exist is reported', () => {
+  const state = buildFixture();
+  const army = state.armies[FIXTURE.romanArmy];
+  if (army) {
+    army.activity = {
+      kind: 'marching',
+      position: { x: 2600, y: 2400 },
+      waypoints: [{ x: 2511.3, y: 2335.8 }],
+      sail: { to: 'atlantis' as CityId },
+    };
+  }
+  expect(findBrokenReferences(state)).toEqual([
+    'army army-roman is to sail for city atlantis, which does not exist',
   ]);
 });
 

@@ -1,5 +1,5 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { ArmyId, FactionId } from '../sim/ids.ts';
+import type { ArmyId, CityId, FactionId } from '../sim/ids.ts';
 import {
   CONVOY_KM_PER_DAY,
   MARCH_KM_PER_DAY,
@@ -41,7 +41,25 @@ export const FAR_LONGER = 1.5;
 /** What a right click points at: a city drawn on the map, or a point of the map. */
 export type CommandTarget =
   | { readonly kind: 'city'; readonly city: DeepReadonly<City> }
-  | { readonly kind: 'point'; readonly point: MapPoint };
+  | { readonly kind: 'point'; readonly point: MapPoint }
+  /** Drawn as land but unknown to the rules, which hold it for sea. */
+  | { readonly kind: 'islet'; readonly point: MapPoint };
+
+/**
+ * What a right click points an order at: the city whose symbol or name it is on, before
+ * anything under it; else an islet the map draws; else the map point.
+ */
+export function commandTarget(
+  state: State,
+  { point, city, islet }: { point: MapPoint; city: CityId | undefined; islet: boolean },
+): CommandTarget {
+  const clicked = city && state.cities[city];
+  if (clicked) return { kind: 'city', city: clicked };
+  return islet ? { kind: 'islet', point } : { kind: 'point', point };
+}
+
+/** The refusal of an order onto an islet the map draws and no army can reach. */
+export const ISLET_REFUSAL = 'Order refused. No army can land on that islet.';
 
 /** One way to a city that a menu offers, with how many days it takes. */
 export interface MenuOption {
@@ -87,7 +105,8 @@ function travelDays(from: MapPoint, waypoints: readonly MapPoint[], kmPerDay: nu
 
 /**
  * Where the march or the crossing takes its army if it applies today, or the reason the
- * rules refuse it. The rules play the order on a copy, so the answer is always theirs.
+ * rules refuse it. The rules play the order on a copy, so the answer is always theirs. A
+ * march that ends in a crossing counts the crossing too, set out where the march ends.
  */
 export function route(
   state: State,
@@ -97,24 +116,43 @@ export function route(
   const trial = structuredClone(state) as GameState;
   const rejected = executeOrder(trial, order, world);
   if (rejected) return rejected.reason;
-  const after = trial.armies[order.army]?.activity;
-  if (after?.kind === 'marching') {
-    return {
+  const army = trial.armies[order.army];
+  const after = army?.activity;
+  if (army && after?.kind === 'marching') {
+    const march = {
       path: [after.position, ...after.waypoints],
       days: travelDays(after.position, after.waypoints, MARCH_KM_PER_DAY),
     };
+    if (!after.sail) return march;
+    const end = after.waypoints.at(-1) ?? after.position;
+    army.activity = { kind: 'idle', position: { ...end } };
+    const sail: EmbarkOrder = { kind: 'embark', faction: army.owner, army: army.id, ...after.sail };
+    const refused = executeOrder(trial, sail, world);
+    if (refused) return refused.reason;
+    const crossing = crossingOf(trial, army.id, end);
+    return { path: [...march.path, ...crossing.path], days: march.days + crossing.days };
   }
   const before = state.armies[order.army]?.activity;
-  const convoy = after?.kind === 'embarked' ? trial.convoys[after.convoy] : undefined;
-  if (!convoy || !before || before.kind === 'embarked') {
+  if (!before || before.kind === 'embarked') {
     throw new Error(`${order.kind} of army ${order.army} applied without setting it on its way`);
   }
+  const crossing = crossingOf(trial, order.army, before.position);
+  return { path: [before.position, ...crossing.path], days: crossing.days };
+}
+
+/** The way and the days of the crossing the army has just embarked on from the point. */
+function crossingOf(trial: GameState, id: ArmyId, from: MapPoint): Route {
+  const after = trial.armies[id]?.activity;
+  const convoy = after?.kind === 'embarked' ? trial.convoys[after.convoy] : undefined;
+  if (!convoy || after?.kind !== 'embarked') {
+    throw new Error(`army ${id} set out from ${from.x}, ${from.y} without a convoy`);
+  }
   const landing = convoy.waypoints.at(-1) ?? convoy.position;
-  const ashore = after?.kind === 'embarked' ? (after.march ?? []) : [];
+  const ashore = after.march ?? [];
   return {
-    path: [before.position, convoy.position, ...convoy.waypoints, ...ashore],
+    path: [convoy.position, ...convoy.waypoints, ...ashore],
     days:
-      (convoy.departsOn === undefined ? 0 : convoy.departsOn - state.day) +
+      (convoy.departsOn === undefined ? 0 : convoy.departsOn - trial.day) +
       travelDays(convoy.position, convoy.waypoints, CONVOY_KM_PER_DAY) +
       (ashore.length > 0 ? travelDays(landing, ashore, MARCH_KM_PER_DAY) : 0),
   };
@@ -140,7 +178,7 @@ function daysText(days: number): string {
 
 /** The way by sea from the army to the place: the order that starts it, and its legs in days. */
 interface SeaWay {
-  readonly order: EmbarkOrder | MoveArmyOrder;
+  readonly order: EmbarkOrder;
   readonly start: Embarkation;
   readonly landing: DeepReadonly<City>;
   readonly walk: number;
@@ -255,9 +293,15 @@ function seaWay(
     if (!path) continue;
     const sail = travelDays(start.from, path, CONVOY_KM_PER_DAY);
     const onward = city?.id === landing.id ? {} : { then: { x: to.x, y: to.y } };
-    const order: EmbarkOrder | MoveArmyOrder = here
-      ? { kind: 'embark', faction: army.owner, army: army.id, to: landing.id, ...onward }
-      : { kind: 'moveArmy', faction: army.owner, army: army.id, to: walkTo(start) };
+    const from = walkTo(start);
+    const order: EmbarkOrder = {
+      kind: 'embark',
+      faction: army.owner,
+      army: army.id,
+      to: landing.id,
+      ...onward,
+      ...(!here && { from: { x: from.x, y: from.y } }),
+    };
     const way = { order, start, landing, walk, sail, ashore, here };
     if (!best || wayDays(way) < wayDays(best)) best = way;
   }
@@ -391,6 +435,7 @@ export function planCommand(
   target: CommandTarget,
   pending: readonly Order[] = [],
 ): Plan {
+  if (target.kind === 'islet') return { kind: 'refuse', notice: ISLET_REFUSAL };
   const city = target.kind === 'city' ? target.city : undefined;
   const to = target.kind === 'city' ? target.city.position : target.point;
   const march: MoveArmyOrder = {

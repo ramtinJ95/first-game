@@ -14,7 +14,15 @@ import type { MapPoint } from '../sim/state/map-point.ts';
 import { warKey, newWar } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import type { World } from '../sim/world/world.ts';
-import { FAR_LONGER, planCommand, plannedRoutes, route, type CommandTarget } from './command.ts';
+import {
+  FAR_LONGER,
+  commandTarget,
+  ISLET_REFUSAL,
+  planCommand,
+  plannedRoutes,
+  route,
+  type CommandTarget,
+} from './command.ts';
 import { placeName } from './names.ts';
 
 const world = fixtureWorld();
@@ -53,6 +61,15 @@ function playOut(state: GameState, order: Order, army: ArmyId = f.romanArmy) {
   }
   expectConsistent(current);
   return { state: current, days };
+}
+
+/** Where the army stands, or where its convoy is. */
+function positionOf(state: GameState, id: ArmyId = f.romanArmy): MapPoint {
+  const { activity } = armyOf(state, id);
+  const at =
+    activity.kind === 'embarked' ? state.convoys[activity.convoy]?.position : activity.position;
+  if (!at) throw new Error(`army ${id} has no position`);
+  return at;
 }
 
 /** The days of every leg in a menu line, summed. */
@@ -131,9 +148,14 @@ describe('a right click on a city', () => {
             `^\\d+ days? to the shore, then ${GATHER_DAYS} days to gather ships, then \\d+ days by sea$`,
           ),
         ),
-        order: { kind: 'moveArmy' },
+        order: { kind: 'embark', to: f.syracusae, from: expect.any(Object) },
       },
     ]);
+    const [sail] = planned.menu.options;
+    if (!sail) return;
+    const { state: after, days } = playOut(state, sail.order);
+    expect(days).toBe(daysOf(sail.detail));
+    expect(placeName(after, positionOf(after))).toBe('at Syracusae');
   });
 
   it('offers the march to a port of its own and the crossing when no land route reaches the city', () => {
@@ -146,9 +168,14 @@ describe('a right click on a city', () => {
         group: 'sea',
         label: 'March to Roma to sail for Syracusae',
         detail: expect.stringMatching(/^\d+ days? to the port, then \d+ days by sea$/),
-        order: { kind: 'moveArmy', to: cityOf(state, f.roma).position },
+        order: { kind: 'embark', to: f.syracusae, from: cityOf(state, f.roma).position },
       },
     ]);
+    const [sail] = planned.menu.options;
+    if (!sail) return;
+    const { state: after, days } = playOut(state, sail.order);
+    expect(days).toBe(daysOf(sail.detail));
+    expect(placeName(after, positionOf(after))).toBe('at Syracusae');
   });
 
   it('Carthage to Capua by way of Roma: one order sails, lands, and marches on to Capua in the days the menu gave', () => {
@@ -238,6 +265,34 @@ describe('a right click on a point', () => {
       kind: 'refuse',
       notice: 'Order refused. The destination is off the map.',
     });
+  });
+
+  it('points a right click at the clicked city before an islet under it, and at an islet before the point', () => {
+    const state = buildFixture();
+    const point = { x: 2400, y: 2500 };
+    const roma = state.cities[f.roma];
+    if (!roma) throw new Error('no Roma');
+    expect(commandTarget(state, { point, city: f.roma, islet: true })).toEqual({
+      kind: 'city',
+      city: roma,
+    });
+    expect(commandTarget(state, { point, city: undefined, islet: true })).toEqual({
+      kind: 'islet',
+      point,
+    });
+    expect(commandTarget(state, { point, city: undefined, islet: false })).toEqual({
+      kind: 'point',
+      point,
+    });
+  });
+
+  it('refuses an islet the map draws as land, saying no army can land there', () => {
+    const state = buildFixture();
+    expect(plan(state, { kind: 'islet', point: { x: 2400, y: 2500 } })).toEqual({
+      kind: 'refuse',
+      notice: ISLET_REFUSAL,
+    });
+    expect(ISLET_REFUSAL).toBe('Order refused. No army can land on that islet.');
   });
 
   it('refuses at once an army that is in a battle', () => {
@@ -422,9 +477,14 @@ describe('a shore beside a port of its own', () => {
       {
         group: 'sea',
         label: 'March to Carthago to sail for Syracusae',
-        order: { kind: 'moveArmy', to: cityOf(state, f.carthago).position },
+        order: { kind: 'embark', to: f.syracusae, from: cityOf(state, f.carthago).position },
       },
     ]);
+    const [sail] = planned.menu.options;
+    if (!sail) return;
+    const { state: after, days } = playOut(state, sail.order, f.punicArmy);
+    expect(days).toBe(daysOf(sail.detail));
+    expect(placeName(after, positionOf(after, f.punicArmy))).toBe('at Syracusae');
   });
 });
 

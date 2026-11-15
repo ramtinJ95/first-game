@@ -33,7 +33,13 @@ import { BORDER_WEIGHTS, borderRuns, sharedBorders } from './borders.ts';
 import type { DrawOptions } from './draw-options.ts';
 import { cacheDrawing, coversView, fitTexture } from './cached-texture.ts';
 import { atlasCoast, atlasLand, ATLAS_COAST_SCALE } from './atlas-coast.ts';
-import { coastalSurface, fitBanner, fitCoastalScene, sceneAnchor } from './coastal-ground.ts';
+import {
+  coastalSurface,
+  fitBanner,
+  fitCoastalScene,
+  fitPlace,
+  sceneAnchor,
+} from './coastal-ground.ts';
 import { landOutline } from './land-outline.ts';
 import { drawColumnMark, drawnColumns, fitColumnMarker, type DrawnColumn } from './columns.ts';
 import { createFog, fogCircles } from './fog.ts';
@@ -60,7 +66,7 @@ import {
 import { paperTexture, waterTexture } from './paper.ts';
 import { toPixels } from './lines.ts';
 import { FramePacer } from './frame-pacer.ts';
-import { cityAt, pickAt, type DrawnCity, type FigureHit, type Pick } from './pick.ts';
+import { cityAt, commandIslet, pickAt, type DrawnCity, type FigureHit, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
 import { cityDrawingView, citySymbols, fitCitySymbol } from './symbols.ts';
 import { createLife } from './terrain/life.ts';
@@ -100,6 +106,8 @@ export interface Command {
   /** The city whose drawn symbol or name the click is on or close to. */
   readonly city: CityId | undefined;
   readonly screen: MapPoint;
+  /** Whether the point is on an islet the map draws as land and the rules do not know. */
+  readonly islet: boolean;
 }
 
 export interface RendererOptions {
@@ -883,7 +891,9 @@ export async function createRenderer({
         population: city.population,
       });
     }
-    const settled = places.layout(camera, view, symbolBoxes, onLand);
+    const settled = places.layout(camera, view, symbolBoxes, (at, halfWidth, lift, thick) =>
+      fitPlace(at, halfWidth, lift, thick, onLand, onRulesWay, camera.scale),
+    );
     const placed = placeLabels(
       [...requests, ...settled.requests],
       [...symbolBoxes, ...settled.boxes, ...standingMarkers(state)],
@@ -1175,6 +1185,11 @@ export async function createRenderer({
   const toMap = (screen: MapPoint) => screenToMap(camera, viewport(), screen);
   const onDrawnLand = coastalSurface(drawingLand, toMap);
   const onLand = coastalSurface(drawingLand, toMap, terrain.land.land);
+  const onRulesWay = (from: MapPoint, to: MapPoint) => {
+    const a = toMap(from),
+      b = toMap(to);
+    return terrain.land.land.segmentInside(a.x, a.y, b.x, b.y);
+  };
   /** At the zooms that draw figures, a battle's marker stands above its fighting. */
   const battleLift = () =>
     scene && scene.height > 0 ? (1.75 * scene.height + 14) / camera.scale : 0;
@@ -1285,11 +1300,13 @@ export async function createRenderer({
         view.battles,
         view.figures,
       );
+      const point = screenToMap(view.camera, view.size, screen);
       onCommand({
-        point: screenToMap(view.camera, view.size, screen),
+        point,
         pick,
         city: cityAt(view.cities, screen, view.cityAnchors, pick),
         screen,
+        islet: commandIslet(map, view.camera.scale, point),
       });
     },
     { signal },
