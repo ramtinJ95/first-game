@@ -541,7 +541,7 @@ function loadText(text: string, how: { pause: boolean; focus: boolean }) {
 }
 
 function refuseSave(refusal: Refusal, detail: string) {
-  console.error(`The save did not load. ${detail}`);
+  console.warn(`The save did not load. ${detail}`);
   showNotice(REFUSED_SAVE[refusal]);
   view.refresh();
 }
