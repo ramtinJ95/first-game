@@ -103,10 +103,13 @@ expiry are each an "Invitation to trade ended" line; closing and refusing now em
 `tradeClosed` with `invitation` set and the actor in the cause. A siege of a partner's city
 is one line naming the routes it stops, once until the city has been free for
 `TRADE_QUIET_DAYS` (60); a siege of the player's own city is left to its `siegeBegan` alert.
-Raids carry `raider` and `looted`. One enemy's raids on the player's roads are one episode:
-the first raid is told with what it took, later raids are counted, and when the roads have
-been quiet for 60 days, or their routes close, a `tradeRaidsEnded` line tallies the raids,
-roads, cargoes and gold if they took more than the first line told. The page keeps the open
+Raids carry `raider` and `looted`. A raider beside a siege still takes the cargo, so that
+day has a raid event beside the siege event, and the news tells the theft even when the
+siege is of the player's own city. One enemy's raids on the player's roads are one episode:
+the first raid is told with what it took; while the episode stays open, a line at most
+`TRADE_TALLY_DAYS` (30) after the last tells the cargoes and gold taken since it; and when
+the roads have been quiet for 60 days, or their routes close, a `tradeRaidsEnded` line
+tallies the whole episode if it took more than the lines told. The page keeps the open
 episodes in the saved `tradeTroubles`. The 60 days come from the gaps between one enemy's
 raids on one route in two ten-year AI games: 15 of 25 repeats came within 43 days, the rest
 68 days or more, six of them a year or more apart.
@@ -117,11 +120,14 @@ idle and under the AI, beside the raw raid and siege interruptions. Five seeds, 
 | Rome, mean of 5 games | trade lines before | after | raid and siege lines before | after |
 | --------------------- | ------------------ | ----- | --------------------------- | ----- |
 | idle                  | 28.0               | 28.0  | 0                           | 0     |
-| under the AI          | 57.6               | 43.8  | 25.8                        | 14.6  |
+| under the AI          | 57.6               | 44.6  | 25.8                        | 15.4  |
 
 An idle Rome hears only invitations and their expiry, which stay one line each. Under the
-AI the raid and siege lines per game went from 49, 27, 17, 8 and 28 to 24, 12, 13, 8 and 16;
-routes closed went from 63 lines to 50 in all. Before is `main` at `c40d8c7`, where each
+AI the raid and siege lines per game went from 49, 27, 17, 8 and 28 to 27, 12, 13, 8 and 17;
+routes closed went from 63 lines to 50 in all. The monthly tally of an open episode's new
+losses, and the theft told beside a siege, added 0.8 lines a game over one line per episode
+(43.8 lines, 14.6 of them raids and sieges); the raw interruptions in seed 1 rose from 49 to
+51 with the two raid events beside a siege. Before is `main` at `c40d8c7`, where each
 raid and each route stopped by a siege was a line.
 
 ## Verification and decisions
