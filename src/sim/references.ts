@@ -270,7 +270,7 @@ export function findBrokenReferences(state: DeepReadonly<GameState>): string[] {
       `trade ${route.id} has a missing or changed destination`,
     );
     expect(route.from !== route.to, `trade ${route.id} trades with itself`);
-    for (const payer of [route.openedBy, ...route.improvedBy])
+    for (const payer of [route.openedBy, ...route.improvedBy, ...Object.keys(route.receipts)])
       expect(
         get(state.factions, payer) !== undefined,
         `trade ${route.id} names payer ${payer}, who does not exist`,

@@ -678,6 +678,22 @@ describe('caravans, interruption, and saves', () => {
     expectConsistent(state);
   });
 
+  test.each(['openedBy', 'improvedBy', 'receipts'] as const)(
+    'loading refuses a route whose %s names a faction that does not exist',
+    (field) => {
+      const { state, route } = opened();
+      const broken = structuredClone(state);
+      const r = broken.tradeRoutes[route.id];
+      if (!r) throw new Error('missing route');
+      const ghost = 'ghost' as typeof f.rome;
+      if (field === 'openedBy') r.openedBy = ghost;
+      if (field === 'improvedBy') r.improvedBy = [ghost];
+      if (field === 'receipts') r.receipts = { [ghost]: 10 };
+      expect(loadGame(saveGame(broken))).toMatchObject({ ok: false });
+      expectConsistent(state);
+    },
+  );
+
   test.each([f.carthage, f.syracusaeFaction])(
     '%s trades deterministically without a random draw',
     (faction) => {
