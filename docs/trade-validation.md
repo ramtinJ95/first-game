@@ -8,7 +8,7 @@
 - **Owner decision:** accept the measured 88-day decision interval for PR51, rather than the original 60. The next slice, goods required by troops and buildings, adds choices. The raw harness still prints its original 60-day target as not met.
 - Every previously met world, AI and peace guard remains met. The largest-power distribution was already not met on main (Persia leads 9/20); after trade Carthage leads 11/20. This is not claimed as a newly met target.
 - **Rules frame guard met in the tested views:** all four median/p95 comparisons are within +10% at both zooms over three balanced rounds on automatic merges with current main #57.
-- **Look frame guard still NOT met:** the original comparison and the later clipping-only candidate both failed. The bounded route-texture candidate below is awaiting its browser and matched-frame proof. PR53 remains draft; the required limit is not waived.
+- **Look frame guard met in one round, not yet over three:** the slow frames came from the goods suffix pushing a resting army off land, so `landShift` ran about 28,000 land tests per frame. With that shift remembered, all eight median/p95 changes against main `aef5b10` are within +10% at both zooms in one 60-second round of every drawn frame. The three-round matrix is left for a follow-up. See [trade frame checks](trade-handover.md).
 
 ## Rules delivery source and verification
 
@@ -237,11 +237,9 @@ animation, route ink or quality reduction is intended. **The trimming candidate
 and its new tests have not been run or built.** Its commit is explicitly labelled
 untested. There is no post-trim budget result.
 
-See [the handover](trade-handover.md) for portable commands, invalid-run criteria,
-remaining pixel/resource checks, media and CI work. `scripts/trade-frame-bench.mjs`
-is the portable version of the measured temporary driver, with strict scene
-guards and summaries; only its syntax/formatting were checked here, not a new
-browser run. No more browser or benchmark runs were made for the handover.
+The trimming candidate was measured later and kept. [Trade frame checks](trade-handover.md)
+has the cause of the slow frames, the fix, the result on `aef5b10`, the method and
+what makes a run invalid. `scripts/trade-frame-bench.mjs` drives that comparison.
 
 ## Trade targets
 
