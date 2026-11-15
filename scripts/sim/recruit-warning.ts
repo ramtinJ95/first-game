@@ -32,6 +32,7 @@ const { values } = parseArgs({
     years: { type: 'string', default: '10' },
     rule: { type: 'string' },
     sort: { type: 'boolean', default: false },
+    audit: { type: 'boolean', default: false },
   },
 });
 const seeds = Number(values.seeds);
@@ -56,6 +57,9 @@ console.log(
 );
 console.log('| --- | ---: | ---: | ---: | ---: | ---: | ---: |');
 const BANDS = [365, 730, 1460, Infinity] as const;
+let chosen: Forecast | undefined;
+const audited: { day: number; forecast: Forecast; shortOn: number | undefined; seed?: number }[] =
+  [];
 const sorted = new Map<string, { growthWarns: number; growthClears: number }>(
   (['food', 'gold'] as const).flatMap((store) =>
     BANDS.map((band) => [bandKey(store, band), { growthWarns: 0, growthClears: 0 }]),
@@ -85,8 +89,14 @@ function play(seed: number, warns: (forecast: Forecast) => boolean) {
     else if (raise) orders.push(raise);
     const owned = citiesOf(state);
     const { state: next, events, rejected } = tick(state, orders, world);
-    if (raise && raise !== 'warned' && !rejected.some((r) => r.order === raise)) row.raised++;
+    if (raise && raise !== 'warned' && !rejected.some((r) => r.order === raise)) {
+      row.raised++;
+      if (values.audit && chosen) audited.push({ day, forecast: chosen, shortOn: undefined });
+    }
     const stores = next.factions[rome]?.stores;
+    if (stores && (stores.food < 0 || stores.gold < 0))
+      for (const entry of audited)
+        if (entry.shortOn === undefined && entry.seed === undefined) entry.shortOn = day;
     for (const event of events) {
       if (event.kind !== 'armyDeserted' || event.owner !== rome || !stores) continue;
       if (stores.food < 0) row.hunger += event.men;
@@ -100,6 +110,7 @@ function play(seed: number, warns: (forecast: Forecast) => boolean) {
       break;
     }
   }
+  for (const entry of audited) entry.seed ??= seed;
   return row;
 }
 
@@ -122,6 +133,7 @@ function cautiousRaise(
   if (!city) return undefined;
   const forecast = recruitForecast(state, [], world, troop, trainingDaysAt(city, days));
   if (values.sort) sortForecast(forecast);
+  chosen = forecast;
   if (warns(forecast)) return 'warned';
   return { kind: 'recruit', faction: rome, city: city.id as CityId, troop };
 }
@@ -161,4 +173,24 @@ if (values.sort) {
 
 function bandKey(store: string, band: number): string {
   return `${store} ${band === Infinity ? 'over 1,460' : `up to ${band.toLocaleString('en-US')}`} days`;
+}
+
+if (values.audit) {
+  console.log(
+    '\nEvery raise Rome made, scored by each rule against what followed: did food or gold run short within two or four years of it?\n',
+  );
+  console.log(
+    '| warning rule | raises it warns of | short within 2 y | within 4 y | raises it lets pass | short within 2 y | within 4 y |',
+  );
+  console.log('| --- | ---: | ---: | ---: | ---: | ---: | ---: |');
+  for (const [name, warns] of Object.entries(RULES)) {
+    if (name === 'none') continue;
+    const within = (list: typeof audited, days: number) =>
+      list.filter((e) => e.shortOn !== undefined && e.shortOn - e.day <= days).length;
+    const warned = audited.filter((e) => warns(e.forecast));
+    const passed = audited.filter((e) => !warns(e.forecast));
+    console.log(
+      `| ${name} | ${warned.length} | ${within(warned, 730)} | ${within(warned, 1460)} | ${passed.length} | ${within(passed, 730)} | ${within(passed, 1460)} |`,
+    );
+  }
 }
