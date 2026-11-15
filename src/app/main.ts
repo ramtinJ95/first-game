@@ -35,6 +35,7 @@ import { tradeNews, type TradeTrouble } from './trade-news.ts';
 import { commandTarget, planCommand, plannedRoutes, type Plan } from './command.ts';
 import { fateChoices, type FateChoice } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
+import { guardNewsOfDay } from './guard-news.ts';
 import { refusalText } from './names.ts';
 import { alertsInSight, followJoin, seesPick, sightOfAll } from './sighted.ts';
 import { enqueue, keepOpen, unansweredOffer, type Modal } from './modals.ts';
@@ -261,6 +262,7 @@ const clock = createClock({
         ...worldNewsOfDay(before, after, events, world),
         ...leader.alerts,
         ...threatNewsOfDay(before, after, world, toldOnce),
+        ...guardNewsOfDay(before, after),
       ]),
       newsPauses ? pauses : NO_PAUSES,
       toldOnce,

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { dateText } from '../src/app/names.ts';
 import { BUILDINGS } from '../src/sim/buildings/buildings.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import {
@@ -10,11 +11,15 @@ import {
   openGame,
   pause,
   resume,
+  romaTreasuryFull,
   setRich,
   startGame,
   untilDay,
   untilDrawn,
 } from './support.ts';
+
+const garrisonOf = (text: string | null) =>
+  Number(/^([\d,]+) of/.exec(text ?? '')?.[1]?.replace(/,/g, ''));
 
 async function load(page: Page, state: GameState) {
   await pause(page);
@@ -100,5 +105,33 @@ test.describe('buildings', () => {
     await expect(buildings).toContainText('None yet');
     await expect(buildings.getByTestId('city-built')).toHaveCount(0);
     await expect(buildings.getByTestId('build-towers')).toBeVisible();
+  });
+
+  test('a full treasury hires 500 guards in Roma for a year, who stand on its walls the next day', async ({
+    page,
+  }) => {
+    await load(page, romaTreasuryFull());
+    await openCity(page, 'roma', 'Roma');
+    const panel = page.getByTestId('city-panel');
+    const garrison = panel.getByTestId('city-garrison');
+    const line = panel.getByTestId('guards-line');
+    await expect(line).toHaveText('No guards hired');
+    const before = garrisonOf(await garrison.textContent());
+
+    const hire = panel.getByTestId('guards-hire');
+    await expect(hire).toBeEnabled();
+    await expect(hire).toHaveText('Hire 500 guards for a year · 2,000 gold');
+    await expect(panel.getByTestId('guards-change')).toHaveText(
+      `Garrison ${before.toLocaleString('en')} → ${(before + 500).toLocaleString('en')}`,
+    );
+    await hire.click();
+    await expect(line).toHaveText('No guards hired · 500 more hired for the next day');
+
+    const from = await day(page);
+    await resume(page);
+    await untilDay(page, from + 1);
+    await pause(page);
+    await expect(line).toHaveText(`500 guards · 500 leave ${dateText(from + 365)}`);
+    expect(garrisonOf(await garrison.textContent())).toBe(before + 500);
   });
 });

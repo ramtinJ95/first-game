@@ -4,6 +4,7 @@ import { threatNewsOfDay } from '../../src/app/threat-news.ts';
 import { createRouter } from '../../src/sim/ai/routes.ts';
 import { enemiesOf, sorted, strengthNear, strengthOf } from '../../src/sim/ai/situation.ts';
 import { WAR_FRONT_KM, WAR_REACH_KM } from '../../src/sim/ai/thresholds.ts';
+import { guardMen } from '../../src/sim/guards.ts';
 import type { FactionId } from '../../src/sim/ids.ts';
 import { truceBetween } from '../../src/sim/peace/truce.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
@@ -19,11 +20,19 @@ const { values, positionals } = parseArgs({
     from: { type: 'string', default: '1' },
     years: { type: 'string', default: '10' },
     peaceful: { type: 'boolean', default: false },
+    guards: { type: 'boolean', default: false },
     json: { type: 'boolean', default: false },
     summarize: { type: 'boolean', default: false },
   },
 });
-const SPENDING = new Set(['openTrade', 'acceptTrade', 'improveTrade', 'build', 'recruit']);
+const SPENDING = new Set([
+  'openTrade',
+  'acceptTrade',
+  'improveTrade',
+  'build',
+  'recruit',
+  'hireGuards',
+]);
 
 /** One month of a great power at peace with every other and with Rome in reach. */
 interface Weighing {
@@ -45,6 +54,7 @@ interface Row {
   menAtEnd: number;
   goldAtEnd: number;
   capDays: number;
+  guardsAtEnd: number;
   longestQuiet: number;
   quietFrom: number;
   weighings: Weighing[];
@@ -111,6 +121,7 @@ function play(seed: number, years: number): Row {
     menAtEnd: 0,
     goldAtEnd: 0,
     capDays: 0,
+    guardsAtEnd: 0,
     longestQuiet: 0,
     quietFrom: 0,
     weighings: [],
@@ -159,13 +170,16 @@ function play(seed: number, years: number): Row {
           if (weighed) row.weighings.push(weighed);
         }
     },
-    { peaceful: values.peaceful },
+    { peaceful: values.peaceful, guards: values.guards },
   );
   quiet(end.day);
   row.fellOn = end.factions[rome]?.defeatedOn ?? null;
   row.citiesAtEnd = Object.values(end.cities).filter((c) => c.owner === rome).length;
   row.menAtEnd = menOf(end, rome);
   row.goldAtEnd = Math.round(end.factions[rome]?.stores.gold ?? 0);
+  row.guardsAtEnd = Object.values(end.cities)
+    .filter((c) => c.owner === rome)
+    .reduce((sum, c) => sum + guardMen(c), 0);
   return row;
 }
 
@@ -191,7 +205,7 @@ function print(rows: readonly Row[]) {
     `First wars warned of beforehand: ${firsts.filter((w) => w.warnedDaysBefore !== null).length} of ${firsts.length}, median ${median(firsts.flatMap((w) => (w.warnedDaysBefore === null ? [] : [w.warnedDaysBefore])))} days before. Warnings in all: ${rows.reduce((sum, r) => sum + r.warnings, 0)}.`,
   );
   console.log(
-    `Longest stretch without a decision: median ${median(rows.map((r) => r.longestQuiet))}, most ${Math.max(0, ...rows.map((r) => r.longestQuiet))} days. Days gold at its limit: median ${median(rows.map((r) => r.capDays))}, most ${Math.max(0, ...rows.map((r) => r.capDays))}.`,
+    `Longest stretch without a decision: median ${median(rows.map((r) => r.longestQuiet))}, most ${Math.max(0, ...rows.map((r) => r.longestQuiet))} days. Days gold at its limit: median ${median(rows.map((r) => r.capDays))}, most ${Math.max(0, ...rows.map((r) => r.capDays))}. Guards held at the end: median ${median(rows.map((r) => r.guardsAtEnd ?? 0))}, most ${Math.max(0, ...rows.map((r) => r.guardsAtEnd ?? 0))}.`,
   );
   const weighings = rows.flatMap((r) => r.weighings);
   console.log(
@@ -227,7 +241,7 @@ if (values.summarize) {
   const first = Number(values.from);
   const years = Number(values.years);
   console.log(
-    `Cautious Rome of trade-judge --heed --improve${values.peaceful ? ', declaring no war' : ''}, seeds ${first} to ${first + Number(values.seeds) - 1}, ${years} years.\n`,
+    `Cautious Rome of trade-judge --heed --improve${values.peaceful ? ', declaring no war' : ''}${values.guards ? ', hiring guards' : ''}, seeds ${first} to ${first + Number(values.seeds) - 1}, ${years} years.\n`,
   );
   const rows: Row[] = [];
   for (let seed = first; seed < first + Number(values.seeds); seed++) {

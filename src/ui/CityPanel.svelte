@@ -17,6 +17,7 @@
   import ArmiesHere from './ArmiesHere.svelte';
   import { afterWaiting } from './buildings-text.ts';
   import CityBuildings from './CityBuildings.svelte';
+  import CityGuards from './CityGuards.svelte';
   import {
     armiesAt,
     cityBalance,
@@ -266,6 +267,7 @@
   {/if}
 
   {#if own}
+    <CityGuards {game} {world} {city} {pending} {actions} />
     <CityBuildings {game} {world} {city} {pending} {actions} />
   {/if}
   <CityTrade {game} {world} {city} {sight} {pending} {actions} />

@@ -692,7 +692,7 @@ export function storeNote(
   if (store === 'gold') {
     return {
       text: `Full${when}`,
-      why: `Treasury full${when}. It holds ${TREASURY_DAYS} days of the gold your people pay. More gold is lost: spend it on troops.`,
+      why: `Treasury full${when}. It holds ${TREASURY_DAYS} days of the gold your people pay, and more is lost. A full treasury tempts the great powers to war: hire guards for a year in a city or spend it on troops.`,
       bad: false,
     };
   }

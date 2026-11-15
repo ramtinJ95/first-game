@@ -444,6 +444,9 @@ describe('storeNote', () => {
       text: 'Full',
       why: expect.stringMatching(/^Treasury full\. /) as string,
     });
+    expect(storeNote('gold', 1000, 5, 1000)?.why).toContain(
+      'A full treasury tempts the great powers to war: hire guards for a year in a city',
+    );
     expect(storeNote('gold', 400, 5, 1000)).toBeUndefined();
   });
 });

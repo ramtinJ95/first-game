@@ -55,7 +55,7 @@ export function threatNewsOfDay(
       kind: 'warThreat',
       day: before.day,
       tone: 'bad',
-      text: `${factionName(after, power.id)} could soon declare war on you: its armies have ${Math.round(Math.min(1, threat.readiness) * 100)}% of the strength it needs against your forces near ${front?.name ?? 'your land'}.${hoard}`,
+      text: `${factionName(after, power.id)} could soon declare war on you: its armies have ${Math.round(Math.min(1, threat.readiness) * 100)}% of the strength it needs against your forces near ${front?.name ?? 'your land'}.${hoard}${front && !threat.pressed ? ` Guards hired at ${front.name} count against it.` : ''}`,
       ...(front ? { focus: { at: front.position } } : {}),
     });
   }

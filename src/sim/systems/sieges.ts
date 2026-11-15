@@ -1,6 +1,7 @@
 import { leaveSiege, removeArmy } from '../armies.ts';
 import { defenceSharesOf } from '../buildings/buildings.ts';
 import { changeCityOwner } from '../cities.ts';
+import { guardMen } from '../guards.ts';
 import type { ArmyLoss } from '../events.ts';
 import type { FactionId, SiegeId } from '../ids.ts';
 import { allocateId } from '../ids.ts';
@@ -31,16 +32,21 @@ export const CITY_DEFENCES: Readonly<
 
 /**
  * A city's full walls, garrison, and food: its rank's, with walls and food scaled by how
- * well it is fortified, and walls and garrison raised by its towers.
+ * well it is fortified, walls and garrison raised by its towers, and the garrison by its
+ * hired guards.
  */
 export function fullDefences(
-  city: DeepReadonly<Pick<City, 'rank' | 'fortified'> & Partial<Pick<City, 'buildings'>>>,
+  city: DeepReadonly<
+    Pick<City, 'rank' | 'fortified'> & Partial<Pick<City, 'buildings' | 'guards'>>
+  >,
 ): Pick<City, 'walls' | 'garrison' | 'foodDays'> {
   const full = CITY_DEFENCES[city.rank];
   const towers = defenceSharesOf(city);
   return {
     walls: full.walls * city.fortified * towers.walls,
-    garrison: Math.round(full.garrison * towers.garrison),
+    garrison:
+      Math.round(full.garrison * towers.garrison) +
+      (city.guards ? guardMen({ guards: city.guards }) : 0),
     foodDays: full.foodDays * city.fortified,
   };
 }
@@ -252,6 +258,8 @@ export function cityFalls(state: GameState, siege: Siege): void {
   removeRecord(state.sieges, siege.id);
   const city = state.cities[siege.city];
   if (!city || winner === undefined) return;
+  // The guards fell with the walls, so the conquerors' share counts the garrison without them.
+  city.guards = [];
   const men = occupiers.reduce((sum, army) => sum + menOf(state, army), 0);
   const garrison = Math.min(
     Math.floor(men / 2),
