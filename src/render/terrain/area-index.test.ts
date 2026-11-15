@@ -187,3 +187,32 @@ describe('the area index', () => {
     expect(wrong).toEqual([]);
   });
 });
+
+describe('segmentInside', () => {
+  const box = (left: number, top: number, right: number, bottom: number): MultiPolygon => [
+    [
+      [
+        [left, top],
+        [right, top],
+        [right, bottom],
+        [left, bottom],
+      ],
+    ],
+  ];
+
+  it('refuses a way across a strait narrower than any sampling step', () => {
+    const index = new AreaIndex([box(0, 0, 30, 40), box(30.05, 0, 60, 40)], 0, { seams: false });
+    expect(index.segmentInside(10, 20, 50, 20)).toBe(false);
+    expect(index.segmentInside(10, 20, 25, 33)).toBe(true);
+  });
+
+  it('crosses a seam that two outlines share as one piece of land', () => {
+    const index = new AreaIndex([box(0, 0, 30, 40), box(30, 0, 60, 40)]);
+    expect(index.segmentInside(10, 20, 50, 21)).toBe(true);
+  });
+
+  it('refuses a way that leaves through a horizontal shore', () => {
+    const index = new AreaIndex([box(0, 0, 40, 20), box(0, 20.05, 40, 40)], 0, { seams: false });
+    expect(index.segmentInside(10, 10, 12, 30)).toBe(false);
+  });
+});

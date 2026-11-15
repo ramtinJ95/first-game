@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { COAST_VIEWS } from '../../e2e/coast-views.ts';
-import { parseMap } from '../sim/map.ts';
+import { parseMap, type MultiPolygon } from '../sim/map.ts';
 import { newGame } from '../sim/new-game.ts';
 import { expectConsistent } from '../sim/references.ts';
 import {
@@ -38,6 +38,7 @@ import { tick } from '../sim/tick.ts';
 import { cityDrawingView, fitCitySymbol } from './symbols.ts';
 import type { CityRank } from '../sim/state/city.ts';
 import type { Day } from '../sim/state/day.ts';
+import { AreaIndex } from './terrain/area-index.ts';
 import { Land } from './terrain/marks.ts';
 
 const map = parseMap(
@@ -649,30 +650,32 @@ test('a refugee cart regrouped at its column still draws behind a refugee standi
 });
 
 test('coastal towns and villages stand inland on drawn land instead of vanishing', () => {
-  const ground = { town: 6.5, village: 6.2 } as const;
+  const ground = { town: { half: 6.5, thick: 0.5 }, village: { half: 6.2, thick: 0.45 } } as const;
   const fits = (settlement: (typeof map.settlements)[number], scale: number) => {
     const camera = { centre: { x: settlement.at[0], y: settlement.at[1] }, scale };
     const toMap = (p: MapPoint) => screenToMap(camera, viewport, p);
     const land = coastalSurface(() => drawn, toMap, physical.land);
     const grow = symbolGrowth(scale);
     const at = mapToScreen(camera, viewport, camera.centre);
+    const { half: halfWidth, thick } = ground[settlement.rank];
     const spot = fitPlace(
       at,
-      ground[settlement.rank] * grow,
+      halfWidth * grow,
       3.6 * grow,
+      thick * grow,
       land,
-      (p) => {
-        const m = toMap(p);
-        return physical.land.inside(m.x, m.y);
+      (from, to) => {
+        const a = toMap(from),
+          b = toMap(to);
+        return physical.land.segmentInside(a.x, a.y, b.x, b.y);
       },
       scale,
     );
     if (spot) {
-      const half = ground[settlement.rank] * grow * spot.growth;
+      const half = halfWidth * grow * spot.growth;
+      const stroke = thick * grow * spot.growth;
       const base = spot.y + 3.6 * grow * spot.growth;
-      expect(
-        land.box(spot.x - half, spot.x + half, base - 0.5 * spot.growth, base + 0.5 * spot.growth),
-      ).toBe(true);
+      expect(land.box(spot.x - half, spot.x + half, base - stroke, base + stroke)).toBe(true);
       expect(Math.hypot(spot.x - at.x, spot.y - at.y) / scale).toBeLessThanOrEqual(
         PLACE_REACH_KM + 1e-9,
       );
@@ -696,4 +699,37 @@ test('coastal towns and villages stand inland on drawn land instead of vanishing
     if (!spot) throw new Error(`Samothrace does not fit at ${scale} px/km`);
     expect(Math.hypot(spot.x - samothrace.at[0], spot.y - samothrace.at[1])).toBeLessThan(12);
   }
+});
+
+test('a town on an island a kilometre off the mainland is never fitted onto the mainland', () => {
+  const square = (left: number, right: number): MultiPolygon => [
+    [
+      [
+        [left, 0],
+        [right, 0],
+        [right, 40],
+        [left, 40],
+      ],
+    ],
+  ];
+  // A 3 km island, 1 km of water, then a wide mainland.
+  const rules = new AreaIndex([square(0, 3), square(4, 60)], 0, { seams: false });
+  const camera = { centre: { x: 1.5, y: 20 }, scale: 1 };
+  const toMap = (p: MapPoint) => screenToMap(camera, viewport, p);
+  const land = coastalSurface(() => rules, toMap);
+  const at = mapToScreen(camera, viewport, camera.centre);
+  const spot = fitPlace(
+    at,
+    6.5,
+    3.6,
+    0.5,
+    land,
+    (from, to) => {
+      const a = toMap(from),
+        b = toMap(to);
+      return rules.segmentInside(a.x, a.y, b.x, b.y);
+    },
+    1,
+  );
+  if (spot) expect(toMap(spot).x).toBeLessThan(3);
 });

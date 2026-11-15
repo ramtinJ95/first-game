@@ -237,23 +237,16 @@ export function fitPlace(
   at: MapPoint,
   halfWidth: number,
   lift: number,
+  halfThickness: number,
   land: { box(left: number, right: number, top: number, bottom: number): boolean },
-  rulesLand: (screen: MapPoint) => boolean,
+  rulesWay: (from: MapPoint, to: MapPoint) => boolean,
   scale: number,
 ): { x: number; y: number; growth: number } | undefined {
   const reach = PLACE_REACH_KM * scale;
   const rings = Math.max(1, Math.ceil(reach / 2));
-  const along = (to: MapPoint) => {
-    const steps = Math.max(1, Math.ceil(Math.hypot(to.x - at.x, to.y - at.y) / 2));
-    for (let i = 1; i <= steps; i++)
-      if (
-        !rulesLand({ x: at.x + ((to.x - at.x) * i) / steps, y: at.y + ((to.y - at.y) * i) / steps })
-      )
-        return false;
-    return true;
-  };
   for (const growth of PLACE_SIZES) {
     const half = halfWidth * growth;
+    const thick = halfThickness * growth;
     const base = lift * growth;
     for (let ring = 0; ring <= rings; ring++) {
       const radius = (ring * reach) / rings;
@@ -262,8 +255,8 @@ export function fitPlace(
         const angle = (2 * Math.PI * k) / around;
         const spot = { x: at.x + Math.cos(angle) * radius, y: at.y + Math.sin(angle) * radius };
         const y = spot.y + base;
-        if (!land.box(spot.x - half, spot.x + half, y - 0.5 * growth, y + 0.5 * growth)) continue;
-        if (ring && !along(spot)) continue;
+        if (!land.box(spot.x - half, spot.x + half, y - thick, y + thick)) continue;
+        if (ring && !rulesWay(at, spot)) continue;
         return { ...spot, growth };
       }
     }

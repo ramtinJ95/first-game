@@ -889,8 +889,8 @@ export async function createRenderer({
         population: city.population,
       });
     }
-    const settled = places.layout(camera, view, symbolBoxes, (at, halfWidth, lift) =>
-      fitPlace(at, halfWidth, lift, onLand, onRulesLand, camera.scale),
+    const settled = places.layout(camera, view, symbolBoxes, (at, halfWidth, lift, thick) =>
+      fitPlace(at, halfWidth, lift, thick, onLand, onRulesWay, camera.scale),
     );
     const placed = placeLabels(
       [...requests, ...settled.requests],
@@ -1183,9 +1183,10 @@ export async function createRenderer({
   const toMap = (screen: MapPoint) => screenToMap(camera, viewport(), screen);
   const onDrawnLand = coastalSurface(drawingLand, toMap);
   const onLand = coastalSurface(drawingLand, toMap, terrain.land.land);
-  const onRulesLand = (screen: MapPoint) => {
-    const point = toMap(screen);
-    return terrain.land.land.inside(point.x, point.y);
+  const onRulesWay = (from: MapPoint, to: MapPoint) => {
+    const a = toMap(from),
+      b = toMap(to);
+    return terrain.land.land.segmentInside(a.x, a.y, b.x, b.y);
   };
   /** At the zooms that draw figures, a battle's marker stands above its fighting. */
   const battleLift = () =>

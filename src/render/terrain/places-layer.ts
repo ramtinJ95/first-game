@@ -64,8 +64,11 @@ function settlementSymbols(): Record<Rank, GraphicsContext> {
   return { town, village };
 }
 
-/** Half the ground line under each ornament, round cap included. */
-const GROUND: Record<Rank, number> = { town: 6.5, village: 6.2 };
+/** Half the ground line under each ornament, round cap included, and half its stroke. */
+const GROUND: Record<Rank, { half: number; thick: number }> = {
+  town: { half: 6.5, thick: 0.5 },
+  village: { half: 6.2, thick: 0.45 },
+};
 
 const HALF: Record<Rank, { x: number; y: number }> = {
   town: { x: 6.5, y: 5.5 },
@@ -88,13 +91,14 @@ interface Drawn {
 
 /**
  * Where a town or village ornament at `at` stands with its ground line, `halfWidth` either
- * side of it and `lift` below it, on the drawn land, and at what share of its size; or
- * undefined when it fits nowhere near.
+ * side of it, `lift` below it and `halfThickness` above and below that, on the drawn land,
+ * and at what share of its size; or undefined when it fits nowhere near.
  */
 export type PlaceFit = (
   at: { x: number; y: number },
   halfWidth: number,
   lift: number,
+  halfThickness: number,
 ) => { x: number; y: number; growth: number } | undefined;
 
 export interface PlacesLayer {
@@ -224,7 +228,12 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
         if (d.kind !== 'peak' && fit) {
           let placed = fitted.get(d);
           if (!placed || placed.scale !== scale) {
-            const spot = fit(at, GROUND[d.kind] * grow, 3.6 * grow);
+            const spot = fit(
+              at,
+              GROUND[d.kind].half * grow,
+              3.6 * grow,
+              GROUND[d.kind].thick * grow,
+            );
             placed = {
               scale,
               spot: spot && { dx: spot.x - at.x, dy: spot.y - at.y, growth: spot.growth },
