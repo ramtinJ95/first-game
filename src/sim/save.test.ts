@@ -196,3 +196,20 @@ describe('save and load', () => {
     );
   });
 });
+
+describe('a refused save', () => {
+  test('reads a numbered format as a save from before the change sets, and any other as damaged', () => {
+    const state = JSON.parse(saveGame(buildFixture())).state as unknown;
+    const refusal = (format: unknown) => {
+      const result = loadGame(JSON.stringify({ format, state }));
+      return result.ok ? 'loaded' : result.refusal;
+    };
+    expect(refusal(13)).toBe('older');
+    expect([null, false, 'x', [123]].map(refusal)).toEqual([
+      'damaged',
+      'damaged',
+      'damaged',
+      'damaged',
+    ]);
+  });
+});

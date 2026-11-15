@@ -565,6 +565,24 @@ describe('a city that changes hands', () => {
     expectConsistent(fallen);
   });
 
+  test('a city starved out holds the next siege for weeks, not days, so a relief has time to come', () => {
+    const state = besiegingCapua();
+    const capua = cityOf(state, FIXTURE.capua);
+    capua.foodDays = 0;
+    capua.walls = 0;
+    capua.garrison = HUNGER;
+    let current = tick(state, [], world).state;
+    expect(cityOf(current, FIXTURE.capua).owner).toBe(FIXTURE.carthage);
+    armyOf(current, FIXTURE.punicArmy).activity = { kind: 'idle', position: BETWEEN };
+    addArmy(current, 'army-counter', FIXTURE.rome, 1000, NEAR_CAPUA);
+    current = play(current, 1);
+    expect(Object.values(current.sieges).map((siege) => siege.city)).toEqual([FIXTURE.capua]);
+    current = play(current, 14);
+    expect(cityOf(current, FIXTURE.capua).owner).toBe(FIXTURE.carthage);
+    expect(Object.values(current.sieges)).toHaveLength(1);
+    expectConsistent(current);
+  });
+
   test('a city that gives up with fuller stores keeps them', () => {
     const state = besiegingCapua();
     const capua = cityOf(state, FIXTURE.capua);

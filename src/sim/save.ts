@@ -16,7 +16,8 @@ export type Refusal = 'older' | 'newer' | 'damaged';
 function formatError(format: unknown): { refusal: Refusal; error: string } | undefined {
   if (!Array.isArray(format) || !format.every((name): name is string => typeof name === 'string')) {
     return {
-      refusal: 'older',
+      // Saves before the change sets carried a version number.
+      refusal: typeof format === 'number' ? 'older' : 'damaged',
       error: `The save has legacy or malformed format ${JSON.stringify(format)}; it lacks changes: ${SAVE_FORMAT.join(', ')}.`,
     };
   }
