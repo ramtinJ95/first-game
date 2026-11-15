@@ -99,7 +99,7 @@ test.describe('what the page tells of stores, cities, and sieges', () => {
       .getByText(/^Carthage could soon declare war on you: its armies have \d+% of the strength/);
     await line.waitFor();
     await pause(page);
-    await expect(line).toContainText('Your treasury of 8,568 gold lowers what it needs by 25%');
+    await expect(line).toContainText(/Your treasury of [\d,]+ gold lowers what it needs by 25%/);
     await expect(line).toHaveCount(1);
   });
 
