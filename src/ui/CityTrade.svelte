@@ -172,12 +172,10 @@
             (route.owner === route.partner ? 2 : 1)}
           {@const blocked = improveProblem(waiting, order)}
           <p class="muted" data-testid="trade-improve">
-            Improve for {cost} gold: +{gain.toFixed(1)} gold a day here, repaid in {(
-              cost /
-              gain /
-              365
-            ).toFixed(1)} years. Improved {route.improvedBy.length} of {MAX_IMPROVEMENTS} times; no refund
-            on closing.
+            Improve for {cost} gold: +{gain.toFixed(1)} gold a day {route.owner === route.partner
+              ? 'to your realm, from both ends'
+              : 'here'}, repaid in {(cost / gain / 365).toFixed(1)} years. Improved {route
+              .improvedBy.length} of {MAX_IMPROVEMENTS} times; no refund on closing.
           </p>
           <button
             type="button"

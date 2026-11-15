@@ -9,6 +9,8 @@ export const TradeRouteSchema = v.object({
   from: CityIdSchema,
   to: CityIdSchema,
   owner: FactionIdSchema,
+  /** The faction that paid to open the route; `owner` changes when the city does. */
+  openedBy: FactionIdSchema,
   partner: FactionIdSchema,
   mode: v.picklist(['land', 'sea']),
   status: v.picklist(['offered', 'running']),

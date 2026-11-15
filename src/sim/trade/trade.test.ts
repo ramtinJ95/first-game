@@ -3,6 +3,7 @@ import { bestTrade, trading } from '../ai/trade.ts';
 import { tradeReserve } from '../ai/budget.ts';
 import { decideAll, decideOrders } from '../ai/decide.ts';
 import { changeCityOwner } from '../cities.ts';
+import { makePeace } from '../peace/make-peace.ts';
 import { recordEvents } from '../events.ts';
 import { buildFixture, fixtureWorld, FIXTURE as f } from '../fixture.ts';
 import { newGame } from '../new-game.ts';
@@ -537,19 +538,48 @@ describe('caravans, interruption, and saves', () => {
     expectConsistent(state);
   });
 
-  test('a route closes when its city falls to an enemy of the other end', () => {
+  test('a route at a city taken by an enemy of the other end closes that day as a war between the partners', () => {
     const { state, route } = opened();
     state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);
-    const events = recordEvents(state, () => changeCityOwner(state, f.capua, f.carthage));
+    const events = recordEvents(state, () => {
+      changeCityOwner(state, f.capua, f.carthage);
+      trade(state);
+    });
     expect(state.tradeRoutes[route.id]).toBeUndefined();
     expect(events).toContainEqual(
       expect.objectContaining({
         kind: 'tradeClosed',
         route: route.id,
-        cause: 'a city fell to an enemy of its partner',
+        cause: 'war between the partners',
       }),
     );
     expectConsistent(state);
+  });
+
+  test('a route at a city ceded in a peace survives under the new owner', () => {
+    const { state, route } = opened();
+    state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);
+    makePeace(state, f.rome, f.carthage, {
+      kind: 'payment',
+      payer: f.rome,
+      gold: 0,
+      cities: [f.capua],
+    });
+    trade(state);
+    expect(state.cities[f.capua]?.owner).toBe(f.carthage);
+    expect(state.tradeRoutes[route.id]).toMatchObject({ owner: f.rome, partner: f.carthage });
+    expectConsistent(state);
+  });
+
+  test('an improvement in a tick leaves the day before unchanged', () => {
+    const { state, route } = opened();
+    need(state.factions[f.rome]).stores.gold = 10_000;
+    const before = structuredClone(state);
+    const next = tick(state, [{ kind: 'improveTrade', faction: f.rome, route: route.id }], world);
+    expect(next.rejected).toEqual([]);
+    expect(next.state.tradeRoutes[route.id]?.improvedBy).toEqual([f.rome]);
+    expect(state).toEqual(before);
+    expectConsistent(next.state);
   });
 
   test('an improvement costs half the opening price and raises both ends a quarter, twice at most', () => {

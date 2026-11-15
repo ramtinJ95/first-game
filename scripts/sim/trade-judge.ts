@@ -54,7 +54,7 @@ console.log(
   `monthly, before any other spending and keeping ${TRADE_FLOOR} gold, Rome opens its best route by return per gold${values.heed ? ', skipping a partner at war or a besieged end, and declaring no war on a partner whose routes have not repaid' : ''}${values.improve ? `; with no route to open it improves the route whose step repays soonest, if within ${IMPROVE_PAYBACK_DAYS} days` : ''}.`,
 );
 console.log(
-  'Lost gold is what Rome paid for routes that closed before their receipts repaid it, less those receipts.\n',
+  'Lost gold is what Rome paid to open or improve routes that closed or left its hands before their receipts repaid it, less those receipts, valued at arrival prices: a full treasury may have kept less.\n',
 );
 console.log(
   '| seed | routes opened | closed early | gold lost | decisions | median days between | day-1 paybacks min / median / max years |',
@@ -115,18 +115,25 @@ function play(seed: number) {
       if (event.kind !== 'tradeClosed') continue;
       const other = event.owners.find((owner) => owner !== rome);
       const war = other && next.wars[warKey(rome, other)];
+      const was = state.tradeRoutes[event.route];
+      const changedHands =
+        was && (was.owner !== event.owners[0] || was.partner !== event.owners[1]);
       causes.set(
         event.route,
-        event.cause === 'war between the partners' && war
-          ? war.declaredBy === rome
-            ? 'Rome declared war on the partner'
-            : 'the partner declared war on Rome'
-          : (event.cause ?? 'closed'),
+        event.cause === 'war between the partners' && changedHands
+          ? 'a city fell to an enemy of its partner'
+          : event.cause === 'war between the partners' && war
+            ? war.declaredBy === rome
+              ? 'Rome declared war on the partner'
+              : 'the partner declared war on Rome'
+            : (event.cause ?? 'closed'),
       );
     }
     const accepted = mine.filter((o) => !rejected.some((r) => r.order === o));
     if (accepted.length) days.push(day);
     for (const order of accepted) {
+      if (order.kind === 'acceptTrade' && next.tradeRoutes[order.route]?.status === 'running')
+        ledger.set(order.route, { paid: 0, received: 0, deliveries: 0 });
       const entry = order.kind === 'improveTrade' ? ledger.get(order.route) : undefined;
       const route = order.kind === 'improveTrade' ? state.tradeRoutes[order.route] : undefined;
       const cost = route && improveCost(route);
@@ -142,13 +149,13 @@ function play(seed: number) {
     for (const [id, entry] of ledger) {
       const route = next.tradeRoutes[id];
       if (route && route.deliveries > entry.deliveries) {
-        const end = route.owner === rome ? 'from' : route.partner === rome ? 'to' : undefined;
-        if (end)
-          entry.received +=
-            (route.deliveries - entry.deliveries) *
-            rateOf(route) *
-            route.days *
-            adminShareOf(next, rome);
+        const ends = Number(route.owner === rome) + Number(route.partner === rome);
+        entry.received +=
+          (route.deliveries - entry.deliveries) *
+          rateOf(route) *
+          route.days *
+          adminShareOf(next, rome) *
+          ends;
         entry.deliveries = route.deliveries;
       }
       if (!route || (route.owner !== rome && route.partner !== rome)) {
@@ -199,7 +206,7 @@ function improvement(state: GameState, budget: number): Order[] {
     const cost = improveCost(route);
     if (route.status !== 'running' || cost === undefined || cost > budget) continue;
     if (route.owner !== rome && route.partner !== rome) continue;
-    if ('improvements' in route && (route.improvements as number) >= 2) continue;
+    if ('improvedBy' in route && (route.improvedBy as readonly unknown[]).length >= 2) continue;
     const ends = Number(route.owner === rome) + Number(route.partner === rome);
     const days = cost / (route.daily * 0.25 * ends * share);
     if (days <= IMPROVE_PAYBACK_DAYS && (!pick || days < pick.days))

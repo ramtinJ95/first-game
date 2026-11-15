@@ -27,7 +27,7 @@ export interface RouteLedger {
 export function routeLedger(state: State, route: Route, faction: FactionId): RouteLedger {
   const ends = Number(route.owner === faction) + Number(route.partner === faction);
   const improved = route.improvedBy.filter((by) => by === faction).length;
-  const cost = (route.owner === faction ? route.cost : 0) + improved * improvementCost(route);
+  const cost = (route.openedBy === faction ? route.cost : 0) + improved * improvementCost(route);
   const worth =
     route.deliveries * routeRate(route) * route.days * adminShareOf(state, faction) * ends;
   return { cost, worth, owed: Math.max(0, cost - worth) };
@@ -45,7 +45,7 @@ export function ledgerText(state: State, route: Route): string {
   const { cost, worth, owed } = routeLedger(state, route, state.player);
   const paid = cost
     ? `cost ${whole(cost)} gold`
-    : `cost you nothing, as ${state.factions[route.owner]?.name ?? route.owner} paid`;
+    : `cost you nothing, as ${state.factions[route.openedBy]?.name ?? route.openedBy} paid`;
   return `${paid}, arrivals worth about ${whole(worth)} gold, about ${whole(owed)} still unpaid`;
 }
 

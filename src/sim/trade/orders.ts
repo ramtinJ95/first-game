@@ -67,6 +67,7 @@ export function openTrade(state: GameState, order: OpenTrade, world: World): str
     from: from.id,
     to: to.id,
     owner: from.owner,
+    openedBy: from.owner,
     partner: to.owner,
     mode: order.mode,
     status: offered ? 'offered' : 'running',

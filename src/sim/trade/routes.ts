@@ -49,27 +49,24 @@ export function closeRoute(state: GameState, route: DeepReadonly<TradeRoute>, ca
 }
 
 /**
- * A route outlives a change of owner at either end while the two ends' owners stay at peace:
- * the new owner takes over that end. An invitation, which waits on its inviter's consent, and a
- * route whose new owners are at war close.
+ * A running route whose other end is the player's passes to a city's new owner, so a partner
+ * taken in a war the player is not part of keeps trading with the player. If the new owner is
+ * at war with the player, the trade system closes it the same day as a war between the
+ * partners; a peace that cedes the city ends its war first, so the route survives the cession.
+ * Every other route at the city closes, as do invitations, whose inviter or invitee changed.
+ * Keeping routes between two other realms open would let a conqueror inherit its victim's
+ * trade and tip the balance between the powers.
  */
 export function handRoutesOver(state: GameState, city: CityId, owner: FactionId): void {
   for (const route of routesAt(state, city)) {
-    const ends = {
-      owner: route.from === city ? owner : route.owner,
-      partner: route.to === city ? owner : route.partner,
-    };
-    const war = ends.owner !== ends.partner && areAtWar(state, ends.owner, ends.partner);
     const record = state.tradeRoutes[route.id];
-    if (record && route.status === 'running' && !war) {
-      Object.assign(record, ends);
+    const kept = route.from === city ? route.partner : route.owner;
+    if (record && route.status === 'running' && kept === state.player) {
+      if (route.from === city) record.owner = owner;
+      if (route.to === city) record.partner = owner;
       continue;
     }
-    closeRoute(
-      state,
-      route,
-      war ? 'a city fell to an enemy of its partner' : 'a city changed owner',
-    );
+    closeRoute(state, route, 'a city changed owner');
   }
 }
 

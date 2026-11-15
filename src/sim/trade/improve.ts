@@ -39,6 +39,6 @@ export function improveTrade(state: GameState, order: ImproveTrade): string | un
   const payer = state.factions[order.faction];
   if (problem || !route || !payer) return problem ?? 'that route is not running';
   payer.stores.gold -= improvementCost(route);
-  route.improvedBy.push(order.faction);
+  route.improvedBy = [...route.improvedBy, order.faction];
   return undefined;
 }

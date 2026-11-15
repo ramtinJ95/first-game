@@ -8,19 +8,34 @@ import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { menOf } from '../sim/systems/economy.ts';
 import { distanceToRoute, RAID_KM } from '../sim/trade/routes.ts';
+import { areAtWar } from '../sim/wars.ts';
 
 type State = DeepReadonly<GameState>;
 
 /**
  * What could stop or close a route under today's rules, gravest first: a siege of an end
- * stops it and closes it if the city falls, a war between the two ends closes it, a
- * change of either city's owner closes it, and an enemy of either end near a land road
- * takes its cargo.
+ * stops it, a war between the two ends closes it, an end that falls closes it unless the
+ * other end is the player's and the taker is at peace with the player (then the route passes
+ * to the taker), and an enemy of either end near a land road takes its cargo. `other` is the
+ * owner of the end that is not `city`.
  */
 export type TradeRisk =
-  | { kind: 'besieged'; city: CityId; by: readonly FactionId[] }
-  | { kind: 'joinsWar'; city: CityId; owner: FactionId; league: FactionId; against: FactionId }
-  | { kind: 'atWar'; city: CityId; owner: FactionId; enemies: readonly FactionId[] }
+  | { kind: 'besieged'; city: CityId; other: FactionId; by: readonly FactionId[] }
+  | {
+      kind: 'joinsWar';
+      city: CityId;
+      other: FactionId;
+      owner: FactionId;
+      league: FactionId;
+      against: FactionId;
+    }
+  | {
+      kind: 'atWar';
+      city: CityId;
+      other: FactionId;
+      owner: FactionId;
+      enemies: readonly FactionId[];
+    }
   | { kind: 'raids'; enemies: readonly FactionId[]; near: number };
 
 const GRAVITY: Record<TradeRisk['kind'], number> = { besieged: 0, joinsWar: 1, atWar: 2, raids: 3 };
@@ -39,23 +54,28 @@ export function tradeRisk(
   const risks: TradeRisk[] = [];
   const owners = new Set(ends.map((end) => end.owner));
   for (const end of ends) {
+    const other = (end === ends[0] ? ends[1] : ends[0]).owner;
+    const closes = (taker: FactionId) => other !== state.player || areAtWar(state, taker, other);
     const siege = Object.values(state.sieges).find((s) => s.city === end.id);
     if (siege) {
       const by = siege.besiegers.flatMap((id) => {
         const owner = sight.armies.has(id) ? state.armies[id]?.owner : undefined;
         return owner ? [owner] : [];
       });
-      risks.push({ kind: 'besieged', city: end.id, by: [...new Set(by)] });
+      risks.push({ kind: 'besieged', city: end.id, other, by: [...new Set(by)] });
     }
-    const enemies = [...enemiesOf(state, end.owner)].filter((e) => !owners.has(e)).sort();
-    if (enemies.length) risks.push({ kind: 'atWar', city: end.id, owner: end.owner, enemies });
+    const enemies = [...enemiesOf(state, end.owner)]
+      .filter((e) => !owners.has(e) && (end.owner === state.player || closes(e)))
+      .sort();
+    if (enemies.length)
+      risks.push({ kind: 'atWar', city: end.id, other, owner: end.owner, enemies });
     if (end.owner === state.player) continue;
     const league = state.factions[end.owner]?.league;
     if (!league || state.factions[league]?.defeatedOn !== null) continue;
     for (const against of [...enemiesOf(state, league)].sort()) {
       if (against === end.owner || enemiesOf(state, end.owner).has(against)) continue;
-      if (truceBetween(state, end.owner, against)) continue;
-      risks.push({ kind: 'joinsWar', city: end.id, owner: end.owner, league, against });
+      if (truceBetween(state, end.owner, against) || !closes(against)) continue;
+      risks.push({ kind: 'joinsWar', city: end.id, other, owner: end.owner, league, against });
     }
   }
   if (road) {
@@ -94,6 +114,10 @@ function names(state: State, factions: readonly FactionId[]): string {
   return all.length > 1 ? `${all.slice(0, -1).join(', ')} and ${all.at(-1)}` : (all[0] ?? '');
 }
 
+/** "you" for the player, otherwise the faction's name. */
+const them = (state: State, faction: FactionId) =>
+  faction === state.player ? 'you' : (state.factions[faction]?.name ?? faction);
+
 const cityName = (state: State, city: CityId) => state.cities[city]?.name ?? city;
 const factionName = (state: State, faction: FactionId) => state.factions[faction]?.name ?? faction;
 
@@ -101,19 +125,30 @@ const factionName = (state: State, faction: FactionId) => state.factions[faction
 export function riskText(state: State, risk: TradeRisk): string {
   const city = 'city' in risk ? cityName(state, risk.city) : '';
   switch (risk.kind) {
-    case 'besieged':
-      return `${city} is besieged${risk.by.length ? ` by ${names(state, risk.by)}` : ''}: deliveries stop while the siege lasts, and if ${city} falls, the route closes.`;
+    case 'besieged': {
+      const hostile = risk.by.filter((by) => areAtWar(state, by, state.player));
+      const mine = state.cities[risk.city]?.owner === state.player;
+      const fall =
+        mine || risk.other !== state.player
+          ? `if ${city} falls, the route closes`
+          : !risk.by.length
+            ? `if ${city} falls to an enemy of yours, the route closes`
+            : hostile.length
+              ? `if ${city} falls to ${names(state, hostile)}, the route closes`
+              : `if ${city} falls, the route passes to ${names(state, risk.by)}, at peace with you`;
+      return `${city} is besieged${risk.by.length ? ` by ${names(state, risk.by)}` : ''}: deliveries stop while the siege lasts, and ${fall}.`;
+    }
     case 'joinsWar': {
       const owner = factionName(state, risk.owner);
       const league = factionName(state, risk.league);
       return risk.against === state.player
         ? `${owner}'s league partner ${league} is at war with you, and ${owner} will join that war, which closes the route.`
-        : `${owner}'s league partner ${league} is at war with ${names(state, [risk.against])}, and ${owner} will join it: if ${city} falls, the route closes.`;
+        : `${owner}'s league partner ${league} is at war with ${names(state, [risk.against])}, and ${owner} will join it: if ${city} falls to ${names(state, [risk.against])}, the route closes.`;
     }
     case 'atWar':
       return risk.owner === state.player
         ? `You are at war with ${names(state, risk.enemies)}: if ${city} falls, the route closes.`
-        : `${factionName(state, risk.owner)} is at war with ${names(state, risk.enemies)}: if ${city} changes hands, the route closes.`;
+        : `${factionName(state, risk.owner)} is at war with ${names(state, risk.enemies)}, at war with ${them(state, risk.other)} too: if ${city} falls to them, the route closes.`;
     case 'raids':
       return `${names(state, risk.enemies)} could raid this road and take its cargo${
         risk.near

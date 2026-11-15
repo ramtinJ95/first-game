@@ -19,9 +19,13 @@ twice the route's own payback, so it pays only when no new route does: after the
 full. The AI does not improve routes.
 
 `changeCityOwner` calls `handRoutesOver`: each running route at the city passes to the new
-owner unless the new owners of its two ends are at war, when it closes with the cause "a
-city fell to an enemy of its partner". An invitation at the city closes, since its inviter
-or its invitee changed.
+owner, and the trade system closes it the same day as a war between the partners if the new
+owners of its two ends are at war. A peace that cedes a city ends its war first, so its routes
+survive the cession. An invitation at the city closes, since its inviter or its invitee
+changed. `openedBy` keeps the faction that paid to open a route and `improvedBy` the payer of
+each improvement, so the ledger charges each end only what it paid. The risk reading says a
+fall closes a route only when the taker is at war with the other end, and that a fall to a
+power at peace with it hands the route over.
 
 Land routes reach 1,000 km at 16 km/day; sea routes require two actual ports and reach
 1,800 km at 28 km/day. Navigation uses the existing constrained mesh, and paths are
@@ -77,13 +81,15 @@ the reading of them is in `src/ui`, so the rules PR that changes survival change
 
 - `tradeRisk(state, sight, ends, road)` in `src/ui/trade-risk.ts` lists what could stop or
   close a route under today's rules, gravest first: a siege of either end (deliveries stop,
-  and the route closes if the city falls), a leagued minor that will join its partner's war
-  (on the player, which closes the route, or on another), the partner owner's wars (a change
-  of owner closes the route), and the enemies of either end who could raid a land road.
+  and a fall closes the route if the besieger is at war with the other end, or hands it over
+  if not), a leagued minor that will join a war that would close the route, the partner
+  owner's wars with powers also at war with the other end (a fall to one of them closes the
+  route), and the enemies of either end who could raid a land road.
   It names a besieger only while one of its armies is in sight and counts only enemy armies
   in sight within `RAID_KM` of the road, so it reveals nothing the fog hides. `riskText`,
   `riskMark` and `paybackText` turn it into the quote's line ("pays back in 1.1 years;
-  Syracusae is at war with Carthage: if Syracusae changes hands, the route closes."), a
+  Syracusae is at war with Carthage, at war with you too: if Syracusae falls to them, the
+  route closes."), a
   list row's mark, and the lines of an invitation and of a running route.
 - `tradeChoices` in `src/ui/trade-choices.ts` is the partner list: the cities that would agree
   now, each with every open way (land, sea, or both, each a `TradeWay` with its own risks and

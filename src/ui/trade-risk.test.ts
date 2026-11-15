@@ -45,12 +45,14 @@ describe('the risk a quote tells', () => {
     );
   });
 
-  test("the partner's war says the route closes if the city changes hands, and ships face no raids", () => {
+  test("a partner's war closes the route only if it can fall to an enemy of yours, and ships face no raids", () => {
     const state = buildFixture();
     atWar(state, f.carthage, f.syracusaeFaction);
+    expect(read(state, f.syracusae, 'sea').lines).toEqual([]);
+    atWar(state, f.rome, f.carthage);
     const { lines, mark, payback } = read(state, f.syracusae, 'sea');
     expect(lines).toEqual([
-      'Syracusae is at war with Carthage: if Syracusae changes hands, the route closes.',
+      'Syracusae is at war with Carthage, at war with you too: if Syracusae falls to them, the route closes.',
     ]);
     expect(mark).toBe('Syracusae at war');
     expect(payback).toMatch(/^pays back in \d\.\d years; Syracusae is at war with Carthage/);
@@ -91,12 +93,12 @@ describe('the risk a quote tells', () => {
     const all = { ...sightOf(besieged, world, besieged.player), armies: new Set([f.punicArmy]) };
     const seen = read(besieged, f.syracusae, 'sea', all);
     expect(seen.lines[0]).toBe(
-      'Syracusae is besieged by Carthage: deliveries stop while the siege lasts, and if Syracusae falls, the route closes.',
+      'Syracusae is besieged by Carthage: deliveries stop while the siege lasts, and if Syracusae falls, the route passes to Carthage, at peace with you.',
     );
     expect(seen.mark).toBe('Syracusae besieged');
     const none = { ...all, armies: new Set<never>() };
     expect(read(besieged, f.syracusae, 'sea', none).lines[0]).toBe(
-      'Syracusae is besieged: deliveries stop while the siege lasts, and if Syracusae falls, the route closes.',
+      'Syracusae is besieged: deliveries stop while the siege lasts, and if Syracusae falls to an enemy of yours, the route closes.',
     );
   });
 
