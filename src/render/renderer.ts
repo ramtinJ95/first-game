@@ -32,9 +32,10 @@ import {
 import { BORDER_WEIGHTS, borderRuns, sharedBorders } from './borders.ts';
 import type { DrawOptions } from './draw-options.ts';
 import { cacheDrawing, coversView, fitTexture } from './cached-texture.ts';
-import { naturalCoast } from './coast.ts';
+import { atlasCoast, atlasLand, ATLAS_COAST_SCALE } from './atlas-coast.ts';
+import { coastalSurface, fitBanner, fitCoastalScene, sceneAnchor } from './coastal-ground.ts';
 import { landOutline } from './land-outline.ts';
-import { drawColumnMark, drawnColumns, type DrawnColumn } from './columns.ts';
+import { drawColumnMark, drawnColumns, fitColumnMarker, type DrawnColumn } from './columns.ts';
 import { createFog, fogCircles } from './fog.ts';
 import { LABEL_PRIORITY, placeLabels, type Box, type LabelRequest } from './labels.ts';
 import {
@@ -61,7 +62,7 @@ import { toPixels } from './lines.ts';
 import { FramePacer } from './frame-pacer.ts';
 import { cityAt, pickAt, type DrawnCity, type FigureHit, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
-import { citySymbols } from './symbols.ts';
+import { cityDrawingView, citySymbols, fitCitySymbol } from './symbols.ts';
 import { createLife } from './terrain/life.ts';
 import { createPlaces } from './terrain/places-layer.ts';
 import { createTerrain } from './terrain/terrain-layer.ts';
@@ -235,18 +236,41 @@ function fillOutline(
   return g;
 }
 
-/** Traces open lines, `scale` pixels per km, with points at least `minStep` px apart. */
+/**
+ * Traces open lines, `scale` pixels per km, with points at least `minStep` px apart.
+ * Given `clip`, in the same pixels, it leaves out every segment that misses it and
+ * starts the line again past the gap.
+ */
 function traceLines(
   g: Graphics,
   lines: readonly MapLine[],
   scale: number,
   minStep: number,
+  clip?: Box,
 ): Graphics {
   for (const line of lines) {
     const flat = toPixels(line, scale, minStep);
     if (flat.length < 4) continue;
-    g.moveTo(flat[0] as number, flat[1] as number);
-    for (let i = 2; i < flat.length; i += 2) g.lineTo(flat[i] as number, flat[i + 1] as number);
+    let open = false;
+    for (let i = 2; i < flat.length; i += 2) {
+      const ax = flat[i - 2] as number,
+        ay = flat[i - 1] as number,
+        bx = flat[i] as number,
+        by = flat[i + 1] as number;
+      if (
+        clip &&
+        (Math.max(ax, bx) < clip.left ||
+          Math.min(ax, bx) > clip.right ||
+          Math.max(ay, by) < clip.top ||
+          Math.min(ay, by) > clip.bottom)
+      ) {
+        open = false;
+        continue;
+      }
+      if (!open) g.moveTo(ax, ay);
+      g.lineTo(bx, by);
+      open = true;
+    }
   }
   return g;
 }
@@ -492,6 +516,7 @@ export async function createRenderer({
   let armies: DrawnArmy[] = [];
   let columns: DrawnColumn[] = [];
   let drawnCities: DrawnCity[] = [];
+  let cityAnchors: DrawnCity[] = [];
   // All hit geometry and its transform belong to one completed frame. Mixing the live
   // camera with old figures or city boxes can select the land behind a visible army.
   interface DrawnView {
@@ -503,6 +528,7 @@ export async function createRenderer({
     /** The `data-still` request this frame was drawn in the still pose for. */
     still: string | undefined;
     cities: readonly DrawnCity[];
+    cityAnchors: readonly DrawnCity[];
     armies: readonly DrawnArmy[];
     battles: readonly DrawnBattle[];
     figures: readonly FigureHit[];
@@ -576,30 +602,72 @@ export async function createRenderer({
   let motion = 0;
   let clockAt: { day: number; now: number } | undefined;
 
+  /**
+   * The world pixels the sea's water lines and the coast and river ink are stroked for.
+   * Only the cached textures show them, and each covers the view and SEA_MARGIN, so the
+   * strokes reach a margin further and are stroked again once the view leaves them.
+   */
+  let strokedRect: Box = { left: 0, right: 0, top: 0, bottom: 0 };
+  let strokedCoast: readonly MapLine[] = map.coastline;
+  const STROKE_REACH = WATER_LINES[0].distance + WATER_LINE_WIDTH;
+  /** The view and `reach` screen pixels round it, in the pixels of the strokes. */
+  function viewRect(reach: number): Box {
+    const { width, height } = viewport();
+    const k = strokedAt / camera.scale;
+    const x = camera.centre.x * strokedAt,
+      y = camera.centre.y * strokedAt;
+    return {
+      left: x - (width / 2 + reach) * k,
+      right: x + (width / 2 + reach) * k,
+      top: y - (height / 2 + reach) * k,
+      bottom: y + (height / 2 + reach) * k,
+    };
+  }
+  function strokeCoast() {
+    const scale = strokedAt;
+    const round = { cap: 'round', join: 'round' } as const;
+    const flat = { cap: 'butt', join: 'bevel' } as const;
+    strokedRect = viewRect(2 * SEA_MARGIN);
+    const clip = viewRect(2 * SEA_MARGIN + STROKE_REACH);
+    waterLines.clear();
+    for (const { distance, strength } of WATER_LINES) {
+      const step = Math.max(1, distance / 4);
+      traceLines(waterLines, strokedCoast, scale, step, clip).stroke({
+        width: 2 * distance + WATER_LINE_WIDTH,
+        color: mix(SEA, WATER_LINE, strength),
+        ...flat,
+      });
+      traceLines(waterLines, strokedCoast, scale, step, clip).stroke({
+        width: 2 * distance - WATER_LINE_WIDTH,
+        color: SEA,
+        ...flat,
+      });
+    }
+    inkLines.clear();
+    traceLines(
+      inkLines,
+      map.rivers.map((river) => river.line),
+      scale,
+      0.75,
+      clip,
+    ).stroke({ width: 1.1, color: RIVER, alpha: 0.9, ...round });
+    traceLines(inkLines, strokedCoast, scale, 0.75, clip).stroke({
+      width: 1.5,
+      color: INK,
+      ...round,
+    });
+  }
+
   function restroke(scale: number) {
     strokedAt = scale;
     const round = { cap: 'round', join: 'round' } as const;
-    const flat = { cap: 'butt', join: 'bevel' } as const;
-    const coast = scale >= 1.75 ? naturalCoast(map) : undefined;
+    const coast = scale >= ATLAS_COAST_SCALE ? atlasCoast(map) : undefined;
+    canvas.dataset['coast'] = coast ? 'atlas' : 'physical';
     const coastline = coast?.lines ?? map.coastline;
     const outline = coast?.land ?? landOutline(map);
     if (outline !== coastOutline) {
       wash.clip(outline);
       coastOutline = outline;
-    }
-    waterLines.clear();
-    for (const { distance, strength } of WATER_LINES) {
-      const step = Math.max(1, distance / 4);
-      traceLines(waterLines, coastline, scale, step).stroke({
-        width: 2 * distance + WATER_LINE_WIDTH,
-        color: mix(SEA, WATER_LINE, strength),
-        ...flat,
-      });
-      traceLines(waterLines, coastline, scale, step).stroke({
-        width: 2 * distance - WATER_LINE_WIDTH,
-        color: SEA,
-        ...flat,
-      });
     }
     borders.clear();
     for (const weight of BORDER_WEIGHTS) {
@@ -607,14 +675,8 @@ export async function createRenderer({
       traceLines(borders, runs, scale, 0.5).stroke({ width: weight, color: BORDER, ...round });
     }
     terrain.repaint();
-    inkLines.clear();
-    traceLines(
-      inkLines,
-      map.rivers.map((river) => river.line),
-      scale,
-      0.75,
-    ).stroke({ width: 1.1, color: RIVER, alpha: 0.9, ...round });
-    traceLines(inkLines, coastline, scale, 0.75).stroke({ width: 1.5, color: INK, ...round });
+    strokedCoast = coastline;
+    strokeCoast();
     terrain.restroke(scale, outline);
     frame.clear();
     frame.poly(toPixels(map.extent, scale, 0)).stroke({ width: 2.5, color: INK, join: 'round' });
@@ -749,6 +811,34 @@ export async function createRenderer({
     return boxes;
   }
 
+  const cityContacts = new Map<
+    CityId,
+    { scale: number; rank: CityRank; position: MapPoint; offset: MapPoint; growth: number }
+  >();
+  function placedCity(city: DeepReadonly<City>) {
+    const at = mapToScreen(camera, viewport(), city.position);
+    if (camera.scale < ATLAS_COAST_SCALE) return { ...at, growth: symbolGrowth(camera.scale) };
+    let placed = cityContacts.get(city.id);
+    if (
+      !placed ||
+      placed.scale !== camera.scale ||
+      placed.rank !== city.rank ||
+      placed.position.x !== city.position.x ||
+      placed.position.y !== city.position.y
+    ) {
+      const fitted = fitCitySymbol(at, city.rank, onLand, camera.scale);
+      placed = {
+        scale: camera.scale,
+        rank: city.rank,
+        position: city.position,
+        offset: { x: fitted.x - at.x, y: fitted.y - at.y },
+        growth: fitted.growth,
+      };
+      cityContacts.set(city.id, placed);
+    }
+    return { x: at.x + placed.offset.x, y: at.y + placed.offset.y, growth: placed.growth };
+  }
+
   function layoutCities(state: DeepReadonly<GameState>) {
     const view = viewport();
     const requests: LabelRequest[] = [];
@@ -757,11 +847,10 @@ export async function createRenderer({
       const drawn = cities.get(city.id);
       if (!drawn) continue;
       const { symbol, label, rank } = drawn;
-      const grow = symbolGrowth(camera.scale);
-      const halfWidth = extents[rank].halfWidth * grow;
-      const halfHeight = extents[rank].halfHeight * grow;
-      symbol.scale.set(grow);
-      const at = mapToScreen(camera, view, city.position);
+      let grow = symbolGrowth(camera.scale);
+      let halfWidth = extents[rank].halfWidth * grow;
+      let halfHeight = extents[rank].halfHeight * grow;
+      let at = mapToScreen(camera, view, city.position);
       label.visible = false;
       symbol.visible =
         at.x > -halfWidth &&
@@ -769,6 +858,14 @@ export async function createRenderer({
         at.x < view.width + halfWidth &&
         at.y < view.height + halfHeight;
       if (!symbol.visible) continue;
+      if (camera.scale >= ATLAS_COAST_SCALE) {
+        const fitted = placedCity(city);
+        at = fitted;
+        grow = fitted.growth;
+        halfWidth = extents[rank].halfWidth * grow;
+        halfHeight = extents[rank].halfHeight * grow;
+      }
+      symbol.scale.set(grow);
       symbol.position.set(at.x, at.y);
       symbolBoxes.push({
         left: at.x - halfWidth,
@@ -786,7 +883,7 @@ export async function createRenderer({
         population: city.population,
       });
     }
-    const settled = places.layout(camera, view, symbolBoxes);
+    const settled = places.layout(camera, view, symbolBoxes, onLand);
     const placed = placeLabels(
       [...requests, ...settled.requests],
       [...symbolBoxes, ...settled.boxes, ...standingMarkers(state)],
@@ -812,6 +909,25 @@ export async function createRenderer({
       symbol: symbolBoxes[i] as Box,
       label: placed.get(id),
     }));
+    cityAnchors = requests.map(({ id }) => {
+      const city = state.cities[id as CityId];
+      if (!city) throw new Error(`Missing drawn city ${id}`);
+      const at = mapToScreen(camera, view, city.position);
+      const size = extents[city.rank];
+      const grow = symbolGrowth(camera.scale);
+      // Keep the original city target as well as its inset glyph: a physical city
+      // anchor must still open city orders, not become an ordinary land destination.
+      return {
+        id: city.id,
+        symbol: {
+          left: at.x - size.halfWidth * grow,
+          right: at.x + size.halfWidth * grow,
+          top: at.y - size.halfHeight * grow,
+          bottom: at.y + size.halfHeight * grow,
+        },
+        label: undefined,
+      };
+    });
     const side = (from: number, to: number) => (Math.abs(to - from) < 1 ? 0 : Math.sign(to - from));
     nameSides = requests
       .map(({ id, anchor }) => {
@@ -913,7 +1029,13 @@ export async function createRenderer({
     const view = viewport();
     for (const column of columns) {
       const at = mapToScreen(camera, view, column.position);
-      columnMarks.get(column.id)?.graphics.position.set(at.x, at.y);
+      const placed =
+        columnLayer.visible && camera.scale >= ATLAS_COAST_SCALE
+          ? fitColumnMarker(at, onLand, camera.scale)
+          : { ...at, growth: 1 };
+      const graphics = columnMarks.get(column.id)?.graphics;
+      graphics?.position.set(placed.x, placed.y);
+      graphics?.scale.set(placed.growth);
     }
   }
 
@@ -986,8 +1108,20 @@ export async function createRenderer({
     grain.height = height;
     grain.tilePosition.set(x, y);
     fog.place(x, y, camera.scale, width, height);
-    if (Math.abs(Math.log(camera.scale / strokedAt)) > Math.log(RESTROKE_RATIO)) {
+    if (
+      Math.abs(Math.log(camera.scale / strokedAt)) > Math.log(RESTROKE_RATIO) ||
+      camera.scale >= ATLAS_COAST_SCALE !== (coastOutline !== landOutline(map))
+    ) {
       restroke(camera.scale);
+    } else {
+      const need = viewRect(SEA_MARGIN);
+      if (
+        need.left < strokedRect.left ||
+        need.right > strokedRect.right ||
+        need.top < strokedRect.top ||
+        need.bottom > strokedRect.bottom
+      )
+        strokeCoast();
     }
     if (
       !seaDrawn ||
@@ -1037,10 +1171,10 @@ export async function createRenderer({
     }
   }
 
-  const onLand = (screen: MapPoint) => {
-    const point = screenToMap(camera, viewport(), screen);
-    return terrain.land.open(point.x, point.y);
-  };
+  const drawingLand = () => (camera.scale < ATLAS_COAST_SCALE ? terrain.land.land : atlasLand(map));
+  const toMap = (screen: MapPoint) => screenToMap(camera, viewport(), screen);
+  const onDrawnLand = coastalSurface(drawingLand, toMap);
+  const onLand = coastalSurface(drawingLand, toMap, terrain.land.land);
   /** At the zooms that draw figures, a battle's marker stands above its fighting. */
   const battleLift = () =>
     scene && scene.height > 0 ? (1.75 * scene.height + 14) / camera.scale : 0;
@@ -1114,7 +1248,10 @@ export async function createRenderer({
         );
         // A city's name can stand over a neighbouring province, so a click on it, or on
         // its symbol, picks the city's own province.
-        const city = !pick || pick.kind === 'province' ? cityAt(view.cities, screen) : undefined;
+        const city =
+          !pick || pick.kind === 'province'
+            ? cityAt(view.cities, screen, view.cityAnchors, pick)
+            : undefined;
         const province = city && map.provinces.find((p) => (p.id as string) === city)?.id;
         onPick(province ? { kind: 'province', province } : pick);
       }
@@ -1139,10 +1276,19 @@ export async function createRenderer({
       if (!onCommand || !displayed) return;
       const view = displayed;
       const screen = local(event);
+      const pick = pickAt(
+        map,
+        view.camera,
+        view.size,
+        view.armies,
+        screen,
+        view.battles,
+        view.figures,
+      );
       onCommand({
         point: screenToMap(view.camera, view.size, screen),
-        pick: pickAt(map, view.camera, view.size, view.armies, screen, view.battles, view.figures),
-        city: cityAt(view.cities, screen),
+        pick,
+        city: cityAt(view.cities, screen, view.cityAnchors, pick),
         screen,
       });
     },
@@ -1251,9 +1397,25 @@ export async function createRenderer({
       ) {
         dirty = true;
       }
-      const next = drawnArmies(previous, current, progress).filter((army) =>
-        sight.armies.has(army.id),
-      );
+      const next = drawnArmies(previous, current, progress)
+        .filter((army) => sight.armies.has(army.id))
+        .map((army) => {
+          if (camera.scale < ATLAS_COAST_SCALE) return army;
+          const at = mapToScreen(camera, viewport(), army.position);
+          const fitted = fitBanner(
+            army,
+            previous,
+            current,
+            terrain.land.land,
+            at,
+            onDrawnLand,
+            camera.scale,
+            onLand,
+          );
+          return fitted.x === at.x && fitted.y === at.y
+            ? army
+            : { ...army, position: screenToMap(camera, viewport(), fitted) };
+        });
       if (!sameArmies(armies, next)) {
         armies = next;
         dirty = true;
@@ -1310,21 +1472,40 @@ export async function createRenderer({
         (stale || newDay || (moving && due))
       ) {
         const start = performance.now();
+        const cityPosition = (city: DeepReadonly<City>) =>
+          screenToMap(camera, view, placedCity(city));
+        const was = cityDrawingView(previous, previousSight, cityPosition);
+        const is = cityDrawingView(current, sight, cityPosition);
         scene = buildScene({
-          previous,
-          current,
+          previous: was.state,
+          current: is.state,
           progress,
           camera,
           viewport: view,
-          previousSight,
-          sight,
+          previousSight: was.sight,
+          sight: is.sight,
           motion: still ? 0 : motion,
           now: clock / 1000,
           growth: symbolGrowth(camera.scale),
-          land: onLand,
+          land: (screen) => {
+            const point = screenToMap(camera, viewport(), screen);
+            return terrain.land.open(point.x, point.y);
+          },
           names: new Map(drawnCities.flatMap(({ id, label }) => (label ? [[id, label]] : []))),
           keepClear: drawnPlaces,
         });
+        scene = fitCoastalScene(
+          scene,
+          onDrawnLand,
+          camera.scale,
+          onLand,
+          sceneAnchor(
+            current,
+            armies,
+            columns.map((column) => column.position),
+            (point) => mapToScreen(camera, view, point),
+          ),
+        );
         drawnFigures = armyLayer.draw(scene);
         sceneReady =
           drawnFigures.length === scene.sprites.filter((sprite) => sprite.alpha > 0.05).length;
@@ -1354,7 +1535,10 @@ export async function createRenderer({
         }
       }
       if (!dirty) return false;
-      life.update(camera, viewport(), clock, sight);
+      life.update(camera, viewport(), clock, sight, onDrawnLand, (id) => {
+        const city = current.cities[id as CityId];
+        return city ? placedCity(city) : undefined;
+      });
       moveSwell(clock);
       // A cold figure sheet paints asynchronously. Keep visible, pickable flags until
       // the replacement art is drawn, rather than letting armies vanish during a zoom.
@@ -1409,6 +1593,7 @@ export async function createRenderer({
         ready: sceneReady,
         still: stillRequest,
         cities: drawnCities,
+        cityAnchors,
         armies: bannersShown(),
         battles: battlesShown(),
         figures: figuresShown(),

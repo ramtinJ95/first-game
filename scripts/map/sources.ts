@@ -24,6 +24,10 @@ interface Source {
 }
 
 export const SOURCES = {
+  drawingLand: {
+    url: `${NATURAL_EARTH}/ne_10m_land.geojson`,
+    sha256: '1ac90796408bc6ad6911d69448485d3c4dbf2190370080368a09976e1c9f7416',
+  },
   land: {
     url: `${NATURAL_EARTH}/ne_50m_land.geojson`,
     sha256: 'e874b27a51d146452be360cafb3cc50c86001074a67d534113e6534682f9826b',
@@ -185,6 +189,11 @@ async function readJson(source: Source): Promise<unknown> {
   return JSON.parse(await readText(source));
 }
 
+/** Finer land for the renderer only; never an input to buildMap. */
+export async function loadDrawingLand(): Promise<LonLatPolygon[]> {
+  return parseLand(await readJson(SOURCES.drawingLand), SOURCES.drawingLand.url);
+}
+
 async function readText(source: Source): Promise<string> {
   return (await readSource(source)).toString('utf8');
 }
@@ -284,8 +293,7 @@ function parseEcoregion(raw: unknown, where: string): Ecoregion {
   return { name: text(properties, 'ECO_NAME', where), biome, polygons: areas(geometry, where) };
 }
 
-function parseLand(raw: unknown): LonLatPolygon[] {
-  const where = SOURCES.land.url;
+function parseLand(raw: unknown, where: string = SOURCES.land.url): LonLatPolygon[] {
   return features(raw, where).flatMap(({ geometry }, i) =>
     areas(geometry, `${where} feature ${i}`),
   );

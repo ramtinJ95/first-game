@@ -10,6 +10,7 @@ import {
   type Camera,
 } from '../src/render/camera.ts';
 import { BANNER } from '../src/render/markers.ts';
+import { provinceAt } from '../src/render/pick.ts';
 import { nameNewArmy } from '../src/sim/army-names.ts';
 import { decideAll } from '../src/sim/ai/decide.ts';
 import { changeCityOwner } from '../src/sim/cities.ts';
@@ -506,16 +507,24 @@ export function hundredArmies(): GameState {
   const state = startGame();
   const first = armyOf(state, rome);
   const roma = cityPoint('roma');
+  // An army stands idle only on land: the rules land a convoy before it rests.
+  const spots: MapPoint[] = [];
+  for (let row = -7; row <= 7; row++)
+    for (let col = -10; col <= 10; col++) {
+      const spot = { x: roma.x + col * 60, y: roma.y + row * 50 };
+      if (provinceAt(map, spot)) spots.push(spot);
+    }
+  spots.sort(
+    (a, b) => Math.hypot(a.x - roma.x, a.y - roma.y) - Math.hypot(b.x - roma.x, b.y - roma.y),
+  );
+  if (spots.length < 100) throw new Error(`only ${spots.length} land spots near Roma`);
   for (let i = 0; i < 100; i++) {
     const id = (i === 0 ? first.id : allocateId(state, 'army')) as ArmyId;
     const army: Army =
       i === 0 ? first : { ...first, id, name: nameNewArmy(state, rome), formations: [] };
     state.armies[id] = army;
     withFormations(state, army, ROMAN_FOUR);
-    army.activity = {
-      kind: 'idle',
-      position: { x: roma.x - 270 + (i % 10) * 60, y: roma.y - 230 + Math.floor(i / 10) * 50 },
-    };
+    army.activity = { kind: 'idle', position: spots[i] as MapPoint };
   }
   return state;
 }

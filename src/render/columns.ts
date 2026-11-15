@@ -5,6 +5,8 @@ import type { Sight } from '../sim/sight.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { INK, PAPER } from './palette.ts';
+import { fitCoastalSprite } from './coastal-ground.ts';
+import { groundSpan } from './figures/sheet.ts';
 
 export interface DrawnColumn {
   readonly id: RefugeeColumnId;
@@ -42,6 +44,27 @@ export function drawnColumns(
 const WOOD = 0x9c7442;
 const WOOD_SHADE = 0x6e4f2c;
 const WOOD_LIT = 0xc9a36c;
+
+/** The small cart's wheel contact, at zooms below the figure tier. */
+export function fitColumnMarker(at: MapPoint, land: (screen: MapPoint) => boolean, scale: number) {
+  const size = 11 / groundSpan('cart');
+  const placed = fitCoastalSprite(
+    {
+      key: 'cart.0',
+      x: at.x,
+      y: at.y + 1.6,
+      size,
+      mirror: false,
+      alpha: 1,
+      rotation: 0,
+      depth: at.y,
+    },
+    land,
+    scale,
+  );
+  const growth = placed.size / size;
+  return { x: placed.x, y: placed.y - 1.6 * growth, growth };
+}
 
 /**
  * A refugee column's mark at the zooms where an army is its flag: an ox cart piled with

@@ -48,6 +48,12 @@ for (let i = 0; i < Number(values.rounds); i++) {
       () => (window as unknown as { __shaderLinks: number[] }).__shaderLinks,
     ),
     batchTextures: await page.locator('canvas[data-renderer]').getAttribute('data-batch-textures'),
+    resources:
+      i === 0
+        ? await page.evaluate(() =>
+            performance.getEntriesByType('resource').map((entry) => entry.name),
+          )
+        : undefined,
     measures: await page.evaluate(() =>
       performance.getEntriesByType('measure').map(({ name, duration }) => ({ name, duration })),
     ),
