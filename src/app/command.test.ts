@@ -14,7 +14,14 @@ import type { MapPoint } from '../sim/state/map-point.ts';
 import { warKey, newWar } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import type { World } from '../sim/world/world.ts';
-import { FAR_LONGER, planCommand, plannedRoutes, route, type CommandTarget } from './command.ts';
+import {
+  FAR_LONGER,
+  ISLET_REFUSAL,
+  planCommand,
+  plannedRoutes,
+  route,
+  type CommandTarget,
+} from './command.ts';
 import { placeName } from './names.ts';
 
 const world = fixtureWorld();
@@ -238,6 +245,15 @@ describe('a right click on a point', () => {
       kind: 'refuse',
       notice: 'Order refused. The destination is off the map.',
     });
+  });
+
+  it('refuses an islet the map draws as land, saying no army can land there', () => {
+    const state = buildFixture();
+    expect(plan(state, { kind: 'islet', point: { x: 2400, y: 2500 } })).toEqual({
+      kind: 'refuse',
+      notice: ISLET_REFUSAL,
+    });
+    expect(ISLET_REFUSAL).toBe('Order refused. No army can land on that islet.');
   });
 
   it('refuses at once an army that is in a battle', () => {

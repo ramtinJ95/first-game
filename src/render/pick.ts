@@ -1,6 +1,7 @@
 import type { ArmyId, BattleId, CityId, ProvinceId } from '../sim/ids.ts';
 import type { GameMap, Ring } from '../sim/map.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
+import { atlasLand } from './atlas-coast.ts';
 import { mapToScreen, screenToMap, type Camera, type Size } from './camera.ts';
 import type { Box } from './labels.ts';
 import { BANNER_HIT, BATTLE_HIT_RADIUS, type DrawnArmy, type DrawnBattle } from './markers.ts';
@@ -166,4 +167,12 @@ export function pickAt(
   }
   const province = provinceAt(map, screenToMap(camera, viewport, screen));
   return province && { kind: 'province', province };
+}
+
+/**
+ * Whether a map point is on an islet the atlas draws but the rules do not know: drawn as
+ * land, yet in no province, so no army can land or stand there.
+ */
+export function isletAt(map: GameMap, point: MapPoint): boolean {
+  return atlasLand(map).inside(point.x, point.y) && provinceAt(map, point) === undefined;
 }

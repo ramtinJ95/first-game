@@ -60,7 +60,7 @@ import {
 import { paperTexture, waterTexture } from './paper.ts';
 import { toPixels } from './lines.ts';
 import { FramePacer } from './frame-pacer.ts';
-import { cityAt, pickAt, type DrawnCity, type FigureHit, type Pick } from './pick.ts';
+import { cityAt, isletAt, pickAt, type DrawnCity, type FigureHit, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
 import { cityDrawingView, citySymbols, fitCitySymbol } from './symbols.ts';
 import { createLife } from './terrain/life.ts';
@@ -100,6 +100,8 @@ export interface Command {
   /** The city whose drawn symbol or name the click is on or close to. */
   readonly city: CityId | undefined;
   readonly screen: MapPoint;
+  /** Whether the point is on an islet the map draws as land and the rules do not know. */
+  readonly islet: boolean;
 }
 
 export interface RendererOptions {
@@ -1285,11 +1287,13 @@ export async function createRenderer({
         view.battles,
         view.figures,
       );
+      const point = screenToMap(view.camera, view.size, screen);
       onCommand({
-        point: screenToMap(view.camera, view.size, screen),
+        point,
         pick,
         city: cityAt(view.cities, screen, view.cityAnchors, pick),
         screen,
+        islet: view.camera.scale >= ATLAS_COAST_SCALE && isletAt(map, point),
       });
     },
     { signal },

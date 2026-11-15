@@ -5,7 +5,7 @@ import type { ArmyId, BattleId, CityId, FactionId, ProvinceId } from '../sim/ids
 import { parseMap, type GameMap } from '../sim/map.ts';
 import { fitCamera, mapToScreen, type Camera } from './camera.ts';
 import type { DrawnArmy, DrawnBattle } from './markers.ts';
-import { CITY_HIT_MARGIN, cityAt, pickAt, provinceAt, type DrawnCity } from './pick.ts';
+import { CITY_HIT_MARGIN, cityAt, isletAt, pickAt, provinceAt, type DrawnCity } from './pick.ts';
 
 const MAP = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../../data/map/map.json'), 'utf8')),
@@ -60,6 +60,35 @@ describe('provinceAt', () => {
     };
     expect(provinceAt(lake, { x: 10, y: 10 })).toBe('ring');
     expect(provinceAt(lake, { x: 50, y: 50 })).toBeUndefined();
+  });
+});
+
+describe('islets off Carthago at the closest zoom', () => {
+  const viewport = { width: 1280, height: 720 };
+  const click = (point: { x: number; y: number }) => {
+    const camera = { centre: point, scale: 4 };
+    return pickAt(MAP, camera, viewport, [], mapToScreen(camera, viewport, point));
+  };
+
+  it('selects nothing on an islet the map draws but the rules do not know', () => {
+    // Zembra, 52 km north-east of Carthago, is drawn land and in no province.
+    const zembra = { x: 2276.8, y: 2842.4 };
+    expect(isletAt(MAP, zembra)).toBe(true);
+    expect(click(zembra)).toBeUndefined();
+  });
+
+  it("selects Carthago's province on Cossyra, which the rules give to Carthago, 146 km out", () => {
+    const cossyra = { x: 2372.4, y: 2898.2 };
+    expect(isletAt(MAP, cossyra)).toBe(false);
+    expect(click(cossyra)).toEqual({ kind: 'province', province: 'carthago' });
+  });
+
+  it('opens a city only within its hit margin of its symbol', () => {
+    const symbol = { left: 600, right: 640, top: 340, bottom: 370 };
+    const cities: DrawnCity[] = [{ id: 'carthago' as CityId, symbol, label: undefined }];
+    expect(cityAt(cities, { x: 620, y: 355 })).toBe('carthago');
+    expect(cityAt(cities, { x: 640 + CITY_HIT_MARGIN, y: 355 })).toBe('carthago');
+    expect(cityAt(cities, { x: 640 + CITY_HIT_MARGIN + 1, y: 355 })).toBeUndefined();
   });
 });
 

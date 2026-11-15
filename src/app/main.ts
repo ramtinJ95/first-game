@@ -329,7 +329,7 @@ function tellIssued(plan: Extract<Plan, { kind: 'issue' }>) {
 }
 
 /** A right click with one of the player's armies selected plans an order for the city or point. */
-function command({ point, city, screen }: Command) {
+function command({ point, city, screen, islet }: Command) {
   menu = undefined;
   const state = clock.state;
   const army = selection?.kind === 'army' ? state.armies[selection.army] : undefined;
@@ -337,7 +337,9 @@ function command({ point, city, screen }: Command) {
   if (army && army.owner === state.player) {
     const target: CommandTarget = clicked
       ? { kind: 'city', city: clicked }
-      : { kind: 'point', point };
+      : islet
+        ? { kind: 'islet', point }
+        : { kind: 'point', point };
     const plan = planCommand(state, world, army, target, clock.pending);
     if (plan.kind === 'issue') {
       clock.issue(plan.order);
