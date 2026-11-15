@@ -1792,9 +1792,9 @@ export async function createRenderer({
     },
     leaveGame() {
       armyLayer.forget();
-      scene = undefined;
+      // The next frame builds the scene again from the new game, at every zoom, as after a paint.
       built = undefined;
-      drawnFigures = [];
+      sheetPainted = true;
     },
     destroy() {
       terrain.destroy();

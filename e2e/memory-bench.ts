@@ -269,6 +269,11 @@ async function waitTerrain(page: Page) {
 
 /** Zooms with single wheel events from the whole map to the plateau, closer and closer, then out. */
 async function zoomCycle(page: Page, at: MapPoint) {
+  // A new game opens on its capital; one long wheel out from the middle comes to rest on
+  // the whole map, which is where the camera below begins.
+  await page.mouse.move(VIEWPORT.width / 2, VIEWPORT.height / 2);
+  await page.mouse.wheel(0, 5000);
+  await untilDrawn(page);
   let camera: Camera = fitCamera(VIEWPORT, map);
   const wheelTo = async (scale: number, at: MapPoint) => {
     const screen = mapToScreen(camera, VIEWPORT, at);
@@ -280,6 +285,14 @@ async function zoomCycle(page: Page, at: MapPoint) {
     const start = performance.now();
     await delay(300);
     await waitTerrain(page);
+    await page.waitForFunction(
+      () =>
+        document.querySelector('canvas[data-renderer]')?.getAttribute('data-figure-sheets') !==
+        'busy',
+      undefined,
+      { timeout: 180_000 },
+    );
+    await untilDrawn(page);
     const figures = await page.locator('canvas[data-renderer]').getAttribute('data-figures');
     console.error(
       `  zoom ${scale}: peak ${peak.phaseMb} MB, renderer ${residentMb('renderer')} gpu ${residentMb('gpu-process')} MB at rest, figures ${figures}, ${Math.round((performance.now() - start) / 1000)} s`,

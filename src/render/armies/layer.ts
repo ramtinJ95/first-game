@@ -172,6 +172,8 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
   }
 
   function forget() {
+    marks.clear();
+    ready = true;
     for (const sprite of pool) {
       sprite.texture = Texture.EMPTY;
       sprite.visible = false;
