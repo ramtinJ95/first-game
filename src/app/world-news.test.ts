@@ -6,6 +6,7 @@ import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { newWar, warKey } from '../sim/state/war.ts';
 import { alertsOfDay, cornerAlerts, type Alert } from './alerts.ts';
+import { pageData, parsePage } from './page.ts';
 import { leaderNews, leadingPower, worldNewsOfDay } from './world-news.ts';
 
 const f = FIXTURE;
@@ -218,6 +219,32 @@ describe('leaderNews', () => {
     expect(toldAsCapuaPasses([f.carthage, tie, f.carthage, tie, f.carthage])).toEqual([
       'newLeader corner: Carthage is now the leading power, with 2 cities: the other powers will join against it',
     ]);
+  });
+
+  it('does not tell the same lead again after a save and a load during a tie', () => {
+    const before = buildFixture();
+    const leads = structuredClone(before);
+    owner(leads, f.capua, f.carthage);
+    const told = leaderNews(before, leads, leadingPower(before)).told;
+    const tie = structuredClone(leads);
+    owner(tie, f.capua, f.syracusaeFaction);
+    expect(leadingPower(tie)).toBeUndefined();
+    const saved = parsePage(
+      pageData({
+        leaderTold: leaderNews(leads, tie, told).told,
+        chronicle: [],
+        camera: undefined,
+        selection: undefined,
+        panel: undefined,
+        occupied: new Map(),
+        told: new Set(),
+        weakSieges: new Map(),
+      }),
+    );
+    if (!saved.ok) throw new Error(saved.error);
+    const again = structuredClone(tie);
+    owner(again, f.capua, f.carthage);
+    expect(leaderNews(tie, again, saved.page?.leaderTold).alerts).toEqual([]);
   });
 
   it("tells every real change of the lead, the player's own included", () => {

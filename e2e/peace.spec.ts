@@ -114,6 +114,7 @@ test.describe('peace', () => {
     expect(promised, `the form names the truce: "${draftTruce}"`).toBeDefined();
     await panel.getByRole('button', { name: 'Send offer — Peace as things stand' }).click();
     await expect(panel.getByTestId('offer-peace')).toBeDisabled();
+    await expect(panel.getByTestId('peace-draft-truce')).toHaveCount(0);
     await expect(panel.getByTestId('our-offer')).toHaveText(
       'You offer Carthage peace as things stand. Carthage hears it with the next day.',
     );

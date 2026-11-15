@@ -72,7 +72,9 @@
       </div>
     {/if}
     {#if blocked.declareOn}
-      <WarStatus {game} owner={blocked.declareOn} {pending} {actions} />
+      {#key `${army.id} ${blocked.declareOn}`}
+        <WarStatus {game} owner={blocked.declareOn} {pending} {actions} />
+      {/key}
     {/if}
   {/if}
   {#if weak}

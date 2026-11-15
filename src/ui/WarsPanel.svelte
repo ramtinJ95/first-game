@@ -278,7 +278,9 @@
           {peaceVerdict(game, draftAnswer)}
         </p>
         {@render reckoning(draftAnswer)}
-        <p data-testid="peace-draft-truce">{truceText(game, draft, game.day + 1)}</p>
+        {#if war.ourOffer === undefined}
+          <p data-testid="peace-draft-truce">{truceText(game, draft, game.day + 1)}</p>
+        {/if}
         <div class="row">
           <button
             type="button"

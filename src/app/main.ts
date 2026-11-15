@@ -170,7 +170,7 @@ let weakSieges = new Map<SiegeId, WeakSiege>();
 let desertion: Desertion | undefined;
 /** The raids and sieges of the player's trade that the news is in the middle of telling. */
 let tradeTroubles: readonly TradeTrouble[] = [];
-/** The leading power the player was last told of. A new game or a load starts from the one that leads. */
+/** The leading power the player was last told of. A save keeps it; a new game or an older save starts from the one that leads. */
 let leaderTold: FactionId | undefined;
 
 function fateOpen(state: DeepReadonly<GameState>, id: CityId): boolean {
@@ -465,6 +465,7 @@ function pageNow(): Page {
     weakSieges,
     desertion,
     tradeTroubles,
+    leaderTold,
   };
 }
 
@@ -492,7 +493,7 @@ function enter(
   weakSieges = new Map(page?.weakSieges);
   desertion = page?.desertion;
   tradeTroubles = page?.tradeTroubles ?? [];
-  leaderTold = leadingPower(state);
+  leaderTold = page?.leaderTold ?? leadingPower(state);
   menu = undefined;
   stopAsked = false;
   const outcome = outcomeOf(state, world, state.player);

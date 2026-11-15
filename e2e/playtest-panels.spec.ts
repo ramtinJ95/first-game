@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import type { CityId } from '../src/sim/ids.ts';
+import { allocateId, type CityId } from '../src/sim/ids.ts';
 import type { Day } from '../src/sim/state/day.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import {
@@ -18,6 +18,7 @@ import {
   startGame,
   untilDay,
   untilDrawn,
+  withFormations,
 } from './support.ts';
 
 /**
@@ -279,6 +280,38 @@ test.describe('the panels after the playtest', () => {
     await expect(army.getByRole('button', { name: /Declare war/ })).toHaveCount(0);
     await resume(page);
     await expect(army.getByTestId('army-activity')).toHaveText(/^Besieging Massalia · day \d+$/);
+  });
+
+  test("a confirmation opened for one army's city does not carry over to another army by another city", async ({
+    page,
+  }) => {
+    await pause(page);
+    const state = startGame();
+    const first = armyOf(state, rome);
+    first.activity = { kind: 'idle', position: cityPoint('massalia') };
+    const id = allocateId(state, 'army');
+    const second = { ...first, id, name: 'Second Legion', formations: [] };
+    second.activity = { kind: 'idle', position: cityPoint('mediolanum') };
+    state.armies[id] = second;
+    withFormations(state, second, [['spearmen', 1000]]);
+    await load(page, state);
+    const banner = camera(page).banner(cityPoint('massalia'));
+    await page.mouse.click(banner.x, banner.y);
+    const army = page.getByTestId('army-panel');
+    await army.getByRole('button', { name: 'Declare war on Massalia' }).click();
+    await expect(army.getByRole('button', { name: 'Confirm war' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
+    await page
+      .getByTestId('overview-armies')
+      .getByRole('button', { name: /Second Legion/ })
+      .click();
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
+    await expect(army.getByTestId('army-siege-block')).toHaveText(
+      'At peace with Mediolanum. Declare war to besiege it.',
+    );
+    await expect(army.getByRole('button', { name: 'Declare war on Mediolanum' })).toBeVisible();
+    await expect(army.getByRole('button', { name: 'Confirm war' })).toHaveCount(0);
   });
 
   test("the city panel names a taken city's rank and owner, and a minor's own city stays independent", async ({
