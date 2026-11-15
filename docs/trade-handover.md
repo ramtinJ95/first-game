@@ -29,20 +29,42 @@ about 10% faster in GPU time.
 ## Verdict: not established on this host
 
 The budget is set in `scripts/trade-frame-bench.mjs`: three alternating rounds, a
-1.5-second warm-up and a 5-second meter window from day 7, with Roma selected. Run as
-committed against main `aef5b10`, the look `940d12d` is within +10% at middle on all
-four figures. At closest its medians are within +10% (+7.4% interval, +3.9% drawn)
-and its p95s are not (+20.6% interval, +15.5% drawn).
+1.5-second warm-up and a 5-second meter window from day 7, with Roma selected and
+with nothing selected. All four figures must be within +10% at both zooms.
 
-The same protocol run with main against itself, with identical builds on both sides,
-gave +8.0% / +12.9% interval and +1.2% / +9.1% drawn at middle (median / p95), and
--3.7% / -31.1% and -0.6% / -35.1% at closest. One build's single-round p95 ranged from
-450 to 1,067 ms. On this host the committed protocol cannot tell a p95 within a tenth:
-the look's +20.6% at closest is inside main's own spread of 35%. So the budget is
-neither shown met nor shown failed here. Settling it needs a steadier host, or the
-owner's decision to accept the measured medians.
+On main `3605308`, the look `bddb7a9` (the current changes, before the rebase onto
+`d1a58a1`, which changed no renderer code) passes with Roma selected: every figure
+is within +10% at both zooms. With nothing selected its medians are within +10% and
+its p95s are not: +26.9% interval and +36.9% drawn at middle, +14.8% and +24.0% at
+closest. Main against itself in the same session gave up to +11.1% interval and
++18.5% drawn in middle p95, and an earlier session up to 35% at closest. A p95 here
+is the slowest or second slowest of about twelve frames; one round's p95 for one
+build ranged from 450 to 867 ms.
 
-### The committed protocol on `aef5b10`
+So on this host the committed protocol does not settle the p95s either way. Settling
+them needs a steadier host, or the owner's decision to accept the measured medians,
+which are within +10% in every run.
+
+### The committed protocol on `3605308`
+
+The driver ran unchanged except its 180-second limit on each browser run, which only
+guards against a hung process, raised to 1,800 seconds in an uncommitted copy,
+because one side's setup takes about 7.5 minutes on this VM.
+
+| Run                    | Zoom    | Interval median | Interval p95 | Drawn median | Drawn p95 |
+| ---------------------- | ------- | --------------- | ------------ | ------------ | --------- |
+| look, Roma selected    | middle  | -3.8%           | -6.4%        | +0.1%        | -1.1%     |
+| look, Roma selected    | closest | +7.7%           | +3.5%        | +6.5%        | +3.2%     |
+| look, nothing selected | middle  | +8.7%           | +26.9%       | +8.4%        | +36.9%    |
+| look, nothing selected | closest | -4.0%           | +14.8%       | +0.5%        | +24.0%    |
+| main against itself    | middle  | 0.0%            | +11.1%       | -0.9%        | +18.5%    |
+| main against itself    | closest | 0.0%            | 0.0%         | -0.5%        | -6.8%     |
+
+Unselected p95 per round, middle interval: look 683.3, 550 and 449.9 ms; main 450.1,
+416.6 and 433.4 ms. Readings and logs are in
+[`evidence/trade-frames/3605308-committed-protocol`](evidence/trade-frames/3605308-committed-protocol).
+
+### The committed protocol on `aef5b10`, before the plain-name fallback
 
 Each side ran the committed driver unchanged except one line: its 180-second limit
 on each browser run, which only guards against a hung process, was raised to 1,800
