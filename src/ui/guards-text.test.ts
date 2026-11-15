@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { buildFixture, FIXTURE as f, fixtureWorld } from '../sim/fixture.ts';
 import type { Order } from '../sim/orders/orders.ts';
+import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { dailyBalances } from '../sim/systems/economy.ts';
-import { signed } from './describe.ts';
 import { cityGuards, guardsLine } from './guards-text.ts';
 
 const world = fixtureWorld();
 const hire: Order = { kind: 'hireGuards', faction: f.rome, city: f.roma };
+const band = (until: number) => ({ until: until as Day });
 
 function withGold(gold: number): GameState {
   const state = buildFixture();
@@ -23,39 +23,29 @@ function shown(state: GameState, pending: Order[] = []) {
 }
 
 describe('guardsLine', () => {
-  it('says the guards held, their daily gold, and what the next day changes', () => {
-    expect(guardsLine(0, 0)).toBe('No guards hired');
-    expect(guardsLine(500, 0)).toBe('500 guards · 10 gold a day');
-    expect(guardsLine(495, 0)).toBe('495 guards · 9.9 gold a day');
-    expect(guardsLine(0, 500)).toBe('No guards hired · 500 more hired for the next day');
-    expect(guardsLine(1000, -500)).toBe(
-      '1,000 guards · 20 gold a day · 500 dismissed for the next day',
+  it('says the guards held, the day each band leaves, and what the next day hires', () => {
+    expect(guardsLine([], 0)).toBe('No guards hired');
+    expect(guardsLine([band(770), band(831)], 0)).toBe(
+      '1,000 guards · 500 leave Year 3, day 40, 500 leave Year 3, day 101',
     );
+    expect(guardsLine([band(770), band(770)], 0)).toBe('1,000 guards · 1,000 leave Year 3, day 40');
+    expect(guardsLine([], 1)).toBe('No guards hired · 500 more hired for the next day');
   });
 });
 
 describe('cityGuards', () => {
-  it("gives a hire's garrison and the realm's gold a day before and after, from the rules", () => {
-    const state = withGold(5000);
-    const now = dailyBalances(state).get(f.rome)?.gold ?? 0;
-    expect(shown(state)).toEqual({
+  it("gives a hire's price and the garrison before and after, from the rules", () => {
+    expect(shown(withGold(5000))).toEqual({
       line: 'No guards hired',
-      hire: {
-        gold: 1500,
-        change: `Garrison 3,000 → 3,500 · gold ${signed(now)} → ${signed(now - 10)} a day`,
-        why: undefined,
-      },
-      dismiss: undefined,
+      hire: { gold: 2000, change: 'Garrison 3,000 → 3,500', why: undefined },
     });
   });
 
   it('counts a hire waiting for the next day, its gold already spent', () => {
-    const state = withGold(2000);
-    const after = shown(state, [hire]);
+    const after = shown(withGold(3000), [hire]);
     expect(after.line).toBe('No guards hired · 500 more hired for the next day');
-    expect(after.hire.change).toMatch(/^Garrison 3,500 → 4,000 /);
+    expect(after.hire.change).toBe('Garrison 3,500 → 4,000');
     expect(after.hire.why).toBe('Needs 1,000 more gold');
-    expect(after.dismiss).toBe(500);
   });
 
   it('says in words why a hire is refused', () => {
@@ -68,8 +58,7 @@ describe('cityGuards', () => {
       change: undefined,
     });
     roma.unrestDays = 0;
-    roma.guards = 3000;
+    roma.guards = Array.from({ length: 6 }, () => band(400));
     expect(shown(state).hire.why).toBe('Roma holds 3,000 guards, and 3,000 is the most it can');
-    expect(shown(state).dismiss).toBe(500);
   });
 });

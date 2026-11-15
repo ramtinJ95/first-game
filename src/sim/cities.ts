@@ -54,7 +54,7 @@ export function changeCityOwner(state: GameState, cityId: CityId, owner: Faction
   city.unrestDays = UNREST_DAYS;
   city.recruits = [];
   city.fellOn = null;
-  city.guards = 0;
+  city.guards = [];
   if (city.construction) {
     emit(state, {
       kind: 'buildingsLost',

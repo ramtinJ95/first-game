@@ -2,15 +2,16 @@ import type { DeepReadonly } from './deep-readonly.ts';
 import type { CityId, FactionId } from './ids.ts';
 import { ownedCity } from './orders/owned-city.ts';
 import type { City } from './state/city.ts';
+import type { Day } from './state/day.ts';
 import type { GameState } from './state/game-state.ts';
-import { beleaguered, CITY_DEFENCES, fullDefences } from './systems/sieges.ts';
+import { beleaguered, CITY_DEFENCES } from './systems/sieges.ts';
 
-/** Men a city hires, or lets go, at one order. */
+/** Men a city hires at one order. */
 export const GUARD_BAND = 500;
-/** Gold paid at the order for one band. Guards cost no manpower. */
-export const GUARD_GOLD = 1500;
-/** Gold each guard costs his city's owner each day, twice a soldier's. Guards eat no food. */
-export const GUARD_UPKEEP = 0.02;
+/** Gold paid at the order for one band's term. Guards cost no manpower, food, or upkeep. */
+export const GUARD_GOLD = 2000;
+/** Days a band serves before it leaves, so the choice to hire comes back each year. */
+export const GUARD_DAYS = 365;
 
 export interface HireGuardsOrder {
   kind: 'hireGuards';
@@ -18,13 +19,12 @@ export interface HireGuardsOrder {
   city: CityId;
 }
 
-export interface DismissGuardsOrder {
-  kind: 'dismissGuards';
-  faction: FactionId;
-  city: CityId;
+/** The men the city's bands of guards hold its walls with. */
+export function guardMen(city: DeepReadonly<Pick<City, 'guards'>>): number {
+  return city.guards.length * GUARD_BAND;
 }
 
-/** The most guards a city holds: its rank's full garrison, so a capital holds 3,000. */
+/** The most guards a city holds, in men: its rank's full garrison, so a capital holds 3,000. */
 export function guardLimit(city: DeepReadonly<Pick<City, 'rank'>>): number {
   return CITY_DEFENCES[city.rank].garrison;
 }
@@ -42,8 +42,8 @@ export function guardRefusal(
   if (city.owner !== faction) return `${city.id} belongs to ${city.owner}, not ${faction}`;
   if (city.unrestDays > 0) return `${city.id} is in unrest for ${city.unrestDays} more days`;
   if (beleaguered(state, city)) return `an enemy stands at the walls of ${city.id}`;
-  if (city.guards + GUARD_BAND > guardLimit(city)) {
-    return `${city.id} holds ${city.guards} guards, and ${guardLimit(city)} is the most it can`;
+  if (guardMen(city) + GUARD_BAND > guardLimit(city)) {
+    return `${city.id} holds ${guardMen(city)} guards, and ${guardLimit(city)} is the most it can`;
   }
   const gold = state.factions[faction]?.stores.gold ?? 0;
   if (gold < GUARD_GOLD) {
@@ -52,19 +52,7 @@ export function guardRefusal(
   return undefined;
 }
 
-/** Why the faction cannot let guards go in the city, or undefined when it can. */
-export function dismissRefusal(city: DeepReadonly<City>, faction: FactionId): string | undefined {
-  if (city.owner !== faction) return `${city.id} belongs to ${city.owner}, not ${faction}`;
-  if (city.guards === 0) return `${city.id} holds no guards`;
-  return undefined;
-}
-
-/** The guards one dismissal lets go: a band, or what is left after unpaid guards walked off. */
-export function dismissedGuards(city: DeepReadonly<City>): number {
-  return Math.min(GUARD_BAND, city.guards);
-}
-
-/** Pays for a band and puts it on the walls at once, raising the garrison and the full garrison. */
+/** Pays for a band's year and puts it on the walls at once, raising the garrison and the full garrison. */
 export function hireGuards(state: GameState, order: HireGuardsOrder): string | undefined {
   const city = ownedCity(state, order.faction, order.city);
   if (typeof city === 'string') return city;
@@ -73,23 +61,7 @@ export function hireGuards(state: GameState, order: HireGuardsOrder): string | u
   const stores = state.factions[order.faction]?.stores;
   if (!stores) return `faction ${order.faction} does not exist`;
   stores.gold -= GUARD_GOLD;
-  city.guards += GUARD_BAND;
+  city.guards.push({ until: (state.day + GUARD_DAYS) as Day });
   city.garrison += GUARD_BAND;
   return undefined;
-}
-
-/** Lets a band go, with no gold back, and the garrison shrinks to the new full garrison. */
-export function dismissGuards(state: GameState, order: DismissGuardsOrder): string | undefined {
-  const city = ownedCity(state, order.faction, order.city);
-  if (typeof city === 'string') return city;
-  const refusal = dismissRefusal(city, order.faction);
-  if (refusal) return refusal;
-  loseGuards(city, dismissedGuards(city));
-  return undefined;
-}
-
-/** Takes guards off the city, and the garrison with them where it stood above the new full garrison. */
-export function loseGuards(city: City, guards: number): void {
-  city.guards -= guards;
-  city.garrison = Math.min(city.garrison, fullDefences(city).garrison);
 }

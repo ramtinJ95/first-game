@@ -21,6 +21,10 @@ export const ConstructionSchema = v.object({
 });
 export type Construction = v.InferOutput<typeof ConstructionSchema>;
 
+/** A band of `GUARD_BAND` men hired for gold, who hold the walls until their day. */
+export const GuardBandSchema = v.object({ until: DaySchema });
+export type GuardBand = v.InferOutput<typeof GuardBandSchema>;
+
 export const CitySchema = v.pipe(
   v.object({
     id: CityIdSchema,
@@ -50,8 +54,8 @@ export const CitySchema = v.pipe(
     /** The buildings the city stands with, in the order they were finished. */
     buildings: v.array(v.picklist(BUILDING_KINDS)),
     construction: v.nullable(ConstructionSchema),
-    /** Men hired for gold who hold the walls. They raise the full garrison by as many. */
-    guards: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    /** The bands of guards hired for gold, in the order hired. They raise the full garrison by their men. */
+    guards: v.array(GuardBandSchema),
   }),
   v.check(
     (city) =>

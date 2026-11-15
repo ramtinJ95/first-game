@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { dateText } from '../src/app/names.ts';
 import { BUILDINGS } from '../src/sim/buildings/buildings.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import {
@@ -106,7 +107,7 @@ test.describe('buildings', () => {
     await expect(buildings.getByTestId('build-towers')).toBeVisible();
   });
 
-  test('a full treasury hires 500 guards in Roma, who stand on its walls the next day', async ({
+  test('a full treasury hires 500 guards in Roma for a year, who stand on its walls the next day', async ({
     page,
   }) => {
     await load(page, romaTreasuryFull());
@@ -115,13 +116,12 @@ test.describe('buildings', () => {
     const garrison = panel.getByTestId('city-garrison');
     const line = panel.getByTestId('guards-line');
     await expect(line).toHaveText('No guards hired');
-    await expect(panel.getByTestId('guards-dismiss')).toHaveCount(0);
     const before = garrisonOf(await garrison.textContent());
 
     const hire = panel.getByTestId('guards-hire');
     await expect(hire).toBeEnabled();
-    await expect(hire).toHaveText('Hire 500 guards · 1,500 gold');
-    await expect(panel.getByTestId('guards-change')).toContainText(
+    await expect(hire).toHaveText('Hire 500 guards for a year · 2,000 gold');
+    await expect(panel.getByTestId('guards-change')).toHaveText(
       `Garrison ${before.toLocaleString('en')} → ${(before + 500).toLocaleString('en')}`,
     );
     await hire.click();
@@ -131,8 +131,7 @@ test.describe('buildings', () => {
     await resume(page);
     await untilDay(page, from + 1);
     await pause(page);
-    await expect(line).toHaveText(/^500 guards · 10 gold a day/);
+    await expect(line).toHaveText(`500 guards · 500 leave ${dateText(from + 365)}`);
     expect(garrisonOf(await garrison.textContent())).toBe(before + 500);
-    await expect(panel.getByTestId('guards-dismiss')).toHaveText('Dismiss 500 · no gold back');
   });
 });

@@ -1,6 +1,7 @@
 import { leaveSiege, removeArmy } from '../armies.ts';
 import { defenceSharesOf } from '../buildings/buildings.ts';
 import { changeCityOwner } from '../cities.ts';
+import { guardMen } from '../guards.ts';
 import type { ArmyLoss } from '../events.ts';
 import type { FactionId, SiegeId } from '../ids.ts';
 import { allocateId } from '../ids.ts';
@@ -43,7 +44,9 @@ export function fullDefences(
   const towers = defenceSharesOf(city);
   return {
     walls: full.walls * city.fortified * towers.walls,
-    garrison: Math.round(full.garrison * towers.garrison) + (city.guards ?? 0),
+    garrison:
+      Math.round(full.garrison * towers.garrison) +
+      (city.guards ? guardMen({ guards: city.guards }) : 0),
     foodDays: full.foodDays * city.fortified,
   };
 }
@@ -258,7 +261,7 @@ export function cityFalls(state: GameState, siege: Siege): void {
   const men = occupiers.reduce((sum, army) => sum + menOf(state, army), 0);
   const garrison = Math.min(
     Math.floor(men / 2),
-    Math.round(fullDefences({ ...city, guards: 0 }).garrison * OCCUPATION_SHARE),
+    Math.round(fullDefences({ ...city, guards: [] }).garrison * OCCUPATION_SHARE),
   );
   killMen(state, occupiers, garrison, 'storm');
   city.garrison = garrison;

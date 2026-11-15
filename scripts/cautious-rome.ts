@@ -13,8 +13,8 @@ import { areAtWar } from '../src/sim/wars.ts';
 import { distance } from '../src/sim/world/find-path.ts';
 import { buildWorld, type World } from '../src/sim/world/world.ts';
 import { threatNewsOfDay } from '../src/app/threat-news.ts';
-import { GUARD_GOLD, GUARD_UPKEEP, GUARD_BAND, guardRefusal } from '../src/sim/guards.ts';
-import { dailyBalances, limitsOf } from '../src/sim/systems/economy.ts';
+import { GUARD_GOLD, guardRefusal } from '../src/sim/guards.ts';
+import { limitsOf } from '../src/sim/systems/economy.ts';
 import { homeCapital } from '../src/sim/ai/situation.ts';
 
 export const map = parseMap(
@@ -127,16 +127,15 @@ export function playCautiousRome(
 }
 
 /**
- * On its monthly turn with no trade to buy, Rome hires a band of guards while its gold is
- * at least half its limit and its daily gold stays above zero with their upkeep: at the
- * city the last warning of a coming war named, else at its capital.
+ * On its monthly turn with no trade to buy, Rome hires a band of guards for a year while
+ * its gold after the band is at least half its limit: at the city the last warning of a
+ * coming war named, else at its capital.
  */
 function guardOrders(state: GameState, warnedAt: CityId | undefined): Order[] {
   if (state.day % 30 !== 0) return [];
   const gold = state.factions[rome]?.stores.gold ?? 0;
   const limit = limitsOf(state).get(rome)?.gold ?? Infinity;
-  const balance = dailyBalances(state).get(rome)?.gold ?? 0;
-  if (gold - GUARD_GOLD < limit / 2 || balance - GUARD_BAND * GUARD_UPKEEP <= 0) return [];
+  if (gold - GUARD_GOLD < limit / 2) return [];
   const capital = homeCapital(state, world, rome);
   for (const id of [warnedAt, capital?.id]) {
     const city = id && state.cities[id];

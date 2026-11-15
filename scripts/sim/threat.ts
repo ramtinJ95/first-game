@@ -4,6 +4,7 @@ import { threatNewsOfDay } from '../../src/app/threat-news.ts';
 import { createRouter } from '../../src/sim/ai/routes.ts';
 import { enemiesOf, sorted, strengthNear, strengthOf } from '../../src/sim/ai/situation.ts';
 import { WAR_FRONT_KM, WAR_REACH_KM } from '../../src/sim/ai/thresholds.ts';
+import { guardMen } from '../../src/sim/guards.ts';
 import type { FactionId } from '../../src/sim/ids.ts';
 import { truceBetween } from '../../src/sim/peace/truce.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
@@ -178,7 +179,7 @@ function play(seed: number, years: number): Row {
   row.goldAtEnd = Math.round(end.factions[rome]?.stores.gold ?? 0);
   row.guardsAtEnd = Object.values(end.cities)
     .filter((c) => c.owner === rome)
-    .reduce((sum, c) => sum + c.guards, 0);
+    .reduce((sum, c) => sum + guardMen(c), 0);
   return row;
 }
 

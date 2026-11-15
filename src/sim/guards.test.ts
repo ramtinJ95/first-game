@@ -2,13 +2,13 @@ import { describe, expect, test } from 'vitest';
 import { leaveSiege } from './armies.ts';
 import { changeCityOwner } from './cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from './fixture.ts';
-import { dismissRefusal, GUARD_BAND, GUARD_GOLD, GUARD_UPKEEP, guardRefusal } from './guards.ts';
+import { GUARD_BAND, GUARD_DAYS, GUARD_GOLD, guardMen, guardRefusal } from './guards.ts';
 import type { CityId } from './ids.ts';
 import { executeOrder, type Order } from './orders/orders.ts';
 import { expectConsistent } from './references.ts';
 import { loadGame, SAVE_FORMAT, saveGame } from './save.ts';
 import type { GameState } from './state/game-state.ts';
-import { dailyBalances, DESERTION } from './systems/economy.ts';
+import type { Day } from './state/day.ts';
 import {
   CITY_DEFENCES,
   fullDefences,
@@ -31,11 +31,6 @@ const hire = (city: CityId = FIXTURE.roma): Order => ({
   faction: FIXTURE.rome,
   city,
 });
-const dismiss = (city: CityId = FIXTURE.roma): Order => ({
-  kind: 'dismissGuards',
-  faction: FIXTURE.rome,
-  city,
-});
 
 function withGold(gold: number): GameState {
   const state = buildFixture();
@@ -45,6 +40,9 @@ function withGold(gold: number): GameState {
 
 const gold = (state: GameState) => need(state.factions[FIXTURE.rome]).stores.gold;
 const city = (state: GameState, id: CityId = FIXTURE.roma) => need(state.cities[id]);
+/** `men` of guards in bands that serve long past the test. */
+const bands = (men: number) =>
+  Array.from({ length: men / GUARD_BAND }, () => ({ until: 1000 as Day }));
 
 /** Carthage at war with Rome and its army, of 5,000 men, idle beside Capua, so it besieges Capua tomorrow. */
 function capuaBeleaguered(state: GameState): GameState {
@@ -62,12 +60,14 @@ function capuaBeleaguered(state: GameState): GameState {
 }
 
 describe('hiring guards', () => {
-  test('pays the gold and raises the garrison and the full garrison at once, and they hold', () => {
+  test('pays the gold and raises the garrison and the full garrison at once, for a year', () => {
     let state = withGold(5000);
     expect(executeOrder(state, hire(), world)).toBeUndefined();
     const full = CITY_DEFENCES.capital.garrison;
     expect(gold(state)).toBe(5000 - GUARD_GOLD);
-    expect(city(state)).toMatchObject({ guards: GUARD_BAND, garrison: full + GUARD_BAND });
+    expect(city(state).guards).toEqual([{ until: state.day + GUARD_DAYS }]);
+    expect(guardMen(city(state))).toBe(GUARD_BAND);
+    expect(city(state).garrison).toBe(full + GUARD_BAND);
     expect(fullDefences(city(state)).garrison).toBe(full + GUARD_BAND);
     state = tick(state, [], world).state;
     expect(city(state).garrison).toBe(full + GUARD_BAND);
@@ -76,12 +76,12 @@ describe('hiring guards', () => {
 
   test('a capital holds at most its full garrison of guards, and a great power city half that', () => {
     const state = withGold(50_000);
-    city(state).guards = CITY_DEFENCES.capital.garrison - GUARD_BAND;
+    city(state).guards = bands(CITY_DEFENCES.capital.garrison - GUARD_BAND);
     expect(executeOrder(state, hire(), world)).toBeUndefined();
     expect(executeOrder(state, hire(), world)?.reason).toBe(
       'roma holds 3000 guards, and 3000 is the most it can',
     );
-    city(state, FIXTURE.capua).guards = 1000;
+    city(state, FIXTURE.capua).guards = bands(1000);
     expect(executeOrder(state, hire(FIXTURE.capua), world)).toBeUndefined();
     expect(guardRefusal(state, city(state, FIXTURE.capua), FIXTURE.rome)).toBe(
       'capua holds 1500 guards, and 1500 is the most it can',
@@ -104,65 +104,32 @@ describe('hiring guards', () => {
       'an enemy stands at the walls of capua',
     );
     expect(gold(state)).toBe(50_000);
-    expect(city(state, FIXTURE.capua).guards).toBe(0);
+    expect(city(state, FIXTURE.capua).guards).toEqual([]);
     expectConsistent(state);
   });
 
   test('is refused with less gold than a band costs', () => {
     const state = withGold(GUARD_GOLD - 1);
     expect(executeOrder(state, hire(), world)?.reason).toBe(
-      '500 guards cost 1500 gold, but rome has 1499',
+      '500 guards cost 2000 gold, but rome has 1999',
     );
-    expect(city(state).guards).toBe(0);
+    expect(city(state).guards).toEqual([]);
     expectConsistent(state);
   });
 });
 
-describe('dismissing guards', () => {
-  test('lets a band go with no gold back, and the garrison falls to the new full garrison', () => {
-    const state = withGold(5000);
+describe('the term of guards', () => {
+  test('a band serves its year and leaves on its day, and the garrison falls with it', () => {
+    let state = withGold(5000);
     executeOrder(state, hire(), world);
-    executeOrder(state, hire(), world);
-    expect(executeOrder(state, dismiss(), world)).toBeUndefined();
-    expect(gold(state)).toBe(5000 - 2 * GUARD_GOLD);
-    expect(city(state)).toMatchObject({
-      guards: GUARD_BAND,
-      garrison: CITY_DEFENCES.capital.garrison + GUARD_BAND,
-    });
-    expectConsistent(state);
-  });
-
-  test('is refused in a city with no guards or not its own', () => {
-    const state = withGold(5000);
-    expect(executeOrder(state, dismiss(), world)?.reason).toBe('roma holds no guards');
-    expect(dismissRefusal(city(state, FIXTURE.carthago), FIXTURE.rome)).toBe(
-      'carthago belongs to carthage, not rome',
-    );
-    expectConsistent(state);
-  });
-});
-
-describe('the cost of guards', () => {
-  test('their upkeep shows in the daily balance', () => {
-    const state = withGold(5000);
-    const before = need(dailyBalances(state).get(FIXTURE.rome));
-    executeOrder(state, hire(), world);
-    executeOrder(state, hire(FIXTURE.capua), world);
-    const after = need(dailyBalances(state).get(FIXTURE.rome));
-    expect(before.gold - after.gold).toBeCloseTo(2 * GUARD_BAND * GUARD_UPKEEP);
-    expect(after.food).toBe(before.food);
-    expectConsistent(state);
-  });
-
-  test('unpaid guards leave while the gold is below zero, and the garrison with them', () => {
-    let state = withGold(0);
-    city(state).guards = 1000;
-    city(state).garrison = CITY_DEFENCES.capital.garrison + 1000;
-    need(state.factions[FIXTURE.rome]).stores.gold = -1000;
+    const full = CITY_DEFENCES.capital.garrison;
+    const leaves = state.day + GUARD_DAYS;
+    while (state.day < leaves) state = tick(state, [], world).state;
+    expect(city(state).garrison).toBe(full + GUARD_BAND);
     state = tick(state, [], world).state;
-    const left = 1000 - Math.ceil(1000 * DESERTION);
-    expect(city(state).guards).toBe(left);
-    expect(city(state).garrison).toBe(CITY_DEFENCES.capital.garrison + left);
+    expect(city(state).guards).toEqual([]);
+    expect(city(state).garrison).toBe(full);
+    expect(fullDefences(city(state)).garrison).toBe(full);
     expectConsistent(state);
   });
 });
@@ -172,7 +139,7 @@ describe('guards and war', () => {
     const state = withGold(5000);
     executeOrder(state, hire(FIXTURE.capua), world);
     changeCityOwner(state, FIXTURE.capua, FIXTURE.carthage);
-    expect(city(state, FIXTURE.capua).guards).toBe(0);
+    expect(city(state, FIXTURE.capua).guards).toEqual([]);
     expect(fullDefences(city(state, FIXTURE.capua)).garrison).toBe(
       CITY_DEFENCES.greatPowerCity.garrison,
     );
@@ -188,7 +155,7 @@ describe('guards and war', () => {
     state = tick(state, [], world).state;
     expect(city(state, FIXTURE.capua)).toMatchObject({
       owner: FIXTURE.carthage,
-      guards: 0,
+      guards: [],
       garrison:
         Math.round(CITY_DEFENCES.greatPowerCity.garrison * OCCUPATION_SHARE) +
         Math.ceil(CITY_DEFENCES.greatPowerCity.garrison / RECOVERY_DAYS),
@@ -211,7 +178,8 @@ describe('guards and war', () => {
     const days = Math.ceil((3 * hunger) / Math.ceil(full / RECOVERY_DAYS));
     for (let day = 0; day < days + 1; day++) state = tick(state, [], world).state;
     expect(state.sieges).toEqual({});
-    expect(city(state, FIXTURE.capua)).toMatchObject({ guards: GUARD_BAND, garrison: full });
+    expect(guardMen(city(state, FIXTURE.capua))).toBe(GUARD_BAND);
+    expect(city(state, FIXTURE.capua).garrison).toBe(full);
     expectConsistent(state);
   });
 });
