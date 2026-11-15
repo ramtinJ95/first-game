@@ -193,7 +193,15 @@ export async function buildDrawingCoast() {
       );
       return intersection([decoded], physical).length === 0 ? [p] : [];
     }),
-    land,
+    // Each ring is one flat list of every point's step from the one before, which gzip halves.
+    land: land.map((polygon) =>
+      polygon.map((ring) =>
+        ring.flatMap(([x, y], i) => {
+          const [px, py] = i === 0 ? [0, 0] : (ring[i - 1] as Point);
+          return [x - px, y - py];
+        }),
+      ),
+    ),
     runs,
   };
 }
@@ -201,5 +209,7 @@ export async function buildDrawingCoast() {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = await buildDrawingCoast();
   writeFileSync('data/map/drawing-coast.json', JSON.stringify(result) + '\n');
-  console.log(`${result.land.length} land pieces, ${result.land.flat(2).length} outline points`);
+  console.log(
+    `${result.land.length} land pieces, ${result.land.flat(2).length / 2} outline points`,
+  );
 }

@@ -17,12 +17,17 @@ export function atlasCoast(map: GameMap) {
   }
   if (!coast) {
     const land: MultiPolygon = drawing.land.map((polygon) =>
-      polygon.map((ring) =>
-        ring.map((point): Point => [
-          (point[0] as number) * drawing.unitKm,
-          (point[1] as number) * drawing.unitKm,
-        ]),
-      ),
+      polygon.map((steps) => {
+        const ring: Point[] = [];
+        let x = 0,
+          y = 0;
+        for (let i = 0; i < steps.length; i += 2) {
+          x += steps[i] as number;
+          y += steps[i + 1] as number;
+          ring.push([x * drawing.unitKm, y * drawing.unitKm]);
+        }
+        return ring;
+      }),
     );
     const rings = land.flat();
     coast = {
