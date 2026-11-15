@@ -138,7 +138,7 @@ export function recruitForecast(
             : `Stores grow while you wait: raised in about ${whole(holdsAfter)} days, on ${dateText(game.day + holdsAfter)}, these men are fed as the people grow, ${
                 short.gold === undefined
                   ? 'if you raise no other troops and lose no city before then'
-                  : 'if you raise no other troops, spend no gold, and your income holds until then'
+                  : 'if you raise no other troops, spend no gold, and your income holds until then, though trade gold comes as each caravan arrives and can move the day by some weeks'
               }. Raise now only if you need them sooner.`
         }`
       : undefined,

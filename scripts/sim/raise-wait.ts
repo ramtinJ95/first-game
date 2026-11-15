@@ -10,6 +10,7 @@ import type { GameState } from '../../src/sim/state/game-state.ts';
 import { tick } from '../../src/sim/tick.ts';
 import { TROOPS, type Troop } from '../../src/sim/troops.ts';
 import { buildWorld } from '../../src/sim/world/world.ts';
+import { dateText } from '../../src/app/names.ts';
 import { recruitForecast } from '../../src/ui/recruit-forecast.ts';
 import { playCautiousRome } from '../cautious-rome.ts';
 
@@ -31,7 +32,6 @@ const roma = 'roma' as CityId;
 const troops = values.troops.split(',') as Troop[];
 const EVERY = Number(values.every);
 const LAST_DAY = 12 * 365;
-const yearDay = (day: number) => `Y${Math.floor(day / 365) + 1} d${(day % 365) + 1}`;
 
 interface Trial {
   city: CityId;
@@ -75,7 +75,8 @@ for (
   let warnedOn: number | undefined;
   const trials: Trial[] = [];
   const disturbances: { day: number; war: boolean; lost: number; men: number }[] = [];
-  for (let day = 0; day < LAST_DAY; day++) {
+  for (let step = 0; step < LAST_DAY; step++) {
+    const day = state.day;
     const orders: Order[] = values.world === 'ai' ? decideAll(state, world) : [];
     if (warnedOn === undefined && day % EVERY === 0 && canAfford(state, 'spearmen')) {
       if (forecast(state, roma, 'spearmen').warning) {
@@ -129,7 +130,7 @@ for (
     const slip = t.passes === null || t.passes < 0 ? null : t.passes - t.named;
     if (slip !== null && before.length === 0) slips.push(slip);
     console.log(
-      `| ${seed} | ${yearDay(warnedOn)} | ${state.cities[t.city]?.name ?? t.city} | ${t.troop} | ${t.named - warnedOn} | ${yearDay(t.named)} | ${t.againWait === null ? 'no warning' : t.againWait < 0 ? 'warns, no wait' : `warns, about ${t.againWait} days`} | ${t.passes === null ? 'not in 12 years' : t.passes < 0 ? 'city lost' : yearDay(t.passes)} | ${slip ?? '-'} | ${before.length ? `${before.filter((d) => d.war).length}, ${before.reduce((s, d) => s + d.lost, 0)}, ${before.reduce((s, d) => s + d.men, 0)}` : 'none'} |`,
+      `| ${seed} | ${dateText(warnedOn)} | ${state.cities[t.city]?.name ?? t.city} | ${t.troop} | ${t.named - warnedOn} | ${dateText(t.named)} | ${t.againWait === null ? 'no warning' : t.againWait < 0 ? 'warns, no wait' : `warns, about ${t.againWait} days`} | ${t.passes === null ? 'not in 12 years' : t.passes < 0 ? 'city lost' : dateText(t.passes)} | ${slip ?? '-'} | ${before.length ? `${before.filter((d) => d.war).length}, ${before.reduce((s, d) => s + d.lost, 0)}, ${before.reduce((s, d) => s + d.men, 0)}` : 'none'} |`,
     );
   }
 }
@@ -137,7 +138,7 @@ if (values.world === 'cautious') cautious();
 
 function cautious() {
   console.log(
-    '\nThe cautious Rome of `npm run sim -- threat -- --peaceful` plays its AI, raises and builds included, and its trade. Every 45 days the card for Spearmen at Roma is read; a warning that names a wait is tried again on the day named.\n',
+    '\nThe cautious Rome of `npm run sim -- threat -- --peaceful` plays its AI, raises and builds included, and its trade. Every 45 days that Rome has the gold and men for Spearmen, so the card can be clicked, the card at Roma is read; a warning that names a wait is tried again on the day named.\n',
   );
   console.log(
     "| seed | warned | short of | Rome's orders taken until the named day | wait named | named day | on the named day | passes | slip | Rome then and on the named day: men, buildings, routes, cities |",
@@ -165,7 +166,7 @@ function cautious() {
           for (const order of accepted)
             open.acts.set(order.kind, (open.acts.get(order.kind) ?? 0) + 1);
         if (!open) {
-          if (day % 45 !== 0) return;
+          if (day % 45 !== 0 || !canAfford(after, 'spearmen')) return;
           const f = forecast(after, roma, 'spearmen');
           if (f.warning && f.holdsAfter !== undefined)
             open = {
@@ -188,7 +189,7 @@ function cautious() {
         if (passes !== undefined || day > open.named + 3 * 365) {
           const [said, realm] = open.again.split(' | ');
           rows.push(
-            `| ${seed} | ${yearDay(open.on)} | ${open.store} | ${[...open.acts].map(([k, n]) => `${k} ${n}`).join(', ') || 'none'} | ${open.named - open.on} | ${yearDay(open.named)} | ${said} | ${passes === undefined ? 'not in 3 years' : yearDay(passes)} | ${passes === undefined ? '-' : passes - open.named} | ${realm} |`,
+            `| ${seed} | ${dateText(open.on)} | ${open.store} | ${[...open.acts].map(([k, n]) => `${k} ${n}`).join(', ') || 'none'} | ${open.named - open.on} | ${dateText(open.named)} | ${said} | ${passes === undefined ? 'not in 3 years' : dateText(passes)} | ${passes === undefined ? '-' : passes - open.named} | ${realm} |`,
           );
           open = undefined;
           passes = undefined;

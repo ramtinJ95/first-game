@@ -75,7 +75,7 @@ it('pays a delayed raise on the day it is given, after the treasury has refilled
   const wait = required(forecast.holdsAfter);
   expect(forecast.short.gold).toBeDefined();
   expect(forecast.warning).toContain(
-    `on ${dateText(state.day + wait)}, these men are fed as the people grow, if you raise no other troops, spend no gold, and your income holds until then.`,
+    `on ${dateText(state.day + wait)}, these men are fed as the people grow, if you raise no other troops, spend no gold, and your income holds until then, though trade gold comes as each caravan arrives and can move the day by some weeks.`,
   );
   expect(() => firstShortfall(state, 'gold', true, 1 + wait)).toThrow('Stores never ran short');
   expect(() => firstShortfall(state, 'food', true, 1 + wait)).toThrow('Stores never ran short');
