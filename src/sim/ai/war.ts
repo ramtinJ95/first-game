@@ -82,6 +82,8 @@ export interface WarReadiness {
   readonly hoard: number;
   /** The other's city nearest the power, whose defenders it weighs. */
   readonly front: CityId;
+  /** Whether rival pressure, which weighs field armies only, stands nearer than the odds. */
+  readonly pressed: boolean;
 }
 
 /**
@@ -110,14 +112,13 @@ export function warReadiness(
   if (!reckoning?.eligible.has(against)) return undefined;
   const front = reckoning.frontOf(against);
   if (!front) return undefined;
-  const pressure = reckoning.pressureOn(against) ?? 0;
+  const pressure = (reckoning.pressureOn(against) ?? 0) / RIVAL_PRESSURE_ODDS;
+  const odds = reckoning.scoreOf(against, reckoning.measure(against, front.city), front.km);
   return {
-    readiness: Math.max(
-      reckoning.scoreOf(against, reckoning.measure(against, front.city), front.km),
-      pressure / RIVAL_PRESSURE_ODDS,
-    ),
+    readiness: Math.max(odds, pressure),
     hoard: reckoning.hoardShare(against),
     front: front.city.id,
+    pressed: pressure > odds,
   };
 }
 

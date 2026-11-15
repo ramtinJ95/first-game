@@ -133,9 +133,9 @@ describe('how near a power stands to war', () => {
       faction: FIXTURE.rome,
       against: FIXTURE.carthage,
     });
-    expect(
-      warReadiness(state, tiny, FIXTURE.rome, FIXTURE.carthage)?.readiness,
-    ).toBeGreaterThanOrEqual(1);
+    const readiness = warReadiness(state, tiny, FIXTURE.rome, FIXTURE.carthage);
+    expect(readiness?.readiness).toBeGreaterThanOrEqual(1);
+    expect(readiness?.pressed).toBe(true);
     expectConsistent(state);
   });
 

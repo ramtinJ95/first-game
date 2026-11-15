@@ -48,7 +48,7 @@ export function threatNewsOfDay(
     const front = after.cities[threat.front];
     const gold = after.factions[player]?.stores.gold ?? 0;
     const hoard =
-      threat.hoard > 0
+      threat.hoard > 0 && !threat.pressed
         ? ` Your treasury of ${whole(gold)} gold lowers what it needs by ${Math.round(threat.hoard * 100)}%, since a peace would make you pay it.`
         : '';
     news.push({
