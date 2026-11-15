@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildFixture, FIXTURE as f, fixtureWorld } from '../sim/fixture.ts';
-import type { Order } from '../sim/orders/orders.ts';
+import { executeOrder, type Order } from '../sim/orders/orders.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { readFileSync } from 'node:fs';
@@ -103,6 +103,31 @@ describe('the threat a hire answers', () => {
     ]);
     const after = Number(/→ (\d+)%/.exec(shown.hire.threats[0] ?? '')?.[1]);
     expect(after).toBeLessThan(now);
+  });
+});
+
+describe('a threat guards cannot answer', () => {
+  it('says so of a power drawn by rival pressure, which weighs field armies only', () => {
+    const state = buildFixture();
+    const hastati = state.formations[f.hastati];
+    const spears = state.formations[f.citizenSpears];
+    const carthaginians = state.factions[f.carthage];
+    if (!hastati || !spears || !carthaginians) throw new Error('no fixture records');
+    hastati.men = 2000;
+    spears.men = 500;
+    carthaginians.stores.gold = 5000;
+    executeOrder(
+      state,
+      { kind: 'declareWar', faction: f.rome, against: f.syracusaeFaction },
+      world,
+    );
+    state.player = f.carthage;
+    const threat = warReadiness(state, world, f.rome, f.carthage);
+    const city = threat && state.cities[threat.front];
+    if (!threat?.pressed || !city) throw new Error('no pressure on Carthage');
+    expect(cityGuards(state, [], city, world).hire.threats).toEqual([
+      `Rome ${Math.round(Math.min(1, threat.readiness) * 100)}% of the strength it needs to declare war, by its field armies against yours: guards do not hold that back`,
+    ]);
   });
 });
 

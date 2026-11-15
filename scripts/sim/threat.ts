@@ -4,7 +4,7 @@ import { threatNewsOfDay } from '../../src/app/threat-news.ts';
 import { createRouter } from '../../src/sim/ai/routes.ts';
 import { enemiesOf, sorted, strengthNear, strengthOf } from '../../src/sim/ai/situation.ts';
 import { WAR_FRONT_KM, WAR_REACH_KM } from '../../src/sim/ai/thresholds.ts';
-import { GUARD_GOLD, guardMen } from '../../src/sim/guards.ts';
+import { GUARD_GOLD, guardMen, weighedGarrison } from '../../src/sim/guards.ts';
 import { whole } from '../../src/app/names.ts';
 import type { FactionId } from '../../src/sim/ids.ts';
 import { truceBetween } from '../../src/sim/peace/truce.ts';
@@ -107,7 +107,8 @@ function weighing(state: GameState, power: FactionId): Weighing | undefined {
   for (const army of sorted(state.armies)) if (army.owner === power) own += strengthOf(state, army);
   const romans = sorted(state.armies).filter((a) => a.owner === rome);
   const theirs =
-    strengthNear(state, romans, front.theirs.position, WAR_FRONT_KM) + front.theirs.garrison;
+    strengthNear(state, romans, front.theirs.position, WAR_FRONT_KM) +
+    weighedGarrison(front.theirs, state.day);
   const limits = limitsOf(state);
   const full = (faction: FactionId) =>
     (state.factions[faction]?.stores.gold ?? 0) / Math.max(1, limits.get(faction)?.gold ?? 0);
@@ -252,7 +253,7 @@ function print(rows: readonly Row[]) {
   );
   const weighings = rows.flatMap((r) => r.weighings);
   console.log(
-    "\nMonths a great power at peace with every other had Rome in reach, by its cities: its whole strength over Rome's armies near Rome's nearest city plus that city's garrison, and the share of each treasury that is full.\n",
+    "\nMonths a great power at peace with every other had Rome in reach, by its cities: its whole strength over Rome's armies near Rome's nearest city plus that city's garrison with the guards great powers still count, and the share of each treasury that is full.\n",
   );
   console.log(
     "| cities | months | odds, median | odds, 9 in 10 below | its treasury full | Rome's treasury full |",

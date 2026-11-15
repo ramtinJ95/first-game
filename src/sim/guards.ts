@@ -30,7 +30,7 @@ export function guardMen(city: DeepReadonly<Pick<City, 'guards'>>): number {
   return city.guards.length * GUARD_BAND;
 }
 
-/** The last day a great power counts the band against a war. */
+/** The first day a great power no longer counts the band against a war. */
 export function deterrentUntil(band: DeepReadonly<GuardBand>): Day {
   return (band.until - GUARD_DAYS + GUARD_DETER_DAYS) as Day;
 }

@@ -28,7 +28,8 @@ export interface GuardsHire {
   /**
    * For each great power that weighs this city before it declares war on the owner, how
    * near it stands now and with the band, such as "Carthage 85% → 74% of the strength it
-   * needs to declare war, until Year 2, day 100". Empty when the hire is refused for a
+   * needs to declare war, until Year 2, day 100", or that guards do not hold back a power
+   * drawn by rival pressure. Empty when the hire is refused for a
    * reason other than gold.
    */
   readonly threats: readonly string[];
@@ -83,7 +84,8 @@ function hireChange(state: State, city: DeepReadonly<City>, world: World): strin
 
 /**
  * Each great power that weighs the city before it declares on the owner, by the AI's own
- * reckoning, today and with one more band, played through the rules' handler.
+ * reckoning, today and with one more band, played through the rules' handler. A power
+ * drawn by rival pressure weighs field armies only, so the line says guards change nothing.
  */
 function hireThreats(state: State, city: DeepReadonly<City>, world: World): string[] {
   const hired = structuredClone(state) as GameState;
@@ -94,7 +96,13 @@ function hireThreats(state: State, city: DeepReadonly<City>, world: World): stri
   for (const power of Object.values(state.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (power.id === city.owner || power.kind !== 'greatPower') continue;
     const now = warReadiness(state, world, power.id, city.owner);
-    if (!now || now.front !== city.id || now.pressed) continue;
+    if (!now || now.front !== city.id) continue;
+    if (now.pressed) {
+      lines.push(
+        `${factionName(state, power.id)} ${percent(now.readiness)} of the strength it needs to declare war, by its field armies against yours: guards do not hold that back`,
+      );
+      continue;
+    }
     const then = warReadiness(hired, world, power.id, city.owner);
     lines.push(
       `${factionName(state, power.id)} ${percent(now.readiness)} → ${percent(then?.readiness ?? 0)} of the strength it needs to declare war, until ${until}`,
