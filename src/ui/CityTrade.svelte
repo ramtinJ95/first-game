@@ -95,7 +95,7 @@
 <ul data-testid="trade-routes">
   {#each routes as route (route.id)}
     {@const other = game.cities[route.from === city.id ? route.to : route.from]}
-    {@const risk = routeRisks(route)[0]}
+    {@const risk = routeRisks(route).find((r) => !('city' in r) || r.city !== city.id)}
     <li>
       <strong>{other?.name}</strong> · {route.mode === 'land' ? 'caravan' : 'ship'} ·
       {#if route.status === 'offered'}
@@ -280,7 +280,11 @@
   .partners {
     max-height: 16em;
     overflow-y: auto;
-    padding-right: 2px;
+    padding: 4px 2px 4px 0;
+    border-block: 1px solid rgb(122 75 42 / 30%);
+  }
+  .partners [aria-pressed='true'] .what {
+    color: inherit;
   }
   .partners li {
     margin-bottom: 0;

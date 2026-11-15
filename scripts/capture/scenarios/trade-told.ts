@@ -14,10 +14,12 @@ import {
   rome,
   startGame,
   untilDrawn,
+  withFormations,
 } from '../../../e2e/support.ts';
 import type { CityId, FactionId } from '../../../src/sim/ids.ts';
 import type { Order } from '../../../src/sim/orders/orders.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
+import { routePoint } from '../../../src/sim/trade/routes.ts';
 import { defineScenario } from '../scenario.ts';
 
 async function load(page: Page, state: GameState) {
@@ -72,7 +74,10 @@ export default defineScenario({
       'quote-risk',
       'A quote for Roma to Syracusae: the payback set against Syracusae’s war with Carthage, which closes the route if Syracusae falls',
     );
-    await partners.scrollIntoViewIfNeeded();
+    await partners.evaluate((list) => {
+      list.scrollTop = 0;
+      list.previousElementSibling?.previousElementSibling?.scrollIntoView({ block: 'start' });
+    });
     await shot(
       'picker',
       'The partner list: cities that agree now with their way, payback, price and risk, then the rest with the reason',
@@ -115,28 +120,33 @@ export default defineScenario({
       'An invitation: both goods, the way and its crossing, what each arrival pays Roma, the last day, and Accept disabled with its reason',
     );
 
-    const besieged = playDays(rich(), 1, [
+    const troubled = playDays(rich(), 1, [
       open('roma', 'capua', 'land'),
       open('roma', 'syracusae', 'sea'),
-      open('roma', 'mediolanum', 'land'),
+      open('roma', 'arretium', 'land'),
     ]);
-    declareWar(besieged, rome, carthage);
-    const roma = besieged.cities['roma' as CityId];
-    const punic = armyOf(besieged, carthage);
-    const roman = armyOf(besieged, rome);
-    if (!roma) throw new Error('missing Roma');
-    roman.activity = { kind: 'idle', position: { x: roma.position.x - 300, y: roma.position.y } };
-    punic.activity = { kind: 'idle', position: { ...roma.position } };
-    await load(page, besieged);
+    const macedon = 'macedon' as FactionId;
+    declareWar(troubled, carthage, 'syracusae' as FactionId);
+    declareWar(troubled, rome, macedon);
+    const punic = withFormations(troubled, armyOf(troubled, carthage), [
+      ['spearmen', 3000],
+      ['swordsmen', 2000],
+    ]);
+    punic.activity = { kind: 'idle', position: cityPoint('syracusae') };
+    armyOf(troubled, rome).activity = { kind: 'idle', position: cityPoint('mediolanum') };
+    const road = Object.values(troubled.tradeRoutes).find((r) => r.to === 'capua');
+    if (!road) throw new Error('expected the road to Capua');
+    armyOf(troubled, macedon).activity = { kind: 'idle', position: routePoint(road, 0.5) };
+    await load(page, troubled);
     await resume(page);
-    await page
-      .getByTestId('alerts')
-      .getByText(/The siege of Roma stops 3 trade routes/)
-      .waitFor();
+    const alerts = page.getByTestId('alerts');
+    await alerts.getByText(/Trade closed: Roma to Syracusae, a city changed owner/).waitFor();
     await pause(page);
+    await expect(alerts).toContainText('The siege of Syracusae stops trade: Roma to Syracusae.');
+    await expect(alerts).toContainText('Macedon raided the road Roma to Capua');
     await shot(
       'news',
-      'One line for a siege that stops three of Roma’s routes, where each route took a line of its own before',
+      'The news of trade: Carthage’s siege of Syracusae warns that the route closes if it falls, Macedon’s raid is one line with its loss, and the fall closes the route',
     );
 
     await load(page, syracusaeAtWar);

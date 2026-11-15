@@ -59,9 +59,46 @@ describe('trade news', () => {
     const both = whole(route.daily * route.days * 4);
     expect(told.map((a) => a.text)).toEqual([
       expect.stringContaining('Carthage raided the road Roma to Capua'),
-      `Carthage's raids on Roma to Capua have stopped: 3 raids since Year 1, day 1 took 2 cargoes worth about ${both} gold to you.`,
+      `Carthage's raids have stopped: 3 raids on Roma to Capua since Year 1, day 1 took 2 cargoes worth about ${both} gold to you.`,
     ]);
     expectConsistent(state);
+  });
+
+  test("one enemy's raids on two roads are one episode, tallied with both roads", () => {
+    const { state, route, cargo } = road();
+    const away = route.path.map((p) => ({ x: p.x + 200, y: p.y }));
+    const other = {
+      ...route,
+      id: 'tradeRoute-99' as TradeRouteId,
+      from: f.capua,
+      to: f.roma,
+      path: away,
+    };
+    state.tradeRoutes[other.id] = other;
+    const army = state.armies[f.punicArmy];
+    if (!army) throw new Error('missing army');
+    let watched: TradeTrouble[] = [];
+    const told: string[] = [];
+    const play = (at: { x: number; y: number }) => {
+      const before = structuredClone(state);
+      army.activity = { kind: 'idle', position: at };
+      const news = tradeNews(
+        before,
+        state,
+        recordEvents(state, () => trade(state)),
+        watched,
+      );
+      watched = news.watched;
+      told.push(...news.alerts.map((a) => a.text));
+      state.day = (state.day + 1) as Day;
+    };
+    play(routePoint(route, 0.5));
+    play(routePoint(other, 0.5));
+    for (let i = 0; i < TRADE_QUIET_DAYS; i++) play({ x: 1, y: 1 });
+    expect(told).toEqual([
+      `Carthage raided the road Roma to Capua and took a cargo worth about ${cargo} gold to you. Deliveries stop while its armies stay within reach.`,
+      `Carthage's raids have stopped: 2 raids on Roma to Capua and Capua to Roma since Year 1, day 1 took 2 cargoes worth about ${whole(route.daily * route.days * 4)} gold to you.`,
+    ]);
   });
 
   test('raids that take nothing more need no tally, and a raid after a quiet spell is news again', () => {
@@ -89,7 +126,34 @@ describe('trade news', () => {
     expect(told).toHaveLength(1);
   });
 
-  test('a siege that stops several of the player routes is one line naming them', () => {
+  test("a siege of a partner's city is one line naming the routes it stops, told once", () => {
+    const state = buildFixture();
+    const punic = state.armies[f.punicArmy];
+    const syracusae = state.cities[f.syracusae];
+    if (!punic || !syracusae) throw new Error('missing fixture');
+    const order = { kind: 'openTrade', faction: f.rome, from: f.roma } as const;
+    expect(openTrade(state, { ...order, to: f.syracusae, mode: 'sea' }, world)).toBeUndefined();
+    punic.activity = { kind: 'idle', position: { ...syracusae.position } };
+    const war = { kind: 'declareWar', faction: f.carthage, against: f.syracusaeFaction } as const;
+    const { state: next, events } = tick(state, [war], world);
+    const news = tradeNews(state, next, events, []);
+    expect(news.alerts.map((a) => a.text)).toEqual([
+      'The siege of Syracusae stops trade: Roma to Syracusae. If Syracusae falls, the route closes.',
+    ]);
+    const second = events.flatMap((e) =>
+      e.kind === 'tradeRaided'
+        ? [{ ...e, route: 'tradeRoute-9' as TradeRouteId, from: f.capua }]
+        : [],
+    );
+    expect(tradeNews(state, next, [...events, ...second], []).alerts.map((a) => a.text)).toEqual([
+      'The siege of Syracusae stops 2 trade routes: Roma to Syracusae and Capua to Syracusae. If Syracusae falls, they close.',
+    ]);
+    const later = tick(next, [], world);
+    expect(tradeNews(next, later.state, later.events, news.watched).alerts).toEqual([]);
+    expectConsistent(later.state);
+  });
+
+  test("a siege of the player's own city is left to the city's own news", () => {
     const state = buildFixture();
     const roman = state.armies[f.romanArmy];
     const punic = state.armies[f.punicArmy];
@@ -98,18 +162,15 @@ describe('trade news', () => {
     if (!roman || !punic || !roma || !capua) throw new Error('missing fixture');
     const order = { kind: 'openTrade', faction: f.rome, from: f.roma } as const;
     expect(openTrade(state, { ...order, to: f.capua, mode: 'land' }, world)).toBeUndefined();
-    expect(openTrade(state, { ...order, to: f.syracusae, mode: 'sea' }, world)).toBeUndefined();
     roman.activity = { kind: 'idle', position: { ...capua.position } };
     punic.activity = { kind: 'idle', position: { ...roma.position } };
     const war = { kind: 'declareWar', faction: f.rome, against: f.carthage } as const;
     const { state: next, events } = tick(state, [war], world);
-    const news = tradeNews(state, next, events, []);
-    expect(news.alerts.map((a) => a.text)).toEqual([
-      'The siege of Roma stops 2 trade routes: Roma to Capua and Roma to Syracusae. If Roma falls, they close.',
-    ]);
-    const later = tick(next, [], world);
-    expect(tradeNews(next, later.state, later.events, news.watched).alerts).toEqual([]);
-    expectConsistent(later.state);
+    expect(events).toContainEqual(expect.objectContaining({ kind: 'tradeRaided', cause: 'siege' }));
+    expect(tradeNews(state, next, events, []).alerts).toEqual([]);
+    expect(alertsOfDay(state, next, events)).toContainEqual(
+      expect.objectContaining({ kind: 'siegeBegan', text: 'Carthage besieges Roma' }),
+    );
   });
 
   test('opening, an invitation with its terms, and its refusal are each a line that selects the city', () => {
