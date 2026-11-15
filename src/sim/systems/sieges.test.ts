@@ -17,6 +17,7 @@ import {
   RECOVERY_DAYS,
   SALLY_SHARE,
   TAKEN_FOOD_SHARE,
+  TAKEN_WALLS_SHARE,
   WALL_DEFENCE,
 } from './sieges.ts';
 
@@ -544,10 +545,11 @@ describe('after a siege', () => {
 });
 
 describe('a city that changes hands', () => {
-  test('a city starved out holds half its full food on the day it falls, so the next siege cannot starve it within days', () => {
+  test('a city starved out holds half its full food and a quarter of its walls on the day it falls, so the next siege cannot take it within days', () => {
     const state = besiegingCapua();
     const capua = cityOf(state, FIXTURE.capua);
     capua.foodDays = 0;
+    capua.walls = 0;
     capua.garrison = HUNGER;
     const fallen = tick(state, [], world).state;
     const city = cityOf(fallen, FIXTURE.capua);
@@ -556,6 +558,10 @@ describe('a city that changes hands', () => {
       CITY_DEFENCES.greatPowerCity.foodDays * TAKEN_FOOD_SHARE,
     );
     expect(city.foodDays).toBeLessThan(CITY_DEFENCES.greatPowerCity.foodDays * 0.6);
+    expect(city.walls).toBeGreaterThanOrEqual(
+      CITY_DEFENCES.greatPowerCity.walls * TAKEN_WALLS_SHARE,
+    );
+    expect(city.walls).toBeLessThan(CITY_DEFENCES.greatPowerCity.walls * 0.3);
     expectConsistent(fallen);
   });
 
