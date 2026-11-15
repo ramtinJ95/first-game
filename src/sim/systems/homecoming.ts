@@ -6,7 +6,7 @@ import type { World } from '../world/world.ts';
 
 /**
  * Sends the two sides of a peace home. On its day, after the day's orders, every army of
- * either side on the other's land, or marching or sailing there, turns home. On every day
+ * either side on the other's land, or marching or sailing there, or marching to a shore to sail there, turns home. On every day
  * of the truce, an idle army of either side on the other's land goes on home, so an army
  * that reached a shore takes ship. It runs first in the day, so the march home starts at once.
  */
@@ -46,8 +46,13 @@ function goHome(
     const { activity } = army;
     if (activity.kind !== 'idle' && activity.kind !== 'marching') continue;
     const end = activity.kind === 'marching' ? activity.waypoints.at(-1) : undefined;
+    const sail = activity.kind === 'marching' ? activity.sail : undefined;
     const onTheirLand = landOwnerAt(state, activity.position) === enemy;
-    const bound = end !== undefined && landOwnerAt(state, end) === enemy;
+    const bound =
+      (end !== undefined && landOwnerAt(state, end) === enemy) ||
+      (sail !== undefined &&
+        (state.cities[sail.to]?.owner === enemy ||
+          (sail.then !== undefined && landOwnerAt(state, sail.then) === enemy)));
     if (onTheirLand || bound) sendHome(state, world, army);
   }
 
