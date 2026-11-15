@@ -101,12 +101,10 @@ the reading of them is in `src/ui`, so the rules PR that changes survival change
   A row the player cannot afford keeps its place with the gold it still needs. The first
   computation finds the paths of a city once (about 0.3–0.5 s on the full map); later ones
   read the cache (about 20–30 ms).
-- `routeLedger` in `src/ui/trade-ledger.ts` gives what a route cost the player (nothing for an
-  accepted invitation), an estimate of what its arrivals were worth, and the price less that
-  estimate as still unpaid. The route keeps no tally of past pay, so the estimate values every
-  arrival at today's administrative share and cannot see receipts a full treasury refused;
-  every ledger says that receipts which came while the treasury was full were not kept, so the
-  player may have received less. Close route confirms with it, no refund, and today's price to reopen. The
+- `routeLedger` in `src/ui/trade-ledger.ts` gives what the player paid to open and improve a
+  route (`openedBy`, `improvedBy`), the gold the player kept from its arrivals (the route's
+  `receipts`, which the trade system adds after the treasury's limit, so a full treasury adds
+  nothing), and the price less those receipts as still unpaid. Close route confirms with it, no refund, and today's price to reopen. The
   war confirmation lists, under `declarationFacts`, each route the war closes with its ledger,
   including routes with a minor's league partner that joins at once (`warJoiners`), the
   invitations that lapse, and the player's other land roads the enemy could then raid.

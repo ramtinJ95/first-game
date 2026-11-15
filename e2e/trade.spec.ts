@@ -12,6 +12,7 @@ import {
   playDays,
   resizeTo,
   resume,
+  rome,
   startGame,
   untilDay,
   untilDrawn,
@@ -102,9 +103,8 @@ test('declaring war through the page names the route it closes, then closes it a
   const cost = route.cost.toLocaleString('en');
   const lines = page.getByTestId('war-trade');
   await expect(lines).toContainText(
-    `It closes Roma to Carthago by sea: cost ${cost} gold, arrivals worth about 0 gold, about ${cost} still unpaid.`,
+    `It closes Roma to Carthago by sea: cost ${cost} gold, brought 0 gold, ${cost} still unpaid.`,
   );
-  await expect(lines).toContainText('so you may have received less than that.');
   await page.getByRole('button', { name: 'Confirm war', exact: true }).click();
   await resume(page);
   await expect(page.getByTestId('alerts')).toContainText(
@@ -126,7 +126,7 @@ test('Close route asks first, with what the route cost and earned and that there
   await page.getByRole('button', { name: 'Close route', exact: true }).click();
   const confirm = page.getByTestId('trade-close-confirm');
   await expect(confirm).toContainText(
-    `Close Roma to Capua by land? It cost ${route.cost.toLocaleString('en')} gold, arrivals worth about`,
+    `Close Roma to Capua by land? It cost ${route.cost.toLocaleString('en')} gold, brought ${Math.round(route.receipts[rome] ?? 0).toLocaleString('en')} gold`,
   );
   await expect(confirm).toContainText(
     'Closing gives no refund, and opening it again costs the full price',

@@ -93,7 +93,7 @@ export default defineScenario({
     await page.getByTestId('war-trade').scrollIntoViewIfNeeded();
     await shot(
       'war-routes',
-      'Declare war on Carthage? The route it closes with its price, an estimate of its arrivals and of what is still unpaid, and the roads it exposes',
+      'Declare war on Carthage? The route it closes with its price, what it has brought, and what is still unpaid, and the roads it exposes',
     );
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 

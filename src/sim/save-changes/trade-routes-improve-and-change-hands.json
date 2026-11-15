@@ -1,3 +1,3 @@
 {
-  "adds": "Who paid for each improvement of a trade route. A route whose city changes owner now keeps running under the new owner while the two ends stay at peace."
+  "adds": "Who opened each trade route, who paid for each of its improvements, and the gold each faction has kept from its arrivals. A route whose city changes owner now keeps running under the new owner while the two ends stay at peace."
 }

@@ -153,7 +153,7 @@ export function tradeNews(
       {
         kind: 'tradeRaided',
         tone: 'bad',
-        text: `The siege of ${name(city)} stops ${many ? `${routes.length} trade routes` : 'trade'}: ${list(routes.map(routeName))}. If ${name(city)} falls, ${many ? 'they close' : 'the route closes'}.`,
+        text: `The siege of ${name(city)} stops ${many ? `${routes.length} trade routes` : 'trade'}: ${list(routes.map(routeName))}. If ${name(city)} falls to a power at war with the other end, ${many ? 'they close' : 'the route closes'}; to one at peace with it, ${many ? 'they pass' : 'it passes'} to the new owner.`,
       },
       city,
     );

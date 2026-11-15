@@ -94,9 +94,11 @@ function play(seed: number) {
   for (let day = 0; day < years * 365; day++) {
     const ai = decideAll(state, world, []);
     const owing = (faction: FactionId) =>
-      [...ledger].some(
-        ([id, entry]) => state.tradeRoutes[id]?.partner === faction && entry.received < entry.paid,
-      );
+      [...ledger].some(([id, entry]) => {
+        const route = state.tradeRoutes[id];
+        const other = route?.owner === rome ? route.partner : route?.owner;
+        return other === faction && entry.received < entry.paid;
+      });
     const orders: Order[] = ai.filter(
       (o) =>
         o.faction !== rome ||
@@ -146,6 +148,13 @@ function play(seed: number) {
         opened++;
       }
     }
+    for (const route of Object.values(next.tradeRoutes))
+      if (
+        route.status === 'running' &&
+        (route.owner === rome || route.partner === rome) &&
+        !ledger.has(route.id)
+      )
+        ledger.set(route.id, { paid: 0, received: 0, deliveries: route.deliveries });
     for (const [id, entry] of ledger) {
       const route = next.tradeRoutes[id];
       if (route && route.deliveries > entry.deliveries) {

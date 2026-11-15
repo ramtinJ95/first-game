@@ -99,10 +99,12 @@ export function trade(state: GameState): void {
       const limit = limits.get(owner);
       if (!faction || !limit) throw new Error(`trade ${route.id} has no treasury for ${owner}`);
       const pay = routeRate(route) * route.days * adminShareOf(state, owner);
-      faction.stores.gold = Math.max(
-        faction.stores.gold,
-        Math.min(limit.gold, faction.stores.gold + pay),
-      );
+      const before = faction.stores.gold;
+      faction.stores.gold = Math.max(before, Math.min(limit.gold, before + pay));
+      route.receipts = {
+        ...route.receipts,
+        [owner]: (route.receipts[owner] ?? 0) + faction.stores.gold - before,
+      };
     }
     route.deliveries++;
     route.progress = 0;
