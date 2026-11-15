@@ -18,6 +18,7 @@
     type TradeMode,
   } from '../sim/trade/routes.ts';
   import type { World } from '../sim/world/world.ts';
+  import { invitationProblem } from '../sim/ai/trade-consent.ts';
   import type { Actions } from './actions.ts';
   import { afterWaiting } from './buildings-text.ts';
   import { tradeCaution } from './trade-caution.ts';
@@ -101,7 +102,7 @@
       {#if route.status === 'offered'}
         Invitation awaiting your consent.
         {#if own && route.partner === game.player}
-          {@const refusal = tradeProblem(
+          {@const problem = tradeProblem(
             waiting,
             world,
             route.owner,
@@ -109,6 +110,10 @@
             route.to,
             route.mode,
           )}
+          {@const lapse = problem ? undefined : invitationProblem(waiting, world, route)}
+          {@const refusal = problem
+            ? `You cannot accept: ${reasonText(game, problem)}.`
+            : lapse && `You cannot accept now: accepting would end the invitation, as ${lapse}.`}
           {@const perDay = route.daily * share}
           {@const left = route.openedOn + TRADE_INVITATION_DAYS - game.day}
           <p data-testid="trade-invitation">
@@ -124,9 +129,7 @@
               {riskText(waiting, each)}
             </p>{/each}
           {#if refusal}
-            <p class="bad" data-testid="trade-accept-refusal">
-              You cannot accept: {reasonText(game, refusal)}.
-            </p>
+            <p class="bad" data-testid="trade-accept-refusal">{refusal}</p>
           {:else}
             <p>Accepting uses one of {city.name}'s free route slots and costs you nothing.</p>
           {/if}
@@ -135,7 +138,7 @@
             <button
               type="button"
               disabled={!!refusal}
-              title={refusal ? reasonText(game, refusal) : undefined}
+              title={refusal || undefined}
               onclick={() =>
                 actions.issue({ kind: 'acceptTrade', faction: game.player, route: route.id })}
               >Accept trade</button

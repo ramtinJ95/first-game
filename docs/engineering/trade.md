@@ -91,7 +91,9 @@ the reading of them is in `src/ui`, so the rules PR that changes survival change
   invitations that lapse, and the player's other land roads the enemy could then raid.
 - An invitation gives both goods, its way and crossing, what each arrival and each day pays
   the player, its risk, and its last day (`openedOn + TRADE_INVITATION_DAYS`). Accept is
-  disabled with `tradeProblem`'s reason for the inviter's order, such as no free slot. Refuse
+  disabled with `tradeProblem`'s reason for the inviter's order, such as no free slot, or
+  with `invitationProblem`'s, which would end the invitation on accepting (about 1–10 ms on
+  the full map, once a day while the invitation shows). Refuse
   says what it forgoes. `tradeCaution` says whose treasury is full: a partner's full treasury
   loses the partner's receipts, not the player's.
 
