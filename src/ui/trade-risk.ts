@@ -36,7 +36,13 @@ export type TradeRisk =
       owner: FactionId;
       enemies: readonly FactionId[];
     }
-  | { kind: 'raids'; enemies: readonly FactionId[]; near: number };
+  | {
+      kind: 'raids';
+      enemies: readonly FactionId[];
+      near: number;
+      /** The owners of the two ends, so the line can say whose war lets a power at peace with the player raid. */
+      owners: readonly FactionId[];
+    };
 
 const GRAVITY: Record<TradeRisk['kind'], number> = { besieged: 0, joinsWar: 1, atWar: 2, raids: 3 };
 
@@ -94,7 +100,7 @@ export function tradeRisk(
           distanceToRoute(at.position, { path: road }) <= RAID_KM
         );
       }).length;
-      risks.push({ kind: 'raids', enemies: [...raiders].sort(), near });
+      risks.push({ kind: 'raids', enemies: [...raiders].sort(), near, owners: [...owners].sort() });
     }
   }
   return risks.sort((a, b) => gravity(state, a) - gravity(state, b));
@@ -155,8 +161,28 @@ export function riskText(state: State, risk: TradeRisk): string {
         risk.near
           ? `; ${risk.near === 1 ? 'one of their armies stands' : `${risk.near} of their armies stand`} within ${RAID_KM} km of it now`
           : ''
-      }.`;
+      }.${whyRaid(state, risk.enemies, risk.owners)}`;
   }
+}
+
+/**
+ * Why a power at peace with the player may still raid: any army at war with either end's
+ * owner takes a land road's cargo, which both ends share. Empty when every raider is at war
+ * with the player.
+ */
+export function whyRaid(
+  state: State,
+  raiders: readonly FactionId[],
+  owners: readonly FactionId[],
+): string {
+  const clauses = raiders
+    .filter((raider) => !areAtWar(state, raider, state.player))
+    .map((raider) => {
+      const foes = owners.filter((o) => o !== state.player && areAtWar(state, raider, o));
+      return `${factionName(state, raider)} is at peace with you but at war with ${names(state, foes)}`;
+    });
+  if (!clauses.length) return '';
+  return ` ${clauses.join('; ')}, and an army at war with either end of a road takes its cargo.`;
 }
 
 /** The short mark a list row carries for its gravest risk, or nothing when none. */

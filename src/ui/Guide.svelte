@@ -74,6 +74,15 @@
         enemies at the walls stop work. Full stores waste further gains. Watch the daily balances:
         short gold or food costs men.
       </dd>
+      <dt>Trade</dt>
+      <dd data-testid="guide-trade">
+        Your city's Trade section opens routes. A city has one route slot; 25,000 people, a Forum
+        and a port each add one. A route costs gold once, and each arrival pays both ends, more for
+        unlike goods. The other city must agree: at peace, with a free slot. War between the two
+        ends closes a route, and so does the fall of either city, unless the other end is yours and
+        the taker is at peace with you. A siege of either end stops deliveries, and an army at war
+        with either end takes a road's cargo, even one at peace with you.
+      </dd>
       <dt>Wars and peace</dt>
       <dd>
         {PEACE_TEXT.start} Wars in the top bar lists your wars and waiting offers. Offer peace as things

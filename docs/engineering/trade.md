@@ -66,7 +66,7 @@ Incoming invitations are accepted or refused by explicit orders whenever that fa
 is under AI control, including the player faction in an all-AI simulation. A human
 player skipped by `decideAll` is never consented automatically.
 
-An enemy anywhere within 20 km of a land route can raid it. A raid pays one shipment
+An army at war with either end's owner, anywhere within 20 km of a land route, can raid it, even when it is at peace with the other end: the cargo is shared, so a war on one end's owner reaches the road. The player hears why: the raid news and the quote's risk line both say, for a raider at peace with the player, whom it is at war with (`whyRaid` in `src/ui/trade-risk.ts`). Changing the rule was weighed and not done: `npm run sim -- peace-raids` plays seeds 1–20 for ten years under the AI, and 732 of 745 raids (98 %) were by a power at war with one end only, so raiding a power's trade partners is how almost every raid happens, and a rule that spared the peaceful end would change the AI's wars and trade, not only the player's news. A raid pays one shipment
 to the raider and resets the caravan; replacement takes a crossing's days. The road
 must be cleared for it to travel again. An endpoint siege suspends any route. These
 are public interruptions for the player's own trade, not a way to reveal hidden enemy
@@ -88,7 +88,7 @@ the reading of them is in `src/ui`, so the rules PR that changes survival change
   besieger is at war with the player, or hands it over if not), a leagued minor that will
   join a war that would close the route, the partner owner's wars with powers also at war
   with the player (a fall to one of them closes the route), the enemies of either end who
-  could raid a land road, and the player's own wars (a fall of the player's city closes it).
+  could raid a land road (a raider at peace with the player is named with the end it is at war with), and the player's own wars (a fall of the player's city closes it).
   It names a besieger only while one of its armies is in sight and counts only enemy armies
   in sight within `RAID_KM` of the road, so it reveals nothing the fog hides. `riskText`,
   `riskMark` and `paybackText` turn it into the quote's line ("pays back in 1.1 years;

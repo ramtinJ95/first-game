@@ -82,6 +82,17 @@ describe('the risk a quote tells', () => {
     );
   });
 
+  test('a power at peace with you that is at war with the partner may raid the road, and the line says why', () => {
+    const state = buildFixture();
+    city(state, f.capua).owner = f.syracusaeFaction;
+    atWar(state, f.carthage, f.syracusaeFaction);
+    const { lines, mark } = read(state, f.capua, 'land');
+    expect(lines).toContain(
+      'Carthage could raid this road and take its cargo. Carthage is at peace with you but at war with Syracusae, and an army at war with either end of a road takes its cargo.',
+    );
+    expect(mark).toBe('road open to raids');
+  });
+
   test('a besieged partner comes first, naming the besieger only while one is in sight', () => {
     const state = buildFixture();
     atWar(state, f.carthage, f.syracusaeFaction);
