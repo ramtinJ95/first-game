@@ -8,6 +8,7 @@ import { buildFixture, fixtureWorld, FIXTURE as f } from '../fixture.ts';
 import { newGame } from '../new-game.ts';
 import type { CityId, ProvinceId } from '../ids.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
+import { allocateId } from '../ids.ts';
 import { expectConsistent } from '../references.ts';
 import { loadGame, saveGame } from '../save.ts';
 import type { Day } from '../state/day.ts';
@@ -212,6 +213,36 @@ describe('trade orders and consent', () => {
       accept: { kind: 'acceptTrade', faction: f.rome, route: route.id } as const,
     };
   }
+
+  test('refusing an invitation and closing a route each tell both ends who ended it', () => {
+    const { state, route } = invited();
+    const refusal = { kind: 'closeTrade', faction: f.rome, route: route.id } as const;
+    expect(tick(state, [refusal], world).events).toContainEqual(
+      expect.objectContaining({ kind: 'tradeClosed', cause: 'refused by Rome', invitation: true }),
+    );
+    const running = opened();
+    const closing = { kind: 'closeTrade', faction: f.rome, route: running.route.id } as const;
+    const result = tick(running.state, [closing], world);
+    expect(result.events).toContainEqual(
+      expect.objectContaining({ kind: 'tradeClosed', cause: 'closed by Rome', invitation: false }),
+    );
+    expectConsistent(result.state);
+  });
+
+  test('an unanswered invitation expires on its ninetieth day and says so', () => {
+    const { state, route } = invited();
+    state.day = (route.openedOn + 89) as Day;
+    expect(recordEvents(state, () => trade(state))).toEqual([]);
+    state.day = (route.openedOn + 90) as Day;
+    expect(recordEvents(state, () => trade(state))).toContainEqual(
+      expect.objectContaining({
+        kind: 'tradeClosed',
+        cause: 'the invitation expired',
+        invitation: true,
+      }),
+    );
+    expect(state.tradeRoutes).toEqual({});
+  });
 
   test('consent lapses visibly without spending if recruitment has consumed the inviter reserve', () => {
     const { state, payer, route, accept } = invited();
@@ -452,7 +483,14 @@ describe('caravans, interruption, and saves', () => {
     const gold = state.factions[f.carthage]?.stores.gold ?? 0;
     const events = recordEvents(state, () => trade(state));
     expect(route.blocked).toBe('raid');
-    expect(events).toContainEqual(expect.objectContaining({ kind: 'tradeRaided' }));
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        kind: 'tradeRaided',
+        cause: 'raid',
+        raider: f.carthage,
+        looted: route.daily * route.days,
+      }),
+    );
     expect(state.factions[f.carthage]?.stores.gold).toBeCloseTo(gold + route.daily * route.days);
     expect(recordEvents(state, () => trade(state))).toEqual([]);
     army.activity.position = { x: 1000, y: 1000 };
@@ -462,6 +500,32 @@ describe('caravans, interruption, and saves', () => {
     state.day = route.departsOn;
     trade(state);
     expect(route.progress).toBeGreaterThan(0);
+    expectConsistent(state);
+  });
+
+  test('a raider beside a siege still takes the cargo, and its theft is an event of that day', () => {
+    const { state, route } = opened();
+    state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);
+    const army = state.armies[f.punicArmy];
+    const carthage = state.factions[f.carthage];
+    if (!army || !carthage) throw new Error('missing raider');
+    const siege = allocateId(state, 'siege');
+    state.sieges[siege] = { id: siege, city: f.capua, besiegers: [army.id], startedOn: state.day };
+    army.activity = { kind: 'besieging', position: routePoint(route, 0.9), siege };
+    const gold = carthage.stores.gold;
+    const events = recordEvents(state, () => trade(state));
+    expect(route.blocked).toBe('siege');
+    expect(carthage.stores.gold).toBeCloseTo(gold + route.daily * route.days);
+    expect(events).toEqual([
+      expect.objectContaining({ kind: 'tradeRaided', cause: 'siege', route: route.id }),
+      expect.objectContaining({
+        kind: 'tradeRaided',
+        cause: 'raid',
+        route: route.id,
+        raider: f.carthage,
+        looted: route.daily * route.days,
+      }),
+    ]);
     expectConsistent(state);
   });
 
@@ -479,15 +543,18 @@ describe('caravans, interruption, and saves', () => {
     const faction = state.factions[f.carthage];
     if (!army || !faction) throw new Error('missing raider');
     const gold = faction.stores.gold;
+    const looted: number[] = [];
     for (let day = 1; day <= 5; day++) {
       state.day = day as Day;
       army.activity = {
         kind: 'idle',
         position: day % 2 ? routePoint(route, 0.5) : { x: 1000, y: 1000 },
       };
-      trade(state);
+      for (const event of recordEvents(state, () => trade(state)))
+        if (event.kind === 'tradeRaided' && event.cause === 'raid') looted.push(event.looted);
     }
     expect(faction.stores.gold).toBeCloseTo(gold + route.daily * route.days);
+    expect(looted).toEqual([route.daily * route.days, 0, 0]);
     expect(route.progress).toBe(0);
     expect(route.deliveries).toBe(0);
     expectConsistent(state);

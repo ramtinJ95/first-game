@@ -31,11 +31,11 @@ it('warns of a lasting deficit years away, which the people grow too slowly to c
   expect(forecast.lasts.food).toBeGreaterThan(365);
   expect(forecast.short.food).toBeGreaterThan(365);
   expect(forecast.warning).toContain(
-    `stores run short in about ${forecast.short.food?.toLocaleString('en-US')} days`,
+    `stores last about ${((forecast.short.food ?? 0) - 1).toLocaleString('en-US')} days`,
   );
   expect(forecast.runway.find((store) => store.key === 'food')).toMatchObject({
     urgent: true,
-    text: `about ${forecast.short.food?.toLocaleString('en-US')} days left as the people grow`,
+    text: `about ${((forecast.short.food ?? 0) - 1).toLocaleString('en-US')} days left as the people grow`,
   });
   expect(forecast.short.food).toBe(firstShortfall(state, 'food', true));
   expectConsistent(state);
@@ -49,7 +49,7 @@ it('stays plain for a small deficit that the growing people close before the sto
   expect(forecast.warning).toBeUndefined();
   expect(forecast.runway.find((store) => store.key === 'food')).toMatchObject({
     urgent: false,
-    text: `short in about ${forecast.lasts.food?.toLocaleString('en-US')} days at today's yields, but the people's growth closes the gap first`,
+    text: `stores last about ${((forecast.lasts.food ?? 0) - 1).toLocaleString('en-US')} days at today's yields, but the people's growth closes the gap first`,
   });
   expect(() => firstShortfall(state, 'food', true)).toThrow('Stores never ran short');
   expectConsistent(state);

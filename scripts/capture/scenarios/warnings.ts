@@ -33,7 +33,7 @@ export default defineScenario({
     await page.getByTestId('recruit-warning').scrollIntoViewIfNeeded();
     await shot(
       'recruit-shortfall',
-      'A lasting deficit warns at any distance: 9 days of food and 824 days of gold, both red, and the raise asks Raise anyway',
+      'A lasting deficit warns at any distance: 8 days of food and 823 days of gold, as the top bar counts them, both red, and the raise asks Raise anyway',
     );
 
     await loadWarnings(page, slowFoodDeficit());
@@ -41,7 +41,7 @@ export default defineScenario({
     await page.getByTestId('recruit-forecast').scrollIntoViewIfNeeded();
     await shot(
       'recruit-growth-closes',
-      "With Spearmen selected, a small deficit the growing people close stays plain: 2,809 days at today's yields, no warning, and a plain Raise troops",
+      "With Spearmen selected, a small deficit the growing people close stays plain: 2,808 days at today's yields, no warning, and a plain Raise troops",
     );
 
     const hungry = foodShortfall();

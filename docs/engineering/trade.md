@@ -27,7 +27,7 @@ random stream and therefore does not redraw a seed's minor-city kinds or armies.
 
 Size, Forum and port slots make routes compete with each other. Capacity reductions
 grandfather existing investments; no new route can exceed the current capacity.
-The player may close or refuse a route without refund. Incoming invitations reserve
+The player may close or refuse a route without refund; Close route asks first. Incoming invitations reserve
 neither slots nor gold. Acceptance rechecks peace, ownership, unrest, sieges, slots,
 duplicates, path and the inviter's gold before changing anything.
 It also rechecks the inviter's military reserve and next recruit, after projecting
@@ -58,6 +58,81 @@ owners, distinct ends, running-pair uniqueness, positive rates, progress, and pa
 length. It does not migrate older change sets. Orders and alert kinds use their own
 registration files, after rebasing onto tooling main `a3ac1ba`.
 
+## What the player is told
+
+Every trade act says what it costs and risks before it is done. The rules stay as above;
+the reading of them is in `src/ui`, so the rules PR that changes survival changes one place.
+
+- `tradeRisk(state, sight, ends, road)` in `src/ui/trade-risk.ts` lists what could stop or
+  close a route under today's rules, gravest first: a siege of either end (deliveries stop,
+  and the route closes if the city falls), a leagued minor that will join its partner's war
+  (on the player, which closes the route, or on another), the partner owner's wars (a change
+  of owner closes the route), and the enemies of either end who could raid a land road.
+  It names a besieger only while one of its armies is in sight and counts only enemy armies
+  in sight within `RAID_KM` of the road, so it reveals nothing the fog hides. `riskText`,
+  `riskMark` and `paybackText` turn it into the quote's line ("pays back in 1.1 years;
+  Syracusae is at war with Carthage: if Syracusae changes hands, the route closes."), a
+  list row's mark, and the lines of an invitation and of a running route.
+- `tradeChoices` in `src/ui/trade-choices.ts` is the partner list: the cities that would agree
+  now, each with every open way (land, sea, or both, each a `TradeWay` with its own risks and
+  the gold it still needs, so a threatened road shows beside a safe sea lane), ordered by
+  payback to a tenth of a
+  year, then by whether the player can afford it, fewer risks, and the shorter crossing,
+  since unlike goods all repay in about 1.13 years; then the cities that would not, each with
+  the rules' reason. A city out of reach both ways says so for both, naming a missing port.
+  A row the player cannot afford keeps its place with the gold it still needs. The first
+  computation finds the paths of a city once (about 0.3–0.5 s on the full map); later ones
+  read the cache (about 20–30 ms).
+- `routeLedger` in `src/ui/trade-ledger.ts` gives what a route cost the player (nothing for an
+  accepted invitation), an estimate of what its arrivals were worth, and the price less that
+  estimate as still unpaid. The route keeps no tally of past pay, so the estimate values every
+  arrival at today's administrative share and cannot see receipts a full treasury refused;
+  every ledger says that receipts which came while the treasury was full were not kept, so the
+  player may have received less. Close route confirms with it, no refund, and today's price to reopen. The
+  war confirmation lists, under `declarationFacts`, each route the war closes with its ledger,
+  including routes with a minor's league partner that joins at once (`warJoiners`), the
+  invitations that lapse, and the player's other land roads the enemy could then raid.
+- An invitation gives both goods, its way and crossing, what each arrival and each day pays
+  the player, its risk, and its last day (`openedOn + TRADE_INVITATION_DAYS`). Accept is
+  disabled with `tradeProblem`'s reason for the inviter's order, such as no free slot, or
+  with `invitationProblem`'s, which would end the invitation on accepting (about 1–10 ms on
+  the full map, once a day while the invitation shows). Refuse
+  says what it forgoes. `tradeCaution` says whose treasury is full: a partner's full treasury
+  loses the partner's receipts, not the player's.
+
+`tradeNews` in `src/app/trade-news.ts` tells all of the player's trade news; `alertsOfDay`
+tells none of it. Routes closed for one cause on one day are one line. A refusal and an
+expiry are each an "Invitation to trade ended" line; closing and refusing now emit
+`tradeClosed` with `invitation` set and the actor in the cause. A siege of a partner's city
+is one line naming the routes it stops, once until the city has been free for
+`TRADE_QUIET_DAYS` (60); a siege of the player's own city is left to its `siegeBegan` alert.
+Raids carry `raider` and `looted`. A raider beside a siege still takes the cargo, so that
+day has a raid event beside the siege event, and the news tells the theft even when the
+siege is of the player's own city. One enemy's raids on the player's roads are one episode:
+the first raid is told with what it took; while the episode stays open, a line at most
+`TRADE_TALLY_DAYS` (30) after the last tells the cargoes and gold taken since it; and when
+the roads have been quiet for 60 days, or their routes close, a `tradeRaidsEnded` line
+tallies the whole episode if it took more than the lines told. The page keeps the open
+episodes in the saved `tradeTroubles`. The 60 days come from the gaps between one enemy's
+raids on one route in two ten-year AI games: 15 of 25 repeats came within 43 days, the rest
+68 days or more, six of them a year or more apart.
+
+`npm run sim -- trade-news [--seeds 5 --years 10 --print]` counts the trade lines Rome gets,
+idle and under the AI, beside the raw raid and siege interruptions. Five seeds, ten years:
+
+| Rome, mean of 5 games | trade lines before | after | raid and siege lines before | after |
+| --------------------- | ------------------ | ----- | --------------------------- | ----- |
+| idle                  | 28.0               | 28.0  | 0                           | 0     |
+| under the AI          | 57.6               | 44.6  | 25.8                        | 15.4  |
+
+An idle Rome hears only invitations and their expiry, which stay one line each. Under the
+AI the raid and siege lines per game went from 49, 27, 17, 8 and 28 to 27, 12, 13, 8 and 17;
+routes closed went from 63 lines to 50 in all. The monthly tally of an open episode's new
+losses, and the theft told beside a siege, added 0.8 lines a game over one line per episode
+(43.8 lines, 14.6 of them raids and sieges); the raw interruptions in seed 1 rose from 49 to
+51 with the two raid events beside a siege. Before is `main` at `c40d8c7`, where each
+raid and each route stopped by a siege was a line.
+
 ## Verification and decisions
 
 Run `npm run sim -- trade` for seeds 1–20, five peaceful years. Like `sim:buildings`, the
@@ -87,7 +162,12 @@ The reproducible before/after world tables and timing results are in
 to compare that source. The existing `sim:movement` benchmark fails on unmodified
 main with `not every army set out`, so it cannot provide a successful baseline.
 
-The two browser tests open a route through the panel, observe its delivery counter
-and rising gold, load a saved caravan in transit, and declare war through the panel
-to close a saved sea route. The first look is intentionally a plain moving marker;
-drawn trade figures, selected routes, map goods, raids and the guide are the second PR.
+The browser tests in `e2e/trade.spec.ts` open a route through the partner list, observe
+its delivery counter and rising gold, load a saved caravan in transit, read the war
+confirmation's route line and close a saved sea route by war, confirm Close route, read
+an invitation whose Accept is disabled for want of a slot and refuse it into the news,
+and check that the partner list leads with agreeing cities and is reachable at 390 px.
+The `trade-told` capture shows the quote with its risk, the list, the war lines, Close
+route, an invitation, the news, and the list on a phone. The first look is intentionally
+a plain moving marker; drawn trade figures, selected routes, map goods and the guide are
+later work.

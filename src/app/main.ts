@@ -31,6 +31,7 @@ import {
 } from './alerts.ts';
 import { createClock } from './clock.ts';
 import { desertionNews, type Desertion } from './desertion.ts';
+import { tradeNews, type TradeTrouble } from './trade-news.ts';
 import { planCommand, plannedRoutes, type CommandTarget, type Plan } from './command.ts';
 import { fateChoices, type FateChoice } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
@@ -167,6 +168,8 @@ let occupied = new Map<CityId, Day>();
 /** The player's sieges too weak to cut the food that the player has been told of. */
 let weakSieges = new Map<SiegeId, WeakSiege>();
 let desertion: Desertion | undefined;
+/** The raids and sieges of the player's trade that the news is in the middle of telling. */
+let tradeTroubles: readonly TradeTrouble[] = [];
 
 function fateOpen(state: DeepReadonly<GameState>, id: CityId): boolean {
   const city = state.cities[id];
@@ -240,12 +243,15 @@ const clock = createClock({
     weakSieges = weak.watched;
     const shortage = desertionNews(before, after, events, desertion);
     desertion = shortage.watched;
+    const trade = tradeNews(before, after, events, tradeTroubles);
+    tradeTroubles = trade.watched;
     const stops = stopsOfDay(
       groupAlerts([
         ...alertsInSight(alertsOfDay(before, after, events, occupied, toldOnce), saw, sees),
         ...sightingsOfDay(before, after, saw, sees, world, toldOnce),
         ...weak.alerts,
         ...shortage.alerts,
+        ...trade.alerts,
         // The world's news reaches every power, whether it sees the place or not.
         ...worldNewsOfDay(before, after, events, world),
       ]),
@@ -453,6 +459,7 @@ function pageNow(): Page {
     told: toldOnce,
     weakSieges,
     desertion,
+    tradeTroubles,
   };
 }
 
@@ -479,6 +486,7 @@ function enter(
   }
   weakSieges = new Map(page?.weakSieges);
   desertion = page?.desertion;
+  tradeTroubles = page?.tradeTroubles ?? [];
   menu = undefined;
   stopAsked = false;
   const outcome = outcomeOf(state, world, state.player);

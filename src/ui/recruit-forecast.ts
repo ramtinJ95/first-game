@@ -92,7 +92,7 @@ export function recruitForecast(
     const days = short[key];
     if (days === undefined) return [];
     return [
-      `${key === 'food' ? 'Food' : 'Gold'} shortfall: stores run short in about ${whole(days)} days with this order.`,
+      `${key === 'food' ? 'Food' : 'Gold'} shortfall: stores last about ${whole(daysLeft(days))} days with this order.`,
     ];
   });
   return {
@@ -109,9 +109,9 @@ export function recruitForecast(
         urgent: days !== undefined,
         text:
           days !== undefined
-            ? `about ${whole(days)} days left as the people grow`
+            ? `about ${whole(daysLeft(days))} days left as the people grow`
             : flat !== undefined
-              ? `short in about ${whole(flat)} days at today's yields, but the people's growth closes the gap first`
+              ? `stores last about ${whole(daysLeft(flat))} days at today's yields, but the people's growth closes the gap first`
               : 'not running short',
       };
     }),
@@ -135,6 +135,9 @@ function grownRealm(state: DeepReadonly<GameState>): DeepReadonly<GameState> {
   );
   return { ...state, cities } as DeepReadonly<GameState>;
 }
+
+/** Full days of stores before the day they run short, as the top bar counts them. */
+const daysLeft = (shortOn: number) => Math.max(0, shortOn - 1);
 
 /** The people's daily growth factor, as the population system applies it. */
 const DAILY = (1 + YEARLY_GROWTH) ** (1 / 365);

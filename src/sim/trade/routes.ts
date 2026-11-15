@@ -20,6 +20,8 @@ export const TRADE_BASE = 1.15;
 export const DIFFERENT_GOODS = 1.8;
 export const TRADE_PAYBACK_DAYS = 740;
 export const RAID_KM = 20;
+/** An invitation the player leaves unanswered this many days lapses. */
+export const TRADE_INVITATION_DAYS = 90;
 
 /** Distance is the path length, or a lower bound when screening unaffordable pairs. */
 export function routeOpeningCost(km: number, domestic: boolean): number {
@@ -28,19 +30,23 @@ export function routeOpeningCost(km: number, domestic: boolean): number {
   );
 }
 
+/** Ends a route or an invitation and tells both ends why. */
+export function closeRoute(state: GameState, route: DeepReadonly<TradeRoute>, cause: string): void {
+  emit(state, {
+    kind: 'tradeClosed',
+    route: route.id,
+    from: route.from,
+    to: route.to,
+    owners: [route.owner, route.partner],
+    cause,
+    invitation: route.status === 'offered',
+    position: routePoint(route),
+  });
+  removeRecord(state.tradeRoutes, route.id);
+}
+
 export function closeRoutesAt(state: GameState, city: CityId): void {
-  for (const route of routesAt(state, city)) {
-    emit(state, {
-      kind: 'tradeClosed',
-      route: route.id,
-      from: route.from,
-      to: route.to,
-      owners: [route.owner, route.partner],
-      cause: 'a city changed owner',
-      position: routePoint(route),
-    });
-    removeRecord(state.tradeRoutes, route.id);
-  }
+  for (const route of routesAt(state, city)) closeRoute(state, route, 'a city changed owner');
 }
 
 /** Size provides one or two slots; civic markets and a harbour each support one more. */
@@ -230,7 +236,10 @@ export function routePoint(route: DeepReadonly<TradeRoute>, progress = route.pro
   return { ...(path.at(-1) as MapPoint) };
 }
 
-export function distanceToRoute(point: MapPoint, route: DeepReadonly<TradeRoute>): number {
+export function distanceToRoute(
+  point: MapPoint,
+  route: Pick<DeepReadonly<TradeRoute>, 'path'>,
+): number {
   let best = Infinity;
   for (let i = 1; i < route.path.length; i++) {
     const a = route.path[i - 1] as MapPoint;
