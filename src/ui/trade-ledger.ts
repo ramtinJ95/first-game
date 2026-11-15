@@ -47,11 +47,14 @@ export function ledgerText(state: State, route: Route): string {
   return `${paid}, arrivals worth about ${whole(worth)} gold, about ${whole(owed)} still unpaid`;
 }
 
-/** Said beside a ledger when the player's treasury is at its limit today. */
-function fullTreasuryText(state: State): string | undefined {
+/**
+ * Said beside every ledger: a full treasury kept no receipt above its limit, and the route
+ * keeps no tally of what was kept, so the estimate may count gold the player never held.
+ */
+function fullTreasuryText(state: State): string {
   return treasuryFull(state, state.player)
-    ? 'Your treasury is full, and receipts above a full treasury were not kept, so you may have received less than that.'
-    : undefined;
+    ? 'Your treasury is full, and receipts above a full treasury are not kept, so you may have received less than that.'
+    : 'Receipts that came while your treasury was full were not kept, so you may have received less than that.';
 }
 
 /** The question Close route asks before it ends a running route. */

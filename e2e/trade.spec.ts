@@ -100,9 +100,11 @@ test('declaring war through the page names the route it closes, then closes it a
   await expect(page.getByTestId('trade-routes')).toContainText('Roma');
   await page.getByRole('button', { name: 'Declare war on Carthage', exact: true }).click();
   const cost = route.cost.toLocaleString('en');
-  await expect(page.getByTestId('war-trade')).toHaveText(
+  const lines = page.getByTestId('war-trade');
+  await expect(lines).toContainText(
     `It closes Roma to Carthago by sea: cost ${cost} gold, arrivals worth about 0 gold, about ${cost} still unpaid.`,
   );
+  await expect(lines).toContainText('so you may have received less than that.');
   await page.getByRole('button', { name: 'Confirm war', exact: true }).click();
   await resume(page);
   await expect(page.getByTestId('alerts')).toContainText(

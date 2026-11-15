@@ -85,7 +85,8 @@ the reading of them is in `src/ui`, so the rules PR that changes survival change
   accepted invitation), an estimate of what its arrivals were worth, and the price less that
   estimate as still unpaid. The route keeps no tally of past pay, so the estimate values every
   arrival at today's administrative share and cannot see receipts a full treasury refused;
-  when the player's treasury is at its limit today, the text says such receipts were not kept. Close route confirms with it, no refund, and today's price to reopen. The
+  every ledger says that receipts which came while the treasury was full were not kept, so the
+  player may have received less. Close route confirms with it, no refund, and today's price to reopen. The
   war confirmation lists, under `declarationFacts`, each route the war closes with its ledger,
   including routes with a minor's league partner that joins at once (`warJoiners`), the
   invitations that lapse, and the player's other land roads the enemy could then raid.

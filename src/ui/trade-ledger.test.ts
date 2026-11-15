@@ -26,22 +26,26 @@ describe('what closing trade costs the player', () => {
     const route = trading(state, f.carthago, 'sea');
     const worth = 2 * route.daily * route.days;
     expect(closeText(state, route)).toBe(
-      `Close Roma to Carthago by sea? It cost ${whole(route.cost)} gold, arrivals worth about ${whole(worth)} gold, about ${whole(route.cost - worth)} still unpaid. Closing gives no refund, and opening it again costs the full price, ${whole(route.cost)} gold.`,
+      `Close Roma to Carthago by sea? It cost ${whole(route.cost)} gold, arrivals worth about ${whole(worth)} gold, about ${whole(route.cost - worth)} still unpaid. Receipts that came while your treasury was full were not kept, so you may have received less than that. Closing gives no refund, and opening it again costs the full price, ${whole(route.cost)} gold.`,
     );
   });
 
-  test('with the treasury at its limit, the ledger says receipts above it were not kept', () => {
+  test('the ledger always says a full treasury kept no receipts, also after the gold is spent', () => {
     const state = buildFixture();
     const route = trading(state, f.carthago, 'sea');
-    const full = 'Your treasury is full, and receipts above a full treasury were not kept';
-    expect(closeText(state, route)).not.toContain(full);
-    expect(warTradeLines(state, f.carthage).join(' ')).not.toContain(full);
     const rome = state.factions[f.rome];
     if (!rome) throw new Error('missing Rome');
     rome.stores.gold = limitsOf(state).get(f.rome)?.gold ?? Infinity;
+    const full = 'Your treasury is full, and receipts above a full treasury are not kept';
     expect(closeText(state, route)).toContain(full);
     expect(warTradeLines(state, f.carthage)).toContain(
       `${full}, so you may have received less than that.`,
+    );
+    rome.stores.gold -= 100;
+    const spent = 'Receipts that came while your treasury was full were not kept';
+    expect(closeText(state, route)).toContain(spent);
+    expect(warTradeLines(state, f.carthage)).toContain(
+      `${spent}, so you may have received less than that.`,
     );
   });
 
@@ -76,6 +80,7 @@ describe('what closing trade costs the player', () => {
     const worth = 2 * sea.daily * sea.days;
     expect(warTradeLines(state, f.carthage)).toEqual([
       `It closes Roma to Carthago by sea: cost ${whole(sea.cost)} gold, arrivals worth about ${whole(worth)} gold, about ${whole(sea.cost - worth)} still unpaid.`,
+      'Receipts that came while your treasury was full were not kept, so you may have received less than that.',
       'Their armies could then raid your other land road.',
     ]);
     expect(warTradeLines(state, f.syracusaeFaction)).toEqual([
@@ -96,6 +101,7 @@ describe('what closing trade costs the player', () => {
       expect.stringMatching(
         /^It closes Roma to Carthago by sea: cost [\d,]+ gold, arrivals worth about 0 gold/,
       ),
+      'Receipts that came while your treasury was full were not kept, so you may have received less than that.',
       "Carthage joins as Syracusae's league partner, so its routes close too.",
     ]);
     state.truces[warKey(f.carthage, f.rome)] = {
