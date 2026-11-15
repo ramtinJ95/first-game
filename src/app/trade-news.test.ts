@@ -47,6 +47,36 @@ function road() {
 }
 
 describe('trade news', () => {
+  test('a raider at peace with you is told as at war with the other end, which lets it take the cargo', () => {
+    const state = buildFixture();
+    const capua = state.cities[f.capua];
+    const army = state.armies[f.punicArmy];
+    if (!capua || !army) throw new Error('missing fixture');
+    capua.owner = f.syracusaeFaction;
+    const order = {
+      kind: 'openTrade',
+      faction: f.rome,
+      from: f.roma,
+      to: f.capua,
+      mode: 'land',
+    } as const;
+    expect(openTrade(state, order, world)).toBeUndefined();
+    const route = Object.values(state.tradeRoutes)[0];
+    if (!route) throw new Error('no route');
+    state.wars[warKey(f.carthage, f.syracusaeFaction)] = newWar(
+      f.carthage,
+      f.syracusaeFaction,
+      state.day,
+    );
+    const before = structuredClone(state);
+    army.activity = { kind: 'idle', position: routePoint(route, 0.5) };
+    const events = recordEvents(state, () => trade(state));
+    const [line] = tradeNews(before, state, events, []).alerts;
+    expect(line?.text).toMatch(
+      /^Carthage raided the road Roma to Capua and took a cargo worth about [\d,]+ gold to you\. Carthage is at peace with you but at war with Syracusae, and an army at war with either end of a road takes its cargo\. Deliveries stop while its armies stay within reach\.$/,
+    );
+  });
+
   test('one enemy raiding one road again and again is one line, then a tally of what it took since', () => {
     const { state, route, cargo, day, told } = road();
     for (const onRoad of [true, false, true, false]) day(onRoad);
