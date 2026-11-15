@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { parseMap, type GameMap, type MultiPolygon, type Point } from '../../src/sim/map.ts';
 import { landOutline } from '../../src/render/land-outline.ts';
+import { AreaIndex } from '../../src/render/terrain/area-index.ts';
 import { naturalCoast } from '../../src/render/coast.ts';
 import { coastKey } from '../../src/render/coast-key.ts';
 import { buildWorld } from '../../src/sim/world/world.ts';
@@ -9,8 +10,8 @@ import {
   area,
   contains,
   difference,
-  distanceToBoundary,
   intersection,
+  nearBoundary,
   simplify,
   union,
 } from './geometry.ts';
@@ -122,11 +123,47 @@ export async function buildDrawingCoast() {
     combine(protections.map(({ at, radius }) => circle(at, radius))),
     coastalBand(physicalFrame),
   );
+  const physicalIndex = new AreaIndex([physical], 0, { seams: false });
+  const physicalEdges = physical.flatMap((polygon) =>
+    polygon.flatMap((ring) =>
+      ring.map((a, i) => {
+        const b = ring[(i + 1) % ring.length] as Point;
+        return [
+          Math.min(a[0], b[0]),
+          Math.max(a[0], b[0]),
+          Math.min(a[1], b[1]),
+          Math.max(a[1], b[1]),
+        ] as const;
+      }),
+    ),
+  );
+  /**
+   * Whether a polygon shares no area with the physical land. A polygon none of whose
+   * points is inside it, and whose box no physical edge enters, lies wholly outside it;
+   * only the others are clipped.
+   */
+  const apart = (polygon: MultiPolygon[number]): boolean => {
+    const points = polygon.flat();
+    const xs = points.map(([x]) => x),
+      ys = points.map(([, y]) => y);
+    const [left, right, top, bottom] = [
+      Math.min(...xs),
+      Math.max(...xs),
+      Math.min(...ys),
+      Math.max(...ys),
+    ];
+    if (
+      points.some(([x, y]) => physicalIndex.inside(x, y)) ||
+      physicalEdges.some(([l, r, t, b]) => l <= right && r >= left && t <= bottom && b >= top)
+    )
+      return intersection([polygon], physical).length === 0;
+    return true;
+  };
   // Uninhabited offshore islands are atlas scenery, not new provinces. Omit specks
   // below half a square kilometre; larger missing land would require a rules-map change.
   const scenery = fine.filter((polygon) => {
     const size = area([polygon]);
-    return size >= 0.5 && size <= 100 && intersection([polygon], physical).length === 0;
+    return size >= 0.5 && size <= 100 && apart(polygon);
   });
   const band = coastalBand(map.coastline);
   const snap = (area: MultiPolygon): MultiPolygon =>
@@ -156,6 +193,8 @@ export async function buildDrawingCoast() {
   const land = union(packed);
   const runs: [number, number, number][] = [];
   const frameEdges: MultiPolygon = physicalFrame.map((line) => [line]);
+  const nearExtent = nearBoundary([[map.extent]], 0.15);
+  const nearFrame = nearBoundary(frameEdges, 0.025);
   for (const [r, ring] of land.flat().entries()) {
     let start: number | undefined;
     for (let i = 0; i < ring.length; i++) {
@@ -167,10 +206,7 @@ export async function buildDrawingCoast() {
       ];
       // Physical extent controls are rounded to 100 m. The 10 m edge detector used
       // before that rounding would mistake parts of the atlas frame for sea coast.
-      if (
-        distanceToBoundary([[map.extent]], mid) <= 0.15 ||
-        distanceToBoundary(frameEdges, mid) <= 0.025
-      ) {
+      if (nearExtent(mid) || nearFrame(mid)) {
         if (start !== undefined) runs.push([r, start, i]);
         start = undefined;
       } else {
@@ -191,7 +227,7 @@ export async function buildDrawingCoast() {
       const decoded = polygon.map((ring) =>
         ring.map(([x, y]): Point => [x * DRAWING_UNIT_KM, y * DRAWING_UNIT_KM]),
       );
-      return intersection([decoded], physical).length === 0 ? [p] : [];
+      return apart(decoded) ? [p] : [];
     }),
     // Each ring is one flat list of every point's step from the one before, which gzip halves.
     land: land.map((polygon) =>
