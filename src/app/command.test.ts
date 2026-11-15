@@ -14,7 +14,15 @@ import type { MapPoint } from '../sim/state/map-point.ts';
 import { warKey, newWar } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import type { World } from '../sim/world/world.ts';
-import { FAR_LONGER, planCommand, plannedRoutes, route, type CommandTarget } from './command.ts';
+import {
+  FAR_LONGER,
+  commandTarget,
+  ISLET_REFUSAL,
+  planCommand,
+  plannedRoutes,
+  route,
+  type CommandTarget,
+} from './command.ts';
 import { placeName } from './names.ts';
 
 const world = fixtureWorld();
@@ -257,6 +265,34 @@ describe('a right click on a point', () => {
       kind: 'refuse',
       notice: 'Order refused. The destination is off the map.',
     });
+  });
+
+  it('points a right click at the clicked city before an islet under it, and at an islet before the point', () => {
+    const state = buildFixture();
+    const point = { x: 2400, y: 2500 };
+    const roma = state.cities[f.roma];
+    if (!roma) throw new Error('no Roma');
+    expect(commandTarget(state, { point, city: f.roma, islet: true })).toEqual({
+      kind: 'city',
+      city: roma,
+    });
+    expect(commandTarget(state, { point, city: undefined, islet: true })).toEqual({
+      kind: 'islet',
+      point,
+    });
+    expect(commandTarget(state, { point, city: undefined, islet: false })).toEqual({
+      kind: 'point',
+      point,
+    });
+  });
+
+  it('refuses an islet the map draws as land, saying no army can land there', () => {
+    const state = buildFixture();
+    expect(plan(state, { kind: 'islet', point: { x: 2400, y: 2500 } })).toEqual({
+      kind: 'refuse',
+      notice: ISLET_REFUSAL,
+    });
+    expect(ISLET_REFUSAL).toBe('Order refused. No army can land on that islet.');
   });
 
   it('refuses at once an army that is in a battle', () => {

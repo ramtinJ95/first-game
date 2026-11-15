@@ -32,7 +32,7 @@ import {
 import { createClock } from './clock.ts';
 import { desertionNews, type Desertion } from './desertion.ts';
 import { tradeNews, type TradeTrouble } from './trade-news.ts';
-import { planCommand, plannedRoutes, type CommandTarget, type Plan } from './command.ts';
+import { commandTarget, planCommand, plannedRoutes, type Plan } from './command.ts';
 import { fateChoices, type FateChoice } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
 import { refusalText } from './names.ts';
@@ -334,15 +334,12 @@ function tellIssued(plan: Extract<Plan, { kind: 'issue' }>) {
 }
 
 /** A right click with one of the player's armies selected plans an order for the city or point. */
-function command({ point, city, screen }: Command) {
+function command({ point, city, screen, islet }: Command) {
   menu = undefined;
   const state = clock.state;
   const army = selection?.kind === 'army' ? state.armies[selection.army] : undefined;
-  const clicked = city && state.cities[city];
   if (army && army.owner === state.player) {
-    const target: CommandTarget = clicked
-      ? { kind: 'city', city: clicked }
-      : { kind: 'point', point };
+    const target = commandTarget(state, { point, city, islet });
     const plan = planCommand(state, world, army, target, clock.pending);
     if (plan.kind === 'issue') {
       clock.issue(plan.order);
