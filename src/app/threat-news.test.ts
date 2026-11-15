@@ -10,7 +10,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import { warKey } from '../sim/state/war.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
 import { buildWorld } from '../sim/world/world.ts';
-import { standingThreats, threatNewsOfDay } from './threat-news.ts';
+import { powersNearWar, standingThreats, threatNewsOfDay } from './threat-news.ts';
 
 const map = parseMap(
   JSON.parse(readFileSync(new URL('../../data/map/map.json', import.meta.url), 'utf8')),
@@ -69,7 +69,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     const news = newsOf(state, told);
     expect(news.map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: its armies have \d+% of the strength it needs against your forces near Roma\. Your treasury of [\d,]+ gold lowers what it needs by 25%, since a peace would make you pay it\. Guards hired at Roma count against it for their first 90 days\.$/,
+        /^Carthage could soon declare war on you: its armies have \d+% of the strength it needs against your forces near Roma\. Your treasury of [\d,]+ gold lowers what it needs by 25%, since a peace would make you pay it\. Guards hired at Roma count against it for their first 90 days\. Watch it under At peace in the Wars panel\.$/,
       ),
     ]);
     expect(news[0]?.tone).toBe('bad');
@@ -127,6 +127,12 @@ describe('how near each power at peace stands to declaring war, as the wars pane
       readiness: undefined,
       text: 'Egypt is not weighing a war on you now: none of its cities is near enough to yours, or none of its armies stands ready to march.',
     });
+  });
+
+  test('counts the powers at the warning threshold for the top bar, and none once they fall below', () => {
+    expect(powersNearWar(game(5300, 'full'), world)).toBe(1);
+    expect(powersNearWar(game(2000, 'empty'), world)).toBe(0);
+    expect(powersNearWar(game(5300, 'full'), world)).toBe(1);
   });
 
   test('leaves out a power at war with you or bound by a truce', () => {
