@@ -1,0 +1,46 @@
+[
+  {
+    "zoom": "middle",
+    "rules": {
+      "intervalMedian": 416.6,
+      "intervalP95": 499.9,
+      "drawMedian": 381.6,
+      "drawP95": 455
+    },
+    "head": {
+      "intervalMedian": 433.3,
+      "intervalP95": 500,
+      "drawMedian": 398.4,
+      "drawP95": 452.9
+    },
+    "changePercent": {
+      "intervalMedian": 4.008641382621225,
+      "intervalP95": 0.02000400080015563,
+      "drawMedian": 4.402515723270417,
+      "drawP95": -0.4615384615384688
+    },
+    "pass": true
+  },
+  {
+    "zoom": "closest",
+    "rules": {
+      "intervalMedian": 450,
+      "intervalP95": 566.7,
+      "drawMedian": 422.8,
+      "drawP95": 504.8
+    },
+    "head": {
+      "intervalMedian": 483.3,
+      "intervalP95": 683.2,
+      "drawMedian": 439.1,
+      "drawP95": 582.8
+    },
+    "changePercent": {
+      "intervalMedian": 7.400000000000007,
+      "intervalP95": 20.557614257984813,
+      "drawMedian": 3.8552507095553468,
+      "drawP95": 15.45166402535656
+    },
+    "pass": false
+  }
+]

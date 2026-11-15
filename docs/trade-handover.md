@@ -26,16 +26,42 @@ sprite stays. The trimmed sprite drew the same pixels as the untrimmed one at
 middle, closest, panned and resized views, and in a paired in-page toggle it was
 about 10% faster in GPU time.
 
-## Verdict: the budget is not met
+## Verdict: not established on this host
 
-Against main `aef5b10`, the look `866ece7` is within +10% on every median and on
-every p95 of the per-frame trace, selected and unselected, at both zooms. It is
-not within +10% on the p95 of the bench's own 5-second meter with Roma selected:
-+62% interval and +60% drawn at middle, +11% and +14% at closest. That meter is
-the measure the budget was set in, so the budget is not met. The cause of the
-meter's tail is not established.
+The budget is set in `scripts/trade-frame-bench.mjs`: three alternating rounds, a
+1.5-second warm-up and a 5-second meter window from day 7, with Roma selected. Run as
+committed against main `aef5b10`, the look `940d12d` is within +10% at middle on all
+four figures. At closest its medians are within +10% (+7.4% interval, +3.9% drawn)
+and its p95s are not (+20.6% interval, +15.5% drawn).
 
-## Three rounds on main `aef5b10`
+The same protocol run with main against itself, with identical builds on both sides,
+gave +8.0% / +12.9% interval and +1.2% / +9.1% drawn at middle (median / p95), and
+-3.7% / -31.1% and -0.6% / -35.1% at closest. One build's single-round p95 ranged from
+450 to 1,067 ms. On this host the committed protocol cannot tell a p95 within a tenth:
+the look's +20.6% at closest is inside main's own spread of 35%. So the budget is
+neither shown met nor shown failed here. Settling it needs a steadier host, or the
+owner's decision to accept the measured medians.
+
+### The committed protocol on `aef5b10`
+
+Each side ran the committed driver unchanged except one line: its 180-second limit
+on each browser run, which only guards against a hung process, was raised to 1,800
+seconds in an uncommitted copy, because one side's setup alone takes about 7.5
+minutes on this VM. The windows, rounds and scene guards are as committed.
+
+| Run                 | Zoom    | Interval median | Interval p95 | Drawn median | Drawn p95 |
+| ------------------- | ------- | --------------- | ------------ | ------------ | --------- |
+| look against main   | middle  | +4.0%           | 0.0%         | +4.4%        | -0.5%     |
+| look against main   | closest | +7.4%           | +20.6%       | +3.9%        | +15.5%    |
+| main against itself | middle  | +8.0%           | +12.9%       | +1.2%        | +9.1%     |
+| main against itself | closest | -3.7%           | -31.1%       | -0.6%        | -35.1%    |
+
+The look's closest p95 per round was 550, 683.2 and 1,266.6 ms, against main's
+566.7, 516.7 and 1,166.6 ms. The unselected run was stopped when main moved; the
+trace below has it within +10% throughout. Readings and logs are in
+[`evidence/trade-frames/aef5b10-committed-protocol`](evidence/trade-frames/aef5b10-committed-protocol).
+
+## Every frame traced, three rounds on main `aef5b10`
 
 Three alternating rounds, median of three, on builds made from the measured
 commits: main `aef5b10` and the look `866ece7`. Each round traces every drawn frame
@@ -69,6 +95,10 @@ closest; meter -4.0% / -28.2% and -3.7% / -26.4% at middle, 0.0% / -2.6% and
 spread and repeats in all three rounds.
 
 ### The meter's tail
+
+This meter reading is not the committed protocol's: the trace replaces the 5-second
+window with 60 seconds and reads the meter at its end, after the page has handed the
+traced frames over.
 
 The meter is a rolling 5-second window, read at the end of the 60 seconds, so its
 p95 is the slowest or second slowest of about twelve frames on days 65 to 69. With
@@ -124,5 +154,7 @@ the bench serves each checkout's `dist/`.
 
 ## Left open
 
-- The meter's p95 tail with Roma selected, above. A faster idle host would show
-  whether it follows the look or the host.
+- A steadier host for the committed protocol, or the owner's decision on the closest
+  p95 above.
+- Why the look's frames at the end of a 60-second traced window are slower with Roma
+  selected.

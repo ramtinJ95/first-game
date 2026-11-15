@@ -1,0 +1,122 @@
+[
+  {
+    "round": 1,
+    "side": "rules",
+    "readings": [
+      {
+        "zoom": "full @ middle",
+        "intervalMedian": 416.6,
+        "intervalP95": 499.9,
+        "drawMedian": 379,
+        "drawP95": 456.7
+      },
+      {
+        "zoom": "full @ closest",
+        "intervalMedian": 433.4,
+        "intervalP95": 566.7,
+        "drawMedian": 414.2,
+        "drawP95": 504.8
+      }
+    ]
+  },
+  {
+    "round": 1,
+    "side": "head",
+    "readings": [
+      {
+        "zoom": "full @ middle",
+        "intervalMedian": 466.7,
+        "intervalP95": 950,
+        "drawMedian": 416.4,
+        "drawP95": 820.2
+      },
+      {
+        "zoom": "full @ closest",
+        "intervalMedian": 483.3,
+        "intervalP95": 550,
+        "drawMedian": 437.2,
+        "drawP95": 505.7
+      }
+    ]
+  },
+  {
+    "round": 2,
+    "side": "head",
+    "readings": [
+      {
+        "zoom": "full @ middle",
+        "intervalMedian": 433.3,
+        "intervalP95": 500,
+        "drawMedian": 398.4,
+        "drawP95": 441.7
+      },
+      {
+        "zoom": "full @ closest",
+        "intervalMedian": 483.3,
+        "intervalP95": 683.2,
+        "drawMedian": 439.1,
+        "drawP95": 582.8
+      }
+    ]
+  },
+  {
+    "round": 2,
+    "side": "rules",
+    "readings": [
+      {
+        "zoom": "full @ middle",
+        "intervalMedian": 416.6,
+        "intervalP95": 500,
+        "drawMedian": 381.6,
+        "drawP95": 455
+      },
+      {
+        "zoom": "full @ closest",
+        "intervalMedian": 450,
+        "intervalP95": 516.7,
+        "drawMedian": 422.8,
+        "drawP95": 493.8
+      }
+    ]
+  },
+  {
+    "round": 3,
+    "side": "rules",
+    "readings": [
+      {
+        "zoom": "full @ middle",
+        "intervalMedian": 416.6,
+        "intervalP95": 450,
+        "drawMedian": 381.8,
+        "drawP95": 392.5
+      },
+      {
+        "zoom": "full @ closest",
+        "intervalMedian": 483.3,
+        "intervalP95": 1166.6,
+        "drawMedian": 437.5,
+        "drawP95": 1088.2
+      }
+    ]
+  },
+  {
+    "round": 3,
+    "side": "head",
+    "readings": [
+      {
+        "zoom": "full @ middle",
+        "intervalMedian": 416.7,
+        "intervalP95": 483.4,
+        "drawMedian": 391,
+        "drawP95": 452.9
+      },
+      {
+        "zoom": "full @ closest",
+        "intervalMedian": 466.7,
+        "intervalP95": 1266.6,
+        "drawMedian": 447.4,
+        "drawP95": 1198.7
+      }
+    ]
+  }
+]
