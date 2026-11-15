@@ -15,13 +15,18 @@ const { values } = parseArgs({
     head: { type: 'string' },
     out: { type: 'string' },
     unselected: { type: 'boolean', default: false },
+    steady: { type: 'boolean', default: false },
   },
 });
-if (!values.rules || !values.head || !values.out)
+if (!values.rules || (!values.head && !values.steady) || !values.out)
   throw new Error(
-    'Usage: node scripts/trade-frame-bench.mjs --rules /abs/rules --head /abs/look --out /abs/evidence [--unselected]',
+    'Usage: node scripts/trade-frame-bench.mjs --rules /abs/rules (--head /abs/look | --steady) --out /abs/evidence [--unselected]',
   );
-const dirs = { rules: resolve(values.rules), head: resolve(values.head) };
+// --steady measures the rules build against itself, to show the host's noise.
+const dirs = {
+  rules: resolve(values.rules),
+  head: resolve(values.steady ? values.rules : (values.head ?? '')),
+};
 const output = resolve(values.out);
 mkdirSync(output, { recursive: true });
 const selected = !values.unselected;
@@ -38,11 +43,12 @@ function replaced(source, pattern, replacement) {
 try {
   const scripts = {};
   for (const side of ['rules', 'head']) {
+    const kind = side === 'head' && !values.steady ? 'head' : 'rules';
     const root = dirs[side],
       require = createRequire(`${root}/package.json`);
     const game = structuredClone(fixture);
 
-    if (side === 'rules') for (const route of Object.values(game.tradeRoutes)) delete route.raid;
+    if (kind === 'rules') for (const route of Object.values(game.tradeRoutes)) delete route.raid;
     const stateFile = join(temp, `${side}.json`);
     writeFileSync(stateFile, JSON.stringify(game));
     const original = pathToFileURL(`${root}/e2e/frame-bench.ts`);
@@ -79,12 +85,9 @@ try {
       source,
       '  const gl = await page.evaluate(() => {',
       `
-  const merchants = Number(await page.locator('canvas').getAttribute('data-trade-figures'));
   console.error('paths', await page.locator('canvas').getAttribute('data-trade-paths'));
-  console.error('subject', ${JSON.stringify(side)}, zoom, 'merchants', merchants);
-  if (${JSON.stringify(side)} === 'head') {
-    const expected = zoom === 'middle' ? 4 : 3;
-    if (merchants !== expected) throw new Error('Merchant scene differs: expected ' + expected + ', saw ' + merchants);
+  console.error('subject', ${JSON.stringify(side)}, zoom, 'merchants at end', await page.locator('canvas').getAttribute('data-trade-figures'));
+  if (${JSON.stringify(kind)} === 'head') {
     const paths = await page.locator('canvas').getAttribute('data-trade-paths');
     if (paths !== ${JSON.stringify(selected ? '2' : '0')}) throw new Error('Selected routes changed during sampling: ' + paths);
   }
@@ -94,8 +97,14 @@ try {
       source,
       '  await delay(WARM_MS + WINDOW_MS);',
       `
-  if (${JSON.stringify(side)} === 'head') await page.locator('canvas[data-figure-sheets="ready"]').waitFor();
+  if (${JSON.stringify(kind)} === 'head') await page.locator('canvas[data-figure-sheets="ready"]').waitFor();
   const firstDay = Number(await page.getByTestId('time-controls-day').getAttribute('data-day'));
+  // Merchants travel during the window, so the matched scene is checked where it starts.
+  const merchants = Number(await page.locator('canvas').getAttribute('data-trade-figures'));
+  if (${JSON.stringify(kind)} === 'head') {
+    const expected = 4;
+    if (merchants !== expected) throw new Error('Merchant scene differs: expected ' + expected + ', saw ' + merchants + ' on day ' + firstDay);
+  }
   await delay(WARM_MS + WINDOW_MS);
   const lastDay = Number(await page.getByTestId('time-controls-day').getAttribute('data-day'));
   if (lastDay <= firstDay) throw new Error('the measured game did not advance');
@@ -126,7 +135,7 @@ try {
         reference.indexOf('  if (save) {'),
         reference.indexOf('  const view = ZOOMS[zoom];'),
       );
-      source = replaced(source, /  if \(save\) \{[\s\S]*?\n  \}/, receipt.trimEnd());
+      source = replaced(source, / {2}if \(save\) \{[\s\S]*?\n {2}\}/, receipt.trimEnd());
     }
     if (!source.includes('const exactScale ='))
       source = replaced(
