@@ -5,6 +5,7 @@ import { executeOrder } from '../sim/orders/orders.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { tick } from '../sim/tick.ts';
+import { expectConsistent } from '../sim/references.ts';
 import { guardNewsOfDay } from './guard-news.ts';
 
 const world = fixtureWorld();
@@ -49,5 +50,20 @@ describe('the news of guards who served their year', () => {
     const lost = structuredClone(before);
     changeCityOwner(lost, FIXTURE.capua, FIXTURE.carthage);
     expect(guardNewsOfDay(before, lost)).toEqual([]);
+  });
+
+  test('tells of the bands that left on a day the city hires another', () => {
+    const before = leavingToday();
+    const rome = before.factions[FIXTURE.rome];
+    if (rome) rome.stores.gold = 5000;
+    const after = tick(
+      before,
+      [{ kind: 'hireGuards', faction: FIXTURE.rome, city: FIXTURE.roma }],
+      world,
+    ).state;
+    expect(guardNewsOfDay(before, after).map((alert) => alert.text)).toContain(
+      'The 1,000 guards hired at Roma have served their year and left. Hire more in its city panel.',
+    );
+    expectConsistent(after);
   });
 });

@@ -191,3 +191,28 @@ test('a city with guards survives save and load, under the registered save chang
   expect(loadGame(saveGame(state))).toEqual({ ok: true, state });
   expectConsistent(state);
 });
+
+describe('guards and a city handed over', () => {
+  test('a city ceded with guards keeps only the garrison its new owner can hold', () => {
+    const state = buildFixture();
+    const romans = state.factions[FIXTURE.rome];
+    if (!romans) throw new Error('no Rome');
+    romans.stores.gold = 10_000;
+    for (let i = 0; i < 2; i++)
+      expect(
+        executeOrder(
+          state,
+          { kind: 'hireGuards', faction: FIXTURE.rome, city: FIXTURE.capua },
+          world,
+        ),
+      ).toBeUndefined();
+    const capua = state.cities[FIXTURE.capua];
+    if (!capua) throw new Error('no Capua');
+    const full = fullDefences({ ...capua, guards: [] }).garrison;
+    expect(capua.garrison).toBe(full + 2 * GUARD_BAND);
+    changeCityOwner(state, FIXTURE.capua, FIXTURE.carthage);
+    expect(capua.guards).toEqual([]);
+    expect(capua.garrison).toBe(full);
+    expectConsistent(state);
+  });
+});

@@ -258,10 +258,12 @@ export function cityFalls(state: GameState, siege: Siege): void {
   removeRecord(state.sieges, siege.id);
   const city = state.cities[siege.city];
   if (!city || winner === undefined) return;
+  // The guards fell with the walls, so the conquerors' share counts the garrison without them.
+  city.guards = [];
   const men = occupiers.reduce((sum, army) => sum + menOf(state, army), 0);
   const garrison = Math.min(
     Math.floor(men / 2),
-    Math.round(fullDefences({ ...city, guards: [] }).garrison * OCCUPATION_SHARE),
+    Math.round(fullDefences(city).garrison * OCCUPATION_SHARE),
   );
   killMen(state, occupiers, garrison, 'storm');
   city.garrison = garrison;
