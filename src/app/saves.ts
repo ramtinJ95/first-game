@@ -85,6 +85,8 @@ export function latestSaved(saves: Partial<Record<Slot, Saved>>): Saved | undefi
 export const REFUSED_SAVE: Readonly<Record<Refusal, string>> = {
   older:
     'This save is from an older version of the game and cannot be opened, so choose a power on the start screen to begin a new game.',
-  newer: 'This save is from a newer version of the game and cannot be opened here.',
-  damaged: 'This file is not a save the game can open.',
+  newer:
+    'This save is from a newer version of the game and cannot be opened here, so open it in that version or choose a power on the start screen to begin a new game.',
+  damaged:
+    'This file is not a save the game can open, so drop another save on the page or choose a power on the start screen to begin a new game.',
 };

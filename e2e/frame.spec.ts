@@ -389,6 +389,15 @@ test.describe('the frame round the game', () => {
     await expect(page.getByTestId('start-screen')).toBeVisible();
   });
 
+  test('a dropped file that is no save is refused with what to do, over the running game', async ({
+    page,
+  }) => {
+    await openGame(page);
+    await dropSave(page, 'not a save');
+    await expect(page.getByTestId('notice')).toHaveText(REFUSED_SAVE.damaged);
+    await expect(page.getByTestId('top-bar')).toBeVisible();
+  });
+
   for (const fate of ['occupy', 'sack', 'enslave'] as const) {
     test(`a city the player takes pauses the game on its fate, and ${fate} applies`, async ({
       page,
