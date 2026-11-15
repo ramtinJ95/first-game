@@ -102,9 +102,14 @@ export default defineScenario({
     await page.getByTestId('trade-close-confirm').scrollIntoViewIfNeeded();
     await shot(
       'close-route',
-      'Close route asks first: what the route cost, about what its arrivals were worth and what is unpaid, no refund, and the price to open it again',
+      'Close route asks first: what the route cost, what it has brought and what is unpaid, no refund, and the price to open it again',
     );
     await page.getByRole('button', { name: 'Keep route', exact: true }).click();
+    await page.getByTestId('trade-improve').first().scrollIntoViewIfNeeded();
+    await shot(
+      'improve-route',
+      'With the slots full, a running route can be improved twice: half its opening price for a quarter more gold a day at both ends, with its payback and no refund on closing',
+    );
 
     const invited = playDays(rich(), 1, [
       open('carthago', 'roma', 'sea', carthage),
@@ -140,16 +145,15 @@ export default defineScenario({
     await load(page, troubled);
     await resume(page);
     const alerts = page.getByTestId('alerts');
-    await alerts.getByText(/Trade closed: Roma to Syracusae, a city changed owner/).waitFor();
+    await alerts.getByText(/The siege of Syracusae stops trade: Roma to Syracusae\./).waitFor();
+    await alerts.getByText(/Macedon raided the road Roma to Capua/).waitFor();
     await pause(page);
-    await expect(alerts).toContainText('The siege of Syracusae stops trade: Roma to Syracusae.');
-    await expect(alerts).toContainText('Macedon raided the road Roma to Capua');
     await page.getByRole('button', { name: 'Chronicle', exact: true }).click();
     const chronicle = page.getByTestId('chronicle');
     await expect(chronicle).toContainText('The siege of Syracusae stops trade');
     await shot(
       'news',
-      'The news of trade: Carthage’s siege of Syracusae warns that the route closes if it falls, Macedon’s raid is one line with its loss, and the fall closes the route',
+      'The news of trade: Carthage’s siege of Syracusae stops the route, which would close only if Syracusae fell to a power at war with Rome, and Macedon’s raid is one line with its loss',
     );
 
     await page.getByRole('button', { name: 'Chronicle', exact: true }).click();

@@ -221,3 +221,21 @@ test('the partner list leads with cities that agree, says why the rest would not
   await openButton.scrollIntoViewIfNeeded();
   await expect(openButton).toBeInViewport();
 });
+
+test('a running route offers its improvement with price and payback, and an improved route earns more', async ({
+  page,
+}) => {
+  await openGame(page);
+  const saved = playDays(richRome(), 2, [open('capua', 'land')]);
+  const route = Object.values(saved.tradeRoutes)[0];
+  if (!route) throw new Error('expected a running route');
+  await load(page, saved);
+  await openCity(page, 'roma', 'Roma');
+  const offer = page.getByTestId('trade-improve');
+  await expect(offer).toContainText(`Improve for ${Math.ceil(route.cost / 2)} gold`);
+  await expect(offer).toContainText('Improved 0 of 2 times; no refund on closing.');
+  await page.getByRole('button', { name: 'Improve route', exact: true }).click();
+  await resume(page);
+  await expect(offer).toContainText('Improved 1 of 2 times');
+  await pause(page);
+});
