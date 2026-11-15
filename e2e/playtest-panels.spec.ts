@@ -252,6 +252,35 @@ test.describe('the panels after the playtest', () => {
     await expect(army.getByTestId('army-siege-block')).toHaveCount(0);
   });
 
+  test('your army at peace by a foreign city declares war from its own panel, with the confirmation the city panel asks', async ({
+    page,
+  }) => {
+    await pause(page);
+    const state = startGame();
+    armyOf(state, rome).activity = { kind: 'idle', position: cityPoint('massalia') };
+    await load(page, state);
+    const banner = camera(page).banner(cityPoint('massalia'));
+    await page.mouse.click(banner.x, banner.y);
+    const army = page.getByTestId('army-panel');
+    await expect(army.getByTestId('army-siege-block')).toHaveText(
+      'At peace with Massalia. Declare war to besiege it.',
+    );
+    await army.getByRole('button', { name: 'Declare war on Massalia' }).click();
+    await expect(army.getByText('Declare war on Massalia?')).toBeVisible();
+    await expect(army.getByTestId('war-consequences')).not.toBeEmpty();
+    await army.getByRole('button', { name: 'Cancel' }).click();
+    await expect(army.getByRole('button', { name: 'Declare war on Massalia' })).toBeVisible();
+
+    await army.getByRole('button', { name: 'Declare war on Massalia' }).click();
+    await army.getByRole('button', { name: 'Confirm war' }).click();
+    await expect(army.getByTestId('army-siege-block')).toHaveText(
+      'War on Massalia begins with the next day, and the siege with it.',
+    );
+    await expect(army.getByRole('button', { name: /Declare war/ })).toHaveCount(0);
+    await resume(page);
+    await expect(army.getByTestId('army-activity')).toHaveText(/^Besieging Massalia · day \d+$/);
+  });
+
   test("the city panel names a taken city's rank and owner, and a minor's own city stays independent", async ({
     page,
   }) => {

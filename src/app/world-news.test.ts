@@ -6,7 +6,7 @@ import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { newWar, warKey } from '../sim/state/war.ts';
 import { alertsOfDay, cornerAlerts, type Alert } from './alerts.ts';
-import { worldNewsOfDay } from './world-news.ts';
+import { leaderNews, leadingPower, worldNewsOfDay } from './world-news.ts';
 
 const f = FIXTURE;
 const world = fixtureWorld();
@@ -187,24 +187,45 @@ describe('worldNewsOfDay', () => {
     ]);
     expect(worldNewsOfDay(after, structuredClone(after), [], world)).toEqual([]);
   });
+});
+
+describe('leaderNews', () => {
+  /** The leader lines told over days on which Capua passes to each owner in turn. */
+  function toldAsCapuaPasses(owners: readonly FactionId[]): string[] {
+    let state = buildFixture();
+    let told = leadingPower(state);
+    const lines: string[] = [];
+    for (const next of owners) {
+      const after = structuredClone(state);
+      after.day = (state.day + 1) as Day;
+      owner(after, f.capua, next);
+      const news = leaderNews(state, after, told);
+      told = news.told;
+      lines.push(...news.alerts.map((alert) => `${alert.kind} ${alert.world}: ${alert.text}`));
+      state = after;
+    }
+    return lines;
+  }
 
   it('tells when a new great power leads, by the rule the others join against it by', () => {
-    expect(newsOf((state) => owner(state, f.capua, f.carthage))).toEqual([
-      [
-        'newLeader',
-        'corner',
-        'Carthage is now the leading power, with 2 cities: the other powers will join against it',
-      ],
+    expect(toldAsCapuaPasses([f.carthage])).toEqual([
+      'newLeader corner: Carthage is now the leading power, with 2 cities: the other powers will join against it',
     ]);
-    expect(
-      newsOf(
-        (state) => owner(state, f.capua, f.rome),
-        (state) => owner(state, f.capua, f.syracusaeFaction),
-      ),
-    ).toContainEqual([
-      'newLeader',
-      'corner',
-      'You are now the leading power, with 2 cities: the other powers will join against you',
+  });
+
+  it('tells a lead that comes back to the same power through a tie only once', () => {
+    const tie = f.syracusaeFaction;
+    expect(toldAsCapuaPasses([f.carthage, tie, f.carthage, tie, f.carthage])).toEqual([
+      'newLeader corner: Carthage is now the leading power, with 2 cities: the other powers will join against it',
+    ]);
+  });
+
+  it("tells every real change of the lead, the player's own included", () => {
+    const tie = f.syracusaeFaction;
+    expect(toldAsCapuaPasses([f.carthage, tie, f.rome, f.carthage])).toEqual([
+      'newLeader corner: Carthage is now the leading power, with 2 cities: the other powers will join against it',
+      'newLeader corner: You are now the leading power, with 2 cities: the other powers will join against you',
+      'newLeader corner: Carthage is now the leading power, with 2 cities: the other powers will join against it',
     ]);
   });
 });

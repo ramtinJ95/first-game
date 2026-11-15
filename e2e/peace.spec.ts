@@ -72,9 +72,16 @@ test.describe('peace', () => {
     await expect(war).toContainText('You besiege Carthago.');
 
     await panel.getByLabel('Carthage pays you').check();
+    await panel.getByTestId('peace-gold').fill('1000');
+    await expect(panel.getByTestId('peace-draft-truce')).toHaveText(
+      /^This peace starts a truce of 665 days, until Year \d+, day \d+\.$/,
+    );
     await panel.getByTestId('peace-gold').fill('3000');
     await expect(panel.getByTestId('peace-verdict')).toHaveText(
       'Carthage would refuse. It would give terms worth 2 points less, such as 200 gold less.',
+    );
+    await expect(panel.getByTestId('peace-draft-truce')).toHaveText(
+      /^This peace starts a truce of 1,095 days, until Year \d+, day \d+\.$/,
     );
     await expect(panel).toContainText('Carthage is losing the war +35');
     await expect(panel).toContainText('Carthage does not end a war for nothing -15');
@@ -99,6 +106,12 @@ test.describe('peace', () => {
     await page.getByRole('button', { name: 'Chronicle' }).click();
     await openWars(page);
 
+    await panel.getByLabel('Nothing changes hands').check();
+    const draftTruce = await panel.getByTestId('peace-draft-truce').textContent();
+    const promised = /^This peace starts a truce of 365 days, until (Year \d+, day \d+)\.$/.exec(
+      draftTruce ?? '',
+    )?.[1];
+    expect(promised, `the form names the truce: "${draftTruce}"`).toBeDefined();
     await panel.getByRole('button', { name: 'Send offer — Peace as things stand' }).click();
     await expect(panel.getByTestId('offer-peace')).toBeDisabled();
     await expect(panel.getByTestId('our-offer')).toHaveText(
@@ -107,7 +120,7 @@ test.describe('peace', () => {
 
     await resume(page);
     await expect(page.getByTestId('alerts')).toContainText(
-      /Peace with Carthage as things stand\. The truce holds until Year \d+, day \d+/,
+      `Peace with Carthage as things stand. The truce holds until ${promised}`,
     );
     await pause(page);
     await expect(panel.getByTestId('truce-row')).toHaveText(

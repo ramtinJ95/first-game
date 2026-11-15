@@ -9,6 +9,7 @@ import {
   newestOfferToPlayer,
   peaceChoices,
   peaceVerdict,
+  truceText,
   warRoomOf,
 } from './war-room.ts';
 import { peaceAnswer } from '../sim/ai/peace.ts';
@@ -167,7 +168,7 @@ describe('the wars panel', () => {
     });
     expect(offer?.counter?.answer.accepts).toBe(true);
     expect(offer?.counter?.text).toBe(
-      'Carthage asks more than it would take. By its reckoning today it would accept peace in which you give 1,700 gold. A counter-offer replaces its demand, and Carthage answers with the next day. This peace starts a truce of 875 days, until Year 3, day 346.',
+      'Carthage asks more than it would take. By its reckoning today it would accept peace in which you give 1,700 gold. A counter-offer replaces its demand, and Carthage answers with the next day. This peace starts a truce of 875 days, until Year 3, day 347.',
     );
     const atFloor = warOn(201);
     changeCityOwner(atFloor, f.capua, f.carthage);
@@ -279,5 +280,19 @@ describe('the wars panel', () => {
       'Truce with Carthage: 14 days left. Neither side may declare war before Year 11, day 264.',
     );
     expectConsistent(state);
+  });
+});
+
+describe('the truce a written offer buys', () => {
+  test('names its days and its last day for each payment, from the day the answer comes', () => {
+    const state = buildFixture();
+    state.day = 100 as Day;
+    const pay = (gold: number) =>
+      truceText(state, { kind: 'payment', payer: FIXTURE.rome, gold, cities: [] }, state.day + 1);
+    expect(truceText(state, { kind: 'asThingsStand' }, state.day + 1)).toBe(
+      'This peace starts a truce of 365 days, until Year 2, day 101.',
+    );
+    expect(pay(1_000)).toBe('This peace starts a truce of 665 days, until Year 3, day 36.');
+    expect(pay(2_500)).toBe('This peace starts a truce of 1,095 days, until Year 4, day 101.');
   });
 });

@@ -71,6 +71,9 @@
         </button>
       </div>
     {/if}
+    {#if blocked.declareOn}
+      <WarStatus {game} owner={blocked.declareOn} {pending} {actions} />
+    {/if}
   {/if}
   {#if weak}
     <p class="bad" data-testid="army-weak-siege">{weak}</p>
