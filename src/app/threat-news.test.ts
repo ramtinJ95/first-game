@@ -69,7 +69,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     const news = newsOf(state, told);
     expect(news.map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: its armies have \d+% of the strength it needs against your forces near Roma\. Your treasury of [\d,]+ gold lowers what it needs by 25%, since a peace would make you pay it\. Guards hired at Roma count against it\.$/,
+        /^Carthage could soon declare war on you: its armies have \d+% of the strength it needs against your forces near Roma\. Your treasury of [\d,]+ gold lowers what it needs by 25%, since a peace would make you pay it\. Guards hired at Roma count against it for their first 90 days\.$/,
       ),
     ]);
     expect(news[0]?.tone).toBe('bad');

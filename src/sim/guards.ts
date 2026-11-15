@@ -1,7 +1,7 @@
 import type { DeepReadonly } from './deep-readonly.ts';
 import type { CityId, FactionId } from './ids.ts';
 import { ownedCity } from './orders/owned-city.ts';
-import type { City } from './state/city.ts';
+import type { City, GuardBand } from './state/city.ts';
 import type { Day } from './state/day.ts';
 import type { GameState } from './state/game-state.ts';
 import { beleaguered, CITY_DEFENCES } from './systems/sieges.ts';
@@ -12,6 +12,12 @@ export const GUARD_BAND = 500;
 export const GUARD_GOLD = 2000;
 /** Days a band serves before it leaves, so the choice to hire comes back each year. */
 export const GUARD_DAYS = 365;
+/**
+ * Days from its hire that a great power counts a band against a war on the city's owner.
+ * After that it reckons on the hirelings leaving, so guards held year after year buy no
+ * lasting peace, while the band still holds the walls for its whole term.
+ */
+export const GUARD_DETER_DAYS = 90;
 
 export interface HireGuardsOrder {
   kind: 'hireGuards';
@@ -22,6 +28,20 @@ export interface HireGuardsOrder {
 /** The men the city's bands of guards hold its walls with. */
 export function guardMen(city: DeepReadonly<Pick<City, 'guards'>>): number {
   return city.guards.length * GUARD_BAND;
+}
+
+/** The last day a great power counts the band against a war. */
+export function deterrentUntil(band: DeepReadonly<GuardBand>): Day {
+  return (band.until - GUARD_DAYS + GUARD_DETER_DAYS) as Day;
+}
+
+/** The garrison a great power weighs before it declares: the guards past GUARD_DETER_DAYS left out. */
+export function weighedGarrison(
+  city: DeepReadonly<Pick<City, 'garrison' | 'guards'>>,
+  day: Day,
+): number {
+  const stale = city.guards.filter((band) => deterrentUntil(band) <= day).length;
+  return Math.max(0, city.garrison - stale * GUARD_BAND);
 }
 
 /** The most guards a city holds, in men: its rank's full garrison, so a capital holds 3,000. */

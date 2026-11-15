@@ -15,6 +15,7 @@ import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import { decideOrders } from './decide.ts';
 import { HOARD_ODDS_SHARE } from './thresholds.ts';
 import { warReadiness } from './war.ts';
+import { GUARD_BAND, GUARD_DAYS, GUARD_DETER_DAYS } from '../guards.ts';
 
 const map = parseMap(
   JSON.parse(readFileSync(new URL('../../../data/map/map.json', import.meta.url), 'utf8')),
@@ -154,6 +155,43 @@ describe('how near a power stands to war', () => {
     spears.men = 5000;
     punic.activity = { kind: 'idle', position: { x: 2229.9, y: 2865.1 } };
     expect(warReadiness(state, tiny, FIXTURE.rome, FIXTURE.syracusaeFaction)?.readiness).toBe(0);
+    expectConsistent(state);
+  });
+});
+
+describe('guards a great power weighs before it declares', () => {
+  /** The full state with its front city's walls held by `bands` bands hired `ago` days before. */
+  function guarded(bands: number, ago: number): { state: GameState; front: CityId } {
+    const state = carthageAndRome({ grown: true, full: true });
+    const front = warReadiness(state, world, carthage, rome)?.front;
+    const city = front && state.cities[front];
+    if (!city) throw new Error('no front city');
+    city.guards = Array.from({ length: bands }, () => ({
+      until: (state.day + GUARD_DAYS - ago) as Day,
+    }));
+    city.garrison += bands * GUARD_BAND;
+    return { state, front: city.id };
+  }
+
+  test(`count for their first ${GUARD_DETER_DAYS} days, and hold back the war while they do`, () => {
+    const { state, front } = guarded(3, 0);
+    const open = carthageAndRome({ grown: true, full: true });
+    expect(declarations(open)).toEqual([{ kind: 'declareWar', faction: carthage, against: rome }]);
+    expect(warReadiness(state, world, carthage, rome)?.front).toBe(front);
+    expect(warReadiness(state, world, carthage, rome)?.readiness ?? 0).toBeLessThan(
+      warReadiness(open, world, carthage, rome)?.readiness ?? 0,
+    );
+    expect(declarations(state)).toEqual([]);
+    expectConsistent(state);
+  });
+
+  test(`count for nothing after ${GUARD_DETER_DAYS} days, though they still stand on the walls`, () => {
+    const { state } = guarded(3, GUARD_DETER_DAYS);
+    const open = carthageAndRome({ grown: true, full: true });
+    expect(warReadiness(state, world, carthage, rome)?.readiness).toBeCloseTo(
+      warReadiness(open, world, carthage, rome)?.readiness ?? 0,
+    );
+    expect(declarations(state)).toEqual([{ kind: 'declareWar', faction: carthage, against: rome }]);
     expectConsistent(state);
   });
 });

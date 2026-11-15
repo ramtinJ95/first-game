@@ -1,5 +1,5 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import { GUARD_BAND } from '../sim/guards.ts';
+import { GUARD_BAND, GUARD_DETER_DAYS } from '../sim/guards.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { Alert } from './alerts.ts';
 import { whole } from './names.ts';
@@ -23,7 +23,7 @@ export function guardNewsOfDay(before: State, after: State): Alert[] {
       kind: 'guardsLeft',
       day: before.day,
       tone: 'neutral',
-      text: `The ${whole(left)} guards hired at ${city.name} have served their year and left. Hire more in its city panel.`,
+      text: `The ${whole(left)} guards hired at ${city.name} have served their year and left. A great power counts fresh guards against a war for ${GUARD_DETER_DAYS} days: hire them when the news warns of one.`,
       focus: { at: city.position, select: { kind: 'province', province: city.province } },
     });
   }

@@ -7,7 +7,7 @@
   import type { GameState } from '../sim/state/game-state.ts';
   import type { World } from '../sim/world/world.ts';
   import type { Actions } from './actions.ts';
-  import { cityGuards } from './guards-text.ts';
+  import { cityGuards, GUARD_RULE } from './guards-text.ts';
 
   let {
     game,
@@ -29,6 +29,8 @@
 <section data-testid="city-guards" aria-label="Guards">
   <h3>Guards</h3>
   <p data-testid="guards-line">{shown.line}</p>
+  {#if shown.weighed}<p class="muted" data-testid="guards-weighed">{shown.weighed}</p>{/if}
+  <p class="muted" data-testid="guards-rule">{GUARD_RULE}</p>
   <button
     type="button"
     data-testid="guards-hire"
@@ -38,5 +40,8 @@
     >Hire {whole(GUARD_BAND)} guards for a year · {whole(shown.hire.gold)} gold</button
   >
   {#if shown.hire.change}<p class="muted" data-testid="guards-change">{shown.hire.change}</p>{/if}
+  {#each shown.hire.threats as threat (threat)}<p class="muted" data-testid="guards-threat">
+      {threat}
+    </p>{/each}
   {#if shown.hire.why}<p class="bad" data-testid="guards-refused">{shown.hire.why}</p>{/if}
 </section>
