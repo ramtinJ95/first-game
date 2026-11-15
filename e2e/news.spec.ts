@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import {
   camera,
+  carthageNearsWar,
   cityPoint,
   dropSave,
   fiveFleetsOnRoma,
@@ -86,6 +87,20 @@ test.describe('what the page tells of stores, cities, and sieges', () => {
       'title',
       /^At the call-up limit\. /,
     );
+  });
+
+  test('a great power that nears the strength it needs to declare war on Rome is told once', async ({
+    page,
+  }) => {
+    await load(page, carthageNearsWar());
+    await resume(page);
+    const line = page
+      .getByTestId('alerts')
+      .getByText(/^Carthage could soon declare war on you: its armies have \d+% of the strength/);
+    await line.waitFor();
+    await pause(page);
+    await expect(line).toContainText(/Your treasury of [\d,]+ gold lowers what it needs by 25%/);
+    await expect(line).toHaveCount(1);
   });
 
   test('the army and city panels of a siege too weak to cut the food say how many men it needs', async ({

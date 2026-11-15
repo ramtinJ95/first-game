@@ -24,9 +24,12 @@ async function load(page: Page, state: GameState) {
   await untilDrawn(page);
 }
 
-/** Seed 5 under the AI, a few days before Persia takes the lead it then holds through three ties. */
-const BEFORE_PERSIA_LEADS = 2735;
-const AFTER_THE_TIES = 2885;
+/**
+ * Seed 5 under the AI, days before Persia takes the lead on day 1114. Played as an idle
+ * Carthage from here, as the page plays it, no fate, offer, or defeat stops the clock.
+ */
+const BEFORE_PERSIA_LEADS = 1100;
+const AFTER_THE_LEAD = 1250;
 
 export default defineScenario({
   name: 'leader-news',
@@ -34,13 +37,13 @@ export default defineScenario({
     'The leading-power news of a ten-year game around a change of lead, told once for each power that takes the lead',
   async run({ page, shot }) {
     await openGame(page);
-    // An idle Rome has fallen by then, so the page plays the same world as Macedon.
+    // An idle Rome has fallen by then, so the page plays the world as Carthage.
     const tenYears = playAi(newGame(map, { seed: 5, player: 'rome' }), BEFORE_PERSIA_LEADS - 1);
-    tenYears.player = 'macedon' as FactionId;
+    tenYears.player = 'carthage' as FactionId;
     await load(page, tenYears);
     await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
     await resume(page);
-    await untilDay(page, AFTER_THE_TIES, 0, 120_000);
+    await untilDay(page, AFTER_THE_LEAD, 0, 120_000);
     await pause(page);
     await page.getByRole('button', { name: 'Chronicle' }).click();
     const chronicle = page.getByTestId('chronicle');
@@ -50,7 +53,7 @@ export default defineScenario({
       .scrollIntoViewIfNeeded();
     await shot(
       'leader-news',
-      'Seed 5, Year 8, 150 days around a change of lead: each power that takes the lead is told once, and a lead that comes back through a tie is not told again',
+      'Seed 5, Year 4, 150 days around a change of lead: Persia is told once as it takes the lead',
     );
   },
 });

@@ -1,20 +1,26 @@
-import type { FactionId } from '../ids.ts';
+import type { CityId, FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import { truceBetween } from '../peace/truce.ts';
 import { BLOCKADE_ODDS } from '../systems/sieges.ts';
 import { distance } from '../world/find-path.ts';
 import { routeRate, tradeIncome } from '../trade/routes.ts';
+import { ADMIN_CITIES, limitsOf } from '../systems/economy.ts';
+import type { World } from '../world/world.ts';
 import type { Context } from './armies.ts';
+import { createRouter } from './routes.ts';
 import {
   canFight,
+  enemiesOf,
   sorted,
   strengthNear,
   strengthOf,
   targetsOf,
   type CityView,
+  type State,
 } from './situation.ts';
 import {
   COALITION_ODDS,
+  HOARD_ODDS_SHARE,
   LEADER_SHARE,
   PEACE_WAR_ODDS,
   RIVAL_ODDS,
@@ -37,11 +43,87 @@ import {
  * at peace with everyone needs only PEACE_WAR_ODDS, whatever the distance. Against a
  * rival great power it needs no more than RIVAL_ODDS in either case, and against the
  * leader, a great power with LEADER_SHARE of all cities and more than any other, no more
- * than COALITION_ODDS. Against a minor the odds it needs grow with its cities over those
- * the map gave it, raised to SATED_EXPONENT, so a realm that has grown is slower to start
- * a new war on a minor.
+ * than COALITION_ODDS. A power past ADMIN_CITIES needs less against a rival great power
+ * whose treasury is full, since the gold is what a peace would make the rival pay: the
+ * odds fall by HOARD_ODDS_SHARE times the share of the rival's treasury that is full
+ * times the share of its own cities past ADMIN_CITIES, which its gold cannot arm.
+ * Against a minor the odds it needs grow with its cities over those the map gave it,
+ * raised to SATED_EXPONENT, so a realm that has grown is slower to start a new war
+ * on a minor.
  */
 export function warDeclaration(context: Context): Order[] {
+  const reckoning = reckon(context);
+  if (!reckoning || reckoning.free <= 0) return [];
+  const { faction } = context;
+  let best: { against: FactionId; score: number } | undefined;
+  for (const { id, bound } of reckoning.candidates) {
+    if (best && bound <= best.score) break;
+    const front = reckoning.frontOf(id);
+    if (!front) continue;
+    const score = reckoning.scoreOf(id, reckoning.measure(id, front.city), front.km);
+    if (score >= 1 && (!best || score > best.score)) best = { against: id, score };
+  }
+  if (best) return [{ kind: 'declareWar', faction, against: best.against }];
+  let pressed: { against: FactionId; odds: number } | undefined;
+  for (const rival of [...reckoning.rivals].sort()) {
+    const odds = reckoning.pressureOn(rival);
+    if (odds === undefined || odds < RIVAL_PRESSURE_ODDS || (pressed && odds <= pressed.odds))
+      continue;
+    if (reckoning.frontOf(rival)) pressed = { against: rival, odds };
+  }
+  return pressed ? [{ kind: 'declareWar', faction, against: pressed.against }] : [];
+}
+
+/** How near a power stands to declaring war on another, by the reckoning of `warDeclaration`. */
+export interface WarReadiness {
+  /** Its odds over the odds it needs: at 1 or more it declares, unless another neighbour scores higher. */
+  readonly readiness: number;
+  /** The share by which the other's full treasury lowers the odds it needs, 0 when it does not. */
+  readonly hoard: number;
+  /** The other's city nearest the power, whose defenders it weighs. */
+  readonly front: CityId;
+  /** Whether rival pressure, which weighs field armies only, stands nearer than the odds. */
+  readonly pressed: boolean;
+}
+
+/**
+ * How near a great power stands to declaring war on another faction, by its odds or, for
+ * a rival it may press, by its uncommitted strength over RIVAL_PRESSURE_ODDS, whichever
+ * is nearer. A power whose strength is all held back by its wars stands at 0. Nothing
+ * when it could not declare on that faction at all: at war or in a truce with it, out of
+ * reach, or with no army ready to march.
+ */
+export function warReadiness(
+  state: State,
+  world: World,
+  faction: FactionId,
+  against: FactionId,
+): WarReadiness | undefined {
+  const record = state.factions[faction];
+  if (record?.kind !== 'greatPower' || record.defeatedOn !== null) return undefined;
+  const context: Context = {
+    state,
+    world,
+    faction,
+    enemies: enemiesOf(state, faction),
+    router: createRouter(state, world, faction),
+  };
+  const reckoning = reckon(context);
+  if (!reckoning?.eligible.has(against)) return undefined;
+  const front = reckoning.frontOf(against);
+  if (!front) return undefined;
+  const pressure = (reckoning.pressureOn(against) ?? 0) / RIVAL_PRESSURE_ODDS;
+  const odds = reckoning.scoreOf(against, reckoning.measure(against, front.city), front.km);
+  return {
+    readiness: Math.max(odds, pressure),
+    hoard: reckoning.hoardShare(against),
+    front: front.city.id,
+    pressed: pressure > odds,
+  };
+}
+
+/** The day's reckoning of war: its free strength, the neighbours it might declare on, and its odds against each. */
+function reckon(context: Context) {
   const { state, faction, enemies, router } = context;
   const armies = sorted(state.armies);
   const strength = new Map<FactionId, number>();
@@ -54,7 +136,7 @@ export function warDeclaration(context: Context): Order[] {
       (army.activity.kind === 'idle' || army.activity.kind === 'marching') &&
       canFight(state, army),
   );
-  if (!ready) return [];
+  if (!ready) return undefined;
   const citiesOf = new Map<FactionId, CityView[]>();
   for (const city of sorted(state.cities)) {
     citiesOf.set(city.owner, [...(citiesOf.get(city.owner) ?? []), city]);
@@ -96,18 +178,26 @@ export function warDeclaration(context: Context): Order[] {
       .filter((other) => other.kind === 'greatPower' && other.defeatedOn === null)
       .map((other) => other.id),
   );
-  if (free <= 0) return [];
   const odds = enemies.size === 0 ? PEACE_WAR_ODDS : WAR_ODDS;
   const leader = leaderOf(citiesOf, rivals);
   const homeland = context.world.map.provinces.filter(
     (province) => (province.owner as string) === faction,
   ).length;
   const sated = Math.max(1, ownCities.length / Math.max(1, homeland)) ** SATED_EXPONENT;
+  const limits = limitsOf(state);
+  const hoard = (other: FactionId) => {
+    const limit = limits.get(other)?.gold ?? 0;
+    const gold = state.factions[other]?.stores.gold ?? 0;
+    return limit > 0 ? Math.min(1, Math.max(0, gold / limit)) : 0;
+  };
+  const growth = Math.max(0, 1 - ADMIN_CITIES / Math.max(1, ownCities.length));
+  const hoardShare = (other: FactionId) =>
+    other !== leader && rivals.has(other) ? HOARD_ODDS_SHARE * growth * hoard(other) : 0;
   const needed = (other: FactionId) =>
     other === leader
       ? Math.min(odds, COALITION_ODDS)
       : rivals.has(other)
-        ? Math.min(odds, RIVAL_ODDS)
+        ? Math.min(odds, RIVAL_ODDS) * (1 - hoardShare(other))
         : odds * sated;
   const income = tradeIncome(state).get(faction) ?? 0;
   const tradeCost = (other: FactionId) =>
@@ -121,13 +211,14 @@ export function warDeclaration(context: Context): Order[] {
       )
       .reduce((sum, r) => sum + routeRate(r), 0);
   const scoreOf = (other: FactionId, theirs: number, km: number) =>
-    free /
+    Math.max(0, free) /
     Math.max(1, theirs) /
     (1 + Math.min(0.25, (tradeCost(other) / Math.max(1, income)) * 0.25)) /
     (needed(other) * (enemies.size === 0 ? 1 : 1 + km / WAR_DISTANCE_KM));
 
   // A neighbour scores at most its best city in reach would with no army near it, so
   // most are ruled out before a route to their front is looked for.
+  const eligible = new Set<FactionId>();
   const candidates = sorted(state.factions)
     .filter(
       (other) =>
@@ -141,23 +232,43 @@ export function warDeclaration(context: Context): Order[] {
       for (const theirs of citiesOf.get(other.id) ?? []) {
         let km = Number.POSITIVE_INFINITY;
         for (const ours of ownCities) km = Math.min(km, distance(ours.position, theirs.position));
-        if (km <= WAR_REACH_KM) bound = Math.max(bound, scoreOf(other.id, theirs.garrison, km));
+        if (km > WAR_REACH_KM) continue;
+        eligible.add(other.id);
+        bound = Math.max(bound, scoreOf(other.id, theirs.garrison, km));
       }
       return bound > 0 ? [{ id: other.id, bound }] : [];
     })
-    .filter((candidate) => candidate.bound >= 1)
     .sort((a, b) => b.bound - a.bound || (a.id < b.id ? -1 : 1));
 
-  let best: { against: FactionId; score: number } | undefined;
-  for (const { id, bound } of candidates) {
-    if (best && bound <= best.score) break;
-    const front = frontOf(id);
-    if (!front) continue;
-    const score = scoreOf(id, measure(id, front.city), front.km);
-    if (score >= 1 && (!best || score > best.score)) best = { against: id, score };
-  }
-  if (best) return [{ kind: 'declareWar', faction, against: best.against }];
-  return rivalPressure(context, strength, pressureFree, rivals, frontOf);
+  /**
+   * A power at war with no great power presses a great-power neighbour that has kept to
+   * its homeland, holding no more cities than the map gave it: its uncommitted armies
+   * over that neighbour's, or nothing for one it may not press. Each existing front keeps
+   * back at least its field strength or its city's blockade requirement, whichever is
+   * greater, in the same strength points used for a garrison in normal war scoring. So a
+   * rival who stays at home is pressed while minor cities are still left.
+   */
+  const atWarWithPower = [...enemies].some((enemy) => rivals.has(enemy));
+  const pressureOn = (rival: FactionId) => {
+    if (atWarWithPower || rival === faction || !rivals.has(rival)) return undefined;
+    const map = context.world.map.provinces;
+    const home = map.filter((province) => (province.owner as string) === rival).length;
+    if ((citiesOf.get(rival)?.length ?? 0) > home) return undefined;
+    if (truceBetween(state, faction, rival)) return undefined;
+    return pressureFree / Math.max(1, strength.get(rival) ?? 0);
+  };
+
+  return {
+    free,
+    rivals,
+    frontOf,
+    measure,
+    scoreOf,
+    hoardShare,
+    pressureOn,
+    eligible,
+    candidates: candidates.filter((candidate) => candidate.bound >= 1),
+  };
 }
 
 /** The great power that holds at least LEADER_SHARE of all cities and more than any other. */
@@ -173,36 +284,4 @@ function leaderOf(
   const [first, second] = counts;
   if (!first || first.count < LEADER_SHARE * total) return undefined;
   return second && second.count === first.count ? undefined : first.rival;
-}
-
-/**
- * A power at war with no great power declares on a great-power neighbour that has kept
- * to its homeland, holding no more cities than the map gave it, once its uncommitted
- * armies outweigh that neighbour's RIVAL_PRESSURE_ODDS times. Each existing front
- * keeps back at least its field strength or its city's blockade requirement, whichever
- * is greater, in the same strength points used for a garrison in normal war scoring.
- * It picks the one it outweighs most. So a rival who stays at home is pressed while
- * minor cities are still left.
- */
-function rivalPressure(
-  { state, world, faction, enemies }: Context,
-  strength: ReadonlyMap<FactionId, number>,
-  own: number,
-  rivals: ReadonlySet<FactionId>,
-  frontOf: (other: FactionId) => unknown,
-): Order[] {
-  if ([...enemies].some((enemy) => rivals.has(enemy))) return [];
-  const homeland = (rival: FactionId) =>
-    world.map.provinces.filter((province) => (province.owner as string) === rival).length;
-  const held = (rival: FactionId) =>
-    sorted(state.cities).filter((city) => city.owner === rival).length;
-  let best: { against: FactionId; odds: number } | undefined;
-  for (const rival of [...rivals].sort()) {
-    if (rival === faction || held(rival) > homeland(rival)) continue;
-    if (truceBetween(state, faction, rival)) continue;
-    const odds = own / Math.max(1, strength.get(rival) ?? 0);
-    if (odds < RIVAL_PRESSURE_ODDS || (best && odds <= best.odds)) continue;
-    if (frontOf(rival)) best = { against: rival, odds };
-  }
-  return best ? [{ kind: 'declareWar', faction, against: best.against }] : [];
 }
