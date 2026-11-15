@@ -16,6 +16,7 @@ import { tick } from '../sim/tick.ts';
 import type { World } from '../sim/world/world.ts';
 import {
   FAR_LONGER,
+  commandTarget,
   ISLET_REFUSAL,
   planCommand,
   plannedRoutes,
@@ -244,6 +245,25 @@ describe('a right click on a point', () => {
     expect(plan(state, atPoint({ x: -50, y: -50 }))).toEqual({
       kind: 'refuse',
       notice: 'Order refused. The destination is off the map.',
+    });
+  });
+
+  it('points a right click at the clicked city before an islet under it, and at an islet before the point', () => {
+    const state = buildFixture();
+    const point = { x: 2400, y: 2500 };
+    const roma = state.cities[f.roma];
+    if (!roma) throw new Error('no Roma');
+    expect(commandTarget(state, { point, city: f.roma, islet: true })).toEqual({
+      kind: 'city',
+      city: roma,
+    });
+    expect(commandTarget(state, { point, city: undefined, islet: true })).toEqual({
+      kind: 'islet',
+      point,
+    });
+    expect(commandTarget(state, { point, city: undefined, islet: false })).toEqual({
+      kind: 'point',
+      point,
     });
   });
 

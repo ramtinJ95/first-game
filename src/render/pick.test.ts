@@ -3,9 +3,18 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ArmyId, BattleId, CityId, FactionId, ProvinceId } from '../sim/ids.ts';
 import { parseMap, type GameMap } from '../sim/map.ts';
+import { ATLAS_COAST_SCALE } from './atlas-coast.ts';
 import { fitCamera, mapToScreen, type Camera } from './camera.ts';
 import type { DrawnArmy, DrawnBattle } from './markers.ts';
-import { CITY_HIT_MARGIN, cityAt, isletAt, pickAt, provinceAt, type DrawnCity } from './pick.ts';
+import {
+  CITY_HIT_MARGIN,
+  cityAt,
+  commandIslet,
+  isletAt,
+  pickAt,
+  provinceAt,
+  type DrawnCity,
+} from './pick.ts';
 
 const MAP = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../../data/map/map.json'), 'utf8')),
@@ -75,6 +84,13 @@ describe('islets off Carthago at the closest zoom', () => {
     const zembra = { x: 2276.8, y: 2842.4 };
     expect(isletAt(MAP, zembra)).toBe(true);
     expect(click(zembra)).toBeUndefined();
+  });
+
+  it('takes a right click for an islet only from the zoom at which islets are drawn', () => {
+    const zembra = { x: 2276.8, y: 2842.4 };
+    expect(commandIslet(MAP, ATLAS_COAST_SCALE - 0.01, zembra)).toBe(false);
+    expect(commandIslet(MAP, ATLAS_COAST_SCALE, zembra)).toBe(true);
+    expect(commandIslet(MAP, 4, zembra)).toBe(true);
   });
 
   it('counts no reachable shore as an islet, even where no province outline holds the point', () => {

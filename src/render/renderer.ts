@@ -60,7 +60,7 @@ import {
 import { paperTexture, waterTexture } from './paper.ts';
 import { toPixels } from './lines.ts';
 import { FramePacer } from './frame-pacer.ts';
-import { cityAt, isletAt, pickAt, type DrawnCity, type FigureHit, type Pick } from './pick.ts';
+import { cityAt, commandIslet, pickAt, type DrawnCity, type FigureHit, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
 import { cityDrawingView, citySymbols, fitCitySymbol } from './symbols.ts';
 import { createLife } from './terrain/life.ts';
@@ -1293,7 +1293,7 @@ export async function createRenderer({
         pick,
         city: cityAt(view.cities, screen, view.cityAnchors, pick),
         screen,
-        islet: view.camera.scale >= ATLAS_COAST_SCALE && isletAt(map, point),
+        islet: commandIslet(map, view.camera.scale, point),
       });
     },
     { signal },
