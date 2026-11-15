@@ -55,6 +55,15 @@ function playOut(state: GameState, order: Order, army: ArmyId = f.romanArmy) {
   return { state: current, days };
 }
 
+/** Where the army stands, or where its convoy is. */
+function positionOf(state: GameState, id: ArmyId = f.romanArmy): MapPoint {
+  const { activity } = armyOf(state, id);
+  const at =
+    activity.kind === 'embarked' ? state.convoys[activity.convoy]?.position : activity.position;
+  if (!at) throw new Error(`army ${id} has no position`);
+  return at;
+}
+
 /** The days of every leg in a menu line, summed. */
 function daysOf(detail: string): number {
   const days = [...detail.matchAll(/(\d+) days?/g)].map((match) => Number(match[1]));
@@ -131,9 +140,14 @@ describe('a right click on a city', () => {
             `^\\d+ days? to the shore, then ${GATHER_DAYS} days to gather ships, then \\d+ days by sea$`,
           ),
         ),
-        order: { kind: 'moveArmy' },
+        order: { kind: 'embark', to: f.syracusae, from: expect.any(Object) },
       },
     ]);
+    const [sail] = planned.menu.options;
+    if (!sail) return;
+    const { state: after, days } = playOut(state, sail.order);
+    expect(days).toBe(daysOf(sail.detail));
+    expect(placeName(after, positionOf(after))).toBe('at Syracusae');
   });
 
   it('offers the march to a port of its own and the crossing when no land route reaches the city', () => {
@@ -146,9 +160,14 @@ describe('a right click on a city', () => {
         group: 'sea',
         label: 'March to Roma to sail for Syracusae',
         detail: expect.stringMatching(/^\d+ days? to the port, then \d+ days by sea$/),
-        order: { kind: 'moveArmy', to: cityOf(state, f.roma).position },
+        order: { kind: 'embark', to: f.syracusae, from: cityOf(state, f.roma).position },
       },
     ]);
+    const [sail] = planned.menu.options;
+    if (!sail) return;
+    const { state: after, days } = playOut(state, sail.order);
+    expect(days).toBe(daysOf(sail.detail));
+    expect(placeName(after, positionOf(after))).toBe('at Syracusae');
   });
 
   it('Carthage to Capua by way of Roma: one order sails, lands, and marches on to Capua in the days the menu gave', () => {
@@ -422,9 +441,14 @@ describe('a shore beside a port of its own', () => {
       {
         group: 'sea',
         label: 'March to Carthago to sail for Syracusae',
-        order: { kind: 'moveArmy', to: cityOf(state, f.carthago).position },
+        order: { kind: 'embark', to: f.syracusae, from: cityOf(state, f.carthago).position },
       },
     ]);
+    const [sail] = planned.menu.options;
+    if (!sail) return;
+    const { state: after, days } = playOut(state, sail.order, f.punicArmy);
+    expect(days).toBe(daysOf(sail.detail));
+    expect(placeName(after, positionOf(after, f.punicArmy))).toBe('at Syracusae');
   });
 });
 

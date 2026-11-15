@@ -16,6 +16,13 @@ export const COAST_VIEWS = [
   { name: 'rhodes', title: 'Rhodos island', lon: 28.15, lat: 36.35, scale: 4 },
   { name: 'gades', title: 'Gades and its harbour', lon: -6.3, lat: 36.5, scale: 4 },
   {
+    name: 'samothrace',
+    title: 'Samothrace, an island town, 1 px/km',
+    lon: 25.6,
+    lat: 40.45,
+    scale: 1,
+  },
+  {
     name: 'ionian-bound',
     title: 'Ionian coast, maximum shared-coast displacement',
     lon: 20.8375,

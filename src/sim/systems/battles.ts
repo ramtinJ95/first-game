@@ -221,9 +221,11 @@ function join(state: GameState, army: Army, position: MapPoint, battle: Battle):
 
 /** A marching army keeps the rest of its march, to take up again if it holds the field. */
 function enterBattle(state: GameState, army: Army, position: MapPoint, battle: BattleId) {
-  const march = army.activity.kind === 'marching' ? army.activity.waypoints : [];
+  const { activity } = army;
+  const march = activity.kind === 'marching' ? activity.waypoints : [];
+  const sail = activity.kind === 'marching' ? activity.sail : undefined;
   leaveSiege(state, army);
-  army.activity = { kind: 'inBattle', position, battle, march };
+  army.activity = { kind: 'inBattle', position, battle, march, ...(sail && { sail }) };
 }
 
 /**
@@ -443,10 +445,10 @@ function settle(state: GameState, world: World, id: BattleId) {
   for (const armyId of [...battle.attackers, ...battle.defenders]) {
     const army = state.armies[armyId];
     if (army?.activity.kind !== 'inBattle') continue;
-    const { position, march } = army.activity;
+    const { position, march, sail } = army.activity;
     army.activity =
       march.length > 0
-        ? { kind: 'marching', position, waypoints: march }
+        ? { kind: 'marching', position, waypoints: march, ...(sail && { sail }) }
         : { kind: 'idle', position };
   }
   const winner: BattleSideName | 'none' =

@@ -125,7 +125,7 @@ export function fitCoastalSprite(
             x: origin.x + dx,
             y: origin.y + dy,
             size: sprite.size * shrink,
-            depth: sprite.depth + dy,
+            depth: sprite.depth + origin.y + dy - sprite.y,
           };
           if (!fits(candidate)) continue;
           const hit = sprite.hit;
@@ -221,6 +221,47 @@ export function sceneAnchor(
     const army = armies.find((a) => a.id === sprite.army);
     return army && toScreen(army.position);
   };
+}
+
+/** How far a town or village may stand inland of its own place, and how small it may grow. */
+export const PLACE_REACH_KM = 12;
+const PLACE_SIZES = [1, 0.75, 0.5] as const;
+
+/**
+ * Where a town or village ornament stands with its whole ground line on drawn land: at
+ * its place, or the nearest spot inland within PLACE_REACH_KM, full-sized before smaller.
+ * The way there stays on the rules' land, so an island town never crosses to the mainland.
+ * Undefined when nothing fits, and the place is then not drawn at this zoom.
+ */
+export function fitPlace(
+  at: MapPoint,
+  halfWidth: number,
+  lift: number,
+  halfThickness: number,
+  land: { box(left: number, right: number, top: number, bottom: number): boolean },
+  rulesWay: (from: MapPoint, to: MapPoint) => boolean,
+  scale: number,
+): { x: number; y: number; growth: number } | undefined {
+  const reach = PLACE_REACH_KM * scale;
+  const rings = Math.max(1, Math.ceil(reach / 2));
+  for (const growth of PLACE_SIZES) {
+    const half = halfWidth * growth;
+    const thick = halfThickness * growth;
+    const base = lift * growth;
+    for (let ring = 0; ring <= rings; ring++) {
+      const radius = (ring * reach) / rings;
+      const around = ring ? Math.max(8, Math.ceil((2 * Math.PI * radius) / 2)) : 1;
+      for (let k = 0; k < around; k++) {
+        const angle = (2 * Math.PI * k) / around;
+        const spot = { x: at.x + Math.cos(angle) * radius, y: at.y + Math.sin(angle) * radius };
+        const y = spot.y + base;
+        if (!land.box(spot.x - half, spot.x + half, y - thick, y + thick)) continue;
+        if (ring && !rulesWay(at, spot)) continue;
+        return { ...spot, growth };
+      }
+    }
+  }
+  return undefined;
 }
 
 export function fitCoastalScene(

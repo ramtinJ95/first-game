@@ -1,5 +1,6 @@
 import { Container, Graphics, GraphicsContext, Text } from 'pixi.js';
 import type { GameMap } from '../../sim/map.ts';
+import { PLACE_REACH_KM } from '../coastal-ground.ts';
 import { mapToScreen, symbolGrowth, type Camera, type Size } from '../camera.ts';
 import { LABEL_PRIORITY, type Box, type LabelRequest } from '../labels.ts';
 import { INK, LABEL_HALO, PAPER } from '../palette.ts';
@@ -63,6 +64,12 @@ function settlementSymbols(): Record<Rank, GraphicsContext> {
   return { town, village };
 }
 
+/** Half the ground line under each ornament, round cap included, and half its stroke. */
+const GROUND: Record<Rank, { half: number; thick: number }> = {
+  town: { half: 6.5, thick: 0.5 },
+  village: { half: 6.2, thick: 0.45 },
+};
+
 const HALF: Record<Rank, { x: number; y: number }> = {
   town: { x: 6.5, y: 5.5 },
   village: { x: 6.25, y: 5.5 },
@@ -82,6 +89,18 @@ interface Drawn {
   labelWanted: boolean;
 }
 
+/**
+ * Where a town or village ornament at `at` stands with its ground line, `halfWidth` either
+ * side of it, `lift` below it and `halfThickness` above and below that, on the drawn land,
+ * and at what share of its size; or undefined when it fits nowhere near.
+ */
+export type PlaceFit = (
+  at: { x: number; y: number },
+  halfWidth: number,
+  lift: number,
+  halfThickness: number,
+) => { x: number; y: number; growth: number } | undefined;
+
 export interface PlacesLayer {
   /**
    * Places the town and village symbols that have room beside `cityBoxes` and returns
@@ -91,7 +110,7 @@ export interface PlacesLayer {
     camera: Camera,
     viewport: Size,
     cityBoxes: readonly Box[],
-    land?: (screen: { x: number; y: number }) => boolean,
+    fit?: PlaceFit,
   ): { requests: LabelRequest[]; boxes: Box[] };
   /** Shows the names that won a place, at `box`, and hides the others. */
   placeLabels(placed: ReadonlyMap<string, Box>): void;
@@ -102,6 +121,11 @@ export interface PlacesLayer {
 /** Towns and villages from the map in the towns layer, and their names and the peaks' names. */
 export function createPlaces(map: GameMap, towns: Container, labels: Container): PlacesLayer {
   const symbols = settlementSymbols();
+  /** Each ornament's spot by the zoom it was fitted at: a pan keeps it, a zoom fits again. */
+  const fitted = new Map<
+    Drawn,
+    { scale: number; spot: { dx: number; dy: number; growth: number } | undefined }
+  >();
   const all: Drawn[] = [
     ...map.settlements.map((s) => ({
       id: s.id,
@@ -165,7 +189,7 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
   }
 
   return {
-    layout(camera, viewport, cityBoxes, land) {
+    layout(camera, viewport, cityBoxes, fit) {
       const scale = camera.scale;
       bands = {
         towns: detailAlpha(DETAIL.towns, scale),
@@ -186,22 +210,44 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
               ? bands.towns > 0
               : bands.villages > 0;
         if (!shown) continue;
-        const at = mapToScreen(camera, viewport, { x: d.x, y: d.y });
-        if (at.x < -20 || at.y < -20 || at.x > viewport.width + 20 || at.y > viewport.height + 20)
+        let at = mapToScreen(camera, viewport, { x: d.x, y: d.y });
+        const margin = 20 + (d.kind === 'peak' ? 0 : PLACE_REACH_KM * scale);
+        if (
+          at.x < -margin ||
+          at.y < -margin ||
+          at.x > viewport.width + margin ||
+          at.y > viewport.height + margin
+        )
           continue;
         const peakKm = scale < 1.8 ? 11 : 5;
         const half =
           d.kind === 'peak'
             ? { x: peakKm * scale, y: peakKm * scale }
             : { x: HALF[d.kind].x * grow, y: HALF[d.kind].y * grow };
-        if (
-          d.kind !== 'peak' &&
-          land &&
-          ![-half.x, 0, half.x].every((dx) => land({ x: at.x + dx, y: at.y + 3.6 * grow }))
-        )
-          continue;
+        let grown = grow;
+        if (d.kind !== 'peak' && fit) {
+          let placed = fitted.get(d);
+          if (!placed || placed.scale !== scale) {
+            const spot = fit(
+              at,
+              GROUND[d.kind].half * grow,
+              3.6 * grow,
+              GROUND[d.kind].thick * grow,
+            );
+            placed = {
+              scale,
+              spot: spot && { dx: spot.x - at.x, dy: spot.y - at.y, growth: spot.growth },
+            };
+            fitted.set(d, placed);
+          }
+          if (!placed.spot) continue;
+          at = { x: at.x + placed.spot.dx, y: at.y + placed.spot.dy };
+          grown = grow * placed.spot.growth;
+          half.x *= placed.spot.growth;
+          half.y *= placed.spot.growth;
+        }
         d.symbol?.position.set(at.x, at.y);
-        d.symbol?.scale.set(grow);
+        d.symbol?.scale.set(grown);
         onScreen.push({
           d,
           at,
