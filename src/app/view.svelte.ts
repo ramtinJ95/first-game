@@ -81,6 +81,21 @@ export interface View {
   destroy(): void;
 }
 
+function sameFields<T extends object>(a: T, b: T): boolean {
+  return (Object.keys(b) as (keyof T)[]).every((key) => a[key] === b[key]);
+}
+
+/**
+ * Whether a snapshot holds what the published one holds, field by field and in its frame.
+ * Every panel reading the view runs again on a new snapshot, and the city panel's forecasts
+ * took a fifth of the page's main thread when republished ten times a second unchanged.
+ */
+function sameSnapshot(a: Snapshot, b: Snapshot): boolean {
+  return (Object.keys(b) as (keyof Snapshot)[]).every((key) =>
+    key === 'frame' ? sameFields(a.frame, b.frame) : a[key] === b[key],
+  );
+}
+
 /** Measures kept under one name before the oldest are dropped. */
 const MEASURES_KEPT = 200;
 
@@ -93,7 +108,8 @@ export function createView(read: () => Snapshot, intervalMs = 100, timing?: stri
   // Raw state is never proxied, so the big plain state tree reaches panels untouched.
   let current = $state.raw(read());
   const refresh = () => {
-    current = read();
+    const next = read();
+    if (!sameSnapshot(current, next)) current = next;
   };
   const publish = () => {
     if (!timing) return refresh();

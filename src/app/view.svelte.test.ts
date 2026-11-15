@@ -71,6 +71,21 @@ describe('view', () => {
     view.destroy();
   });
 
+  it('keeps the published snapshot while nothing in it changed, so panels do not run again', () => {
+    const live = source();
+    // The page builds a new snapshot and frame on every read, as main.ts does.
+    const view = createView(() => ({ ...live.read(), frame: { ...live.read().frame } }), 100);
+    const first = view.current;
+    vi.advanceTimersByTime(1000);
+    view.refresh();
+    expect(view.current).toBe(first);
+    live.setSpeed(2);
+    vi.advanceTimersByTime(100);
+    expect(view.current).not.toBe(first);
+    expect(view.current.speed).toBe(2);
+    view.destroy();
+  });
+
   it('stops republishing after destroy', () => {
     const live = source();
     const view = createView(live.read, 100);
