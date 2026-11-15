@@ -9,11 +9,12 @@ import {
 } from '../src/app/alerts.ts';
 import { alertsInSight } from '../src/app/sighted.ts';
 import { tradeNews, type TradeTrouble } from '../src/app/trade-news.ts';
-import { worldNewsOfDay } from '../src/app/world-news.ts';
+import { leaderNews, worldNewsOfDay } from '../src/app/world-news.ts';
 import { decideAll } from '../src/sim/ai/decide.ts';
 import { parseMap } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
 import { sightOf } from '../src/sim/sight.ts';
+import type { FactionId } from '../src/sim/ids.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { tick } from '../src/sim/tick.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
@@ -57,6 +58,7 @@ function play(seed: number, active: boolean): Year[] {
   let state: GameState = newGame(map, { seed, player: 'rome' });
   let weak = new Map();
   let troubles: TradeTrouble[] = [];
+  let leaderTold: FactionId | undefined;
   const years: Year[] = [];
   for (let day = 1; day <= YEARS * YEAR; day++) {
     const year = Math.floor((day - 1) / YEAR);
@@ -75,7 +77,9 @@ function play(seed: number, active: boolean): Year[] {
       ...weakNews.alerts,
       ...trade.alerts,
     ]);
-    const news = worldNewsOfDay(state, next, events, world);
+    const leader = leaderNews(state, next, leaderTold);
+    leaderTold = leader.told;
+    const news = [...worldNewsOfDay(state, next, events, world), ...leader.alerts];
     counts.before += own.reduce((sum, alert) => sum + linesBefore(alert), 0);
     for (const alert of groupAlerts([...own, ...news])) {
       if (alert.world === 'chronicle') counts.chronicle++;

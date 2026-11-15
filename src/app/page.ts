@@ -8,6 +8,7 @@ import {
   ProvinceIdSchema,
   SiegeIdSchema,
   FactionIdSchema,
+  type FactionId,
   type SiegeId,
 } from '../sim/ids.ts';
 import { DaySchema } from '../sim/state/day.ts';
@@ -56,6 +57,7 @@ const AlertSchema = v.object({
 });
 
 const PageSchema = v.object({
+  leaderTold: v.optional(FactionIdSchema),
   desertion: v.optional(DesertionSchema),
   tradeTroubles: v.optional(TradeTroublesSchema),
   paused: v.optional(v.boolean()),
@@ -111,6 +113,8 @@ const PageSchema = v.object({
  * them again nor stops for them twice.
  */
 export interface Page {
+  /** The leading power the player was last told of, kept through a tie. */
+  readonly leaderTold?: FactionId;
   readonly desertion?: Desertion;
   readonly tradeTroubles?: readonly TradeTrouble[];
   readonly paused?: boolean;
@@ -154,6 +158,7 @@ export function parsePage(
     };
   }
   const {
+    leaderTold,
     desertion,
     tradeTroubles,
     chronicle,
@@ -169,6 +174,7 @@ export function parsePage(
   return {
     ok: true,
     page: {
+      leaderTold,
       desertion,
       tradeTroubles,
       paused,

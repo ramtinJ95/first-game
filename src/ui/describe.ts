@@ -342,7 +342,14 @@ export function whyNotBesieging(
   state: State,
   army: DeepReadonly<Army>,
   pending: readonly Order[],
-): { readonly text: string; readonly besiege?: MoveArmyOrder } | undefined {
+):
+  | {
+      readonly text: string;
+      readonly besiege?: MoveArmyOrder;
+      /** The owner at peace with the army, on whom the panel offers to declare war. */
+      readonly declareOn?: FactionId;
+    }
+  | undefined {
   if (army.activity.kind !== 'idle') return undefined;
   const at = army.activity.position;
   const near = Object.values(state.cities)
@@ -379,7 +386,10 @@ export function whyNotBesieging(
   if (blocked && atWar) return { text: blocked };
   if (!atWar) {
     const target = city.name === owner ? 'it' : city.name;
-    return { text: `At peace with ${owner}. Declare war to besiege ${target}.` };
+    return {
+      text: `At peace with ${owner}. Declare war to besiege ${target}.`,
+      declareOn: city.owner,
+    };
   }
   if (km <= AT_CITY_KM) {
     return declared
