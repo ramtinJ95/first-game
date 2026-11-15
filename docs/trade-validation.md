@@ -644,6 +644,8 @@ A first version of the rule kept every route through a change of owner. It broke
 
 The passive-Rome control is identical on both, since a Rome that gives no orders holds no routes.
 
+`sim:world` and `sim:ai` start every game with Rome as `state.player` while every faction, Rome included, is played by the AI. So in their tables on the branch, Rome's routes take the player's exception and survive a partner's change of owner; they are not a control with no exception.
+
 | `sim:peace` target, seeds 1–20 over ten years | main       | branch     |
 | --------------------------------------------- | ---------- | ---------- |
 | Wars between great powers that end in peace   | 622 of 655 | 599 of 633 |
@@ -655,7 +657,7 @@ Both meet every peace target. The longest war between great powers is longer on 
 
 ## The cautious Rome over ten years
 
-`node scripts/sim/trade-judge.ts` plays seeds 1–20 for ten years, or until Rome is defeated. Every faction plays the AI, Rome included, except Rome's trade: monthly, before any other spending and keeping 600 gold, Rome opens its best route by return per gold. `--heed` makes Rome heed what #67 tells it: it skips a partner at war or a besieged end, and declares no war on a partner whose routes have not repaid. `--improve` makes Rome, with no route to open, buy the improvement that repays soonest, if within three years. Lost gold is what Rome paid to open or improve routes that closed or left its hands before their receipts repaid it, less those receipts, at arrival prices. The same file runs on main.
+`node scripts/sim/trade-judge.ts` plays seeds 1–20 for ten years, or until Rome is defeated. Every faction plays the AI, Rome included, except Rome's trade: monthly, before any other spending and keeping 600 gold, Rome opens its best route by return per gold. `--heed` makes Rome heed what #67 tells it: it skips a partner at war or a besieged end, and declares no war on a partner whose routes have not repaid. `--improve` makes Rome, with no route to open, buy the improvement that repays soonest, if within three years. Lost gold is what Rome paid to open or improve routes that closed or left its hands before their receipts repaid it, less those receipts. `scripts/sim/trade-ledger.ts` settles each day: an opening counts from its `tradeOpened` event at the price it was quoted, so a route the same day closes still enters. On the branch's saves receipts are the route's own tally of the gold Rome kept, after its treasury's limit. On main, which keeps no tally, they are an estimate: each arrival's pay, but no more than the treasury's gain that day, so an arrival into a full treasury repays nothing. The same files run on both.
 
 | Cautious Rome, seeds 1–20, ten years | routes opened | closed before repaying | gold lost | trade decisions | longest stretch without one, median / most | day-1 paybacks min / median / max |
 | ------------------------------------ | ------------: | ---------------------: | --------: | --------------: | ------------------------------------------ | --------------------------------- |

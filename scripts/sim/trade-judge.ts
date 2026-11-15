@@ -1,14 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { decideAll } from '../../src/sim/ai/decide.ts';
-import type { CityId, FactionId, TradeRouteId } from '../../src/sim/ids.ts';
+import type { CityId, FactionId } from '../../src/sim/ids.ts';
 import { parseMap } from '../../src/sim/map.ts';
 import { newGame } from '../../src/sim/new-game.ts';
 import type { Order } from '../../src/sim/orders/orders.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
-import type { TradeRoute } from '../../src/sim/state/trade-route.ts';
 import { adminShareOf } from '../../src/sim/systems/economy.ts';
 import { warKey } from '../../src/sim/state/war.ts';
+import { improveCost, settleDay, type Ledger } from './trade-ledger.ts';
 import { tick } from '../../src/sim/tick.ts';
 import * as routes from '../../src/sim/trade/routes.ts';
 import { areAtWar } from '../../src/sim/wars.ts';
@@ -37,15 +37,8 @@ const IMPROVE_PAYBACK_DAYS = 3 * 365;
 /** A player who puts trade first keeps only the AI's own floor of gold back. */
 const TRADE_FLOOR = 600;
 
-/** A route's gold a day at each end before administration, on the rules of whichever checkout runs this. */
-const rateOf = (route: TradeRoute): number =>
-  'routeRate' in routes && typeof routes.routeRate === 'function'
-    ? (routes.routeRate as (r: TradeRoute) => number)(route)
-    : route.daily;
-const improveCost = (route: TradeRoute): number | undefined =>
-  'improvementCost' in routes && typeof routes.improvementCost === 'function'
-    ? (routes.improvementCost as (r: TradeRoute) => number)(route)
-    : undefined;
+/** The price each of Rome's opening orders was quoted at. */
+const quoted = new Map<Order, number>();
 
 console.log(
   `Cautious Rome, ${years} years, seeds ${first} to ${last}. Every faction plays the AI, Rome included, except Rome's trade:`,
@@ -96,7 +89,7 @@ console.log(
 function play(seed: number) {
   let state: GameState = newGame(map, { seed, player: 'rome' });
   const paybacks = quotes(state, false).map((q) => q.paybackDays / 365);
-  const ledger = new Map<TradeRouteId, { paid: number; received: number; deliveries: number }>();
+  const ledger: Ledger = new Map();
   const days: number[] = [];
   let opened = 0;
   let early = 0;
@@ -121,7 +114,6 @@ function play(seed: number) {
       ai.filter((o) => o.faction === rome),
     );
     orders.unshift(...mine);
-    const before = new Set(Object.keys(state.tradeRoutes));
     const { state: next, rejected, events } = tick(state, orders, world);
     const causes = new Map<string, string>();
     for (const event of events) {
@@ -144,53 +136,17 @@ function play(seed: number) {
     }
     const accepted = mine.filter((o) => !rejected.some((r) => r.order === o));
     if (accepted.length) days.push(day);
-    for (const order of accepted) {
-      if (order.kind === 'acceptTrade' && next.tradeRoutes[order.route]?.status === 'running')
-        ledger.set(order.route, { paid: 0, received: 0, deliveries: 0 });
-      const entry = order.kind === 'improveTrade' ? ledger.get(order.route) : undefined;
-      const route = order.kind === 'improveTrade' ? state.tradeRoutes[order.route] : undefined;
-      const cost = route && improveCost(route);
-      if (entry && cost) entry.paid += cost;
-    }
-    for (const route of Object.values(next.tradeRoutes)) {
-      if (before.has(route.id) || route.owner !== rome || route.status !== 'running') continue;
-      if (accepted.some((o) => o.kind === 'openTrade')) {
-        ledger.set(route.id, { paid: route.cost, received: 0, deliveries: 0 });
-        opened++;
-      }
-    }
-    for (const route of Object.values(next.tradeRoutes))
-      if (
-        route.status === 'running' &&
-        (route.owner === rome || route.partner === rome) &&
-        !ledger.has(route.id)
-      )
-        ledger.set(route.id, { paid: 0, received: 0, deliveries: route.deliveries });
-    for (const [id, entry] of ledger) {
-      const route = next.tradeRoutes[id];
-      if (route && route.deliveries > entry.deliveries) {
-        const ends = Number(route.owner === rome) + Number(route.partner === rome);
-        entry.received +=
-          (route.deliveries - entry.deliveries) *
-          rateOf(route) *
-          route.days *
-          adminShareOf(next, rome) *
-          ends;
-        entry.deliveries = route.deliveries;
-      }
-      if (!route || (route.owner !== rome && route.partner !== rome)) {
-        if (entry.received < entry.paid) {
-          early++;
-          lost += entry.paid - entry.received;
-          const cause = route
-            ? 'Rome lost its city'
-            : accepted.some((o) => o.kind === 'closeTrade' && o.route === id)
-              ? 'Rome replaced it'
-              : (causes.get(id) ?? 'closed');
-          lostBy.set(cause, (lostBy.get(cause) ?? 0) + entry.paid - entry.received);
-        }
-        ledger.delete(id);
-      }
+    const settled = settleDay(ledger, rome, state, next, events, accepted, quoted);
+    opened += settled.opened;
+    for (const close of settled.closed) {
+      early++;
+      lost += close.lost;
+      const cause = close.handedOver
+        ? 'Rome lost its city'
+        : accepted.some((o) => o.kind === 'closeTrade' && o.route === close.route)
+          ? 'Rome replaced it'
+          : (causes.get(close.route) ?? 'closed');
+      lostBy.set(cause, (lostBy.get(cause) ?? 0) + close.lost);
     }
     state = next;
     if (state.factions[rome]?.defeatedOn !== null) {
@@ -217,7 +173,10 @@ function tradeOrders(state: GameState, ai: readonly Order[]): Order[] {
   if (state.day % 30 !== 0 || ai.some((o) => o.kind === 'declareWar')) return [];
   const budget = (state.factions[rome]?.stores.gold ?? 0) - TRADE_FLOOR;
   const best = quotes(state, values.heed).filter((q) => q.cost <= budget)[0];
-  if (best) return [best.order];
+  if (best) {
+    quoted.set(best.order, best.cost);
+    return [best.order];
+  }
   if (!values.improve) return [];
   return improvement(state, budget);
 }
