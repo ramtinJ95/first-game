@@ -121,6 +121,20 @@ describe('cityAt', () => {
   };
   const arelate: DrawnCity = { id: 'arelate' as CityId, symbol: box(60, 100, 5), label: undefined };
 
+  it('keeps an inset city anchor as a fallback, behind visible glyphs and nearby armies', () => {
+    const anchor = { ...massalia, symbol: box(200, 100, 5), label: undefined };
+    const other = { ...arelate, symbol: box(200, 100, 5) };
+    expect(cityAt([massalia], { x: 100, y: 100 }, [anchor])).toBe('massalia');
+    expect(cityAt([massalia], { x: 200, y: 100 }, [anchor])).toBe('massalia');
+    expect(cityAt([massalia, other], { x: 200, y: 100 }, [anchor])).toBe('arelate');
+    expect(
+      cityAt([massalia], { x: 200, y: 100 }, [anchor], { kind: 'army', army: 'a' as ArmyId }),
+    ).toBeUndefined();
+    expect(
+      cityAt([massalia], { x: 200, y: 100 }, [anchor], { kind: 'battle', battle: 'b' as BattleId }),
+    ).toBeUndefined();
+  });
+
   it('finds the city from a click on its symbol, on its name, or a few pixels off either', () => {
     expect(cityAt([massalia], { x: 100, y: 100 })).toBe('massalia');
     expect(cityAt([massalia], { x: 160, y: 100 })).toBe('massalia');

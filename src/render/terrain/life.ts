@@ -20,6 +20,7 @@ const PUFFS = 5;
 const SAIL_SECONDS = 90;
 
 interface Hearth {
+  readonly city?: string;
   readonly x: number;
   readonly y: number;
   /** Height of the rooftops above the point, in pixels at the base symbol size. */
@@ -88,7 +89,14 @@ export interface Life {
    * Draws the smoke and the boats for this moment, only where the player sees, so a
    * boat in the fog never passes for a hidden convoy. Returns true while they show.
    */
-  update(camera: Camera, viewport: Size, now: number, sight: Pick<Sight, 'sees'>): boolean;
+  update(
+    camera: Camera,
+    viewport: Size,
+    now: number,
+    sight: Pick<Sight, 'sees'>,
+    land?: (screen: { x: number; y: number }) => boolean,
+    cityPosition?: (id: string) => { x: number; y: number } | undefined,
+  ): boolean;
 }
 
 /**
@@ -100,6 +108,7 @@ export function createLife(map: GameMap, land: Land, parent: Container): Life {
   parent.addChild(graphics);
   const hearths: Hearth[] = [
     ...map.provinces.map((p) => ({
+      city: p.id,
       x: p.city[0],
       y: p.city[1],
       rise: p.capital ? 7 : 4,
@@ -117,7 +126,7 @@ export function createLife(map: GameMap, land: Land, parent: Container): Life {
   let boats: Boat[] | undefined;
 
   return {
-    update(camera, viewport, now, sight) {
+    update(camera, viewport, now, sight, drawnLand, cityPosition) {
       const alpha = detailAlpha(DETAIL.life, camera.scale);
       graphics.clear();
       graphics.visible = alpha > 0;
@@ -133,8 +142,9 @@ export function createLife(map: GameMap, land: Land, parent: Container): Life {
       const inView = (at: { x: number; y: number }) =>
         at.x > -40 && at.y > -60 && at.x < viewport.width + 40 && at.y < viewport.height + 20;
       for (const hearth of hearths) {
-        const at = mapToScreen(camera, viewport, hearth);
-        if (!inView(at) || !sight.sees(hearth)) continue;
+        const placed = hearth.city ? cityPosition?.(hearth.city) : undefined;
+        const at = placed ?? mapToScreen(camera, viewport, hearth);
+        if (!inView(at) || !sight.sees(hearth) || (drawnLand && !drawnLand(at))) continue;
         const top = at.y - hearth.rise * grow;
         for (let n = 0; n < PUFFS; n++) {
           const t = (seconds / PUFF_SECONDS + hearth.phase + n / PUFFS) % 1;
@@ -164,6 +174,8 @@ export function createLife(map: GameMap, land: Land, parent: Container): Life {
         const s = 0.9 * grow;
         const x = at.x;
         const y = at.y + bob;
+        if (drawnLand && [-6 * s, 0, 6 * s].some((dx) => drawnLand({ x: x + dx, y: y + 1.2 * s })))
+          continue;
         graphics
           .poly([x - 6 * s, y, x + 6 * s, y, x + 4 * s, y + 2.4 * s, x - 4 * s, y + 2.4 * s])
           .fill({ color: HULL, alpha })

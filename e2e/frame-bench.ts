@@ -91,6 +91,10 @@ async function zoomTo(page: Page, at: MapPoint, scale: number) {
     camera = zoomAt(camera, cursor, wheelFactor(-100), viewport, map);
     await delay(30);
   }
+  const exactScale = Math.min(scale, 4);
+  const finalDelta = -Math.log(exactScale / camera.scale) / 0.002;
+  await page.mouse.wheel(0, finalDelta);
+  camera = zoomAt(camera, cursor, wheelFactor(finalDelta), viewport, map);
   const from = mapToScreen(camera, viewport, at);
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
@@ -126,7 +130,12 @@ async function measure(browser: Browser, base: string, query: string, zoom: stri
       .waitFor();
   }
   const view = ZOOMS[zoom];
-  if (view) await zoomTo(page, view.at, view.scale);
+  if (view) {
+    await zoomTo(page, view.at, view.scale);
+    const expected = Math.min(view.scale, 4).toFixed(4);
+    const actual = await page.locator('canvas[data-renderer]').getAttribute('data-zoom');
+    if (actual !== expected) throw new Error(`${zoom}: expected zoom ${expected}, drew ${actual}`);
+  }
   await delay(WARM_MS + WINDOW_MS);
   const reading = await meter.evaluate((el) => ({
     median: Number(el.dataset['median']),

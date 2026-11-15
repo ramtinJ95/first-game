@@ -117,9 +117,10 @@ export async function showSiegeWarning(page: Page) {
 export async function pickMinor(page: Page, state: GameState, city: City) {
   await pause(page);
   // Bring the sample into sight, without inventing knowledge of a hidden field army.
+  // Stand on the city's known land: a fixed eastward offset can be sea or off-map.
   armyOf(state, rome).activity = {
     kind: 'idle',
-    position: { x: city.position.x + 100, y: city.position.y },
+    position: { ...city.position },
   };
   const viewport = page.viewportSize();
   if (!viewport) throw new Error('no viewport');
