@@ -53,7 +53,7 @@
   );
   const pick = $derived.by(() => {
     const row = agreeing.find((r) => r.city.id === chosen?.city) ?? agreeing[0];
-    const quote = row?.quotes.find((q) => q.mode === chosen?.mode) ?? row?.quotes[0];
+    const quote = (row?.ways.find((w) => w.quote.mode === chosen?.mode) ?? row?.ways[0])?.quote;
     return row && quote ? { to: row.city, quote } : undefined;
   });
   const risks = $derived(
@@ -188,7 +188,8 @@
     aria-labelledby="trade-partners-{city.id}"
   >
     {#each agreeing as row (row.city.id)}
-      {#each row.quotes as quote, i (quote.mode)}
+      {#each row.ways as way, i (way.quote.mode)}
+        {@const quote = way.quote}
         {@const picked = pick?.to.id === row.city.id && pick.quote.mode === quote.mode}
         <li class:alternative={i > 0}>
           <button
@@ -197,17 +198,15 @@
             aria-pressed={picked}
             onclick={() => choose(row.city.id, quote.mode)}
           >
-            <span class="mark" class:risky={i === 0 && row.risks.length > 0} aria-hidden="true"
-            ></span>
+            <span class="mark" class:risky={way.risks.length > 0} aria-hidden="true"></span>
             <span class="who"
               >{i > 0 ? `or by ${quote.mode}` : `${row.city.name} by ${quote.mode}`}</span
             >
             <span class="what"
               >{i === 0 ? `${good(row.city.id)} · ` : ''}pays back in {years(quote)} years · {whole(
                 quote.cost,
-              )} gold{i === 0 && row.short > 0 ? ` · needs ${whole(row.short)} more` : ''}{i ===
-                0 && row.risks.length
-                ? ` · ${riskMark(waiting, row.risks)}`
+              )} gold{way.short > 0 ? ` · needs ${whole(way.short)} more` : ''}{way.risks.length
+                ? ` · ${riskMark(waiting, way.risks)}`
                 : ''}</span
             >
           </button>

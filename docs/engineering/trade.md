@@ -74,7 +74,9 @@ the reading of them is in `src/ui`, so the rules PR that changes survival change
   Syracusae is at war with Carthage: if Syracusae changes hands, the route closes."), a
   list row's mark, and the lines of an invitation and of a running route.
 - `tradeChoices` in `src/ui/trade-choices.ts` is the partner list: the cities that would agree
-  now, each with every open way (land, sea, or both), ordered by payback to a tenth of a
+  now, each with every open way (land, sea, or both, each a `TradeWay` with its own risks and
+  the gold it still needs, so a threatened road shows beside a safe sea lane), ordered by
+  payback to a tenth of a
   year, then by whether the player can afford it, fewer risks, and the shorter crossing,
   since unlike goods all repay in about 1.13 years; then the cities that would not, each with
   the rules' reason. A city out of reach both ways says so for both, naming a missing port.

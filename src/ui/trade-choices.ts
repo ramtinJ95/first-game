@@ -15,19 +15,20 @@ import { tradeRisk, type TradeRisk } from './trade-risk.ts';
 
 type State = DeepReadonly<GameState>;
 
+/** One open way to a partner: its quote, the risks on that way, and the gold still lacking. */
+export interface TradeWay {
+  readonly quote: TradeForecast;
+  readonly risks: readonly TradeRisk[];
+  /** Gold the player still lacks for this way, 0 when it is affordable. */
+  readonly short: number;
+}
+
 /**
  * One row of the partner list: a city that would agree today, with each open way there
  * cheapest to repay first, or a city that would not, with the rules' reason.
  */
 export type TradeChoice =
-  | {
-      readonly kind: 'open';
-      readonly city: DeepReadonly<City>;
-      readonly quotes: readonly TradeForecast[];
-      readonly risks: readonly TradeRisk[];
-      /** Gold the player still lacks for the first quote, 0 when it is affordable. */
-      readonly short: number;
-    }
+  | { readonly kind: 'open'; readonly city: DeepReadonly<City>; readonly ways: readonly TradeWay[] }
   | { readonly kind: 'closed'; readonly city: DeepReadonly<City>; readonly reason: string };
 
 const MODES: readonly TradeMode[] = ['land', 'sea'];
@@ -46,30 +47,28 @@ export function tradeChoices(
       const problems = MODES.map((mode) =>
         tradeProblem(state, world, state.player, from.id, to.id, mode, false),
       );
-      const quotes = MODES.flatMap((mode, i) => {
+      const ways = MODES.flatMap((mode, i): TradeWay[] => {
         const quote = problems[i] ? undefined : tradeForecast(state, world, from, to, mode);
-        return quote ? [quote] : [];
-      }).sort((a, b) => years(a) - years(b) || a.cost - b.cost);
-      const [best] = quotes;
-      if (!best) return { kind: 'closed', city: to, reason: refusal(world, from, to, problems) };
-      return {
-        kind: 'open',
-        city: to,
-        quotes,
-        risks: tradeRisk(state, sight, [from, to], best.mode === 'land' ? best.path : undefined),
-        short: Math.max(0, best.cost - gold),
-      };
+        if (!quote) return [];
+        const road = mode === 'land' ? quote.path : undefined;
+        const risks = tradeRisk(state, sight, [from, to], road);
+        return [{ quote, risks, short: Math.max(0, quote.cost - gold) }];
+      }).sort((a, b) => years(a.quote) - years(b.quote) || a.quote.cost - b.quote.cost);
+      if (!ways.length)
+        return { kind: 'closed', city: to, reason: refusal(world, from, to, problems) };
+      return { kind: 'open', city: to, ways };
     });
   const open = rows.filter((row) => row.kind === 'open');
   const closed = rows.filter((row) => row.kind === 'closed');
   return [
     ...open.sort((a, b) => {
-      const [x, y] = [a.quotes[0], b.quotes[0]];
+      const [x, y] = [a.ways[0], b.ways[0]];
+      if (!x || !y) return 0;
       return (
-        (x && y ? years(x) - years(y) : 0) ||
-        Number(a.short > 0) - Number(b.short > 0) ||
-        a.risks.length - b.risks.length ||
-        (x && y ? x.days - y.days : 0) ||
+        years(x.quote) - years(y.quote) ||
+        Number(x.short > 0) - Number(y.short > 0) ||
+        x.risks.length - y.risks.length ||
+        x.quote.days - y.quote.days ||
         a.city.name.localeCompare(b.city.name)
       );
     }),

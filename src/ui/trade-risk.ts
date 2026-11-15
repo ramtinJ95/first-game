@@ -47,9 +47,9 @@ export function tradeRisk(
       });
       risks.push({ kind: 'besieged', city: end.id, by: [...new Set(by)] });
     }
-    if (end.owner === state.player) continue;
     const enemies = [...enemiesOf(state, end.owner)].filter((e) => !owners.has(e)).sort();
     if (enemies.length) risks.push({ kind: 'atWar', city: end.id, owner: end.owner, enemies });
+    if (end.owner === state.player) continue;
     const league = state.factions[end.owner]?.league;
     if (!league || state.factions[league]?.defeatedOn !== null) continue;
     for (const against of [...enemiesOf(state, league)].sort()) {
@@ -79,9 +79,13 @@ export function tradeRisk(
   return risks.sort((a, b) => gravity(state, a) - gravity(state, b));
 }
 
-/** A league war on the player closes the route outright, so it outranks a war elsewhere. */
+/**
+ * A league war on the player closes the route outright, so it outranks a war elsewhere. The
+ * player's own war comes last: the player sees it already, and raiders near a road are nearer.
+ */
 function gravity(state: State, risk: TradeRisk): number {
   if (risk.kind === 'joinsWar' && risk.against === state.player) return 0.5;
+  if (risk.kind === 'atWar' && risk.owner === state.player) return 4;
   return GRAVITY[risk.kind];
 }
 
@@ -107,7 +111,9 @@ export function riskText(state: State, risk: TradeRisk): string {
         : `${owner}'s league partner ${league} is at war with ${names(state, [risk.against])}, and ${owner} will join it: if ${city} falls, the route closes.`;
     }
     case 'atWar':
-      return `${factionName(state, risk.owner)} is at war with ${names(state, risk.enemies)}: if ${city} changes hands, the route closes.`;
+      return risk.owner === state.player
+        ? `You are at war with ${names(state, risk.enemies)}: if ${city} falls, the route closes.`
+        : `${factionName(state, risk.owner)} is at war with ${names(state, risk.enemies)}: if ${city} changes hands, the route closes.`;
     case 'raids':
       return `${names(state, risk.enemies)} could raid this road and take its cargo${
         risk.near
@@ -129,7 +135,9 @@ export function riskMark(state: State, risks: readonly TradeRisk[]): string {
         ? `${factionName(state, first.owner)} joins a war on you`
         : `${factionName(state, first.owner)} joins a war`;
     case 'atWar':
-      return `${factionName(state, first.owner)} at war`;
+      return first.owner === state.player
+        ? 'you are at war'
+        : `${factionName(state, first.owner)} at war`;
     case 'raids':
       return first.near ? 'raiders near the road' : 'road open to raids';
   }

@@ -61,6 +61,8 @@ describe('the risk a quote tells', () => {
     atWar(state, f.rome, f.carthage);
     expect(read(state, f.capua, 'land').lines).toEqual([
       'Carthage could raid this road and take its cargo.',
+      'You are at war with Carthage: if Roma falls, the route closes.',
+      'You are at war with Carthage: if Capua falls, the route closes.',
     ]);
     const army = state.armies[f.punicArmy];
     const { quote } = read(state, f.capua, 'land');
@@ -68,14 +70,14 @@ describe('the risk a quote tells', () => {
     if (!army || !middle) throw new Error('missing army or road');
     army.activity = { kind: 'idle', position: { ...middle } };
     const seen = read(state, f.capua, 'land');
-    expect(seen.lines).toEqual([
+    expect(seen.lines).toContain(
       'Carthage could raid this road and take its cargo; one of their armies stands within 20 km of it now.',
-    ]);
+    );
     expect(seen.mark).toBe('raiders near the road');
     const fogged = { ...sightOf(state, world, state.player), armies: new Set<never>() };
-    expect(read(state, f.capua, 'land', fogged).lines).toEqual([
+    expect(read(state, f.capua, 'land', fogged).lines).toContain(
       'Carthage could raid this road and take its cargo.',
-    ]);
+    );
   });
 
   test('a besieged partner comes first, naming the besieger only while one is in sight', () => {
@@ -98,6 +100,15 @@ describe('the risk a quote tells', () => {
     );
   });
 
+  test("a sea route to a peaceful partner still tells the player's own war", () => {
+    const state = buildFixture();
+    atWar(state, f.rome, f.syracusaeFaction);
+    const { lines, mark, payback } = read(state, f.carthago, 'sea');
+    expect(lines).toEqual(['You are at war with Syracusae: if Roma falls, the route closes.']);
+    expect(mark).toBe('you are at war');
+    expect(payback).not.toContain('no war or siege threatens it now');
+  });
+
   test('a leagued minor whose partner is at war with you will join, which closes the route', () => {
     const state = buildFixture();
     const syracusae = state.factions[f.syracusaeFaction];
@@ -109,6 +120,7 @@ describe('the risk a quote tells', () => {
     const { lines, mark } = read(state, f.syracusae, 'sea');
     expect(lines).toEqual([
       "Syracusae's league partner Carthage is at war with you, and Syracusae will join that war, which closes the route.",
+      'You are at war with Carthage: if Roma falls, the route closes.',
     ]);
     expect(mark).toBe('Syracusae joins a war on you');
   });
