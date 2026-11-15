@@ -78,3 +78,36 @@ test('on a save with no route tally, the estimate is held to the room under the 
   expect(ledger.get(route.id)?.deliveries).toBe(1);
   expect(ledger.get(route.id)?.received).toBe(0);
 });
+
+test('on a save with no route tally, two arrivals share the day’s room in the order routes are paid', () => {
+  const state = buildFixture();
+  need(state.factions[f.rome]).stores.gold = 20_000;
+  const first: Order = {
+    kind: 'openTrade',
+    faction: f.rome,
+    from: f.roma,
+    to: f.capua,
+    mode: 'land',
+  };
+  const second: Order = {
+    kind: 'openTrade',
+    faction: f.rome,
+    from: f.roma,
+    to: f.syracusae,
+    mode: 'sea',
+  };
+  const before = tick(state, [first, second], world).state;
+  const [a, b] = Object.values(before.tradeRoutes);
+  if (!a || !b) throw new Error('expected two routes');
+  for (const r of [a, b]) delete (r as Partial<typeof r>).receipts;
+  const after = structuredClone(before);
+  for (const r of Object.values(after.tradeRoutes)) r.deliveries = 1;
+  need(after.factions[f.rome]).stores.gold = need(before.factions[f.rome]).stores.gold + 1;
+  const ledger: Ledger = new Map([
+    [b.id, { paid: b.cost, received: 0, deliveries: 0, kept: 0 }],
+    [a.id, { paid: a.cost, received: 0, deliveries: 0, kept: 0 }],
+  ]);
+  settleDay(ledger, f.rome, before, after, [], [], new Map());
+  expect(ledger.get(a.id)?.received).toBe(1);
+  expect(ledger.get(b.id)?.received).toBe(0);
+});

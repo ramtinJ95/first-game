@@ -120,7 +120,11 @@ function play(seed: number) {
       if (event.kind !== 'tradeClosed') continue;
       const other = event.owners.find((owner) => owner !== rome);
       const war = other && next.wars[warKey(rome, other)];
-      const was = state.tradeRoutes[event.route];
+      let was: { owner: FactionId; partner: FactionId } | undefined =
+        state.tradeRoutes[event.route];
+      for (const e of events)
+        if (!was && e.kind === 'tradeOpened' && e.route === event.route)
+          was = { owner: e.owners[0], partner: e.owners[1] };
       const changedHands =
         was && (was.owner !== event.owners[0] || was.partner !== event.owners[1]);
       causes.set(

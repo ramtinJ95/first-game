@@ -93,12 +93,23 @@ export function settleDay(
         kept: tally(route, faction) ?? 0,
       });
 
+  // The trade system pays routes in the state's order, so the estimate shares the day's room the same way.
   let room = Math.max(
     0,
     (after.factions[faction]?.stores.gold ?? 0) - (before.factions[faction]?.stores.gold ?? 0),
   );
   const closed: EarlyClose[] = [];
-  for (const [id, entry] of ledger) {
+  const order = [
+    ...new Set([...Object.keys(after.tradeRoutes), ...Object.keys(before.tradeRoutes)]),
+  ];
+  const settling = [
+    ...order.flatMap((id) => {
+      const entry = ledger.get(id as TradeRouteId);
+      return entry ? [[id as TradeRouteId, entry] as const] : [];
+    }),
+    ...[...ledger].filter(([id]) => !order.includes(id)),
+  ];
+  for (const [id, entry] of settling) {
     const route = after.tradeRoutes[id] ?? before.tradeRoutes[id];
     if (route) {
       const kept = tally(route, faction);
