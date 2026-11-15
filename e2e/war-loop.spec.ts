@@ -32,9 +32,6 @@ test('a beaten army beside its own city retreats to safety, is alive 30 days on,
   await pause(page);
   const alerts = page.getByTestId('alerts');
   await expect(
-    alerts.getByRole('button', { name: /Battle (at|near) Capua against Carthage/ }),
-  ).toBeVisible();
-  await expect(
     alerts.getByRole('button', {
       name: /Carthage held the field (at|near) Capua after \d+ days?\. You lost \d+ men, Carthage lost \d+\./,
     }),
@@ -43,6 +40,12 @@ test('a beaten army beside its own city retreats to safety, is alive 30 days on,
     name: /First Legion broke (at|near) Capua, losing \d+ men to the pursuit, and falls back to Roma/,
   });
   await expect(retreat).toBeVisible();
+  // The corner shows the latest five; the warning of Macedon's war takes one of them.
+  await page.getByRole('button', { name: 'Chronicle' }).click();
+  await expect(
+    page.getByTestId('chronicle').getByText(/Battle (at|near) Capua against Carthage/),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Chronicle' }).click();
 
   await retreat.click();
   const panel = page.getByTestId('army-panel');
