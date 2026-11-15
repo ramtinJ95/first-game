@@ -9,6 +9,13 @@ describe('capture timings', () => {
     expect(parseTimes(title ?? '', message ?? '')).toEqual(times);
   });
 
+  it('escapes what the runner would decode, so the message it serves is the JSON written', () => {
+    const times = { shard: '1/8', seconds: { 'odd%0Aname': 12 } };
+    const message = /title=[^:]+::(.*)$/.exec(timesAnnotation(times))?.[1] ?? '';
+    const served = message.replaceAll('%0A', '\n').replaceAll('%0D', '\r').replaceAll('%25', '%');
+    expect(parseTimes(TIMES_TITLE, served)).toEqual(times);
+  });
+
   it('ignores other annotations and refuses malformed seconds', () => {
     expect(parseTimes('memory curve', 'loads,bytes')).toBeUndefined();
     expect(() => parseTimes(TIMES_TITLE, '{"shard":"1/8","seconds":{"map":-1}}')).toThrow(

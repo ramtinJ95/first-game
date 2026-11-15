@@ -18,7 +18,11 @@ export interface ShardTimes {
  * annotations to readers who cannot fetch a job's log, so `capture:timings` can read them.
  */
 export function timesAnnotation(times: ShardTimes): string {
-  return `::notice title=${TIMES_TITLE}::${JSON.stringify(times)}`;
+  const message = JSON.stringify(times)
+    .replaceAll('%', '%25')
+    .replaceAll('\r', '%0D')
+    .replaceAll('\n', '%0A');
+  return `::notice title=${TIMES_TITLE}::${message}`;
 }
 
 /** The shard times an annotation reports, or nothing for any other annotation. */

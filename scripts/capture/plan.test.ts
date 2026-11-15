@@ -11,11 +11,19 @@ const scenarios = readdirSync(join(import.meta.dirname, 'scenarios'))
   .sort();
 const workflow = readFileSync(join(import.meta.dirname, '../../.github/workflows/ci.yml'), 'utf8');
 const capture = workflow.slice(workflow.indexOf('\n  capture-shards:'));
-const shardCount = /shard: \[([\d, ]+)\]/.exec(capture)?.[1]?.split(',').length ?? 0;
+const listed = /\n {8}shard: \[([^\]]*)\]/.exec(capture)?.[1] ?? '';
+const shards = listed.split(',').map((id) => Number(id.trim()));
+const shardCount = shards.length;
 
 describe('the CI capture plan', () => {
   it('has a measured time for every scenario, so none is planned blind', () => {
     expect(scenarios.filter((name) => recorded[name] === undefined)).toEqual([]);
+  });
+
+  it('reads the shard count from a matrix that lists the shards 1 to n in order', () => {
+    expect(shards, `capture-shards matrix "${listed}"`).toEqual(
+      Array.from({ length: shardCount }, (_, i) => i + 1),
+    );
   });
 
   it('keeps every shard within its budget at the shard count the workflow runs', () => {

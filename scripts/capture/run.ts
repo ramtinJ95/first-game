@@ -243,8 +243,10 @@ async function main(names: string[], shard: string | undefined): Promise<number>
         console.log(`capturing ${scenario.name}`);
         const started = performance.now();
         const result = await captureScenario(browser, `http://127.0.0.1:${port}`, scenario);
-        seconds[scenario.name] = Math.round((performance.now() - started) / 100) / 10;
-        console.log(`captured ${scenario.name} in ${seconds[scenario.name]?.toFixed(1)}s`);
+        const took = Math.round((performance.now() - started) / 100) / 10;
+        // A failed scenario stops early, so its seconds would understate the next plan.
+        if (result.failures.length === 0) seconds[scenario.name] = took;
+        console.log(`captured ${scenario.name} in ${took.toFixed(1)}s`);
         for (const failure of result.failures) {
           console.error(`::error::${scenario.name}: ${failure.replaceAll('\n', ' | ')}`);
         }
