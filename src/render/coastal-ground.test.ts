@@ -23,7 +23,13 @@ import { drawnColumns, fitColumnMarker } from './columns.ts';
 import { atlasLand } from './atlas-coast.ts';
 import { buildScene, type Scene, type Sprite } from './armies/scene.ts';
 import { mapToScreen, screenToMap, symbolGrowth } from './camera.ts';
-import { coastalSurface, fitBanner, fitCoastalScene, groundFits } from './coastal-ground.ts';
+import {
+  coastalSurface,
+  fitBanner,
+  fitCoastalScene,
+  groundFits,
+  sceneAnchor,
+} from './coastal-ground.ts';
 import { drawnArmies } from './markers.ts';
 import { tick } from '../sim/tick.ts';
 import { cityDrawingView, fitCitySymbol } from './symbols.ts';
@@ -63,7 +69,6 @@ test('a real Alexandria to Pelusium evacuation cart stays on land below the figu
     const camera = { centre: column.position, scale };
     const land = coastalSurface(
       () => drawn,
-      physical.lakes,
       (p) => screenToMap(camera, viewport, p),
       physical.land,
     );
@@ -95,7 +100,6 @@ test.each([0.6, 0.66, 1, 4])(
       const camera = { centre: city.position, scale };
       const land = coastalSurface(
         () => drawn,
-        physical.lakes,
         (p) => screenToMap(camera, viewport, p),
         physical.land,
       );
@@ -141,7 +145,6 @@ test.each([
       const camera = { centre: city.position, scale };
       const land = coastalSurface(
         () => drawn,
-        physical.lakes,
         (p) => screenToMap(camera, viewport, p),
         physical.land,
       );
@@ -168,7 +171,6 @@ test('damaged and burning Carthago effects follow its displayed city, without mo
   const camera = { centre: city.position, scale: 4 };
   const land = coastalSurface(
     () => drawn,
-    physical.lakes,
     (p) => screenToMap(camera, viewport, p),
     physical.land,
   );
@@ -357,8 +359,8 @@ test.each(COAST_VIEWS.filter((v) => !v.name.endsWith('middle')))(
         return physical.open(q.x, q.y);
       };
       const toMap = (p: MapPoint) => screenToMap(camera, viewport, p);
-      const onDrawnLand = coastalSurface(() => drawn, physical.lakes, toMap);
-      const onWalkable = coastalSurface(() => drawn, physical.lakes, toMap, physical.land);
+      const onDrawnLand = coastalSurface(() => drawn, toMap);
+      const onWalkable = coastalSurface(() => drawn, toMap, physical.land);
       const raw = buildScene({
         previous: state,
         current: state,
@@ -443,8 +445,8 @@ test('a banner sailing from Roma to Carthago keeps to land inland and to the sea
         if (!banner) throw new Error(`the army has no banner on its ${name} day`);
         const camera = { centre: banner.position, scale };
         const toMap = (p: MapPoint) => screenToMap(camera, viewport, p);
-        const drawnLand = coastalSurface(() => drawn, physical.lakes, toMap);
-        const walkable = coastalSurface(() => drawn, physical.lakes, toMap, physical.land);
+        const drawnLand = coastalSurface(() => drawn, toMap);
+        const walkable = coastalSurface(() => drawn, toMap, physical.land);
         const fitted = fitBanner(
           banner,
           previous,
@@ -458,9 +460,92 @@ test('a banner sailing from Roma to Carthago keeps to land inland and to the sea
         const ashore = physical.land.inside(banner.position.x, banner.position.y);
         expect(ashore ? walkable(fitted) : !drawnLand(fitted)).toBe(true);
         surfaces.add(ashore ? 'land' : 'sea');
+        const sight = seeAll(current);
+        const scene = fitCoastalScene(
+          buildScene({
+            previous,
+            current,
+            progress,
+            camera,
+            viewport,
+            previousSight: seeAll(previous),
+            sight,
+            growth: symbolGrowth(scale),
+            motion: 0,
+            now: 0,
+            land: (p) => {
+              const at = toMap(p);
+              return physical.open(at.x, at.y);
+            },
+          }),
+          drawnLand,
+          scale,
+          walkable,
+          sceneAnchor(
+            current,
+            drawnArmies(previous, current, progress).map((other) => ({
+              id: other.id,
+              position: toMap(
+                fitBanner(
+                  other,
+                  previous,
+                  current,
+                  physical.land,
+                  mapToScreen(camera, viewport, other.position),
+                  drawnLand,
+                  scale,
+                  walkable,
+                ),
+              ),
+            })),
+            (p) => mapToScreen(camera, viewport, p),
+          ),
+        );
+        for (const sprite of scene.sprites) {
+          if (sprite.alpha <= 0.05) continue;
+          if (sprite.key.startsWith('ship.')) expect(groundFits(sprite, drawnLand)).toBe(true);
+          else expect(groundFits(sprite, walkable)).toBe(true);
+        }
       }
     expect([name, ...[...surfaces].sort()]).toEqual([name, 'land', 'sea']);
     expectConsistent(current);
   }
   expect(JSON.stringify([departure, landing])).toBe(original);
+});
+
+test('an army the rules march into Lake Van stands where they put it, as on the lake shore', () => {
+  let previous = newGame(map, { seed: 1, player: 'persia' });
+  const army = Object.values(previous.armies).find((a) => a.owner === previous.player);
+  if (!army) throw new Error('Persia has no army');
+  const to = { x: 5017, y: 2696.4 };
+  expect(physical.lakes.inside(to.x, to.y)).toBe(true);
+  let current = tick(
+    previous,
+    [{ kind: 'moveArmy', faction: previous.player, army: army.id, to }],
+    world,
+  ).state;
+  for (let day = 0; day < 120 && current.armies[army.id]?.activity.kind !== 'idle'; day++) {
+    previous = current;
+    current = tick(previous, [], world).state;
+  }
+  const activity = current.armies[army.id]?.activity;
+  if (activity?.kind !== 'idle') throw new Error('the army never arrived');
+  expect(Math.hypot(activity.position.x - to.x, activity.position.y - to.y)).toBeLessThan(1);
+  for (const scale of [0.6, 1, 4]) {
+    const camera = { centre: activity.position, scale };
+    const toMap = (p: MapPoint) => screenToMap(camera, viewport, p);
+    const at = mapToScreen(camera, viewport, activity.position);
+    const fitted = fitBanner(
+      { id: army.id, position: activity.position },
+      current,
+      current,
+      physical.land,
+      at,
+      coastalSurface(() => drawn, toMap),
+      scale,
+      coastalSurface(() => drawn, toMap, physical.land),
+    );
+    expect(fitted).toEqual(at);
+  }
+  expectConsistent(current);
 });

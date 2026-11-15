@@ -11,21 +11,19 @@ type Land = ((point: MapPoint) => boolean) & {
 };
 const AIR = new Set(['smoke', 'dust', 'arrow', 'javelin', 'blaze']);
 
-/** The rendered surface and its exact continuous ground-contact query. */
+/**
+ * The rendered surface and its exact continuous ground-contact query. Lakes count as
+ * land, as they do for the rules that march armies over them; the coast is what moved.
+ */
 export function coastalSurface(
   coast: () => AreaIndex,
-  lakes: AreaIndex,
   toMap: (screen: MapPoint) => MapPoint,
   physical?: AreaIndex,
 ): Land & { box(left: number, right: number, top: number, bottom: number): boolean } {
   return Object.assign(
     (screen: MapPoint) => {
       const p = toMap(screen);
-      return (
-        coast().inside(p.x, p.y) &&
-        !lakes.inside(p.x, p.y) &&
-        (!physical || physical.inside(p.x, p.y))
-      );
+      return coast().inside(p.x, p.y) && (!physical || physical.inside(p.x, p.y));
     },
     {
       box(left: number, right: number, top: number, bottom: number) {
@@ -33,7 +31,6 @@ export function coastalSurface(
           b = toMap({ x: right, y: bottom });
         return (
           coast().boxInside(a.x, b.x, a.y, b.y) &&
-          lakes.boxInside(a.x, b.x, a.y, b.y, false) &&
           (!physical || physical.boxInside(a.x, b.x, a.y, b.y))
         );
       },
@@ -42,13 +39,10 @@ export function coastalSurface(
           b = toMap({ x: right, y });
         if (wanted)
           return (
-            coast().spanInside(a.x, b.x, a.y) &&
-            lakes.spanInside(a.x, b.x, a.y, false) &&
-            (!physical || physical.spanInside(a.x, b.x, a.y))
+            coast().spanInside(a.x, b.x, a.y) && (!physical || physical.spanInside(a.x, b.x, a.y))
           );
         return (
           coast().spanInside(a.x, b.x, a.y, false) ||
-          lakes.spanInside(a.x, b.x, a.y) ||
           (!!physical && physical.spanInside(a.x, b.x, a.y, false))
         );
       },
@@ -189,6 +183,29 @@ export function fitBanner(
     walkable,
   );
   return { x: fitted.x, y: fitted.y };
+}
+
+/**
+ * Where a sprite that does not fit on its own spot regroups: by its army's banner, or a
+ * ship by its convoy, which is at sea or in harbour while the banner may still be walking
+ * to the port.
+ */
+export function sceneAnchor(
+  current: DeepReadonly<GameState>,
+  armies: readonly { readonly id: ArmyId; readonly position: MapPoint }[],
+  toScreen: (point: MapPoint) => MapPoint,
+): (sprite: Sprite) => MapPoint | undefined {
+  return (sprite) => {
+    if (!sprite.army) return undefined;
+    const activity = current.armies[sprite.army]?.activity;
+    const convoy =
+      sprite.key.startsWith('ship.') && activity?.kind === 'embarked'
+        ? current.convoys[activity.convoy]
+        : undefined;
+    if (convoy) return toScreen(convoy.position);
+    const army = armies.find((a) => a.id === sprite.army);
+    return army && toScreen(army.position);
+  };
 }
 
 export function fitCoastalScene(

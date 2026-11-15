@@ -147,7 +147,6 @@ test('a cold figure sheet keeps a coastal fallback banner visible, dry and picka
     if (!viewport) throw new Error('no viewport');
     const land = coastalSurface(
       () => art,
-      physical.lakes,
       (p) => screenToMap(view.camera, viewport, p),
       physical.land,
     );

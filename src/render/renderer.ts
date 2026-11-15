@@ -33,7 +33,7 @@ import { BORDER_WEIGHTS, borderRuns, sharedBorders } from './borders.ts';
 import type { DrawOptions } from './draw-options.ts';
 import { cacheDrawing, coversView, fitTexture } from './cached-texture.ts';
 import { atlasCoast, atlasLand, ATLAS_COAST_SCALE } from './atlas-coast.ts';
-import { coastalSurface, fitBanner, fitCoastalScene } from './coastal-ground.ts';
+import { coastalSurface, fitBanner, fitCoastalScene, sceneAnchor } from './coastal-ground.ts';
 import { landOutline } from './land-outline.ts';
 import { drawColumnMark, drawnColumns, fitColumnMarker, type DrawnColumn } from './columns.ts';
 import { createFog, fogCircles } from './fog.ts';
@@ -1173,8 +1173,8 @@ export async function createRenderer({
 
   const drawingLand = () => (camera.scale < ATLAS_COAST_SCALE ? terrain.land.land : atlasLand(map));
   const toMap = (screen: MapPoint) => screenToMap(camera, viewport(), screen);
-  const onDrawnLand = coastalSurface(drawingLand, terrain.land.lakes, toMap);
-  const onLand = coastalSurface(drawingLand, terrain.land.lakes, toMap, terrain.land.land);
+  const onDrawnLand = coastalSurface(drawingLand, toMap);
+  const onLand = coastalSurface(drawingLand, toMap, terrain.land.land);
   /** At the zooms that draw figures, a battle's marker stands above its fighting. */
   const battleLift = () =>
     scene && scene.height > 0 ? (1.75 * scene.height + 14) / camera.scale : 0;
@@ -1494,10 +1494,13 @@ export async function createRenderer({
           names: new Map(drawnCities.flatMap(({ id, label }) => (label ? [[id, label]] : []))),
           keepClear: drawnPlaces,
         });
-        scene = fitCoastalScene(scene, onDrawnLand, camera.scale, onLand, (sprite) => {
-          const army = sprite.army && armies.find((army) => army.id === sprite.army);
-          return army ? mapToScreen(camera, view, army.position) : undefined;
-        });
+        scene = fitCoastalScene(
+          scene,
+          onDrawnLand,
+          camera.scale,
+          onLand,
+          sceneAnchor(current, armies, (point) => mapToScreen(camera, view, point)),
+        );
         drawnFigures = armyLayer.draw(scene);
         sceneReady =
           drawnFigures.length === scene.sprites.filter((sprite) => sprite.alpha > 0.05).length;
