@@ -1,3 +1,6 @@
+import type { DeepReadonly } from '../sim/deep-readonly.ts';
+import type { ArmyId } from '../sim/ids.ts';
+import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import type { Scene, Sprite } from './armies/scene.ts';
 import { groundSpan, type GroundArt } from './figures/sheet.ts';
@@ -150,6 +153,42 @@ export function fitCoastalSprite(
     }
   }
   throw new Error(`No safe drawing surface for ${sprite.key} at ${sprite.x},${sprite.y}`);
+}
+
+/**
+ * A banner stands on the surface its army is on. A landing army's banner crosses the
+ * sea from yesterday's convoy to today's shore, so it stays afloat until it reaches
+ * the physical land.
+ */
+export function fitBanner(
+  army: { readonly id: ArmyId; readonly position: MapPoint },
+  previous: DeepReadonly<GameState>,
+  current: DeepReadonly<GameState>,
+  physical: AreaIndex,
+  screen: MapPoint,
+  land: Land,
+  scale: number,
+  walkable: Land,
+): MapPoint {
+  const afloat =
+    current.armies[army.id]?.activity.kind === 'embarked' ||
+    (previous.armies[army.id]?.activity.kind === 'embarked' &&
+      !physical.inside(army.position.x, army.position.y));
+  const fitted = fitCoastalSprite(
+    {
+      key: afloat ? 'ship.0' : 'standard.0',
+      ...screen,
+      size: 0,
+      mirror: false,
+      alpha: 1,
+      rotation: 0,
+      depth: screen.y,
+    },
+    land,
+    scale,
+    walkable,
+  );
+  return { x: fitted.x, y: fitted.y };
 }
 
 export function fitCoastalScene(

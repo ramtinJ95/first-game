@@ -33,7 +33,7 @@ import { BORDER_WEIGHTS, borderRuns, sharedBorders } from './borders.ts';
 import type { DrawOptions } from './draw-options.ts';
 import { cacheDrawing, coversView, fitTexture } from './cached-texture.ts';
 import { atlasCoast, atlasLand, ATLAS_COAST_SCALE } from './atlas-coast.ts';
-import { coastalSurface, fitCoastalScene, fitCoastalSprite } from './coastal-ground.ts';
+import { coastalSurface, fitBanner, fitCoastalScene } from './coastal-ground.ts';
 import { landOutline } from './land-outline.ts';
 import { drawColumnMark, drawnColumns, fitColumnMarker, type DrawnColumn } from './columns.ts';
 import { createFog, fogCircles } from './fog.ts';
@@ -1335,17 +1335,12 @@ export async function createRenderer({
         .map((army) => {
           if (camera.scale < ATLAS_COAST_SCALE) return army;
           const at = mapToScreen(camera, viewport(), army.position);
-          const sea = current.armies[army.id]?.activity.kind === 'embarked';
-          const fitted = fitCoastalSprite(
-            {
-              key: sea ? 'ship.0' : 'standard.0',
-              ...at,
-              size: 0,
-              mirror: false,
-              alpha: 1,
-              rotation: 0,
-              depth: at.y,
-            },
+          const fitted = fitBanner(
+            army,
+            previous,
+            current,
+            terrain.land.land,
+            at,
             onDrawnLand,
             camera.scale,
             onLand,
