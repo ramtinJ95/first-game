@@ -40,11 +40,15 @@ test('recruitment forecasts upkeep and demands confirmation before a food shortf
   await expect(page.getByTestId('recruit-cards').getByRole('button')).toHaveCount(6);
   await spears.click();
   const warning = page.getByTestId('recruit-warning');
-  await expect(warning).toContainText(/Food shortfall.*run short in about \d+ days/);
-  await expect(warning).toContainText('Gold shortfall: stores run short in about 824 days');
+  await expect(warning).toContainText('Food shortfall: stores last about 8 days');
+  await expect(page.getByTestId('recruit-runway-food')).toHaveText(
+    'Food: about 8 days left as the people grow',
+  );
+  await expect(page.getByTestId('store-food-note')).toHaveText('8 days left');
+  await expect(warning).toContainText('Gold shortfall: stores last about 823 days');
   await expect(page.getByTestId('recruit-runway-food')).toHaveClass('bad');
   await expect(page.getByTestId('recruit-runway-gold')).toHaveText(
-    'Gold: about 824 days left as the people grow',
+    'Gold: about 823 days left as the people grow',
   );
   await expect(page.getByTestId('recruit-runway-gold')).toHaveClass('bad');
   await expect(page.getByTestId('city-raising')).not.toContainText('ordered');
@@ -68,7 +72,7 @@ test('a lasting gold deficit more than two years away still asks Raise anyway', 
     .getByRole('button', { name: /^Spearmen/ })
     .click();
   const warning = page.getByTestId('recruit-warning');
-  await expect(warning).toContainText('Gold shortfall: stores run short in about 824 days');
+  await expect(warning).toContainText('Gold shortfall: stores last about 823 days');
   await expect(page.getByTestId('recruit-runway-gold')).toHaveClass('bad');
   await expect(page.getByTestId('recruit-forecast')).toContainText('−21.6 gold/day');
   await expect(page.getByTestId('city-raising')).not.toContainText('ordered');
@@ -93,7 +97,7 @@ test('a small deficit that the growing people close stays plain and raises at on
     'Spearmen · ordered for the next day',
   );
   await expect(page.getByTestId('recruit-runway-food')).toHaveText(
-    "Food: short in about 2,809 days at today's yields, but the people's growth closes the gap first",
+    "Food: stores last about 2,808 days at today's yields, but the people's growth closes the gap first",
   );
   await expect(page.getByTestId('recruit-runway-food')).not.toHaveClass('bad');
 });
