@@ -8,7 +8,7 @@ import {
   type WeakSiege,
 } from '../src/app/alerts.ts';
 import { alertsInSight } from '../src/app/sighted.ts';
-import { worldNewsOfDay } from '../src/app/world-news.ts';
+import { leaderNews, worldNewsOfDay } from '../src/app/world-news.ts';
 import { decideAll } from '../src/sim/ai/decide.ts';
 import type { FactionId, SiegeId } from '../src/sim/ids.ts';
 import { parseMap } from '../src/sim/map.ts';
@@ -38,6 +38,7 @@ const rome = 'rome' as FactionId;
 function play(seed: number, passive: boolean) {
   let state = newGame(map, { seed, player: 'rome' });
   let watched = new Map<SiegeId, WeakSiege>();
+  let leaderTold: FactionId | undefined;
   let silent = 0;
   let run = 0;
   let longest = 0;
@@ -57,6 +58,8 @@ function play(seed: number, passive: boolean) {
     const sees = sightOf(after, world, rome);
     const weak = weakSiegeNews(before, after, watched);
     watched = weak.watched;
+    const leader = leaderNews(before, after, leaderTold);
+    leaderTold = leader.told;
     const news = groupAlerts([
       ...alertsInSight(alertsOfDay(before, after, result.events), saw, sees),
       ...sightingsOfDay(before, after, saw, sees, world),
@@ -64,6 +67,7 @@ function play(seed: number, passive: boolean) {
       ...worldNewsOfDay(before, after, result.events, world).filter(
         (alert) => alert.world !== 'chronicle',
       ),
+      ...leader.alerts,
     ]);
     played++;
     if (news.length === 0) {

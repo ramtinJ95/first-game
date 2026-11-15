@@ -172,7 +172,7 @@ export function cheaperCounter(
       : `${name} would accept terms better for you.`;
   return {
     ...cheapest,
-    text: `${lead} By its reckoning today it would accept ${instead}. A counter-offer replaces its demand, and ${name} answers with the next day. ${truceText(state, cheapest.terms)}`,
+    text: `${lead} By its reckoning today it would accept ${instead}. A counter-offer replaces its demand, and ${name} answers with the next day. ${truceText(state, cheapest.terms, state.day + 1)}`,
   };
 }
 
@@ -191,11 +191,19 @@ export function newestOfferToPlayer(
     .sort((a, b) => b.madeOn - a.madeOn || (a.from < b.from ? -1 : 1))[0];
 }
 
-/** How long a truce peace on the terms would start, which a payment lengthens. */
-export function truceText(state: State, terms: DeepReadonly<PeaceTerms>): string {
+/**
+ * How long a truce peace on the terms would start, which a payment lengthens, for a peace
+ * made on the day given: today when the player accepts, the next day when the other side
+ * answers the player's offer.
+ */
+export function truceText(
+  state: State,
+  terms: DeepReadonly<PeaceTerms>,
+  madeOn: number = state.day,
+): string {
   const paid = terms.kind === 'payment' ? -termsPoints(state, terms, terms.payer) : 0;
   const days = truceLength(paid);
-  return `This peace starts a truce of ${whole(days)} days, until ${dateText(state.day + days)}.`;
+  return `This peace starts a truce of ${whole(days)} days, until ${dateText(madeOn + days)}.`;
 }
 
 /** Every war the player is in and how it stands, what peace is on offer, and the truces that hold. */
