@@ -219,6 +219,7 @@ if (values.summarize) {
   print(
     positionals
       .flatMap((file) => readFileSync(file, 'utf8').trim().split('\n'))
+      .filter((line) => line.startsWith('{'))
       .map((line) => JSON.parse(line) as Row)
       .sort((a, b) => a.seed - b.seed),
   );
