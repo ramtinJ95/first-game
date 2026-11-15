@@ -132,6 +132,9 @@ test.describe('buildings', () => {
     await untilDay(page, from + 1);
     await pause(page);
     await expect(line).toHaveText(`500 guards · 500 leave ${dateText(from + 365)}`);
+    await expect(panel.getByTestId('guards-weighed')).toHaveText(
+      `500 count against a war until ${dateText(from + 90)}`,
+    );
     expect(garrisonOf(await garrison.textContent())).toBe(before + 500);
   });
 });

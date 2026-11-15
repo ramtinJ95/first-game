@@ -14,6 +14,7 @@ import { provinceAt } from '../src/render/pick.ts';
 import { nameNewArmy } from '../src/sim/army-names.ts';
 import { decideAll } from '../src/sim/ai/decide.ts';
 import { changeCityOwner } from '../src/sim/cities.ts';
+import { GUARD_BAND } from '../src/sim/guards.ts';
 import {
   allocateId,
   type ArmyId,
@@ -631,6 +632,19 @@ export function romaTreasuryFull(): GameState {
   const stores = state.factions[rome]?.stores;
   if (!limit || !stores) throw new Error('no stores of Rome');
   stores.gold = limit.gold;
+  return state;
+}
+
+/**
+ * Roma holds two bands of guards: one hired 100 days ago, which great powers no longer
+ * count against a war, and one whose year ends today, so it leaves tomorrow.
+ */
+export function romaBandLeavesTomorrow(): GameState {
+  const state = startGame();
+  const roma = state.cities['roma' as CityId];
+  if (!roma) throw new Error('no Roma');
+  roma.guards = [{ until: state.day }, { until: (state.day + 265) as Day }];
+  roma.garrison += 2 * GUARD_BAND;
   return state;
 }
 

@@ -1,6 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 import {
   camera,
+  carthageNearsWar,
   cityPoint,
   day,
   dropSave,
@@ -8,6 +9,7 @@ import {
   pause,
   resizeTo,
   resume,
+  romaBandLeavesTomorrow,
   romaTreasuryFull,
   untilDay,
   untilDrawn,
@@ -57,7 +59,7 @@ async function bothSizes(
 export default defineScenario({
   name: 'guards',
   title:
-    "Guards a city hires for a year: Roma's full treasury, the hire with its price and what it changes, and the guards on the walls the next day with the day they leave",
+    "Guards a city hires for a year: Roma's full treasury, the hire with its price and what it changes, the guards on the walls the next day with the day they leave and the day great powers stop counting them, the hire against Carthage's threat, and a band that leaves",
   viewport: WIDE,
   async run({ page, shot }) {
     await openGame(page);
@@ -88,7 +90,44 @@ export default defineScenario({
       page,
       shot,
       'after-hire',
-      'The next day Roma holds 500 guards, its garrison is 500 higher, and the line names the day the band leaves',
+      'The next day Roma holds 500 guards, its garrison is 500 higher, the line names the day the band leaves, and the next line the day great powers stop counting it against a war, 90 days on',
+    );
+
+    await load(page, carthageNearsWar());
+    await resume(page);
+    await page
+      .getByTestId('alerts')
+      .getByText(/could soon declare war on you/)
+      .waitFor();
+    await pause(page);
+    await openRoma(page);
+    await expect(page.getByTestId('guards-threat')).toContainText(/^Carthage \d+% → \d+%/);
+    await bothSizes(
+      page,
+      shot,
+      'threat-hire',
+      "Carthage nears the strength it needs against Roma: Roma's Guards section says how near it stands now and with one more band, and until when the band counts",
+    );
+
+    await load(page, romaBandLeavesTomorrow());
+    const left = await day(page);
+    await resume(page);
+    await untilDay(page, left + 1);
+    await pause(page);
+    await page
+      .getByTestId('alerts')
+      .getByText(/have served their year and left/)
+      .waitFor();
+    await shot(
+      'band-left',
+      'A band leaves Roma: the news says how long fresh guards count against a war, and to hire them when the news warns of one',
+    );
+    await openRoma(page);
+    await expect(page.getByTestId('guards-weighed')).toHaveText('None count against a war now');
+    await page.getByTestId('city-guards').scrollIntoViewIfNeeded();
+    await shot(
+      'none-count',
+      'Roma still holds a band hired 100 days ago, on its walls till its year ends, but great powers no longer count it against a war',
     );
   },
 });
