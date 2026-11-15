@@ -27,6 +27,7 @@ interface Sheet {
   readonly source: CanvasSource;
   readonly textures: Map<string, Texture>;
   painted: boolean;
+  dropped: boolean;
 }
 
 // The art is posed when a sheet is first needed, so a page that never zooms in to
@@ -88,6 +89,7 @@ async function paint(sheet: Sheet, canvas: HTMLCanvasElement) {
       URL.revokeObjectURL(url);
     }
     await new Promise((done) => setTimeout(done, 0));
+    if (sheet.dropped) return;
     i = j;
   }
   sheet.source.resize(layout.width, layout.height);
@@ -122,11 +124,19 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
     canvas.width = 1;
     canvas.height = 1;
     const source = new CanvasSource({ resource: canvas, resolution: 1, scaleMode: 'linear' });
-    const sheet: Sheet = { layout, part, source, textures: new Map(), painted: false };
+    const sheet: Sheet = {
+      layout,
+      part,
+      source,
+      textures: new Map(),
+      painted: false,
+      dropped: false,
+    };
     sheets.set(key, sheet);
     queue = queue
-      .then(() => paint(sheet, canvas))
+      .then(() => (sheet.dropped ? undefined : paint(sheet, canvas)))
       .then(() => {
+        if (sheet.dropped) return;
         sheet.painted = true;
         onPainted();
       });
@@ -159,6 +169,23 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
       sheet.textures.set(key, found);
     }
     return { texture: found, anchorX: cell.anchorX, anchorY: cell.anchorY };
+  }
+
+  function forget() {
+    for (const sprite of pool) {
+      sprite.texture = Texture.EMPTY;
+      sprite.visible = false;
+    }
+    for (const sheet of sheets.values()) {
+      sheet.dropped = true;
+      for (const t of sheet.textures.values()) t.destroy();
+      const canvas = sheet.source.resource;
+      sheet.source.destroy();
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    sheets.clear();
+    wanted = { size: 0, since: 0 };
   }
 
   return {
@@ -243,11 +270,14 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
       for (let i = used; i < pool.length; i++) (pool[i] as Sprite).visible = false;
       return shown;
     },
+    /**
+     * Lets go of every sheet. A sheet is painted for each colour that comes into view, so
+     * a tab that plays one power after another would otherwise keep a sheet for every
+     * power it ever showed. Sheets the next game needs are painted again.
+     */
+    forget,
     destroy() {
-      for (const sheet of sheets.values()) {
-        for (const t of sheet.textures.values()) t.destroy();
-        sheet.source.destroy();
-      }
+      forget();
       root.destroy({ children: true });
     },
   };

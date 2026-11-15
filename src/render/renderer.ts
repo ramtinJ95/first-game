@@ -152,6 +152,8 @@ export interface Renderer {
   camera(): Camera;
   /** Puts the view where a save left it, kept inside the map. */
   lookAt(camera: Camera): void;
+  /** Lets go of what was drawn for the game shown so far, before another game takes its place. */
+  leaveGame(): void;
   destroy(): void;
 }
 
@@ -1787,6 +1789,12 @@ export async function createRenderer({
     lookAt(next) {
       camera = clampCamera(next, viewport(), map);
       moveCamera();
+    },
+    leaveGame() {
+      armyLayer.forget();
+      scene = undefined;
+      built = undefined;
+      drawnFigures = [];
     },
     destroy() {
       terrain.destroy();

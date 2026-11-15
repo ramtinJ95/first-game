@@ -482,6 +482,7 @@ function enter(
   { pause, focus }: { pause: boolean; focus: boolean },
   page?: Page,
 ) {
+  renderer.leaveGame();
   clock.load(state, page?.pendingPeace);
   chronicle = page?.chronicle ?? [];
   toldOnce = new Set(page?.told);
@@ -556,6 +557,14 @@ function loadText(text: string, how: { pause: boolean; focus: boolean }) {
   enter(loaded.state, how, page.page);
 }
 
+/** A file the browser cannot read is refused like a damaged save, so the player is told. */
+function loadFile(file: File, how: { pause: boolean; focus: boolean }) {
+  file.text().then(
+    (text) => loadText(text, how),
+    (error: unknown) => refuseSave('damaged', String(error)),
+  );
+}
+
 function refuseSave(refusal: Refusal, detail: string) {
   console.warn(`The save did not load. ${detail}`);
   showNotice(REFUSED_SAVE[refusal]);
@@ -577,7 +586,7 @@ window.addEventListener('drop', (event) => {
   event.preventDefault();
   const file = event.dataTransfer?.files[0];
   if (!file) return;
-  void file.text().then((text) => loadText(text, { pause: false, focus: false }));
+  loadFile(file, { pause: false, focus: false });
 });
 
 const frame: FrameActions = {
@@ -682,7 +691,7 @@ const frame: FrameActions = {
     setTimeout(() => URL.revokeObjectURL(link.href), 0);
   },
   importFile(file) {
-    void file.text().then((text) => loadText(text, { pause: true, focus: true }));
+    loadFile(file, { pause: true, focus: true });
   },
 };
 
