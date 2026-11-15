@@ -215,6 +215,7 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
       sackedOn: null,
       buildings: [],
       construction: null,
+      guards: 0,
     };
   }
   pairLeagues(state, leagued);

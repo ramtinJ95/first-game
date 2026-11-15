@@ -3,6 +3,7 @@ import { nameNewArmy } from '../army-names.ts';
 import { SACK, UNREST_DAYS } from '../cities.ts';
 import type { DeepReadonly } from '../deep-readonly.ts';
 import { emit } from '../events.ts';
+import { GUARD_UPKEEP, loseGuards } from '../guards.ts';
 import { allocateId, type FactionId } from '../ids.ts';
 import { STARTING_GENERAL_SKILL } from '../new-game.ts';
 import type { Army } from '../state/army.ts';
@@ -43,7 +44,8 @@ export const UNREST_OUTPUT = 0.25;
 /**
  * The share of its men that each formation loses each day for each store, gold or
  * food, that its owner is short of. It rounds up, but the last man stays, so no
- * formation deserts to nothing.
+ * formation deserts to nothing. A city's hired guards leave at the same share, rounded
+ * up, while the gold is short, and the last of them go too.
  */
 export const DESERTION = 0.01;
 /**
@@ -58,8 +60,9 @@ export const RALLY_DISTANCE = 10;
 
 /**
  * Musters the formations whose training ends today, adds each city's output to its
- * owner less the food its people eat, takes each army's upkeep, and makes armies desert
- * while their owner is in debt. Food and manpower grow only up to the faction's limits.
+ * owner less the food its people eat, takes the upkeep of each army and each city's
+ * guards, and makes armies and guards desert while their owner is in debt. Food and
+ * manpower grow only up to the faction's limits.
  */
 export function economy(state: GameState): void {
   muster(state);
@@ -138,6 +141,7 @@ export function dailyBalances(
     balance.food +=
       city.population * (OUTPUT_PER_PERSON.food - FOOD_PER_PERSON) + extraFoodOf(city);
     balance.manpower += people * OUTPUT_PER_PERSON.manpower * levyShareOf(city) * admin;
+    balance.gold -= city.guards * GUARD_UPKEEP;
   }
   for (const army of Object.values(state.armies)) {
     const balance = of(army.owner);
@@ -236,6 +240,10 @@ function rallyArmy(state: GameState, city: City): Army {
 }
 
 function desert(state: GameState) {
+  for (const city of Object.values(state.cities)) {
+    const gold = state.factions[city.owner]?.stores.gold ?? 0;
+    if (gold < 0 && city.guards > 0) loseGuards(city, Math.ceil(city.guards * DESERTION));
+  }
   for (const army of Object.values(state.armies)) {
     const stores = state.factions[army.owner]?.stores;
     if (!stores) continue;

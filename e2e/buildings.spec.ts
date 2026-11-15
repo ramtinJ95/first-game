@@ -10,11 +10,15 @@ import {
   openGame,
   pause,
   resume,
+  romaTreasuryFull,
   setRich,
   startGame,
   untilDay,
   untilDrawn,
 } from './support.ts';
+
+const garrisonOf = (text: string | null) =>
+  Number(/^([\d,]+) of/.exec(text ?? '')?.[1]?.replace(/,/g, ''));
 
 async function load(page: Page, state: GameState) {
   await pause(page);
@@ -100,5 +104,35 @@ test.describe('buildings', () => {
     await expect(buildings).toContainText('None yet');
     await expect(buildings.getByTestId('city-built')).toHaveCount(0);
     await expect(buildings.getByTestId('build-towers')).toBeVisible();
+  });
+
+  test('a full treasury hires 500 guards in Roma, who stand on its walls the next day', async ({
+    page,
+  }) => {
+    await load(page, romaTreasuryFull());
+    await openCity(page, 'roma', 'Roma');
+    const panel = page.getByTestId('city-panel');
+    const garrison = panel.getByTestId('city-garrison');
+    const line = panel.getByTestId('guards-line');
+    await expect(line).toHaveText('No guards hired');
+    await expect(panel.getByTestId('guards-dismiss')).toHaveCount(0);
+    const before = garrisonOf(await garrison.textContent());
+
+    const hire = panel.getByTestId('guards-hire');
+    await expect(hire).toBeEnabled();
+    await expect(hire).toHaveText('Hire 500 guards · 1,500 gold');
+    await expect(panel.getByTestId('guards-change')).toContainText(
+      `Garrison ${before.toLocaleString('en')} → ${(before + 500).toLocaleString('en')}`,
+    );
+    await hire.click();
+    await expect(line).toHaveText('No guards hired · 500 more hired for the next day');
+
+    const from = await day(page);
+    await resume(page);
+    await untilDay(page, from + 1);
+    await pause(page);
+    await expect(line).toHaveText(/^500 guards · 10 gold a day/);
+    expect(garrisonOf(await garrison.textContent())).toBe(before + 500);
+    await expect(panel.getByTestId('guards-dismiss')).toHaveText('Dismiss 500 · no gold back');
   });
 });

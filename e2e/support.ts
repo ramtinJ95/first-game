@@ -624,6 +624,16 @@ export function storesAtTheirLimits(): GameState {
   return state;
 }
 
+/** Rome's treasury stands full at its limit, with nothing hired yet, so Roma can hire guards. */
+export function romaTreasuryFull(): GameState {
+  const state = startGame();
+  const limit = limitsOf(state).get(rome);
+  const stores = state.factions[rome]?.stores;
+  if (!limit || !stores) throw new Error('no stores of Rome');
+  stores.gold = limit.gold;
+  return state;
+}
+
 /**
  * Carthage holds eight minor cities west of Carthago beside its homeland, twelve in all,
  * keeps a truce with every minor, and has 5,300 spearmen, beside a Rome of 4,000 spearmen

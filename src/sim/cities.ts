@@ -40,8 +40,9 @@ export const MAX_UNREST_DAYS = Math.max(UNREST_DAYS, SACK.unrestDays, ENSLAVE.un
  * Hands a city and its province to a new owner. The city starts its full period of
  * unrest. A city falls only to a siege, which musters what the city trains, so no
  * recruit is left to lose. The new owner keeps the finished buildings, and the building
- * at work is lost with its gold. A fate is never open after this alone: the siege that takes
- * a city opens it. An old owner left without a city is out of the game.
+ * at work is lost with its gold. Hired guards do not serve a conqueror. A fate is never
+ * open after this alone: the siege that takes a city opens it. An old owner left without
+ * a city is out of the game.
  */
 export function changeCityOwner(state: GameState, cityId: CityId, owner: FactionId): void {
   const city = Object.hasOwn(state.cities, cityId) ? state.cities[cityId] : undefined;
@@ -53,6 +54,7 @@ export function changeCityOwner(state: GameState, cityId: CityId, owner: Faction
   city.unrestDays = UNREST_DAYS;
   city.recruits = [];
   city.fellOn = null;
+  city.guards = 0;
   if (city.construction) {
     emit(state, {
       kind: 'buildingsLost',

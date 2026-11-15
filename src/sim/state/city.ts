@@ -50,6 +50,8 @@ export const CitySchema = v.pipe(
     /** The buildings the city stands with, in the order they were finished. */
     buildings: v.array(v.picklist(BUILDING_KINDS)),
     construction: v.nullable(ConstructionSchema),
+    /** Men hired for gold who hold the walls. They raise the full garrison by as many. */
+    guards: v.pipe(v.number(), v.integer(), v.minValue(0)),
   }),
   v.check(
     (city) =>

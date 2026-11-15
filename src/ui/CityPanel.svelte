@@ -17,6 +17,7 @@
   import ArmiesHere from './ArmiesHere.svelte';
   import { afterWaiting } from './buildings-text.ts';
   import CityBuildings from './CityBuildings.svelte';
+  import CityGuards from './CityGuards.svelte';
   import {
     armiesAt,
     cityBalance,
@@ -197,6 +198,9 @@
       {/if}
     </tbody>
   </table>
+  {#if own}
+    <CityGuards {game} {world} {city} {pending} {actions} />
+  {/if}
   {#if onTheRoad}
     <p data-testid="city-leaving">{onTheRoad}</p>
   {/if}
