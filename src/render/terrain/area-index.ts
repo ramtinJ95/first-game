@@ -27,6 +27,8 @@ export class AreaIndex {
   readonly #bands = new Map<number, Edge[]>();
   /** Each band's edges again, by the strips of `STRIP` km their x spans. */
   readonly #strips = new Map<number, Edge[]>();
+  /** The horizontal edges, which no row crosses but a slanting segment can, by the same strips. */
+  readonly #flats = new Map<number, Edge[]>();
   readonly #levels = new Map<number, Set<number>>();
   readonly #left: number;
   readonly #top: number;
@@ -73,7 +75,19 @@ export class AreaIndex {
     this.bounds = bounds;
     for (const edge of edges) {
       const [, ay, , by] = edge;
-      if (ay === by) continue;
+      if (ay === by) {
+        const band = Math.floor(ay / BAND) * BAND_ROW;
+        for (
+          let s = Math.floor(Math.min(edge[0], edge[2]) / STRIP);
+          s <= Math.floor(Math.max(edge[0], edge[2]) / STRIP);
+          s++
+        ) {
+          let flat = this.#flats.get(band + s);
+          if (!flat) this.#flats.set(band + s, (flat = []));
+          flat.push(edge);
+        }
+        continue;
+      }
       const last = Math.floor(Math.max(ay, by) / BAND);
       const right = Math.floor(Math.max(edge[0], edge[2]) / STRIP);
       for (let b = Math.floor(Math.min(ay, by) / BAND); b <= last; b++) {
@@ -302,6 +316,59 @@ export class AreaIndex {
       // Conforming province seams occur twice and do not change the surface.
       if ((end - i) % 2 !== 0) return false;
       i = end;
+    }
+    return true;
+  }
+
+  /**
+   * Whether the whole straight way from one point to another stays inside, however narrow
+   * the water it would cross. The way is cut wherever it meets an edge; between two cuts
+   * it meets none, so it is all inside or all outside, and its middle says which.
+   */
+  segmentInside(ax: number, ay: number, bx: number, by: number): boolean {
+    const edges = new Set<Edge>();
+    for (
+      let band = Math.floor(Math.min(ay, by) / BAND);
+      band <= Math.floor(Math.max(ay, by) / BAND);
+      band++
+    )
+      for (
+        let strip = Math.floor(Math.min(ax, bx) / STRIP);
+        strip <= Math.floor(Math.max(ax, bx) / STRIP);
+        strip++
+      )
+        for (const list of [this.#strips, this.#flats])
+          for (const edge of list.get(band * BAND_ROW + strip) ?? []) edges.add(edge);
+    const rx = bx - ax,
+      ry = by - ay;
+    const length2 = rx * rx + ry * ry;
+    const cuts = [0, 1];
+    for (const [cx, cy, dx, dy] of edges) {
+      const sx = dx - cx,
+        sy = dy - cy;
+      const denominator = rx * sy - ry * sx;
+      if (denominator !== 0) {
+        const t = ((cx - ax) * sy - (cy - ay) * sx) / denominator;
+        const u = ((cx - ax) * ry - (cy - ay) * rx) / denominator;
+        if (t > 0 && t < 1 && u >= 0 && u <= 1) cuts.push(t);
+      } else if (length2 > 0 && (cx - ax) * ry - (cy - ay) * rx === 0) {
+        // An edge along the way itself: its ends are where the way may change sides.
+        for (const [px, py] of [
+          [cx, cy],
+          [dx, dy],
+        ] as const) {
+          const t = ((px - ax) * rx + (py - ay) * ry) / length2;
+          if (t > 0 && t < 1) cuts.push(t);
+        }
+      }
+    }
+    cuts.sort((p, q) => p - q);
+    for (let i = 1; i < cuts.length; i++) {
+      const from = cuts[i - 1] as number,
+        to = cuts[i] as number;
+      if (to - from < 1e-12) continue;
+      const t = (from + to) / 2;
+      if (!this.inside(ax + rx * t, ay + ry * t)) return false;
     }
     return true;
   }

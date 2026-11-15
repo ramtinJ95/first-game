@@ -244,7 +244,7 @@ export const PAN_RIM = 1.15;
  * lattice of `step` km, `reach` steps to each side of a spot.
  */
 const STRIKE_REACH = 160;
-const STRIKE = { step: 45, reach: 2, hillStep: 12, hillReach: 36 } as const;
+const STRIKE = { step: 30, reach: 2, hillStep: 12, hillReach: 36 } as const;
 const MEDITERRANEAN = /mediterranean|appenine|crimean|caspian|euxine|anatolian deciduous/i;
 const CONIFER = /conifer|montane|caledon|alps|pyrenees|carpathian|rodope|dinaric/i;
 

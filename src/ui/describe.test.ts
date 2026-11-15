@@ -767,3 +767,26 @@ describe('joinChoices', () => {
     expect(choices.map((choice) => choice.refusal)).toEqual(['First Legion is re-forming']);
   });
 });
+
+describe('the line of a march that ends in a crossing', () => {
+  it('names the port the army sails for after its march', () => {
+    const state = buildFixture();
+    const army = state.armies[f.romanArmy];
+    const roma = state.cities[f.roma];
+    if (!army || !roma) throw new Error('no Roman army or Roma');
+    army.activity = { kind: 'idle', position: { x: 2600, y: 2400 } };
+    const order: Order = {
+      kind: 'embark',
+      faction: f.rome,
+      army: f.romanArmy,
+      to: f.syracusae,
+      from: roma.position,
+    };
+    const after = tick(state, [order], fixtureWorld()).state;
+    const marching = after.armies[f.romanArmy];
+    if (!marching) throw new Error('no Roman army');
+    expect(activityText(after, marching)).toMatch(
+      /^Marching to Roma · \d+ days? left, then sailing for Syracusae$/,
+    );
+  });
+});

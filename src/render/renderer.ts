@@ -33,7 +33,13 @@ import { BORDER_WEIGHTS, borderRuns, sharedBorders } from './borders.ts';
 import type { DrawOptions } from './draw-options.ts';
 import { cacheDrawing, coversView, fitTexture } from './cached-texture.ts';
 import { atlasCoast, atlasLand, ATLAS_COAST_SCALE } from './atlas-coast.ts';
-import { coastalSurface, fitBanner, fitCoastalScene, sceneAnchor } from './coastal-ground.ts';
+import {
+  coastalSurface,
+  fitBanner,
+  fitCoastalScene,
+  fitPlace,
+  sceneAnchor,
+} from './coastal-ground.ts';
 import { landOutline } from './land-outline.ts';
 import { drawColumnMark, drawnColumns, fitColumnMarker, type DrawnColumn } from './columns.ts';
 import { createFog, fogCircles } from './fog.ts';
@@ -885,7 +891,9 @@ export async function createRenderer({
         population: city.population,
       });
     }
-    const settled = places.layout(camera, view, symbolBoxes, onLand);
+    const settled = places.layout(camera, view, symbolBoxes, (at, halfWidth, lift, thick) =>
+      fitPlace(at, halfWidth, lift, thick, onLand, onRulesWay, camera.scale),
+    );
     const placed = placeLabels(
       [...requests, ...settled.requests],
       [...symbolBoxes, ...settled.boxes, ...standingMarkers(state)],
@@ -1177,6 +1185,11 @@ export async function createRenderer({
   const toMap = (screen: MapPoint) => screenToMap(camera, viewport(), screen);
   const onDrawnLand = coastalSurface(drawingLand, toMap);
   const onLand = coastalSurface(drawingLand, toMap, terrain.land.land);
+  const onRulesWay = (from: MapPoint, to: MapPoint) => {
+    const a = toMap(from),
+      b = toMap(to);
+    return terrain.land.land.segmentInside(a.x, a.y, b.x, b.y);
+  };
   /** At the zooms that draw figures, a battle's marker stands above its fighting. */
   const battleLift = () =>
     scene && scene.height > 0 ? (1.75 * scene.height + 14) / camera.scale : 0;
