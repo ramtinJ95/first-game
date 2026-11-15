@@ -22,6 +22,7 @@ const { values } = parseArgs({
     seeds: { type: 'string', default: '5' },
     years: { type: 'string', default: '10' },
     mode: { type: 'string', default: 'both' },
+    print: { type: 'boolean', default: false },
   },
 });
 const SEEDS = Number(values.seeds);
@@ -57,6 +58,7 @@ function play(seed: number, active: boolean) {
     ]);
     for (const alert of own) {
       if (!alert.kind.startsWith('trade')) continue;
+      if (values.print) console.log(`  day ${day} ${alert.kind}: ${alert.text}`);
       lines.set(alert.kind, (lines.get(alert.kind) ?? 0) + 1);
     }
     state = next;

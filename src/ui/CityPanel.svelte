@@ -268,7 +268,7 @@
   {#if own}
     <CityBuildings {game} {world} {city} {pending} {actions} />
   {/if}
-  <CityTrade {game} {world} {city} {pending} {actions} />
+  <CityTrade {game} {world} {city} {sight} {pending} {actions} />
 
   {#if raising.length > 0 || own}
     <h3>Raising</h3>

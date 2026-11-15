@@ -26,14 +26,18 @@ export default defineScenario({
     const point = camera(page).screen({ x: roma.x, y: roma.y + 40 });
     await page.mouse.click(point.x, point.y);
     await expect(page.getByTestId('city-name')).toHaveText('Roma');
-    await page.getByLabel('Trade partner', { exact: true }).selectOption('carthago');
-    await page.getByLabel('Trade transport').selectOption('sea');
+    await page
+      .getByTestId('trade-partners')
+      .getByRole('button', { name: /^Carthago by sea/ })
+      .click();
     await page.getByTestId('trade-forecast').scrollIntoViewIfNeeded();
     await shot(
       'trade-forecast',
       'Roma and Carthago: unlike goods, sea distance, payment to each end, opening price, payback, and Carthage’s consent',
     );
-    await page.getByRole('button', { name: 'Open trade route', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Open trade route to Carthago by sea', exact: true })
+      .click();
     await page.getByTestId('trade-routes').scrollIntoViewIfNeeded();
     await shot(
       'trade-ordered',

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { recordEvents } from '../sim/events.ts';
+import { recordEvents, type DayEvent } from '../sim/events.ts';
+import type { TradeRouteId } from '../sim/ids.ts';
 import { buildFixture, fixtureWorld, FIXTURE as f } from '../sim/fixture.ts';
 import type { Day } from '../sim/state/day.ts';
 import { newWar, warKey } from '../sim/state/war.ts';
@@ -8,7 +9,7 @@ import { tick } from '../sim/tick.ts';
 import { closeTrade, openTrade } from '../sim/trade/orders.ts';
 import { routePoint } from '../sim/trade/routes.ts';
 import { expectConsistent } from '../sim/references.ts';
-import type { Alert } from './alerts.ts';
+import { alertsOfDay, type Alert } from './alerts.ts';
 import { whole } from './names.ts';
 import { TRADE_QUIET_DAYS, tradeNews, type TradeTrouble } from './trade-news.ts';
 
@@ -46,23 +47,26 @@ function road() {
 }
 
 describe('trade news', () => {
-  test('one enemy raiding one road again and again is one line, then its tally once the road is quiet', () => {
-    const { state, cargo, day, told } = road();
-    for (const onRoad of [true, false, true, false, true]) day(onRoad);
+  test('one enemy raiding one road again and again is one line, then a tally of what it took since', () => {
+    const { state, route, cargo, day, told } = road();
+    for (const onRoad of [true, false, true, false]) day(onRoad);
+    for (let i = 0; i < route.days; i++) day(false);
+    day(true);
     expect(told.map((a) => a.text)).toEqual([
       `Carthage raided the road Roma to Capua and took a cargo worth about ${cargo} gold to you. Deliveries stop while its armies stay within reach.`,
     ]);
     for (let i = 0; i < TRADE_QUIET_DAYS; i++) day(false);
+    const both = whole(route.daily * route.days * 4);
     expect(told.map((a) => a.text)).toEqual([
       expect.stringContaining('Carthage raided the road Roma to Capua'),
-      `Carthage's raids on Roma to Capua have stopped: 3 raids since Year 1, day 1 took a cargo worth about ${cargo} gold to you.`,
+      `Carthage's raids on Roma to Capua have stopped: 3 raids since Year 1, day 1 took 2 cargoes worth about ${both} gold to you.`,
     ]);
     expectConsistent(state);
   });
 
-  test('a lone raid needs no tally, and a raid after a quiet spell is news again', () => {
+  test('raids that take nothing more need no tally, and a raid after a quiet spell is news again', () => {
     const { day, told } = road();
-    day(true);
+    for (const onRoad of [true, false, true]) day(onRoad);
     for (let i = 0; i <= TRADE_QUIET_DAYS; i++) day(false);
     expect(told).toHaveLength(1);
     day(true);
@@ -71,15 +75,15 @@ describe('trade news', () => {
   });
 
   test('closing a raided route tells what its raids took before it closed', () => {
-    const { state, route, cargo, day, told, watched } = road();
+    const { state, route, day, told, watched } = road();
     day(true);
-    day(false);
+    for (let i = 0; i < route.days; i++) day(false);
     day(true);
     const before = structuredClone(state);
     closeTrade(state, { kind: 'closeTrade', faction: f.rome, route: route.id });
     const news = tradeNews(before, state, [], watched());
     expect(news.alerts.map((a) => a.text)).toEqual([
-      `Carthage's 2 raids on Roma to Capua took a cargo worth about ${cargo} gold to you before the route closed.`,
+      `Carthage's 2 raids on Roma to Capua took 2 cargoes worth about ${whole(route.daily * route.days * 4)} gold to you before the route closed.`,
     ]);
     expect(news.watched).toEqual([]);
     expect(told).toHaveLength(1);
@@ -106,5 +110,73 @@ describe('trade news', () => {
     const later = tick(next, [], world);
     expect(tradeNews(next, later.state, later.events, news.watched).alerts).toEqual([]);
     expectConsistent(later.state);
+  });
+
+  test('opening, an invitation with its terms, and its refusal are each a line that selects the city', () => {
+    const state = buildFixture();
+    const carthage = state.factions[f.carthage];
+    if (!carthage) throw new Error('missing Carthage');
+    carthage.stores.gold = 10000;
+    const invite = {
+      kind: 'openTrade',
+      faction: f.carthage,
+      from: f.carthago,
+      to: f.roma,
+      mode: 'sea',
+    } as const;
+    const offered = tick(state, [invite], world);
+    const route = Object.values(offered.state.tradeRoutes)[0];
+    if (!route) throw new Error('expected an invitation');
+    expect(tradeNews(state, offered.state, offered.events, []).alerts).toEqual([
+      expect.objectContaining({
+        kind: 'tradeOffered',
+        text: `Carthago invites Roma to trade by sea, ${route.days} days a crossing, until Year 1, day 91. Select Roma to accept or refuse.`,
+        focus: expect.objectContaining({ select: { kind: 'province', province: f.latium } }),
+      }),
+    ]);
+    expect(alertsOfDay(state, offered.state, offered.events)).toEqual([]);
+    const refusal = { kind: 'closeTrade', faction: f.rome, route: route.id } as const;
+    const refused = tick(offered.state, [refusal], world);
+    expect(tradeNews(offered.state, refused.state, refused.events, []).alerts).toEqual([
+      expect.objectContaining({
+        kind: 'tradeClosed',
+        tone: 'neutral',
+        text: 'Invitation to trade ended: Carthago to Roma, refused by Rome.',
+      }),
+    ]);
+    const opening = {
+      kind: 'openTrade',
+      faction: f.rome,
+      from: f.roma,
+      to: f.capua,
+      mode: 'land',
+    } as const;
+    const opened = tick(state, [opening], world);
+    expect(tradeNews(state, opened.state, opened.events, []).alerts.map((a) => a.text)).toEqual([
+      'Trade opened: Roma to Capua.',
+    ]);
+  });
+
+  test("routes closed for one cause on one day are one line, and others' trade is not news", () => {
+    const state = buildFixture();
+    const closing = (route: string, from: typeof f.roma, to: typeof f.roma): DayEvent => ({
+      kind: 'tradeClosed',
+      route: route as TradeRouteId,
+      from,
+      to,
+      owners: [f.rome, f.carthage],
+      position: { x: 0, y: 0 },
+      cause: 'war between the partners',
+      invitation: false,
+    });
+    const events = [
+      closing('tradeRoute-1', f.roma, f.carthago),
+      closing('tradeRoute-2', f.capua, f.carthago),
+    ];
+    expect(tradeNews(state, state, events, []).alerts.map((a) => a.text)).toEqual([
+      '2 trade routes closed, war between the partners: Roma to Carthago and Capua to Carthago.',
+    ]);
+    const others = events.map((e) => ({ ...e, owners: [f.carthage, f.syracusaeFaction] as const }));
+    expect(tradeNews(state, state, others, []).alerts).toEqual([]);
   });
 });

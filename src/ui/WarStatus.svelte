@@ -9,6 +9,7 @@
   import { truceDaysLeft } from '../sim/peace/truce.ts';
   import { pendingOrder } from './describe.ts';
   import { declarationFacts } from './war-room.ts';
+  import { warTradeLines } from './trade-ledger.ts';
 
   let {
     game,
@@ -31,6 +32,7 @@
   );
   const defeated = $derived(game.factions[owner]?.defeatedOn != null);
   const truce = $derived(owner === game.player ? 0 : truceDaysLeft(game, game.player, owner));
+  const tradeLost = $derived(confirming ? warTradeLines(game, owner) : []);
 </script>
 
 <div class="war" data-testid="war-status">
@@ -53,6 +55,11 @@
       <ul class="facts" data-testid="war-consequences">
         {#each declarationFacts(game, owner) as fact (fact)}<li>{fact}</li>{/each}
       </ul>
+      {#if tradeLost.length}
+        <ul class="facts muted" data-testid="war-trade">
+          {#each tradeLost as line, i (i)}<li>{line}</li>{/each}
+        </ul>
+      {/if}
       <div class="row">
         <button
           type="button"

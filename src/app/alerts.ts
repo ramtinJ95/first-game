@@ -28,7 +28,6 @@ import {
   TROOP_NAMES,
   whole,
 } from './names.ts';
-import { TRADE_INVITATION_DAYS } from '../sim/trade/routes.ts';
 
 import { ALERT_KINDS } from './alert-kinds.generated.ts';
 import { cityDanger } from './city-danger.ts';
@@ -594,35 +593,12 @@ function eventAlert(
 ): Omit<Alert, 'day'> | undefined {
   const player = after.player;
   switch (event.kind) {
-    // `tradeNews` tells raids and sieges, one line for each episode.
-    case 'tradeRaided':
-      return undefined;
+    // `tradeNews` tells the player's trade, one line for each thing that happened.
     case 'tradeOpened':
     case 'tradeOffered':
-    case 'tradeClosed': {
-      if (!event.owners.includes(player)) return undefined;
-      const from = after.cities[event.from]?.name ?? event.from;
-      const to = after.cities[event.to]?.name ?? event.to;
-      const offer = after.tradeRoutes[event.route];
-      const text =
-        event.kind === 'tradeClosed'
-          ? event.invitation
-            ? `Invitation to trade ended: ${from} to ${to}, ${event.cause}.`
-            : `Trade closed: ${from} to ${to}, ${event.cause}.`
-          : event.kind === 'tradeOpened'
-            ? `Trade opened: ${from} to ${to}.`
-            : `${from} invites ${to} to trade${offer ? ` by ${offer.mode}, ${offer.days} days a crossing, until ${dateText(offer.openedOn + TRADE_INVITATION_DAYS)}` : ''}. Select ${to} to accept or refuse.`;
-      const destination = after.cities[event.to];
-      return {
-        kind: event.kind,
-        text,
-        tone: event.kind !== 'tradeClosed' ? 'good' : event.invitation ? 'neutral' : 'bad',
-        focus: {
-          at: event.position,
-          select: destination ? { kind: 'province', province: destination.province } : undefined,
-        },
-      };
-    }
+    case 'tradeClosed':
+    case 'tradeRaided':
+      return undefined;
     case 'battleBegan': {
       const where = placeName(after, event.position);
       const select = after.battles[event.battle]
