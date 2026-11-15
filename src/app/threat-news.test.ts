@@ -41,8 +41,9 @@ function spearmenOf(state: GameState, owner: FactionId) {
  * Rome as the player with 4,000 spearmen beside a Carthage of twelve cities at peace with
  * every minor, with `men` spearmen.
  */
-function game(men: number, gold: 'full' | 'empty'): GameState {
+function game(men: number, gold: 'full' | 'empty', day = 0): GameState {
   const state = newGame(map, { seed: 1, player: 'rome' });
+  state.day = day as Day;
   for (const id of WEST) changeCityOwner(state, id, carthage);
   for (const faction of Object.values(state.factions))
     if (faction.kind === 'minor')
@@ -79,11 +80,23 @@ describe('the news of a power that could soon declare war on the player', () => 
     expect(newsOf(game(5300, 'empty'), new Set())).toEqual([]);
   });
 
-  test('tells again once the power fell back, or after a war between them', () => {
+  test('tells once in a peace although the power falls back for months and returns', () => {
     const told = new Set<string>();
-    expect(newsOf(game(5300, 'full'), told)).toHaveLength(1);
-    expect(newsOf(game(2000, 'empty'), told)).toEqual([]);
-    expect(newsOf(game(5300, 'full'), told)).toHaveLength(1);
+    expect(newsOf(game(5300, 'full', 0), told)).toHaveLength(1);
+    expect(newsOf(game(2000, 'empty', 10), told)).toEqual([]);
+    expect(newsOf(game(2000, 'empty', 300), told)).toEqual([]);
+    expect(newsOf(game(5300, 'full', 310), told)).toEqual([]);
+    expect(newsOf(game(2000, 'empty', 320), told)).toEqual([]);
+    expect(newsOf(game(5300, 'full', 600), told)).toEqual([]);
+  });
+
+  test('tells again once the power stayed below the threat for a year, or after a war between them', () => {
+    const told = new Set<string>();
+    expect(newsOf(game(5300, 'full', 0), told)).toHaveLength(1);
+    expect(newsOf(game(2000, 'empty', 10), told)).toEqual([]);
+    const aYearLess = new Set(told);
+    expect(newsOf(game(5300, 'full', 374), aYearLess)).toEqual([]);
+    expect(newsOf(game(5300, 'full', 375), told)).toHaveLength(1);
 
     const atWar = game(5300, 'full');
     expect(
