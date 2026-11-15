@@ -10,7 +10,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import { warKey } from '../sim/state/war.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
 import { buildWorld } from '../sim/world/world.ts';
-import { threatNewsOfDay } from './threat-news.ts';
+import { standingThreats, threatNewsOfDay } from './threat-news.ts';
 
 const map = parseMap(
   JSON.parse(readFileSync(new URL('../../data/map/map.json', import.meta.url), 'utf8')),
@@ -104,5 +104,37 @@ describe('the news of a power that could soon declare war on the player', () => 
     ).toBeUndefined();
     expect(newsOf(atWar, told)).toEqual([]);
     expect(newsOf(game(5300, 'full'), told)).toHaveLength(1);
+  });
+});
+
+describe('how near each power at peace stands to declaring war, as the wars panel lists it', () => {
+  test('names the share it has, where it weighs your forces, and what your treasury and guards do, in the news words', () => {
+    const state = game(5300, 'full');
+    const carthage = standingThreats(state, world).find((t) => t.power === 'carthage');
+    expect(carthage?.text).toMatch(
+      /^Carthage has \d+% of the strength it needs to declare war on you, against your forces near Roma\. Your treasury of [\d,]+ gold lowers what it needs by 25%, since a peace would make you pay it\. Guards hired at Roma count against it\.$/,
+    );
+    const weaker = standingThreats(game(2000, 'full'), world).find((t) => t.power === 'carthage');
+    expect(weaker?.readiness).toBeLessThan(carthage?.readiness ?? 0);
+    expect(standingThreats(state, world).map((t) => t.power)).not.toContain('rome');
+  });
+
+  test('says a power far from your cities is not weighing a war on you', () => {
+    const egypt = standingThreats(newGame(map, { seed: 1, player: 'rome' }), world).find(
+      (t) => t.power === 'egypt',
+    );
+    expect(egypt).toMatchObject({
+      readiness: undefined,
+      text: 'Egypt is not weighing a war on you now: none of its cities is near enough to yours, or none of its armies stands ready to march.',
+    });
+  });
+
+  test('leaves out a power at war with you or bound by a truce', () => {
+    const atWar = game(5300, 'full');
+    executeOrder(atWar, { kind: 'declareWar', faction: carthage, against: rome }, world);
+    expect(standingThreats(atWar, world).map((t) => t.power)).not.toContain('carthage');
+    const truce = game(5300, 'full');
+    truce.truces[warKey(carthage, rome)] = { since: truce.day, endsOn: (truce.day + 100) as Day };
+    expect(standingThreats(truce, world).map((t) => t.power)).not.toContain('carthage');
   });
 });
