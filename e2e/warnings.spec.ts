@@ -17,6 +17,8 @@ import {
 } from './support.ts';
 import { allocateId } from '../src/sim/ids.ts';
 import { dateText } from '../src/app/names.ts';
+import { fixtureWorld } from '../src/sim/fixture.ts';
+import { tick } from '../src/sim/tick.ts';
 import {
   foodShortfall,
   loadWarnings,
@@ -105,6 +107,29 @@ test('a shortfall the filling granary would carry names the day to raise instead
   await expect(page.getByTestId('city-raising')).toContainText(
     'Spearmen · ordered for the next day',
   );
+});
+
+test('on the day a warned raise named, the same card raises at once and the old warning does not stay open', async ({
+  page,
+}) => {
+  await openGame(page);
+  const state = foodShortUnlessWaiting();
+  await loadWarnings(page, state);
+  await showOwnCity(page, 'Roma');
+  const cards = page.getByTestId('recruit-cards');
+  await cards.getByRole('button', { name: /^Spearmen/ }).click();
+  const warning = page.getByTestId('recruit-warning');
+  await expect(warning).toContainText('raised in about 838 days');
+  const world = fixtureWorld();
+  let named = state;
+  for (let day = 0; day < 838; day++) named = tick(named, [], world).state;
+  await loadWarnings(page, named);
+  await showOwnCity(page, 'Roma');
+  await cards.getByRole('button', { name: /^Spearmen/ }).click();
+  await expect(page.getByTestId('city-raising')).toContainText(
+    'Spearmen · ordered for the next day',
+  );
+  await expect(warning).toHaveCount(0);
 });
 
 test('a small deficit that the growing people close stays plain and raises at once', async ({

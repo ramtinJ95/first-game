@@ -41,10 +41,11 @@ export default defineScenario({
     await cards.getByRole('button', { name: /^Spearmen/ }).click();
     const raising = page.getByTestId('city-raising');
     await expect(raising).toContainText('Spearmen · ordered for the next day');
+    await expect(warning).toHaveCount(0);
     await raising.scrollIntoViewIfNeeded();
     await shot(
       'recruit-wait-named-day',
-      'On the day the card named, with no order given between, a click on the same card raises the Spearmen at once; the card stays selected, so the warning below is for a second regiment on top of it',
+      'On the day the card named, with no order given between, a click on the same card raises the Spearmen at once, with no warning',
     );
   },
 });

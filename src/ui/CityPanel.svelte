@@ -81,7 +81,10 @@
         .warning
     )
       confirming = troop;
-    else actions.issue({ kind: 'recruit', faction: game.player, city: city.id, troop });
+    else {
+      actions.issue({ kind: 'recruit', faction: game.player, city: city.id, troop });
+      confirming = undefined;
+    }
   }
 
   const own = $derived(city.owner === game.player);
