@@ -217,6 +217,7 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
       );
       const requests: LabelRequest[] = [];
       const boxes: Box[] = [];
+      const named = new Set<Drawn>();
       for (const { d, at, box } of onScreen) {
         if (d.kind !== 'peak') {
           if (!kept.has(d.id) || !d.symbol) continue;
@@ -231,6 +232,7 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
               : bands.villageNames;
         if (names <= 0) continue;
         const label = labelFor(d);
+        named.add(d);
         requests.push({
           id: d.id,
           anchor: at,
@@ -240,6 +242,15 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
           priority: LABEL_PRIORITY[d.kind],
           population: 0,
         });
+      }
+      // A name off the screen or out of its band gives back its texture, so a session
+      // that looks at the whole map does not keep a texture for every name on it.
+      for (const d of all) {
+        if (!d.label || named.has(d)) continue;
+        d.label.destroy();
+        d.label = undefined;
+        d.labelAlpha = 0;
+        d.labelWanted = false;
       }
       return { requests, boxes };
     },

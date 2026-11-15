@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { parseMap } from '../../sim/map.ts';
-import { chunkRect, chunksNear, OVERHANG } from './chunks.ts';
+import { chunkRect, chunksNear, chunksToFree, OVERHANG } from './chunks.ts';
 import { Land, placeFields, placeRelief, placeTexture, TIERS, type Mark } from './marks.ts';
 import type { Rect } from './scatter.ts';
 
@@ -194,5 +194,26 @@ describe('chunks and their overhang', () => {
     expect(chunksNear(farRight, size, OVERHANG.middle, 0, map.width, map.height)).not.toContain(
       8 * 4096 + 7,
     );
+  });
+});
+
+describe('freeing chunks', () => {
+  const used = new Map([
+    [1, 10],
+    [2, 30],
+    [3, 20],
+    [4, 40],
+  ]);
+
+  it('frees nothing while no more than the bound are kept', () => {
+    expect(chunksToFree(used, new Set(), 4)).toEqual([]);
+  });
+
+  it('frees the chunks used longest ago first', () => {
+    expect(chunksToFree(used, new Set(), 2)).toEqual([1, 3]);
+  });
+
+  it('never frees a chunk the view shows, even past the bound', () => {
+    expect(chunksToFree(used, new Set([1, 3, 4]), 1)).toEqual([2]);
   });
 });

@@ -45,6 +45,25 @@ export function chunksNear(
   return keys;
 }
 
+/**
+ * The chunks to free so that at most `keep` remain: those used least recently first,
+ * never one the view wants. A long session looks at the whole map at the closest zoom,
+ * and a chunk kept for good there held the tab's memory until it crashed.
+ */
+export function chunksToFree(
+  usedAt: ReadonlyMap<number, number>,
+  wanted: ReadonlySet<number>,
+  keep: number,
+): number[] {
+  const excess = usedAt.size - Math.max(keep, wanted.size);
+  if (excess <= 0) return [];
+  return [...usedAt]
+    .filter(([key]) => !wanted.has(key))
+    .sort((a, b) => a[1] - b[1] || a[0] - b[0])
+    .slice(0, excess)
+    .map(([key]) => key);
+}
+
 /** When work runs, so a test can drive the queue by hand. */
 export interface Timers {
   later(run: () => void): unknown;

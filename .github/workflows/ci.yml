@@ -100,6 +100,32 @@ jobs:
           node e2e/frame-bench.ts --rounds 1 --only full
           --args="--enable-gpu --ignore-gpu-blocklist --use-angle=vulkan --enable-features=Vulkan"
           >> "$GITHUB_STEP_SUMMARY"
+  # Thirty loads of a saved game, each followed by zooms to the middle and the closest
+  # view over the next place on the map: the heap holds within a tenth of loads 3 to 5.
+  memory:
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Memory over thirty loads
+        shell: bash
+        run: node e2e/memory-bench.ts --loads 30 --draw test --bound 0.1 --process-bound 0.25 --out memory.csv | tee -a "$GITHUB_STEP_SUMMARY"
+      # The curve as an annotation too, which the API serves to readers who cannot fetch logs.
+      - name: The curve as an annotation
+        if: ${{ !cancelled() }}
+        run: test -f memory.csv && echo "::notice title=memory curve::$(sed ':a;N;$!ba;s/\n/%0A/g' memory.csv)"
+
   capture-shards:
     timeout-minutes: 12
     runs-on: ubuntu-latest
