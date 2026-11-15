@@ -138,6 +138,8 @@ function grownRealm(state: DeepReadonly<GameState>): DeepReadonly<GameState> {
 
 /** The people's daily growth factor, as the population system applies it. */
 const DAILY = (1 + YEARLY_GROWTH) ** (1 / 365);
+/** A balance this close to zero is the rounding of income that equals upkeep, not a deficit. */
+const ROUNDING = 1e-9;
 
 /**
  * The day a store first runs short, as the economy plays it: upkeep starts on each muster
@@ -166,7 +168,7 @@ function daysUntilShort(
     }
     const today = change + yearly.change * grown(day);
     if (next === schedule.length) {
-      if (today >= 0) return undefined;
+      if (today >= -ROUNDING) return undefined;
       return fallingStores(day - 1, amount, change, yearly.change);
     }
     const cap = limit + yearly.limit * grown(day);
@@ -199,6 +201,7 @@ function fallingStores(
   let low = from;
   while (high - low > 1) {
     const middle = Math.floor((low + high) / 2);
+    if (middle === low || middle === high) break;
     if (at(middle) < 0) high = middle;
     else low = middle;
   }

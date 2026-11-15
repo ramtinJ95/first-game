@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { trainingDaysAt } from '../sim/buildings/buildings.ts';
 import { buildFixture, FIXTURE as f, fixtureWorld } from '../sim/fixture.ts';
+import { newGame } from '../sim/new-game.ts';
 import { UNREST_DAYS } from '../sim/cities.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { Day } from '../sim/state/day.ts';
@@ -61,6 +62,20 @@ it('still warns of a deficit that outlasts a century, with no horizon to hide it
   const forecast = recruitForecast(state, [], world, 'spearmen');
   expect(forecast.short.gold).toBeGreaterThan(100 * 365);
   expect(forecast.warning).toContain('Gold shortfall');
+  expectConsistent(state);
+});
+
+it('takes a balance that rounds to zero for no deficit, and returns', () => {
+  const state = newGame(world.map, { seed: 1, player: 'rome' });
+  required(state.factions[f.rome]).stores.gold = 20_000;
+  const to = Object.values(state.cities).find((c) => c.owner === f.rome && c.id !== f.roma);
+  if (!to) throw new Error('Rome needs a second city');
+  const pending = [
+    { kind: 'evacuate', faction: f.rome, city: f.roma, to: to.id, share: 0.25 },
+  ] as const;
+  const forecast = recruitForecast(state, pending, world, 'spearmen');
+  expect(forecast.short).toEqual({ food: undefined, gold: undefined });
+  expect(forecast.warning).toBeUndefined();
   expectConsistent(state);
 });
 
