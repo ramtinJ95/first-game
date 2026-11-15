@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test } from 'vitest';
+import { beforeAll, expect, test } from 'vitest';
 import { parseMap, type MultiPolygon, type Point, type Ring } from '../sim/map.ts';
 import { buildWorld } from '../sim/world/world.ts';
 import { provinceAt } from './pick.ts';
@@ -14,6 +14,36 @@ const map = parseMap(
 );
 const lakes = map.terrain.filter((area) => area.kind === 'lake');
 
+/**
+ * The map, its navigation, and the coastal hit tests, read before and after the natural
+ * coast is drawn, once for the file: drawing the coast of the whole map takes a second and
+ * a half, and every sea-coast test reads that same coast.
+ */
+type Reading = { json: string; mesh: string; harbours: string; hits: unknown[] };
+let before: Reading;
+let after: Reading;
+const sample = map.coastline
+  .flatMap((line) => line.filter((_, i) => i % 31 === 0))
+  .flatMap(([x, y]) => [
+    { x, y },
+    { x: x + 0.5, y: y + 0.5 },
+    { x: x - 0.5, y: y - 0.5 },
+  ]);
+function read(): Reading {
+  const world = buildWorld(map);
+  return {
+    json: JSON.stringify(map),
+    mesh: JSON.stringify(world.mesh),
+    harbours: JSON.stringify(world.harbours),
+    hits: sample.map((p) => provinceAt(map, p)),
+  };
+}
+beforeAll(() => {
+  before = read();
+  naturalCoast(map);
+  after = read();
+});
+
 test('every inland water body, including each island shore, has no straight run over 3 km', () => {
   expect(lakes.length).toBeGreaterThan(20);
   for (const lake of lakes)
@@ -23,6 +53,8 @@ test('every inland water body, including each island shore, has no straight run 
 });
 
 test('shore detailing is deterministic, keeps every geographic anchor, and stays within 0.6 km', () => {
+  const lost: string[] = [];
+  const far: string[] = [];
   for (const lake of lakes) {
     const detailed = naturalShore(lake.outline);
     expect(detailed).toEqual(naturalShore(lake.outline));
@@ -30,16 +62,23 @@ test('shore detailing is deterministic, keeps every geographic anchor, and stays
       polygon.forEach((source, r) => {
         const shore = detailed[p]?.[r];
         if (!shore) throw new Error(`missing shore: ${lake.name}/${p}/${r}`);
-        for (const point of source) expect(shore).toContainEqual(point);
+        const kept = new Set(shore.map((point) => point.join(',')));
+        for (const point of source)
+          if (!kept.has(point.join(','))) lost.push(`${lake.name} ${point}`);
         for (const point of shore) {
-          const nearest = Math.min(
-            ...source.map((a, i) => distance(point, a, source[(i + 1) % source.length] as Point)),
-          );
-          expect(nearest, lake.name).toBeLessThanOrEqual(0.6);
+          let nearest = Infinity;
+          for (const [i, a] of source.entries())
+            nearest = Math.min(
+              nearest,
+              distance(point, a, source[(i + 1) % source.length] as Point),
+            );
+          if (nearest > 0.6) far.push(`${lake.name} ${point} ${nearest}`);
         }
       }),
     );
   }
+  expect(lost, 'anchors the shore lost').toEqual([]);
+  expect(far, 'shore points over 0.6 km from the outline').toEqual([]);
 });
 
 test('the map build retains the source bays of Tatta and two other lakes', () => {
@@ -133,32 +172,36 @@ test('sea coast keeps every control point in order, stays within 0.6 km, and has
   const coast = naturalCoast(map);
   expect(naturalCoast(map)).toBe(coast);
   expect(coast.lines).toHaveLength(map.coastline.length);
+  const problems: string[] = [];
   for (const [i, source] of map.coastline.entries()) {
     const line = coast.lines[i];
     if (!line) throw new Error(`missing coast ${i}`);
+    const same = (p: Point | undefined, q: Point) =>
+      p !== undefined && p[0] === q[0] && p[1] === q[1];
     let n = 0;
     let deviation = 0;
     for (let k = 1; k < source.length; k++) {
       const a = source[k - 1] as Point,
         b = source[k] as Point;
-      expect(line[n]).toEqual(a);
+      if (!same(line[n], a)) problems.push(`coast ${i} lost control point ${a}`);
       while (n < line.length - 1) {
         const point = line[++n] as Point;
         deviation = Math.max(deviation, distance(point, a, b));
-        if (point[0] === b[0] && point[1] === b[1]) break;
+        if (same(point, b)) break;
       }
-      expect(line[n]).toEqual(b);
+      if (!same(line[n], b)) problems.push(`coast ${i} lost control point ${b}`);
     }
-    expect(n).toBe(line.length - 1);
-    expect(deviation, `coast ${i}`).toBeLessThanOrEqual(0.6);
-    expect(straightRun(line, false), `coast ${i}`).toBeLessThanOrEqual(3.5);
+    if (n !== line.length - 1) problems.push(`coast ${i} runs past its last control point`);
+    if (deviation > 0.6) problems.push(`coast ${i} strays ${deviation} km`);
+    if (straightRun(line, false) > 3.5) problems.push(`coast ${i} has a straight run`);
     const pixels = toPixels(line, 4, 0.75);
     const drawn = Array.from({ length: pixels.length / 2 }, (_, n): Point => [
       (pixels[n * 2] as number) / 4,
       (pixels[n * 2 + 1] as number) / 4,
     ]);
-    expect(straightRun(drawn, false), `drawn coast ${i}`).toBeLessThanOrEqual(3.5);
+    if (straightRun(drawn, false) > 3.5) problems.push(`drawn coast ${i} has a straight run`);
   }
+  expect(problems).toEqual([]);
 });
 
 test('sea shores do not cross themselves or islands, and frame-only edges stay identical', () => {
@@ -189,21 +232,9 @@ test('sea shores do not cross themselves or islands, and frame-only edges stay i
 });
 
 test('drawing a natural coast leaves navigation, harbours, province outlines and coastal hit tests identical', () => {
-  const fresh = parseMap(JSON.parse(JSON.stringify(map)));
-  const original = JSON.stringify(fresh);
-  const before = buildWorld(fresh);
-  const sample = fresh.coastline
-    .flatMap((line) => line.filter((_, i) => i % 31 === 0))
-    .flatMap(([x, y]) => [
-      { x, y },
-      { x: x + 0.5, y: y + 0.5 },
-      { x: x - 0.5, y: y - 0.5 },
-    ]);
-  const hits = sample.map((p) => provinceAt(fresh, p));
-  naturalCoast(fresh);
-  const after = buildWorld(fresh);
-  expect(JSON.stringify(fresh)).toBe(original);
-  expect(after.mesh).toEqual(before.mesh);
-  expect(after.harbours).toEqual(before.harbours);
-  expect(sample.map((p) => provinceAt(fresh, p))).toEqual(hits);
+  expect(naturalCoast(map).lines.length).toBeGreaterThan(0);
+  expect(after.json).toBe(before.json);
+  expect(after.mesh).toBe(before.mesh);
+  expect(after.harbours).toBe(before.harbours);
+  expect(after.hits).toEqual(before.hits);
 });
