@@ -168,6 +168,21 @@ export function cheaperCounter(
   };
 }
 
+/** The newest offer made to the player after the given day, in a war of the player's only. */
+export function newestOfferToPlayer(
+  state: State,
+  after: number,
+): { readonly from: FactionId; readonly madeOn: number } | undefined {
+  const player = state.player;
+  return Object.entries(state.peaceOffers)
+    .filter(
+      ([key, offer]) =>
+        offer.from !== player && offer.madeOn > after && warSides(key)?.includes(player),
+    )
+    .map(([, offer]) => ({ from: offer.from, madeOn: offer.madeOn }))
+    .sort((a, b) => b.madeOn - a.madeOn || (a.from < b.from ? -1 : 1))[0];
+}
+
 /** Every war the player is in and how it stands, what peace is on offer, and the truces that hold. */
 export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
   const player = state.player;

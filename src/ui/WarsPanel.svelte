@@ -10,7 +10,13 @@
   import type { PeaceTerms } from '../sim/state/peace.ts';
   import type { Actions } from './actions.ts';
   import { unansweredOffer } from '../app/modals.ts';
-  import { PEACE_TEXT, peaceVerdict, warRoomOf, type WarRow } from './war-room.ts';
+  import {
+    newestOfferToPlayer,
+    PEACE_TEXT,
+    peaceVerdict,
+    warRoomOf,
+    type WarRow,
+  } from './war-room.ts';
 
   let {
     game,
@@ -42,9 +48,7 @@
   // A new offer shows its own war, whichever war the player had open, and the panel stays
   // on it once answered, so the answer and a counter show there.
   $effect(() => {
-    const [latest] = Object.values(game.peaceOffers)
-      .filter((offer) => offer.from !== game.player && offer.madeOn > shownUpTo)
-      .sort((a, b) => b.madeOn - a.madeOn);
+    const latest = newestOfferToPlayer(game, shownUpTo);
     if (!latest) return;
     shownUpTo = latest.madeOn;
     if (room.wars.some((war) => war.enemy === latest.from)) open = latest.from;

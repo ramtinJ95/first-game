@@ -4,7 +4,13 @@ import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import { executeOrder, type Order } from '../sim/orders/orders.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { declarationFacts, peaceChoices, peaceVerdict, warRoomOf } from './war-room.ts';
+import {
+  declarationFacts,
+  newestOfferToPlayer,
+  peaceChoices,
+  peaceVerdict,
+  warRoomOf,
+} from './war-room.ts';
 import { peaceAnswer } from '../sim/ai/peace.ts';
 import { tick } from '../sim/tick.ts';
 import { expectConsistent } from '../sim/references.ts';
@@ -195,6 +201,32 @@ describe('the wars panel', () => {
     expect(declarationFacts(state, f.syracusaeFaction)).toContain(
       'Carthage is leagued with Syracusae. It declares war on you too, and marches to lift any siege of Syracusae.',
     );
+    expectConsistent(state);
+  });
+
+  test('selects only an offer made to the player, not one another power receives the same day', () => {
+    const state = warOn(201);
+    state.wars[warKey(f.rome, f.syracusaeFaction)] = newWar(f.syracusaeFaction, f.rome, 1 as Day);
+    state.wars[warKey(f.carthage, f.syracusaeFaction)] = newWar(
+      f.syracusaeFaction,
+      f.carthage,
+      1 as Day,
+    );
+    run(state, {
+      kind: 'offerPeace',
+      faction: f.syracusaeFaction,
+      to: f.carthage,
+      terms: { kind: 'asThingsStand' },
+    });
+    expect(newestOfferToPlayer(state, -1)).toBeUndefined();
+    run(state, {
+      kind: 'offerPeace',
+      faction: f.carthage,
+      to: f.rome,
+      terms: { kind: 'asThingsStand' },
+    });
+    expect(newestOfferToPlayer(state, -1)).toEqual({ from: f.carthage, madeOn: state.day });
+    expect(newestOfferToPlayer(state, state.day)).toBeUndefined();
     expectConsistent(state);
   });
 
