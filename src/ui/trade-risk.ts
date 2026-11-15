@@ -176,7 +176,7 @@ export function whyRaid(
   owners: readonly FactionId[],
 ): string {
   const clauses = raiders
-    .filter((raider) => !areAtWar(state, raider, state.player))
+    .filter((raider) => raider !== state.player && !areAtWar(state, raider, state.player))
     .map((raider) => {
       const foes = owners.filter((o) => o !== state.player && areAtWar(state, raider, o));
       return `${factionName(state, raider)} is at peace with you but at war with ${names(state, foes)}`;

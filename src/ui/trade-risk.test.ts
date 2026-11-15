@@ -93,6 +93,22 @@ describe('the risk a quote tells', () => {
     expect(mark).toBe('road open to raids');
   });
 
+  test('on a road between two other realms, you are never told you are at peace with yourself', () => {
+    const state = buildFixture();
+    city(state, f.roma).owner = f.carthage;
+    city(state, f.capua).owner = f.syracusaeFaction;
+    atWar(state, f.rome, f.carthage);
+    const roma = city(state, f.roma);
+    const capua = city(state, f.capua);
+    const quote = tradeForecast(state, world, roma, capua, 'land');
+    if (!quote) throw new Error('no land quote');
+    const risks = tradeRisk(state, sightOf(state, world, state.player), [roma, capua], quote.path);
+    const raids = risks.find((r) => r.kind === 'raids');
+    if (!raids) throw new Error('no raid risk');
+    expect(raids.enemies).toContain(f.rome);
+    expect(riskText(state, raids)).not.toContain('at peace with you');
+  });
+
   test('a besieged partner comes first, naming the besieger only while one is in sight', () => {
     const state = buildFixture();
     atWar(state, f.carthage, f.syracusaeFaction);
