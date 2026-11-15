@@ -112,7 +112,7 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     const state = game(5300, 'full');
     const carthage = standingThreats(state, world).find((t) => t.power === 'carthage');
     expect(carthage?.text).toMatch(
-      /^Carthage has \d+% of the strength it needs to declare war on you, against your forces near Roma\. Your treasury of [\d,]+ gold lowers what it needs by 25%, since a peace would make you pay it\. Guards hired at Roma count against it\.$/,
+      /^Carthage has \d+% of the strength it needs to declare war on you, against your forces near Roma\. Your treasury of [\d,]+ gold lowers what it needs by 25%, since a peace would make you pay it\. Guards hired at Roma count against it for their first 90 days\.$/,
     );
     const weaker = standingThreats(game(2000, 'full'), world).find((t) => t.power === 'carthage');
     expect(weaker?.readiness).toBeLessThan(carthage?.readiness ?? 0);
