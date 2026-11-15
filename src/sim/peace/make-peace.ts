@@ -1,5 +1,6 @@
 import { leaveSiege } from '../armies.ts';
 import { emit } from '../events.ts';
+import type { DeepReadonly } from '../deep-readonly.ts';
 import type { ArmyId, FactionId } from '../ids.ts';
 import { removeRecord } from '../records.ts';
 import type { Day } from '../state/day.ts';
@@ -20,12 +21,12 @@ import { truceLength } from './truce.ts';
 export function makePeace(state: GameState, a: FactionId, b: FactionId, terms: PeaceTerms): void {
   const key = warKey(a, b);
   const receiver = terms.kind === 'payment' && terms.payer === a ? b : a;
-  const paid = termsPoints(state, terms, receiver);
+  const days = peaceTruceDays(state, a, b, terms);
   part(state, a, b);
   if (terms.kind === 'payment') payTerms(state, terms, receiver);
   removeRecord(state.wars, key);
   removeRecord(state.peaceOffers, key);
-  state.truces[key] = { since: state.day, endsOn: (state.day + truceLength(paid)) as Day };
+  state.truces[key] = { since: state.day, endsOn: (state.day + days) as Day };
   emit(state, { kind: 'peaceMade', between: [a, b], terms });
 }
 
@@ -58,4 +59,18 @@ function part(state: GameState, a: FactionId, b: FactionId) {
     const city = siege && state.cities[siege.city];
     if (city && city.owner === other(army.owner)) leaveSiege(state, army);
   }
+}
+
+/**
+ * The days of the truce a peace between the two sides on the terms starts today: what the
+ * terms are worth to the side that receives them, before they are paid, lengthens it.
+ */
+export function peaceTruceDays(
+  state: DeepReadonly<GameState>,
+  a: FactionId,
+  b: FactionId,
+  terms: DeepReadonly<PeaceTerms>,
+): number {
+  if (terms.kind !== 'payment') return truceLength(0);
+  return truceLength(termsPoints(state, terms, terms.payer === a ? b : a));
 }
