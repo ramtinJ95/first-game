@@ -191,9 +191,7 @@ function reckon(context: Context) {
   };
   const growth = Math.max(0, 1 - ADMIN_CITIES / Math.max(1, ownCities.length));
   const hoardShare = (other: FactionId) =>
-    other !== leader && rivals.has(other)
-      ? HOARD_ODDS_SHARE * growth * hoard(other)
-      : 0;
+    other !== leader && rivals.has(other) ? HOARD_ODDS_SHARE * growth * hoard(other) : 0;
   const needed = (other: FactionId) =>
     other === leader
       ? Math.min(odds, COALITION_ODDS)
