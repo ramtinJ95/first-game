@@ -21,6 +21,7 @@ test('the guide teaches buildings, peace, news, automatic pauses, and the real s
   const guide = page.getByTestId('guide');
   for (const heading of [
     'Buildings and stores',
+    'Trade',
     'Wars and peace',
     'Overview and Chronicle',
     'Pause and speed',
@@ -35,6 +36,12 @@ test('the guide teaches buildings, peace, news, automatic pauses, and the real s
   );
   await expect(guide).toContainText(
     "Your army panel's Join section combines nearby idle armies of yours",
+  );
+  await expect(guide.getByTestId('guide-trade')).toContainText(
+    'A city has one route slot; 25,000 people, a Forum and a port each add one.',
+  );
+  await expect(guide.getByTestId('guide-trade')).toContainText(
+    "an army at war with either end takes a road's cargo, even one at peace with you",
   );
   await expect(guide).not.toContainText('halts beside an enemy');
 });

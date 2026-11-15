@@ -12,6 +12,7 @@ import { DaySchema } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { adminShareOf } from '../sim/systems/economy.ts';
 import { TRADE_INVITATION_DAYS } from '../sim/trade/routes.ts';
+import { whyRaid } from '../ui/trade-risk.ts';
 import type { Alert } from './alerts.ts';
 import { dateText, whole } from './names.ts';
 
@@ -160,12 +161,13 @@ export function tradeNews(
   }
 
   const opened: Raids[] = [];
+  const ends = new Map<Raids, Set<FactionId>>();
   for (const event of interruptions) {
     if (event.cause !== 'raid') continue;
     const route = before.tradeRoutes[event.route] ?? after.tradeRoutes[event.route];
-    const ends = route ? Number(route.owner === player) + Number(route.partner === player) : 1;
+    const mine = route ? Number(route.owner === player) + Number(route.partner === player) : 1;
     const cargo = event.looted > 0 ? 1 : 0;
-    const gold = event.looted * adminShareOf(after, player) * ends;
+    const gold = event.looted * adminShareOf(after, player) * mine;
     const road = { route: event.route, from: event.from, to: event.to };
     let raids = troubles.find((t): t is Raids => t.kind === 'raids' && t.raider === event.raider);
     if (!raids) {
@@ -186,6 +188,7 @@ export function tradeNews(
       opened.push(raids);
     }
     if (!raids.roads.some((r) => r.route === road.route)) raids.roads.push(road);
+    ends.set(raids, new Set([...(ends.get(raids) ?? []), ...event.owners]));
     raids.raids++;
     raids.cargoes += cargo;
     raids.gold += gold;
@@ -204,7 +207,7 @@ export function tradeNews(
           raids.cargoes
             ? `and took ${cargoText(raids.cargoes)} worth about ${whole(raids.gold)} gold to you`
             : 'but found no cargo to take'
-        }. Deliveries stop while its armies stay within reach.`,
+        }.${whyRaid(after, [raids.raider], [...(ends.get(raids) ?? [])])} Deliveries stop while its armies stay within reach.`,
       },
       playerEnd(after, first),
     );

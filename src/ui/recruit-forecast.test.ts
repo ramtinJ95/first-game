@@ -12,6 +12,7 @@ import { recruitForecast } from './recruit-forecast.ts';
 import { population } from '../sim/systems/population.ts';
 import { TROOPS } from '../sim/troops.ts';
 import { executeOrder } from '../sim/orders/orders.ts';
+import { recruit } from '../sim/orders/recruit.ts';
 
 const world = fixtureWorld();
 
@@ -38,6 +39,93 @@ it('warns of a lasting deficit years away, which the people grow too slowly to c
     text: `about ${((forecast.short.food ?? 0) - 1).toLocaleString('en-US')} days left as the people grow`,
   });
   expect(forecast.short.food).toBe(firstShortfall(state, 'food', true));
+  expectConsistent(state);
+});
+
+it('names the wait after which stores carry the raise until the people feed it, to the day', () => {
+  const state = foodDeficitAfterSpearmen(-5, 0.1);
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  const wait = required(forecast.holdsAfter);
+  expect(forecast.short.food).toBeDefined();
+  expect(wait).toBeGreaterThan(30);
+  expect(forecast.warning).toContain(
+    `raised in about ${wait.toLocaleString('en-US')} days, these men are fed as the people grow. Raise now only if you need them sooner.`,
+  );
+  expect(forecast.warning).not.toContain('Raise fewer troops');
+  expect(() => firstShortfall(state, 'food', true, 1 + wait)).toThrow('Stores never ran short');
+  expect(firstShortfall(state, 'food', true, wait)).toBeGreaterThan(wait);
+  expectConsistent(state);
+});
+
+it('pays a delayed raise on the day it is given, after the treasury has refilled to its limit', () => {
+  const state = buildFixture();
+  for (const city of Object.values(state.cities))
+    if (city.owner === f.rome) {
+      city.population = 20_000;
+      city.buildings = ['canals'];
+    }
+  required(state.formations[f.hastati]).men = 700;
+  Object.assign(required(state.factions[f.rome]).stores, {
+    gold: 4032,
+    food: required(limitsOf(state).get(f.rome)).food,
+    manpower: 2000,
+  });
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  const wait = required(forecast.holdsAfter);
+  expect(forecast.short.gold).toBeDefined();
+  expect(() => firstShortfall(state, 'gold', true, 1 + wait)).toThrow('Stores never ran short');
+  expect(() => firstShortfall(state, 'food', true, 1 + wait)).toThrow('Stores never ran short');
+  expect(firstShortfall(state, 'gold', true, wait)).toBeGreaterThan(wait);
+  expectConsistent(state);
+});
+
+it('names no wait on which the treasury could not pay the raise before the day’s income', () => {
+  const state = buildFixture();
+  for (const city of Object.values(state.cities))
+    if (city.owner === f.rome) {
+      city.population = 500_000;
+      city.buildings = ['canals'];
+    }
+  required(state.formations[f.hastati]).men = 42_700;
+  Object.assign(required(state.factions[f.rome]).stores, {
+    gold: 2400,
+    food: 200_000,
+    manpower: 50_000,
+  });
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  expect(forecast.holdsAfter).toBe(866);
+  expect(() => firstShortfall(state, 'gold', true, 867)).toThrow('Stores never ran short');
+  expectConsistent(state);
+});
+
+it('tries each wait while other recruits are still training, since a later muster can lose granary room', () => {
+  const state = buildFixture();
+  for (const city of Object.values(state.cities))
+    if (city.owner === f.rome) city.population = 40_000;
+  required(state.formations[f.hastati]).men = 585;
+  Object.assign(required(state.factions[f.rome]).stores, {
+    gold: 100_000,
+    food: 3082.4,
+    manpower: 100_000,
+  });
+  for (let i = 0; i < 3; i++)
+    expect(
+      recruit(state, { kind: 'recruit', faction: f.rome, city: f.capua, troop: 'heavyCavalry' }),
+    ).toBeUndefined();
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  expect(forecast.short.food).toBeDefined();
+  expect(forecast.holdsAfter).toBe(11);
+  expect(() => firstShortfall(state, 'food', true, 12)).toThrow('Stores never ran short');
+  expect(firstShortfall(state, 'food', true, 13)).toBeGreaterThan(13);
+  expectConsistent(state);
+});
+
+it('asks for better income instead of a wait when waiting would not let the stores carry the raise', () => {
+  const state = foodDeficitAfterSpearmen(-20, 0.1);
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  expect(forecast.short.food).toBeDefined();
+  expect(forecast.holdsAfter).toBeUndefined();
+  expect(forecast.warning).toContain('Raise fewer troops or improve income first.');
   expectConsistent(state);
 });
 
@@ -126,12 +214,14 @@ it('projects a queued trade with its world before quoting recruitment, without c
   expectConsistent(projected);
 });
 
-function firstShortfall(initial: GameState, store: 'food' | 'gold', growing = false) {
+function firstShortfall(initial: GameState, store: 'food' | 'gold', growing = false, raiseOn = 1) {
   let state = initial;
   for (let day = 1; day <= 6000; day++) {
     const result = tick(
       state,
-      day === 1 ? [{ kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' }] : [],
+      day === raiseOn
+        ? [{ kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' }]
+        : [],
       fixtureWorld(),
       [
         economy,
@@ -166,8 +256,8 @@ function goldOnly(): GameState {
   return state;
 }
 
-/** Rome's people and full granary as they are, with one army sized so the food balance after a spearmen raise is `after`. */
-function foodDeficitAfterSpearmen(after: number): GameState {
+/** Rome's people as they are and its granary `full`, with one army sized so the food balance after a spearmen raise is `after`. */
+function foodDeficitAfterSpearmen(after: number, full = 1): GameState {
   const state = buildFixture();
   for (const city of Object.values(state.cities))
     if (city.owner === f.rome) city.population = 200_000;
@@ -177,7 +267,7 @@ function foodDeficitAfterSpearmen(after: number): GameState {
   const raised = now - TROOPS.spearmen.recruit.men * UPKEEP_PER_MAN.food;
   first.men += Math.round((raised - after) / UPKEEP_PER_MAN.food);
   const stores = required(state.factions[f.rome]).stores;
-  stores.food = required(limitsOf(state).get(f.rome)).food;
+  stores.food = full * required(limitsOf(state).get(f.rome)).food;
   stores.gold = 100_000;
   stores.manpower = 100_000;
   return state;

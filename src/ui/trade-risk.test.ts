@@ -82,6 +82,33 @@ describe('the risk a quote tells', () => {
     );
   });
 
+  test('a power at peace with you that is at war with the partner may raid the road, and the line says why', () => {
+    const state = buildFixture();
+    city(state, f.capua).owner = f.syracusaeFaction;
+    atWar(state, f.carthage, f.syracusaeFaction);
+    const { lines, mark } = read(state, f.capua, 'land');
+    expect(lines).toContain(
+      'Carthage could raid this road and take its cargo. Carthage is at peace with you but at war with Syracusae, and an army at war with either end of a road takes its cargo.',
+    );
+    expect(mark).toBe('road open to raids');
+  });
+
+  test('on a road between two other realms, you are never told you are at peace with yourself', () => {
+    const state = buildFixture();
+    city(state, f.roma).owner = f.carthage;
+    city(state, f.capua).owner = f.syracusaeFaction;
+    atWar(state, f.rome, f.carthage);
+    const roma = city(state, f.roma);
+    const capua = city(state, f.capua);
+    const quote = tradeForecast(state, world, roma, capua, 'land');
+    if (!quote) throw new Error('no land quote');
+    const risks = tradeRisk(state, sightOf(state, world, state.player), [roma, capua], quote.path);
+    const raids = risks.find((r) => r.kind === 'raids');
+    if (!raids) throw new Error('no raid risk');
+    expect(raids.enemies).toContain(f.rome);
+    expect(riskText(state, raids)).not.toContain('at peace with you');
+  });
+
   test('a besieged partner comes first, naming the besieger only while one is in sight', () => {
     const state = buildFixture();
     atWar(state, f.carthage, f.syracusaeFaction);
