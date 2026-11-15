@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { COAST_VIEWS } from '../../e2e/coast-views.ts';
-import { parseMap } from '../sim/map.ts';
+import { parseMap, type MultiPolygon } from '../sim/map.ts';
 import { newGame } from '../sim/new-game.ts';
 import { expectConsistent } from '../sim/references.ts';
 import {
@@ -28,7 +28,9 @@ import {
   coastalSurface,
   fitBanner,
   fitCoastalScene,
+  fitPlace,
   groundFits,
+  PLACE_REACH_KM,
   sceneAnchor,
 } from './coastal-ground.ts';
 import { drawnArmies } from './markers.ts';
@@ -36,6 +38,7 @@ import { tick } from '../sim/tick.ts';
 import { cityDrawingView, fitCitySymbol } from './symbols.ts';
 import type { CityRank } from '../sim/state/city.ts';
 import type { Day } from '../sim/state/day.ts';
+import { AreaIndex } from './terrain/area-index.ts';
 import { Land } from './terrain/marks.ts';
 
 const map = parseMap(
@@ -534,23 +537,24 @@ function expectWholeSceneFits(
     ),
   }));
   const columns = drawnColumns(previous, current, progress, seeAll(current));
+  const raw = buildScene({
+    previous,
+    current,
+    progress,
+    camera,
+    viewport,
+    previousSight: seeAll(previous),
+    sight: seeAll(current),
+    growth: symbolGrowth(scale),
+    motion: 0,
+    now: 0,
+    land: (p) => {
+      const at = toMap(p);
+      return physical.open(at.x, at.y);
+    },
+  });
   const scene = fitCoastalScene(
-    buildScene({
-      previous,
-      current,
-      progress,
-      camera,
-      viewport,
-      previousSight: seeAll(previous),
-      sight: seeAll(current),
-      growth: symbolGrowth(scale),
-      motion: 0,
-      now: 0,
-      land: (p) => {
-        const at = toMap(p);
-        return physical.open(at.x, at.y);
-      },
-    }),
+    raw,
     drawnLand,
     scale,
     walkable,
@@ -566,7 +570,7 @@ function expectWholeSceneFits(
     if (sprite.key.startsWith('ship.')) expect(groundFits(sprite, drawnLand)).toBe(true);
     else expect(groundFits(sprite, walkable)).toBe(true);
   }
-  return scene;
+  return { raw, scene };
 }
 
 test('refugees from Roma to Massalia, trailing back over the sea, stand on land', () => {
@@ -597,7 +601,7 @@ test('refugees from Roma to Massalia, trailing back over the sea, stand on land'
   let refugees = 0;
   for (const scale of [1, 4])
     for (const progress of [0, 0.5, 1]) {
-      const scene = expectWholeSceneFits(previous, current, progress, {
+      const { scene } = expectWholeSceneFits(previous, current, progress, {
         centre: column.position,
         scale,
       });
@@ -606,4 +610,126 @@ test('refugees from Roma to Massalia, trailing back over the sea, stand on land'
   expect(refugees).toBeGreaterThan(0);
   expect(JSON.stringify([previous, current])).toBe(original);
   expectConsistent(current);
+});
+
+test('a refugee cart regrouped at its column still draws behind a refugee standing below it', () => {
+  const start = newGame(map, { seed: 59, player: 'rome' });
+  changeCityOwner(start, 'massalia' as CityId, start.player);
+  expect(
+    executeOrder(
+      start,
+      {
+        kind: 'evacuate',
+        faction: start.player,
+        city: 'roma' as CityId,
+        to: 'massalia' as CityId,
+        share: 0.5,
+      },
+      world,
+    ),
+  ).toBeUndefined();
+  let previous = start;
+  let current = start;
+  for (let day = 0; day < 30; day++) {
+    previous = current;
+    current = tick(previous, [], world).state;
+  }
+  const column = Object.values(current.refugeeColumns)[0];
+  if (!column) throw new Error('the evacuation has no column');
+  const { raw, scene } = expectWholeSceneFits(previous, current, 0.9, {
+    centre: column.position,
+    scale: 4,
+  });
+  const offsets = (sprites: readonly Sprite[]) =>
+    sprites
+      .map((sprite) => Math.round((sprite.depth - sprite.y) * 1e6) / 1e6 + 0)
+      .sort((a, b) => a - b);
+  expect(scene.sprites.some((sprite, i) => sprite.x !== raw.sprites[i]?.x)).toBe(true);
+  expect(offsets(scene.sprites)).toEqual(offsets(raw.sprites));
+  expectConsistent(current);
+});
+
+test('coastal towns and villages stand inland on drawn land instead of vanishing', () => {
+  const ground = { town: { half: 6.5, thick: 0.5 }, village: { half: 6.2, thick: 0.45 } } as const;
+  const fits = (settlement: (typeof map.settlements)[number], scale: number) => {
+    const camera = { centre: { x: settlement.at[0], y: settlement.at[1] }, scale };
+    const toMap = (p: MapPoint) => screenToMap(camera, viewport, p);
+    const land = coastalSurface(() => drawn, toMap, physical.land);
+    const grow = symbolGrowth(scale);
+    const at = mapToScreen(camera, viewport, camera.centre);
+    const { half: halfWidth, thick } = ground[settlement.rank];
+    const spot = fitPlace(
+      at,
+      halfWidth * grow,
+      3.6 * grow,
+      thick * grow,
+      land,
+      (from, to) => {
+        const a = toMap(from),
+          b = toMap(to);
+        return physical.land.segmentInside(a.x, a.y, b.x, b.y);
+      },
+      scale,
+    );
+    if (spot) {
+      const half = halfWidth * grow * spot.growth;
+      const stroke = thick * grow * spot.growth;
+      const base = spot.y + 3.6 * grow * spot.growth;
+      expect(land.box(spot.x - half, spot.x + half, base - stroke, base + stroke)).toBe(true);
+      expect(Math.hypot(spot.x - at.x, spot.y - at.y) / scale).toBeLessThanOrEqual(
+        PLACE_REACH_KM + 1e-9,
+      );
+    }
+    return spot && { ...toMap(spot), growth: spot.growth };
+  };
+  for (const settlement of map.settlements)
+    expect(fits(settlement, 4), settlement.name).toBeDefined();
+  const entry = map.settlements.filter((s) => !fits(s, s.rank === 'town' ? 0.76 : 1.71));
+  expect(entry.length).toBeLessThanOrEqual(1);
+  for (const name of ['Katane', 'Tauromenium', 'Lokroi Epizephyrioi', 'Scylletium']) {
+    const town = map.settlements.find((s) => s.name === name);
+    if (!town) throw new Error(`no ${name}`);
+    expect(fits(town, 4), name).toBeDefined();
+    expect(fits(town, 1), name).toBeDefined();
+  }
+  const samothrace = map.settlements.find((s) => s.name === 'Samothrace');
+  if (!samothrace) throw new Error('no Samothrace');
+  for (const scale of [0.76, 1, 4]) {
+    const spot = fits(samothrace, scale);
+    if (!spot) throw new Error(`Samothrace does not fit at ${scale} px/km`);
+    expect(Math.hypot(spot.x - samothrace.at[0], spot.y - samothrace.at[1])).toBeLessThan(12);
+  }
+});
+
+test('a town on an island a kilometre off the mainland is never fitted onto the mainland', () => {
+  const square = (left: number, right: number): MultiPolygon => [
+    [
+      [
+        [left, 0],
+        [right, 0],
+        [right, 40],
+        [left, 40],
+      ],
+    ],
+  ];
+  // A 3 km island, 1 km of water, then a wide mainland.
+  const rules = new AreaIndex([square(0, 3), square(4, 60)], 0, { seams: false });
+  const camera = { centre: { x: 1.5, y: 20 }, scale: 1 };
+  const toMap = (p: MapPoint) => screenToMap(camera, viewport, p);
+  const land = coastalSurface(() => rules, toMap);
+  const at = mapToScreen(camera, viewport, camera.centre);
+  const spot = fitPlace(
+    at,
+    6.5,
+    3.6,
+    0.5,
+    land,
+    (from, to) => {
+      const a = toMap(from),
+        b = toMap(to);
+      return rules.segmentInside(a.x, a.y, b.x, b.y);
+    },
+    1,
+  );
+  if (spot) expect(toMap(spot).x).toBeLessThan(3);
 });

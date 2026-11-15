@@ -20,7 +20,7 @@ export const POWER_COLOURS: Record<PowerId, number> = {
   persia: 0x3c7d4a,
 };
 
-export const MINOR_COLOUR = 0x667c94;
+export const MINOR_COLOUR = 0x6e6a64;
 
 /**
  * How much of an owner's colour its wash lays over the ground: the paper, the desert, or

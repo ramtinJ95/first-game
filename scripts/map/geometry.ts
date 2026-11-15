@@ -209,6 +209,36 @@ export function closestOnBoundary(polygons: MultiPolygon, point: Point): Point |
   return best;
 }
 
+/**
+ * A test of whether a point lies within `reach` of the outlines' boundary, for asking
+ * of many points: each edge is filed under the cells of a grid it comes near.
+ */
+export function nearBoundary(polygons: MultiPolygon, reach: number): (point: Point) => boolean {
+  const cell = Math.max(reach * 4, 1);
+  const grid = new Map<string, [Point, Point][]>();
+  for (const [a, b] of edges(polygons)) {
+    for (
+      let i = Math.floor((Math.min(a[0], b[0]) - reach) / cell);
+      i <= Math.floor((Math.max(a[0], b[0]) + reach) / cell);
+      i++
+    )
+      for (
+        let j = Math.floor((Math.min(a[1], b[1]) - reach) / cell);
+        j <= Math.floor((Math.max(a[1], b[1]) + reach) / cell);
+        j++
+      ) {
+        const key = `${i},${j}`;
+        let list = grid.get(key);
+        if (!list) grid.set(key, (list = []));
+        list.push([a, b]);
+      }
+  }
+  return (point) =>
+    (grid.get(`${Math.floor(point[0] / cell)},${Math.floor(point[1] / cell)}`) ?? []).some(
+      ([a, b]) => distance(point, closestOnSegment(point, a, b)) <= reach,
+    );
+}
+
 export function distanceToBoundary(polygons: MultiPolygon, point: Point): number {
   const closest = closestOnBoundary(polygons, point);
   return closest ? distance(point, closest) : Infinity;
