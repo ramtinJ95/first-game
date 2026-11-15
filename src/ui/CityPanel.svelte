@@ -198,9 +198,6 @@
       {/if}
     </tbody>
   </table>
-  {#if own}
-    <CityGuards {game} {world} {city} {pending} {actions} />
-  {/if}
   {#if onTheRoad}
     <p data-testid="city-leaving">{onTheRoad}</p>
   {/if}
@@ -270,6 +267,7 @@
   {/if}
 
   {#if own}
+    <CityGuards {game} {world} {city} {pending} {actions} />
     <CityBuildings {game} {world} {city} {pending} {actions} />
   {/if}
   <CityTrade {game} {world} {city} {sight} {pending} {actions} />
