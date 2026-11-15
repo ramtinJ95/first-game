@@ -323,19 +323,32 @@ try {
     }
   } else {
     const years = Number(values.years ?? 10);
-    await page
-      .getByRole('button', { name: /^Speed \d+$/ })
-      .last()
-      .click();
+    const fastest = page.getByRole('button', { name: /^Speed \d+$/ }).last();
+    await fastest.click();
+    // A peace offer to the player stops the clock until it is answered, so the run
+    // refuses each one and plays on, as a player who ignores diplomacy would.
+    const playTo = async (target: number) => {
+      const deadline = Date.now() + 1_800_000;
+      while (
+        Number(await page.getByTestId('time-controls-day').getAttribute('data-day')) < target
+      ) {
+        if (Date.now() > deadline) throw new Error(`the game did not reach day ${target}`);
+        if ((await page.getByTestId('time-controls-speed').textContent()) === 'Paused') {
+          for (const refuse of await page
+            .getByRole('button', { name: 'Refuse', exact: true })
+            .all())
+            await refuse.click().catch(() => undefined);
+          await page.keyboard.press('Escape');
+          await page
+            .getByRole('button', { name: 'Resume', exact: true })
+            .click({ timeout: 2000 })
+            .catch(() => undefined);
+        }
+        await delay(1000);
+      }
+    };
     for (let year = 1; year <= years; year++) {
-      await page.waitForFunction(
-        (day) =>
-          Number(
-            document.querySelector('[data-testid="time-controls-day"]')?.getAttribute('data-day'),
-          ) >= day,
-        year * 360,
-        { timeout: 1_800_000, polling: 1000 },
-      );
+      await playTo(year * 360);
       await zoomCycle(page, PLACES[(year - 1) % PLACES.length] as MapPoint);
       await zoomCycle(page, PLATEAU);
       print(await sample(page, `year ${year}`));
