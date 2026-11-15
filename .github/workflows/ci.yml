@@ -145,7 +145,7 @@ jobs:
           path: ~/.cache/ms-playwright
           key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
-      - run: npm run capture -- --shard=${{ matrix.shard }}/6
+      - run: npm run capture -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
