@@ -10,6 +10,8 @@ import { saveGame } from '../src/sim/save.ts';
 import { tick } from '../src/sim/tick.ts';
 import type { MapPoint } from '../src/sim/state/map-point.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
+import { newGame } from '../src/sim/new-game.ts';
+import type { PowerId } from '../src/sim/map.ts';
 import { dropSave, map, openGame, startGame } from './support.ts';
 
 /**
@@ -25,6 +27,8 @@ import { dropSave, map, openGame, startGame } from './support.ts';
  * over that of loads 3 to 5, and `--process-bound` sets the share for the renderer and GPU
  * processes, whose memory in software rises for about fifty loads to a plateau.
  *
+ * `--power` and `--seed` choose the new game of `--years` (Persia on seed 2 by default).
+ *
  *   node e2e/memory-bench.ts [--loads 30 | --years 10] [--days 300] [--draw full] [--out file.csv]
  */
 const { values } = parseArgs({
@@ -39,6 +43,8 @@ const { values } = parseArgs({
     out: { type: 'string' },
     snapshot: { type: 'string' },
     query: { type: 'string', default: '' },
+    power: { type: 'string', default: 'persia' },
+    seed: { type: 'string', default: '2' },
     armies: { type: 'boolean', default: false },
     sites: { type: 'boolean', default: false },
   },
@@ -323,6 +329,13 @@ try {
     }
   } else {
     const years = Number(values.years ?? 10);
+    // A player who gives no orders is taken within a few years on most seeds, and a
+    // defeat stops the clock. Played with the same rules, Persia on seed 2 lives ten.
+    await dropSave(
+      page,
+      newGame(map, { seed: Number(values.seed), player: values.power as PowerId }),
+    );
+    await page.getByTestId('time-controls-day').and(page.locator('[data-day="1"]')).waitFor();
     const fastest = page.getByRole('button', { name: /^Speed \d+$/ }).last();
     await fastest.click();
     // A peace offer to the player stops the clock until it is answered, so the run
