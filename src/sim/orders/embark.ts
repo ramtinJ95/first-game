@@ -1,8 +1,9 @@
 import { removeBesieger } from '../armies.ts';
 import type { DeepReadonly } from '../deep-readonly.ts';
 import { allocateId, type ArmyId, type CityId, type FactionId } from '../ids.ts';
-import { busyReason, marchPath } from '../march.ts';
-import type { Army } from '../state/army.ts';
+import { emit } from '../events.ts';
+import { busyReason, marchPath, startMarch } from '../march.ts';
+import type { Army, SailOn } from '../state/army.ts';
 import type { City } from '../state/city.ts';
 import type { Day } from '../state/day.ts';
 import type { GameState } from '../state/game-state.ts';
@@ -35,6 +36,11 @@ export interface EmbarkOrder {
    * city when its harbour lies farther from it than SIEGE_DISTANCE, and stands at the harbour otherwise.
    */
   then?: MapPoint;
+  /**
+   * The shore or the port the army marches to first, to set out from when it arrives.
+   * Without it the army sets out from where it stands.
+   */
+  from?: MapPoint;
 }
 
 /** Where an army sails from: the harbour of its own port, or a point of the shore after GATHER_DAYS. */
@@ -91,21 +97,28 @@ function standing(army: Army): MapPoint | string {
   return busyReason(army) ?? `army ${army.id} cannot set out`;
 }
 
+/** A crossing the rules allow: where it sets out, its way by sea, and the march on from the landing. */
+interface Crossing {
+  readonly start: Embarkation;
+  readonly path: MapPoint[];
+  readonly march: MapPoint[] | undefined;
+}
+
 /**
- * Puts an army that stands at a port of its own, or on any shore, aboard a new convoy that
- * sails to the harbour of the destination port, from that port's harbour at once or from
- * the shore once it has gathered its ships. A besieging army leaves its siege. Once it lands,
- * the army marches on, along a land path found now, to the order's point, or to the port
- * city when its harbour lies farther from it than SIEGE_DISTANCE, so it stands at the city.
+ * The crossing of the army from the point to the port `to`, or why it may not set out from
+ * there. Once it lands, the army marches on to `then`, or to the port city when its harbour
+ * lies farther from it than SIEGE_DISTANCE, so it stands at the city.
  */
-export function embark(state: GameState, order: EmbarkOrder, world: World): string | undefined {
-  const army = ownedArmy(state, order.faction, order.army);
-  if (typeof army === 'string') return army;
-  const at = standing(army);
-  if (typeof at === 'string') return at;
-  const destination = Object.hasOwn(state.cities, order.to) ? state.cities[order.to] : undefined;
-  const landing = world.harbours.get(order.to);
-  if (!destination) return `city ${order.to} does not exist`;
+function crossingFrom(
+  state: GameState,
+  world: World,
+  army: Army,
+  at: MapPoint,
+  { to, then }: SailOn,
+): Crossing | string {
+  const destination = Object.hasOwn(state.cities, to) ? state.cities[to] : undefined;
+  const landing = world.harbours.get(to);
+  if (!destination) return `city ${to} does not exist`;
   if (!landing) return `${destination.name} is not a port`;
   const start = embarkationAt(state, world, army.owner, at, landing);
   if (!start) {
@@ -117,11 +130,23 @@ export function embark(state: GameState, order: EmbarkOrder, world: World): stri
   const path = findPath(world.mesh, start.from, landing, 'sea');
   if (!path) return `no sea route leads to ${destination.name}`;
   const ashore =
-    order.then ??
+    then ??
     (distance(landing, destination.position) > SIEGE_DISTANCE ? destination.position : undefined);
   const march = ashore && marchPath(world, landing, ashore);
-  if (typeof march === 'string' && order.then) return march;
+  if (typeof march === 'string' && then) return march;
+  return { start, path, march: typeof march === 'string' || !march?.length ? undefined : march };
+}
 
+/**
+ * Puts the army aboard a new convoy for the crossing, whose ships gather from the day
+ * `gathersFrom`. A besieging army leaves its siege.
+ */
+function setSail(
+  state: GameState,
+  army: Army,
+  { start, path, march }: Crossing,
+  gathersFrom: Day,
+): void {
   if (army.activity.kind === 'besieging') removeBesieger(state, army.activity.siege, army.id);
   const convoy = allocateId(state, 'convoy');
   state.convoys[convoy] = {
@@ -130,12 +155,69 @@ export function embark(state: GameState, order: EmbarkOrder, world: World): stri
     position: { x: start.from.x, y: start.from.y },
     armies: [army.id],
     waypoints: path,
-    ...(start.waitDays > 0 && { departsOn: (state.day + start.waitDays) as Day }),
+    ...(start.waitDays > 0 && { departsOn: (gathersFrom + start.waitDays) as Day }),
   };
-  army.activity = {
-    kind: 'embarked',
-    convoy,
-    ...(march && typeof march !== 'string' && march.length > 0 && { march }),
-  };
+  army.activity = { kind: 'embarked', convoy, ...(march && { march }) };
+}
+
+/**
+ * Puts an army that stands at a port of its own, or on any shore, aboard a new convoy that
+ * sails to the harbour of the destination port, from that port's harbour at once or from
+ * the shore once it has gathered its ships. A besieging army leaves its siege. Once it lands,
+ * the army marches on, along a land path found now, to the order's point, or to the port
+ * city when its harbour lies farther from it than SIEGE_DISTANCE, so it stands at the city.
+ * With `from`, the army first marches there, and the order is refused unless the crossing
+ * could set out from there today.
+ */
+export function embark(state: GameState, order: EmbarkOrder, world: World): string | undefined {
+  const army = ownedArmy(state, order.faction, order.army);
+  if (typeof army === 'string') return army;
+  const at = standing(army);
+  if (typeof at === 'string') return at;
+  const sail: SailOn = { to: order.to, ...(order.then && { then: order.then }) };
+  const { from } = order;
+  if (from && (!Number.isFinite(from.x) || !Number.isFinite(from.y))) {
+    return `the start ${from.x}, ${from.y} is not a point on the map`;
+  }
+  const crossing = crossingFrom(state, world, army, from ?? at, sail);
+  if (typeof crossing === 'string') return crossing;
+  if (!from) {
+    setSail(state, army, crossing, state.day);
+    return undefined;
+  }
+  const before = army.activity;
+  const refused = startMarch(world, army, at, from);
+  if (refused) return refused;
+  if (before.kind === 'besieging') removeBesieger(state, before.siege, army.id);
+  if (army.activity.kind === 'marching') army.activity.sail = sail;
   return undefined;
+}
+
+/**
+ * Sets out on the crossing an army's march ended in, at the point where the march ended.
+ * When the crossing may no longer set out from there, as when the port it marched to has
+ * changed hands, the army stands idle and the day's news says why.
+ */
+export function sailOnArrival(
+  state: GameState,
+  world: World,
+  army: Army,
+  position: MapPoint,
+  sail: SailOn,
+): void {
+  army.activity = { kind: 'idle', position };
+  const crossing = crossingFrom(state, world, army, position, sail);
+  if (typeof crossing !== 'string') {
+    // The day's march is done, so the ships gather from tomorrow.
+    setSail(state, army, crossing, (state.day + 1) as Day);
+    return;
+  }
+  emit(state, {
+    kind: 'sailingRefused',
+    army: army.id,
+    owner: army.owner,
+    position: { ...position },
+    to: sail.to,
+    reason: crossing,
+  });
 }
