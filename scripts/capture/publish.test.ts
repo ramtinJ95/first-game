@@ -90,7 +90,13 @@ function assetsCommitCount(): number {
 
 /** Commits files straight onto the remote's pr-assets, as a tester's push does. */
 function pushToAssets(files: Record<string, string>): void {
-  const env = { GIT_INDEX_FILE: join(root, 'seed-index') };
+  const env = {
+    GIT_INDEX_FILE: join(root, 'seed-index'),
+    GIT_AUTHOR_NAME: 'tester',
+    GIT_AUTHOR_EMAIL: 'tester@example.test',
+    GIT_COMMITTER_NAME: 'tester',
+    GIT_COMMITTER_EMAIL: 'tester@example.test',
+  };
   const tip = git(bare, ['for-each-ref', '--format=%(objectname)', 'refs/heads/pr-assets']);
   if (tip) git(bare, ['read-tree', tip], { env });
   for (const [path, content] of Object.entries(files)) {
