@@ -66,7 +66,7 @@ export const TAKEN_FOOD_SHARE = 0.5;
  * conquerors close the breach they made, so its garrison does not give up on the first
  * day of the next siege.
  */
-export const TAKEN_WALLS_SHARE = 0.15;
+export const TAKEN_WALLS_SHARE = 0.1;
 
 /** Points of wall that each thousand besieging men wear down a day. */
 export const WALL_WEAR_PER_THOUSAND_MEN = 2;

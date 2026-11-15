@@ -545,7 +545,7 @@ describe('after a siege', () => {
 });
 
 describe('a city that changes hands', () => {
-  test('a city starved out holds half its full food and 15% of its walls on the day it falls, so the next siege cannot take it within days', () => {
+  test('a city starved out holds half its full food and a tenth of its walls on the day it falls, so the next siege cannot take it within days', () => {
     const state = besiegingCapua();
     const capua = cityOf(state, FIXTURE.capua);
     capua.foodDays = 0;
@@ -561,7 +561,7 @@ describe('a city that changes hands', () => {
     expect(city.walls).toBeGreaterThanOrEqual(
       CITY_DEFENCES.greatPowerCity.walls * TAKEN_WALLS_SHARE,
     );
-    expect(city.walls).toBeLessThan(CITY_DEFENCES.greatPowerCity.walls * 0.2);
+    expect(city.walls).toBeLessThan(CITY_DEFENCES.greatPowerCity.walls * 0.15);
     expectConsistent(fallen);
   });
 
@@ -577,7 +577,7 @@ describe('a city that changes hands', () => {
     addArmy(current, 'army-counter', FIXTURE.rome, 1000, NEAR_CAPUA);
     current = play(current, 1);
     expect(Object.values(current.sieges).map((siege) => siege.city)).toEqual([FIXTURE.capua]);
-    current = play(current, 10);
+    current = play(current, 8);
     expect(cityOf(current, FIXTURE.capua).owner).toBe(FIXTURE.carthage);
     expect(Object.values(current.sieges)).toHaveLength(1);
     expectConsistent(current);
