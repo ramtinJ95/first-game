@@ -287,6 +287,16 @@ function traceLines(
   return g;
 }
 
+/**
+ * A merchant that does not fit where its route puts it looks for ground round that
+ * spot; a refugee column, the anchor for other carts and walkers, can be far away.
+ */
+function anchorOutsideTrade(
+  anchor: (sprite: SceneSprite) => MapPoint | undefined,
+): (sprite: SceneSprite) => MapPoint | undefined {
+  return (sprite) => (sprite.trade ? undefined : anchor(sprite));
+}
+
 function sameSelection(a: Pick | undefined, b: Pick | undefined): boolean {
   if (a?.kind === 'province' && b?.kind === 'province') return a.province === b.province;
   if (a?.kind === 'army' && b?.kind === 'army') return a.army === b.army;
@@ -1273,6 +1283,11 @@ export async function createRenderer({
       b = toMap(to);
     return terrain.land.land.segmentInside(a.x, a.y, b.x, b.y);
   };
+  /** The rules' open land, one function for the renderer's life so the scene can remember its answers. */
+  const onOpenLand = (screen: MapPoint) => {
+    const point = toMap(screen);
+    return terrain.land.open(point.x, point.y);
+  };
   /** At the zooms that draw figures, a battle's marker stands above its fighting. */
   const battleLift = () =>
     scene && scene.height > 0 ? (1.75 * scene.height + 14) / camera.scale : 0;
@@ -1588,10 +1603,7 @@ export async function createRenderer({
           motion: still ? 0 : motion,
           now: clock / 1000,
           growth: symbolGrowth(camera.scale),
-          land: (screen) => {
-            const point = screenToMap(camera, viewport(), screen);
-            return terrain.land.open(point.x, point.y);
-          },
+          land: onOpenLand,
           names: new Map(drawnCities.flatMap(({ id, label }) => (label ? [[id, label]] : []))),
           keepClear: drawnPlaces,
         });
@@ -1600,11 +1612,13 @@ export async function createRenderer({
           onDrawnLand,
           camera.scale,
           onLand,
-          sceneAnchor(
-            current,
-            armies,
-            columns.map((column) => column.position),
-            (point) => mapToScreen(camera, view, point),
+          anchorOutsideTrade(
+            sceneAnchor(
+              current,
+              armies,
+              columns.map((column) => column.position),
+              (point) => mapToScreen(camera, view, point),
+            ),
           ),
         );
         drawnFigures = armyLayer.draw(scene);
