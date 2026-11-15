@@ -63,8 +63,13 @@ export function trade(state: GameState): void {
         owners: [route.owner, route.partner],
       } as const;
       const looter = raider && state.factions[raider.owner];
-      if (blocked === 'raid' && raider && 'position' in raider.activity) {
-        const looted = looter && state.day >= route.departsOn ? route.daily * route.days : 0;
+      const looted = looter && state.day >= route.departsOn ? route.daily * route.days : 0;
+      if (blocked === 'siege') {
+        const at = sieged.has(route.from) ? from : to;
+        emit(state, { ...base, cause: 'siege', position: { ...at.position } });
+      }
+      // A raider beside a siege still takes the cargo, so the theft has its own event.
+      if (raider && 'position' in raider.activity && (blocked === 'raid' || looted > 0))
         emit(state, {
           ...base,
           cause: 'raid',
@@ -72,10 +77,6 @@ export function trade(state: GameState): void {
           looted,
           position: { ...raider.activity.position },
         });
-      } else {
-        const at = sieged.has(route.from) ? from : to;
-        emit(state, { ...base, cause: 'siege', position: { ...at.position } });
-      }
       if (looter && state.day >= route.departsOn) {
         looter.stores.gold += route.daily * route.days;
         route.departsOn = (state.day + route.days) as Day;

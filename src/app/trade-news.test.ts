@@ -153,7 +153,7 @@ describe('trade news', () => {
     expectConsistent(later.state);
   });
 
-  test("a siege of the player's own city is left to the city's own news", () => {
+  test("a siege of the player's own city is left to the city's own news, but the cargo its besieger takes is told", () => {
     const state = buildFixture();
     const roman = state.armies[f.romanArmy];
     const punic = state.armies[f.punicArmy];
@@ -167,7 +167,11 @@ describe('trade news', () => {
     const war = { kind: 'declareWar', faction: f.rome, against: f.carthage } as const;
     const { state: next, events } = tick(state, [war], world);
     expect(events).toContainEqual(expect.objectContaining({ kind: 'tradeRaided', cause: 'siege' }));
-    expect(tradeNews(state, next, events, []).alerts).toEqual([]);
+    const route = Object.values(state.tradeRoutes)[0];
+    if (!route) throw new Error('expected a route');
+    expect(tradeNews(state, next, events, []).alerts.map((a) => a.text)).toEqual([
+      `Carthage raided the road Roma to Capua and took a cargo worth about ${whole(route.daily * route.days * 2)} gold to you. Deliveries stop while its armies stay within reach.`,
+    ]);
     expect(alertsOfDay(state, next, events)).toContainEqual(
       expect.objectContaining({ kind: 'siegeBegan', text: 'Carthage besieges Roma' }),
     );

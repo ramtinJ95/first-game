@@ -8,6 +8,7 @@ import { buildFixture, fixtureWorld, FIXTURE as f } from '../fixture.ts';
 import { newGame } from '../new-game.ts';
 import type { CityId, ProvinceId } from '../ids.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
+import { allocateId } from '../ids.ts';
 import { expectConsistent } from '../references.ts';
 import { loadGame, saveGame } from '../save.ts';
 import type { Day } from '../state/day.ts';
@@ -499,6 +500,32 @@ describe('caravans, interruption, and saves', () => {
     state.day = route.departsOn;
     trade(state);
     expect(route.progress).toBeGreaterThan(0);
+    expectConsistent(state);
+  });
+
+  test('a raider beside a siege still takes the cargo, and its theft is an event of that day', () => {
+    const { state, route } = opened();
+    state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);
+    const army = state.armies[f.punicArmy];
+    const carthage = state.factions[f.carthage];
+    if (!army || !carthage) throw new Error('missing raider');
+    const siege = allocateId(state, 'siege');
+    state.sieges[siege] = { id: siege, city: f.capua, besiegers: [army.id], startedOn: state.day };
+    army.activity = { kind: 'besieging', position: routePoint(route, 0.9), siege };
+    const gold = carthage.stores.gold;
+    const events = recordEvents(state, () => trade(state));
+    expect(route.blocked).toBe('siege');
+    expect(carthage.stores.gold).toBeCloseTo(gold + route.daily * route.days);
+    expect(events).toEqual([
+      expect.objectContaining({ kind: 'tradeRaided', cause: 'siege', route: route.id }),
+      expect.objectContaining({
+        kind: 'tradeRaided',
+        cause: 'raid',
+        route: route.id,
+        raider: f.carthage,
+        looted: route.daily * route.days,
+      }),
+    ]);
     expectConsistent(state);
   });
 
