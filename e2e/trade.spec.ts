@@ -232,10 +232,21 @@ test('a running route offers its improvement with price and payback, and an impr
   await load(page, saved);
   await openCity(page, 'roma', 'Roma');
   const offer = page.getByTestId('trade-improve');
-  await expect(offer).toContainText(`Improve for ${Math.ceil(route.cost / 2)} gold`);
+  const price = Math.ceil(route.cost / 2);
+  const gain = route.daily * 0.25 * 2;
+  await expect(offer).toContainText(`Improve for ${price.toLocaleString('en')} gold`);
+  await expect(offer).toContainText(
+    `+${gain.toFixed(1)} gold a day to your realm, from both ends, repaid in ${(price / gain / 365).toFixed(1)} years.`,
+  );
   await expect(offer).toContainText('Improved 0 of 2 times; no refund on closing.');
+  const gold = saved.factions[rome]?.stores.gold ?? 0;
   await page.getByRole('button', { name: 'Improve route', exact: true }).click();
   await resume(page);
-  await expect(offer).toContainText('Improved 1 of 2 times');
+  await untilDay(page, saved.day + 1);
   await pause(page);
+  await expect(offer).toContainText('Improved 1 of 2 times');
+  const paid = Number((await page.getByTestId('store-gold-amount').innerText()).replace(/,/g, ''));
+  expect(paid).toBeLessThanOrEqual(gold - price + 100);
+  expect(paid).toBeLessThan(gold);
+  await expect(offer).toContainText(`Improve for ${price.toLocaleString('en')} gold`);
 });

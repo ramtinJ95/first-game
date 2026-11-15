@@ -65,6 +65,7 @@ export default defineScenario({
 
     const syracusaeAtWar = rich();
     declareWar(syracusaeAtWar, carthage, 'syracusae' as FactionId);
+    declareWar(syracusaeAtWar, rome, carthage);
     await load(page, syracusaeAtWar);
     await openCity(page, 'roma', 'Roma');
     const partners = page.getByTestId('trade-partners');
@@ -72,7 +73,7 @@ export default defineScenario({
     await page.getByTestId('trade-payback').scrollIntoViewIfNeeded();
     await shot(
       'quote-risk',
-      'A quote for Roma to Syracusae: the payback set against Syracusae’s war with Carthage, which closes the route if Syracusae falls',
+      'A quote for Roma to Syracusae: the payback set against Syracusae’s war with Carthage, also at war with Rome, which closes the route if Syracusae falls to Carthage',
     );
     await partners.evaluate((list) => {
       list.scrollTop = 0;
@@ -86,6 +87,7 @@ export default defineScenario({
     const trading = playDays(rich(), 24, [
       open('roma', 'carthago', 'sea'),
       open('roma', 'capua', 'land'),
+      open('roma', 'arretium', 'land'),
     ]);
     await load(page, trading);
     await openCity(page, 'carthago', 'Carthago');
@@ -105,6 +107,7 @@ export default defineScenario({
       'Close route asks first: what the route cost, what it has brought and what is unpaid, no refund, and the price to open it again',
     );
     await page.getByRole('button', { name: 'Keep route', exact: true }).click();
+    await expect(page.getByTestId('trade-slots')).toHaveText('0 of 3 route slots free');
     await page.getByTestId('trade-improve').first().scrollIntoViewIfNeeded();
     await shot(
       'improve-route',

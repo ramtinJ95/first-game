@@ -72,12 +72,12 @@ for (let seed = first; seed <= last; seed++) {
   totals.early += row.early;
   totals.lost += row.lost;
   totals.decisions += row.days.length;
-  const between = [...row.days, years * 365]
+  const between = [...row.days, row.end]
     .map((day, i, all) => day - (i ? (all[i - 1] ?? 0) : 0))
     .slice(1, -1);
   const longest = Math.max(
     0,
-    ...[...row.days, years * 365].map((day, i, all) => day - (i ? (all[i - 1] ?? 0) : 0)),
+    ...[...row.days, row.end].map((day, i, all) => day - (i ? (all[i - 1] ?? 0) : 0)),
   );
   longestAll = Math.max(longestAll, longest);
   longests.push(longest);
@@ -101,6 +101,7 @@ function play(seed: number) {
   let opened = 0;
   let early = 0;
   let lost = 0;
+  let end = years * 365;
   for (let day = 0; day < years * 365; day++) {
     const ai = decideAll(state, world, []);
     const owing = (faction: FactionId) =>
@@ -192,9 +193,12 @@ function play(seed: number) {
       }
     }
     state = next;
-    if (state.factions[rome]?.defeatedOn !== null) break;
+    if (state.factions[rome]?.defeatedOn !== null) {
+      end = day + 1;
+      break;
+    }
   }
-  return { paybacks, days, opened, early, lost };
+  return { paybacks, days, opened, early, lost, end };
 }
 
 /** Rome's trade for the day: invitations at once, and one opening or replacement on its monthly day. */
