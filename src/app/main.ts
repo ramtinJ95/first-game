@@ -11,7 +11,7 @@ import { parseMap, POWERS, type GameMap, type PowerId } from '../sim/map.ts';
 import { newGame, POWER_NAMES } from '../sim/new-game.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import { outcomeOf, standingOf } from '../sim/outcome.ts';
-import { loadGame, saveGame } from '../sim/save.ts';
+import { loadGame, saveGame, type Refusal } from '../sim/save.ts';
 import { sightOf, type Sight } from '../sim/sight.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
@@ -44,6 +44,7 @@ import {
   browserStorage,
   latestSaved,
   readSaved,
+  REFUSED_SAVE,
   SLOTS,
   startsMonth,
   writeSaved,
@@ -541,13 +542,16 @@ function openFates(state: DeepReadonly<GameState>): Modal[] {
 
 function loadText(text: string, how: { pause: boolean; focus: boolean }) {
   const loaded = loadGame(text);
-  const page = loaded.ok ? parsePage(loaded.page) : loaded;
-  if (!loaded.ok || !page.ok) {
-    showNotice(`The save did not load. ${loaded.ok ? (page.ok ? '' : page.error) : loaded.error}`);
-    view.refresh();
-    return;
-  }
+  if (!loaded.ok) return refuseSave(loaded.refusal, loaded.error);
+  const page = parsePage(loaded.page);
+  if (!page.ok) return refuseSave('damaged', page.error);
   enter(loaded.state, how, page.page);
+}
+
+function refuseSave(refusal: Refusal, detail: string) {
+  console.warn(`The save did not load. ${detail}`);
+  showNotice(REFUSED_SAVE[refusal]);
+  view.refresh();
 }
 
 function closeModal() {

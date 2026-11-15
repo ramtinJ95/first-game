@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dailyText, type FateChoice } from '../app/fates.ts';
+  import { dailyText, holdText, type FateChoice } from '../app/fates.ts';
   import { buildingList, whole } from '../app/names.ts';
   import type { ShownModal } from '../app/view.svelte.ts';
   import { BUILDINGS } from '../sim/buildings/buildings.ts';
@@ -49,6 +49,7 @@
     <p class="muted">
       The game is paused. Choose what becomes of its {whole(city.population)} people.
     </p>
+    <p data-testid="fate-stores">{holdText(city)}</p>
     <div class="choices" role="group" aria-label="Fates">
       <div class="fate-row fate-head" aria-hidden="true">
         <span></span>

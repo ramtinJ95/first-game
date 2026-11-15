@@ -6,7 +6,9 @@ import type { City } from '../sim/state/city.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { Stores } from '../sim/state/faction.ts';
 import type { GameState } from '../sim/state/game-state.ts';
+import { fullDefences } from '../sim/systems/sieges.ts';
 import type { World } from '../sim/world/world.ts';
+import { whole } from './names.ts';
 import { cityBalance, signed, unrestDaysLeft } from '../ui/describe.ts';
 
 /** One way to settle a captured city, with what it gives and costs today. */
@@ -114,4 +116,13 @@ const STORE_ORDER = ['gold', 'food', 'manpower'] as const;
 /** A day's yield, such as "+2.1 gold, −0.4 food, +0.3 manpower". */
 export function dailyText(daily: Stores): string {
   return STORE_ORDER.map((store) => `${signed(daily[store])} ${store}`).join(', ');
+}
+
+/**
+ * What a fallen city holds against the next siege, and how to keep it: a city never
+ * falls while a field army of its owner stands at it.
+ */
+export function holdText(city: DeepReadonly<City>): string {
+  const full = fullDefences(city);
+  return `It holds ${Math.floor(city.foodDays)} of ${whole(full.foodDays)} days of food, walls of ${whole(city.walls)} of ${whole(full.walls)}, and a garrison of ${whole(city.garrison)} of ${whole(full.garrison)}. A siege cannot take it while an army of yours stands at it.`;
 }

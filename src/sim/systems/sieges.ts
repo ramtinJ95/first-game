@@ -55,6 +55,19 @@ export const SALLY_SHARE = 0.05;
 /** The share of a city's full garrison that its conquerors leave in it, from their own men. */
 export const OCCUPATION_SHARE = 0.25;
 
+/**
+ * The share of its full food that a city holds on the day it falls, at the least. The
+ * siege kept the harvest of the country round it outside the walls, and it comes in
+ * with the new owner, so a city starved out is not starved again within days.
+ */
+export const TAKEN_FOOD_SHARE = 0.5;
+/**
+ * The share of its full walls that a city holds on the day it falls, at the least: the
+ * conquerors close the breach they made, so its garrison does not give up on the first
+ * day of the next siege.
+ */
+export const TAKEN_WALLS_SHARE = 0.1;
+
 /** Points of wall that each thousand besieging men wear down a day. */
 export const WALL_WEAR_PER_THOUSAND_MEN = 2;
 /** The share of its full garrison that a city without food loses to hunger each day, rounded up. */
@@ -246,6 +259,9 @@ export function cityFalls(state: GameState, siege: Siege): void {
   );
   killMen(state, occupiers, garrison, 'storm');
   city.garrison = garrison;
+  const full = fullDefences(city);
+  city.foodDays = Math.max(city.foodDays, full.foodDays * TAKEN_FOOD_SHARE);
+  city.walls = Math.max(city.walls, full.walls * TAKEN_WALLS_SHARE);
   changeCityOwner(state, city.id, winner);
   city.fellOn = state.day;
 }

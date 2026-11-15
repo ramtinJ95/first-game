@@ -4,6 +4,7 @@ import type { CityId } from '../src/sim/ids.ts';
 import { POWERS } from '../src/sim/map.ts';
 import { POWER_NAMES } from '../src/sim/new-game.ts';
 import { outcomeOf } from '../src/sim/outcome.ts';
+import { REFUSED_SAVE } from '../src/app/saves.ts';
 import { loadGame, SAVE_FORMAT, saveGame } from '../src/sim/save.ts';
 import baseline from '../src/sim/save-changes/baseline-format-12.json' with { type: 'json' };
 import type { GameState } from '../src/sim/state/game-state.ts';
@@ -328,6 +329,8 @@ test.describe('the frame round the game', () => {
   test('a save exports to a file, imports back, and an old format is refused with its notice', async ({
     page,
   }) => {
+    const console: string[] = [];
+    page.on('console', (message) => console.push(message.text()));
     await openGame(page);
     const state = playDays(startGame(), 44);
     await load(page, state);
@@ -360,7 +363,8 @@ test.describe('the frame round the game', () => {
       mimeType: 'application/json',
       buffer: Buffer.from(old),
     });
-    await expect(page.getByTestId('notice')).toHaveText(
+    await expect(page.getByTestId('notice')).toHaveText(REFUSED_SAVE.older);
+    expect(console).toContain(
       `The save did not load. The save lacks changes: baseline-format-12 (${baseline.adds}).`,
     );
     expect(await day(page)).toBe(exported);
@@ -375,11 +379,23 @@ test.describe('the frame round the game', () => {
       );
     }, old);
     await openStart(page);
+    const console: string[] = [];
+    page.on('console', (message) => console.push(message.text()));
     await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByTestId('notice')).toHaveText(
+    await expect(page.getByTestId('notice')).toHaveText(REFUSED_SAVE.newer);
+    expect(console).toContain(
       'The save did not load. The save has unknown changes: future-fleets.',
     );
     await expect(page.getByTestId('start-screen')).toBeVisible();
+  });
+
+  test('a dropped file that is no save is refused with what to do, over the running game', async ({
+    page,
+  }) => {
+    await openGame(page);
+    await dropSave(page, 'not a save');
+    await expect(page.getByTestId('notice')).toHaveText(REFUSED_SAVE.damaged);
+    await expect(page.getByTestId('top-bar')).toBeVisible();
   });
 
   for (const fate of ['occupy', 'sack', 'enslave'] as const) {
