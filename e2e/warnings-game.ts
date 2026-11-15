@@ -1,6 +1,8 @@
 import { expect, type Page } from '@playwright/test';
 import { allocateId, type CityId } from '../src/sim/ids.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
+import { dailyBalances, limitsOf, UPKEEP_PER_MAN } from '../src/sim/systems/economy.ts';
+import { TROOPS } from '../src/sim/troops.ts';
 import {
   armyOf,
   battleAt,
@@ -80,4 +82,17 @@ export async function showOwnCity(page: Page, name: string) {
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('Warning fixture record missing');
   return value;
+}
+
+/** Rome's own start with full granaries and an army grown until a spearmen raise leaves food 1.5 a day short, a gap the growing people close. */
+export function slowFoodDeficit(): GameState {
+  const state = startGame();
+  const stores = required(state.factions[rome]).stores;
+  Object.assign(stores, { gold: 20_000, manpower: 20_000 });
+  const formation = required(state.formations[required(armyOf(state, rome).formations[0])]);
+  const food = required(dailyBalances(state).get(rome)).food;
+  const after = food - TROOPS.spearmen.recruit.men * UPKEEP_PER_MAN.food;
+  formation.men += Math.round((after + 1.5) / UPKEEP_PER_MAN.food);
+  stores.food = required(limitsOf(state).get(rome)).food;
+  return state;
 }

@@ -34,7 +34,7 @@
     weakSiegeText,
   } from './describe.ts';
   import WarStatus from './WarStatus.svelte';
-  import { recruitForecast, RECRUIT_WARNING_DAYS } from './recruit-forecast.ts';
+  import { recruitForecast } from './recruit-forecast.ts';
   import CityTrade from './CityTrade.svelte';
   import type { World } from '../sim/world/world.ts';
 
@@ -285,8 +285,9 @@
   {#if own}
     <h3>Raise</h3>
     <p class="muted small">
-      Today's yields; payment now, upkeep from each muster day. No growth or losses predicted. Warn
-      and confirm only within {RECRUIT_WARNING_DAYS} days: forecasts years ahead are too uncertain.
+      Today's yields, with the people growing as they do while food lasts; payment now, upkeep from
+      each muster day. No battles or losses predicted. A store that runs short at any distance
+      warns.
     </p>
     <div data-testid="recruit-forecast">
       <p>

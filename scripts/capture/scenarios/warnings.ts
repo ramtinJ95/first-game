@@ -13,6 +13,7 @@ import {
   ownCityInDangerTomorrow,
   ownSiegeTomorrow,
   showOwnCity,
+  slowFoodDeficit,
   smallSallyTomorrow,
 } from '../../../e2e/warnings-game.ts';
 import { defineScenario } from '../scenario.ts';
@@ -32,7 +33,15 @@ export default defineScenario({
     await page.getByTestId('recruit-warning').scrollIntoViewIfNeeded();
     await shot(
       'recruit-shortfall',
-      'One realm forecast above compact troop cards: the 9-day food shortfall warns and asks Raise anyway, while 821 days of gold stays in plain ink beyond the one-year warning horizon',
+      'A lasting deficit warns at any distance: 9 days of food and 824 days of gold, both red, and the raise asks Raise anyway',
+    );
+
+    await loadWarnings(page, slowFoodDeficit());
+    await showOwnCity(page, 'Roma');
+    await page.getByTestId('recruit-forecast').scrollIntoViewIfNeeded();
+    await shot(
+      'recruit-growth-closes',
+      "With Spearmen selected, a small deficit the growing people close stays plain: 2,809 days at today's yields, no warning, and a plain Raise troops",
     );
 
     const hungry = foodShortfall();

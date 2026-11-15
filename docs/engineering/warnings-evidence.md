@@ -26,3 +26,41 @@ All 20 city losses now stop the player, rather than only the final defeats. The 
 The own-city danger line is seven days of food or seven days until the walls collapse at today's besieger strength, in a blockading siege. This gives time before bare walls can surrender on any day. The battle line is 500 of the player's men or 10% of their fielded army: a small sally should not stop a large realm, but fighting with the last hundred men still matters.
 
 The AI's matching Skirmish after its first choice is the intended stance rule, not a defect. It changes again only when beaten and neither side is re-forming. The panel now calls its highlighted choice an answer to the enemy's **current** stance **once re-formed**, and explains when the AI may answer. The redirected same-day arrival fix from PR #50 is already present on the base, including the regression in `guide-regressions.test.ts`; it is retained unchanged.
+
+## The recruit warning at any distance
+
+`npm run sim -- recruit-warning` plays seeds 1–20 for ten years. Every faction plays the AI, Rome included, except Rome's recruits. Each day Rome raises the AI's most needed troop at Roma, or else at its first city that can train it, when it holds the gold and men for it at the start of the day and still holds them after its other orders of the day, unless the recruit card warns. The forecast it reads counts those other orders, as the panel counts orders already given. Rome heeds every warning. Only raises the tick accepts count. Hunger counts men who deserted while food was short; unpaid, while only gold was. Cities fallen counts every Roman city taken, so a city lost twice counts twice.
+
+| warning rule                                   | regiments raised | men lost to hunger | men lost unpaid | Roman cities fallen | seeds Rome defeated | days warned |
+| ---------------------------------------------- | ---------------: | -----------------: | --------------: | ------------------: | ------------------: | ----------: |
+| none                                           |              435 |                908 |          34,349 |                 422 |                  10 |           0 |
+| any distance, today's yields (before #56)      |              489 |                  0 |           8,271 |                 435 |                   5 |      16,926 |
+| within 365 days, today's yields (#56)          |              518 |                  0 |          16,612 |                 459 |                   7 |       2,465 |
+| any distance, the people growing (this change) |              465 |                  0 |          12,607 |                 452 |                  10 |       3,579 |
+
+These totals cannot rank the rules. The four histories part at the first raise one rule allows and another refuses, and the AI's wars then differ: under one rule a seed raises 3 regiments and loses the game, under another 43 and survives. The defeated seeds move between rules in both directions. Every warning rule removes hunger, and all rules leave thousands of men unpaid, because cities lost in war take their taxes with them.
+
+The next table compares the rules on the same days. It files every day of the one-year run on which Rome could pay for a raise, by the fixed-yield forecast of that raise, and asks whether the growing realm still runs short. A blocked raise counts again each day it waits.
+
+| fixed-yield shortfall | the growing realm runs short too | growth closes the gap first |
+| --------------------- | -------------------------------: | --------------------------: |
+| food up to 365 days   |                            1,262 |                           0 |
+| food up to 730 days   |                              186 |                           0 |
+| food up to 1,460 days |                              251 |                         118 |
+| food over 1,460 days  |                                0 |                         393 |
+| gold up to 365 days   |                            1,475 |                          13 |
+| gold up to 730 days   |                               29 |                          79 |
+| gold up to 1,460 days |                                0 |                         114 |
+| gold over 1,460 days  |                                0 |                         225 |
+
+This separates the two cases the tester met. Food that runs out in one to two years at today's yields, as it did a year and a half after the tester's second regiment, still runs out as the people grow in all 186 cases, and the one-year horizon gave none of them a food warning. Food more than four years out, like the 2,792-day forecast that stopped a cautious player, closes first in all 393. The measure is the realm's own growth: the people grow `YEARLY_GROWTH` a year while food lasts and each adds to the food and gold balance, so a gap of a few per cent of what the realm eats closes in a few years, and a regiment's worth does not close in decades.
+
+`--audit` scores each rule against what followed. It replays the run with no warning, in which Rome raises at every chance, and for each of its 435 raises asks whether food or gold really ran short within two or four years. A raise late in the game or before a defeat leaves the window it was not followed through, so each cell reads "short of followed".
+
+| warning rule                     | raises it warns of | short within 2 y | short within 4 y | raises it lets pass | short within 2 y | short within 4 y |
+| -------------------------------- | -----------------: | ---------------: | ---------------: | ------------------: | ---------------: | ---------------: |
+| any distance, today's yields     |                168 |        70 of 143 |        77 of 107 |                 267 |        97 of 229 |       138 of 178 |
+| within 365 days, today's yields  |                 39 |         24 of 34 |         20 of 26 |                 396 |       143 of 338 |       195 of 259 |
+| any distance, the people growing |                 67 |         32 of 58 |         32 of 44 |                 368 |       135 of 314 |       183 of 241 |
+
+Against what really followed, no forecast tells this eager recruiter's raises apart at four years: about three in four met a shortage, warned or not, because the shortages came mostly from cities lost in war, which no forecast of today's realm can see. At two years the warnings carry some signal over the base rate of about 43 %: 71 % of the one-year rule's warnings came true, 55 % of the growth rule's and 49 % of the old rule's. The growth rule warns of 67 raises, against 168 for the old rule and 39 for the one-year rule. So it does what the tester asked, warning of the raise whose deficit lasts and staying quiet for the gap growth closes, but it cannot promise a realm at war that its stores will last.

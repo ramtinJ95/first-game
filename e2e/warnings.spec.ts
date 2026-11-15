@@ -22,6 +22,7 @@ import {
   ownCityInDangerTomorrow,
   ownSiegeTomorrow,
   showOwnCity,
+  slowFoodDeficit,
   smallSallyTomorrow,
 } from './warnings-game.ts';
 
@@ -40,10 +41,12 @@ test('recruitment forecasts upkeep and demands confirmation before a food shortf
   await spears.click();
   const warning = page.getByTestId('recruit-warning');
   await expect(warning).toContainText(/Food shortfall.*run short in about \d+ days/);
-  await expect(warning).not.toContainText('Gold shortfall');
+  await expect(warning).toContainText('Gold shortfall: stores run short in about 824 days');
   await expect(page.getByTestId('recruit-runway-food')).toHaveClass('bad');
-  await expect(page.getByTestId('recruit-runway-gold')).toHaveText('Gold: about 821 days left');
-  await expect(page.getByTestId('recruit-runway-gold')).not.toHaveClass('bad');
+  await expect(page.getByTestId('recruit-runway-gold')).toHaveText(
+    'Gold: about 824 days left as the people grow',
+  );
+  await expect(page.getByTestId('recruit-runway-gold')).toHaveClass('bad');
   await expect(page.getByTestId('city-raising')).not.toContainText('ordered');
   await warning.getByRole('button', { name: 'Raise anyway' }).click();
   await expect(page.getByTestId('city-raising')).toContainText(
@@ -51,7 +54,7 @@ test('recruitment forecasts upkeep and demands confirmation before a food shortf
   );
 });
 
-test('a gold shortfall beyond one year stays plain and does not require confirmation', async ({
+test('a lasting gold deficit more than two years away still asks Raise anyway', async ({
   page,
 }) => {
   await openGame(page);
@@ -64,13 +67,35 @@ test('a gold shortfall beyond one year stays plain and does not require confirma
     .getByTestId('recruit-cards')
     .getByRole('button', { name: /^Spearmen/ })
     .click();
+  const warning = page.getByTestId('recruit-warning');
+  await expect(warning).toContainText('Gold shortfall: stores run short in about 824 days');
+  await expect(page.getByTestId('recruit-runway-gold')).toHaveClass('bad');
+  await expect(page.getByTestId('recruit-forecast')).toContainText('−21.6 gold/day');
+  await expect(page.getByTestId('city-raising')).not.toContainText('ordered');
+  await warning.getByRole('button', { name: 'Raise anyway' }).click();
+  await expect(page.getByTestId('city-raising')).toContainText(
+    'Spearmen · ordered for the next day',
+  );
+});
+
+test('a small deficit that the growing people close stays plain and raises at once', async ({
+  page,
+}) => {
+  await openGame(page);
+  await loadWarnings(page, slowFoodDeficit());
+  await showOwnCity(page, 'Roma');
+  await page
+    .getByTestId('recruit-cards')
+    .getByRole('button', { name: /^Spearmen/ })
+    .click();
   await expect(page.getByTestId('recruit-warning')).toHaveCount(0);
   await expect(page.getByTestId('city-raising')).toContainText(
     'Spearmen · ordered for the next day',
   );
-  await expect(page.getByTestId('recruit-runway-gold')).toHaveText('Gold: about 821 days left');
-  await expect(page.getByTestId('recruit-runway-gold')).not.toHaveClass('bad');
-  await expect(page.getByTestId('recruit-forecast')).toContainText('−21.6 gold/day');
+  await expect(page.getByTestId('recruit-runway-food')).toHaveText(
+    "Food: short in about 2,809 days at today's yields, but the people's growth closes the gap first",
+  );
+  await expect(page.getByTestId('recruit-runway-food')).not.toHaveClass('bad');
 });
 
 test('hunger keeps a standing desertion line after its first alert', async ({ page }) => {
