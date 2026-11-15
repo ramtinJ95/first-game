@@ -33,6 +33,12 @@ test.describe('the wheel', () => {
     expect(await drawnZoom(page)).toBeCloseTo(expected.scale, 3);
     const quick = await drawnZoom(page);
 
+    const view = () =>
+      page
+        .locator('canvas[data-renderer]')
+        .getAttribute('data-latest-view')
+        .then((revision) => Number(revision));
+    const before = await view();
     // A save that puts the camera back where the game opened, without reloading the page.
     await dropSave(
       page,
@@ -44,6 +50,14 @@ test.describe('the wheel', () => {
         told: [],
         weakSieges: [],
       }),
+    );
+    // The page reads the dropped file after the drop event, so wait for the camera it sets.
+    await page.waitForFunction(
+      (revision) =>
+        Number(
+          document.querySelector<HTMLCanvasElement>('canvas[data-renderer]')?.dataset['latestView'],
+        ) > revision,
+      before,
     );
     await untilDrawn(page);
     expect(await drawnZoom(page)).toBeCloseTo(fitCamera(viewport, map).scale, 3);
