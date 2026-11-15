@@ -1,5 +1,6 @@
 import {
   Application,
+  CanvasTextMetrics,
   Container,
   DisplacementFilter,
   Graphics,
@@ -20,7 +21,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import type { TradeRoute } from '../sim/state/trade-route.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { routesAt } from '../sim/trade/routes.ts';
-import { anchorOutsideTrade, tradeCityLabel, tradePose } from './trade.ts';
+import { anchorOutsideTrade, placeNamesWithGoods, tradeCityLabel, tradePose } from './trade.ts';
 import {
   clampCamera,
   fitCamera,
@@ -47,7 +48,7 @@ import {
 import { landOutline } from './land-outline.ts';
 import { drawColumnMark, drawnColumns, fitColumnMarker, type DrawnColumn } from './columns.ts';
 import { createFog, fogCircles } from './fog.ts';
-import { LABEL_PRIORITY, placeLabels, type Box, type LabelRequest } from './labels.ts';
+import { LABEL_PRIORITY, type Box, type LabelRequest } from './labels.ts';
 import {
   BANNER,
   BATTLE_HIT_RADIUS,
@@ -741,8 +742,19 @@ export async function createRenderer({
     terrain.repaint();
   }
 
+  /** Cities whose name with its good found no spot at the last layout. */
+  const plainNames = new Set<CityId>();
+  const textWidths = new Map<string, number>();
+  const textWidth = (text: string, label: Text) => {
+    let width = textWidths.get(text);
+    if (width === undefined) {
+      width = CanvasTextMetrics.measureText(text, label.style).width;
+      textWidths.set(text, width);
+    }
+    return width;
+  };
   function labelText(city: DeepReadonly<City>, state: DeepReadonly<GameState>): string {
-    return tradeCityLabel(state, city, camera.scale);
+    return tradeCityLabel(state, city, plainNames.has(city.id) ? 0 : camera.scale);
   }
 
   function syncSettlements(state: DeepReadonly<GameState>) {
@@ -881,11 +893,17 @@ export async function createRenderer({
         right: at.x + halfWidth,
         bottom: at.y + halfHeight,
       });
+      // Widths scale with the drawn label, so the name with and without its good are
+      // measured against the text it shows now.
+      const withGood = tradeCityLabel(state, city, camera.scale);
+      const name = tradeCityLabel(state, city, 0);
+      const per = label.width / textWidth(label.text, label);
       requests.push({
         id: city.id,
         anchor: at,
         clearance: { x: halfWidth, y: halfHeight },
-        width: label.width,
+        width: per * textWidth(withGood, label),
+        ...(withGood === name ? {} : { plainWidth: per * textWidth(name, label) }),
         height: label.height,
         priority: rank === 'capital' ? LABEL_PRIORITY.capital : LABEL_PRIORITY.city,
         population: city.population,
@@ -894,12 +912,21 @@ export async function createRenderer({
     const settled = places.layout(camera, view, symbolBoxes, (at, halfWidth, lift, thick) =>
       fitPlace(at, halfWidth, lift, thick, onLand, onRulesWay, camera.scale),
     );
-    const placed = placeLabels(
+    const { placed, plain } = placeNamesWithGoods(
       [...requests, ...settled.requests],
       [...symbolBoxes, ...settled.boxes, ...standingMarkers(state)],
       view,
       onLand,
     );
+    for (const { id } of requests) {
+      const city = state.cities[id as CityId];
+      const label = cities.get(id as CityId)?.label;
+      if (!city || !label) continue;
+      if (plain.has(id)) plainNames.add(city.id);
+      else plainNames.delete(city.id);
+      const text = labelText(city, state);
+      if (label.text !== text) label.text = text;
+    }
     places.placeLabels(placed);
     drawnPlaces = [
       ...settled.boxes,

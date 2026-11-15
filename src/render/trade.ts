@@ -5,6 +5,7 @@ import type { MapPoint } from '../sim/state/map-point.ts';
 import type { TradeRoute } from '../sim/state/trade-route.ts';
 import { routePoint } from '../sim/trade/routes.ts';
 import type { Sprite } from './armies/scene.ts';
+import { placeLabels, type Box, type LabelRequest } from './labels.ts';
 
 /** An arrival changes direction, not position: interpolate to the old crossing's end. */
 export function tradePose(
@@ -45,4 +46,31 @@ export function anchorOutsideTrade(
   anchor: (sprite: Sprite) => MapPoint | undefined,
 ): (sprite: Sprite) => MapPoint | undefined {
   return (sprite) => (sprite.trade ? undefined : anchor(sprite));
+}
+
+/**
+ * Places city names, each with its province's good where that fits. A name that finds
+ * no spot with its good is placed again by its plain name, which is shorter, so a good
+ * never costs a city the name that main would show.
+ */
+export function placeNamesWithGoods(
+  requests: readonly (LabelRequest & { readonly plainWidth?: number })[],
+  markers: readonly Box[],
+  viewport: { readonly width: number; readonly height: number },
+  land?: (point: MapPoint) => boolean,
+): { placed: Map<string, Box>; plain: Set<string> } {
+  const placed = placeLabels(requests, markers, viewport, land);
+  const plain = new Set(
+    requests
+      .filter(
+        ({ id, width, plainWidth }) =>
+          !placed.has(id) && plainWidth !== undefined && plainWidth < width,
+      )
+      .map(({ id }) => id),
+  );
+  if (plain.size === 0) return { placed, plain };
+  const shorter = requests.map((request) =>
+    plain.has(request.id) ? { ...request, width: request.plainWidth ?? request.width } : request,
+  );
+  return { placed: placeLabels(shorter, markers, viewport, land), plain };
 }

@@ -2,7 +2,8 @@ import { expect, test } from 'vitest';
 import { buildFixture, fixtureWorld, FIXTURE as f } from '../sim/fixture.ts';
 import { openTrade } from '../sim/trade/orders.ts';
 import { routePoint } from '../sim/trade/routes.ts';
-import { anchorOutsideTrade, tradeCityLabel, tradePose } from './trade.ts';
+import { anchorOutsideTrade, placeNamesWithGoods, tradeCityLabel, tradePose } from './trade.ts';
+import { LABEL_PRIORITY, placeLabels } from './labels.ts';
 import { buildScene, type Scene, type SceneInput, type Sprite } from './armies/scene.ts';
 import { fitCoastalScene, sceneAnchor } from './coastal-ground.ts';
 import { groundSpan } from './figures/sheet.ts';
@@ -158,4 +159,24 @@ test('a merchant with no room at its spot shrinks there rather than joining a di
   expect(Math.hypot(kept.x, kept.y)).toBeLessThan(13);
   expect(kept.size).toBeLessThan(size);
   expect(placed(column).x).toBeGreaterThan(1000);
+});
+
+test('a city whose name with its good finds no spot keeps its plain name', () => {
+  const capital = {
+    id: 'carthago',
+    anchor: { x: 100, y: 100 },
+    clearance: { x: 10, y: 10 },
+    width: 210,
+    plainWidth: 60,
+    height: 12,
+    priority: LABEL_PRIORITY.capital,
+    population: 100,
+  };
+  const town = { ...capital, id: 'utica', anchor: { x: 100, y: 40 }, width: 40, plainWidth: 20 };
+  const view = { width: 200, height: 200 };
+  expect(placeLabels([capital], [], view).has('carthago')).toBe(false);
+  const { placed, plain } = placeNamesWithGoods([capital, town], [], view);
+  expect(placed.get('carthago')?.right ?? Infinity).toBeLessThanOrEqual(view.width);
+  expect([...plain]).toEqual(['carthago']);
+  expect(placed.has('utica')).toBe(true);
 });
