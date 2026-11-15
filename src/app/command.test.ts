@@ -11,12 +11,14 @@ import { removeRecord } from '../sim/records.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
+import { locate } from '../sim/world/find-path.ts';
 import { warKey, newWar } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import type { World } from '../sim/world/world.ts';
 import {
   FAR_LONGER,
   commandTarget,
+  ISLAND_REFUSAL,
   ISLET_REFUSAL,
   planCommand,
   plannedRoutes,
@@ -293,6 +295,57 @@ describe('a right click on a point', () => {
       notice: ISLET_REFUSAL,
     });
     expect(ISLET_REFUSAL).toBe('Order refused. No army can land on that islet.');
+  });
+
+  it("refuses the islet of Carthago's province off Cape Bon with the islet's words, and Corsica as an island", () => {
+    const state = buildFixture();
+    expect(plan(state, { kind: 'point', point: { x: 2370.5, y: 2895.9 } })).toEqual({
+      kind: 'refuse',
+      notice: ISLET_REFUSAL,
+    });
+    expect(plan(state, { kind: 'point', point: { x: 2233.9, y: 2211.4 } })).toEqual({
+      kind: 'refuse',
+      notice: ISLAND_REFUSAL,
+    });
+  });
+
+  it('refuses every land with no city on it, and none with a city', () => {
+    const state = buildFixture();
+    const { mesh } = world;
+    const seen = new Map<number, MapPoint>();
+    for (let t = 0; t < mesh.surface.length; t++) {
+      const component = mesh.component[t] as number;
+      if (mesh.surface[t] !== 1 || seen.has(component)) continue;
+      const corners = [0, 1, 2].map((k) => mesh.triangles[3 * t + k] as number);
+      const x = corners.reduce((sum, v) => sum + (mesh.points[2 * v] as number), 0) / 3;
+      const y = corners.reduce((sum, v) => sum + (mesh.points[2 * v + 1] as number), 0) / 3;
+      seen.set(component, { x, y });
+    }
+    const withCity = new Set(
+      world.map.provinces.map(
+        (p) => mesh.component[locate(mesh, { x: p.city[0], y: p.city[1] }, 'land')] as number,
+      ),
+    );
+    let refused = 0;
+    for (const [component, point] of seen) {
+      const notice = (() => {
+        const planned = plan(state, { kind: 'point', point });
+        return planned.kind === 'refuse' ? planned.notice : undefined;
+      })();
+      if (withCity.has(component)) {
+        expect(
+          [ISLET_REFUSAL, ISLAND_REFUSAL],
+          `land of a city at ${point.x}, ${point.y}`,
+        ).not.toContain(notice);
+      } else {
+        expect(
+          [ISLET_REFUSAL, ISLAND_REFUSAL],
+          `cityless land at ${point.x}, ${point.y}`,
+        ).toContain(notice);
+        refused++;
+      }
+    }
+    expect(refused).toBeGreaterThan(0);
   });
 
   it('refuses at once an army that is in a battle', () => {
