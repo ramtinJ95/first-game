@@ -11,6 +11,7 @@ import type { GameState } from '../state/game-state.ts';
 import { warKey } from '../state/war.ts';
 import { ADMIN_CITIES, limitsOf } from '../systems/economy.ts';
 import { buildWorld } from '../world/world.ts';
+import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import { decideOrders } from './decide.ts';
 import { HOARD_ODDS_SHARE } from './thresholds.ts';
 import { warReadiness } from './war.ts';
@@ -106,6 +107,53 @@ describe('a rival great power with a full treasury', () => {
       executeOrder(state, { kind: 'declareWar', faction: carthage, against: rome }, world),
     ).toBeUndefined();
     expect(warReadiness(state, world, carthage, rome)).toBeUndefined();
+    expectConsistent(state);
+  });
+});
+
+describe('how near a power stands to war', () => {
+  const tiny = fixtureWorld();
+
+  test('counts the pressure on a rival great power that keeps to its homeland', () => {
+    const state = buildFixture();
+    const hastati = state.formations[FIXTURE.hastati];
+    const spears = state.formations[FIXTURE.citizenSpears];
+    if (!hastati || !spears) throw new Error('no fixture formations');
+    hastati.men = 2000;
+    spears.men = 500;
+    expect(
+      executeOrder(
+        state,
+        { kind: 'declareWar', faction: FIXTURE.rome, against: FIXTURE.syracusaeFaction },
+        tiny,
+      ),
+    ).toBeUndefined();
+    expect(decideOrders(state, tiny, FIXTURE.rome)).toContainEqual({
+      kind: 'declareWar',
+      faction: FIXTURE.rome,
+      against: FIXTURE.carthage,
+    });
+    expect(
+      warReadiness(state, tiny, FIXTURE.rome, FIXTURE.carthage)?.readiness,
+    ).toBeGreaterThanOrEqual(1);
+    expectConsistent(state);
+  });
+
+  test('stands at nothing while its wars hold back all its strength', () => {
+    const state = buildFixture();
+    expect(
+      executeOrder(
+        state,
+        { kind: 'declareWar', faction: FIXTURE.carthage, against: FIXTURE.rome },
+        tiny,
+      ),
+    ).toBeUndefined();
+    const punic = state.armies[FIXTURE.punicArmy];
+    const spears = state.formations[FIXTURE.citizenSpears];
+    if (!punic || !spears) throw new Error('no Punic army');
+    spears.men = 5000;
+    punic.activity = { kind: 'idle', position: { x: 2229.9, y: 2865.1 } };
+    expect(warReadiness(state, tiny, FIXTURE.rome, FIXTURE.syracusaeFaction)?.readiness).toBe(0);
     expectConsistent(state);
   });
 });

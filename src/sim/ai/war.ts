@@ -48,11 +48,12 @@ import {
  * odds fall by HOARD_ODDS_SHARE times the share of the rival's treasury that is full
  * times the share of its own cities past ADMIN_CITIES, which its gold cannot arm.
  * Against a minor the odds it needs grow with its cities over those the map gave it,
- * raised to SATED_EXPONENT, so a realm that has grown is slower to start a new war * on a minor.
+ * raised to SATED_EXPONENT, so a realm that has grown is slower to start a new war
+ * on a minor.
  */
 export function warDeclaration(context: Context): Order[] {
   const reckoning = reckon(context);
-  if (!reckoning) return [];
+  if (!reckoning || reckoning.free <= 0) return [];
   const { faction } = context;
   let best: { against: FactionId; score: number } | undefined;
   for (const { id, bound } of reckoning.candidates) {
@@ -63,13 +64,14 @@ export function warDeclaration(context: Context): Order[] {
     if (score >= 1 && (!best || score > best.score)) best = { against: id, score };
   }
   if (best) return [{ kind: 'declareWar', faction, against: best.against }];
-  return rivalPressure(
-    context,
-    reckoning.strength,
-    reckoning.pressureFree,
-    reckoning.rivals,
-    reckoning.frontOf,
-  );
+  let pressed: { against: FactionId; odds: number } | undefined;
+  for (const rival of [...reckoning.rivals].sort()) {
+    const odds = reckoning.pressureOn(rival);
+    if (odds === undefined || odds < RIVAL_PRESSURE_ODDS || (pressed && odds <= pressed.odds))
+      continue;
+    if (reckoning.frontOf(rival)) pressed = { against: rival, odds };
+  }
+  return pressed ? [{ kind: 'declareWar', faction, against: pressed.against }] : [];
 }
 
 /** How near a power stands to declaring war on another, by the reckoning of `warDeclaration`. */
@@ -83,9 +85,11 @@ export interface WarReadiness {
 }
 
 /**
- * How near a great power stands to declaring war on another faction. Nothing when it
- * could not declare on that faction at all: at war or in a truce with it, out of reach,
- * or with no army ready or no strength free.
+ * How near a great power stands to declaring war on another faction, by its odds or, for
+ * a rival it may press, by its uncommitted strength over RIVAL_PRESSURE_ODDS, whichever
+ * is nearer. A power whose strength is all held back by its wars stands at 0. Nothing
+ * when it could not declare on that faction at all: at war or in a truce with it, out of
+ * reach, or with no army ready to march.
  */
 export function warReadiness(
   state: State,
@@ -106,8 +110,12 @@ export function warReadiness(
   if (!reckoning?.eligible.has(against)) return undefined;
   const front = reckoning.frontOf(against);
   if (!front) return undefined;
+  const pressure = reckoning.pressureOn(against) ?? 0;
   return {
-    readiness: reckoning.scoreOf(against, reckoning.measure(against, front.city), front.km),
+    readiness: Math.max(
+      reckoning.scoreOf(against, reckoning.measure(against, front.city), front.km),
+      pressure / RIVAL_PRESSURE_ODDS,
+    ),
     hoard: reckoning.hoardShare(against),
     front: front.city.id,
   };
@@ -169,7 +177,6 @@ function reckon(context: Context) {
       .filter((other) => other.kind === 'greatPower' && other.defeatedOn === null)
       .map((other) => other.id),
   );
-  if (free <= 0) return undefined;
   const odds = enemies.size === 0 ? PEACE_WAR_ODDS : WAR_ODDS;
   const leader = leaderOf(citiesOf, rivals);
   const homeland = context.world.map.provinces.filter(
@@ -205,13 +212,14 @@ function reckon(context: Context) {
       )
       .reduce((sum, r) => sum + routeRate(r), 0);
   const scoreOf = (other: FactionId, theirs: number, km: number) =>
-    free /
+    Math.max(0, free) /
     Math.max(1, theirs) /
     (1 + Math.min(0.25, (tradeCost(other) / Math.max(1, income)) * 0.25)) /
     (needed(other) * (enemies.size === 0 ? 1 : 1 + km / WAR_DISTANCE_KM));
 
   // A neighbour scores at most its best city in reach would with no army near it, so
   // most are ruled out before a route to their front is looked for.
+  const eligible = new Set<FactionId>();
   const candidates = sorted(state.factions)
     .filter(
       (other) =>
@@ -225,21 +233,41 @@ function reckon(context: Context) {
       for (const theirs of citiesOf.get(other.id) ?? []) {
         let km = Number.POSITIVE_INFINITY;
         for (const ours of ownCities) km = Math.min(km, distance(ours.position, theirs.position));
-        if (km <= WAR_REACH_KM) bound = Math.max(bound, scoreOf(other.id, theirs.garrison, km));
+        if (km > WAR_REACH_KM) continue;
+        eligible.add(other.id);
+        bound = Math.max(bound, scoreOf(other.id, theirs.garrison, km));
       }
       return bound > 0 ? [{ id: other.id, bound }] : [];
     })
     .sort((a, b) => b.bound - a.bound || (a.id < b.id ? -1 : 1));
 
+  /**
+   * A power at war with no great power presses a great-power neighbour that has kept to
+   * its homeland, holding no more cities than the map gave it: its uncommitted armies
+   * over that neighbour's, or nothing for one it may not press. Each existing front keeps
+   * back at least its field strength or its city's blockade requirement, whichever is
+   * greater, in the same strength points used for a garrison in normal war scoring. So a
+   * rival who stays at home is pressed while minor cities are still left.
+   */
+  const atWarWithPower = [...enemies].some((enemy) => rivals.has(enemy));
+  const pressureOn = (rival: FactionId) => {
+    if (atWarWithPower || rival === faction || !rivals.has(rival)) return undefined;
+    const map = context.world.map.provinces;
+    const home = map.filter((province) => (province.owner as string) === rival).length;
+    if ((citiesOf.get(rival)?.length ?? 0) > home) return undefined;
+    if (truceBetween(state, faction, rival)) return undefined;
+    return pressureFree / Math.max(1, strength.get(rival) ?? 0);
+  };
+
   return {
-    strength,
-    pressureFree,
+    free,
     rivals,
     frontOf,
     measure,
     scoreOf,
     hoardShare,
-    eligible: new Set(candidates.map((candidate) => candidate.id)),
+    pressureOn,
+    eligible,
     candidates: candidates.filter((candidate) => candidate.bound >= 1),
   };
 }
@@ -257,36 +285,4 @@ function leaderOf(
   const [first, second] = counts;
   if (!first || first.count < LEADER_SHARE * total) return undefined;
   return second && second.count === first.count ? undefined : first.rival;
-}
-
-/**
- * A power at war with no great power declares on a great-power neighbour that has kept
- * to its homeland, holding no more cities than the map gave it, once its uncommitted
- * armies outweigh that neighbour's RIVAL_PRESSURE_ODDS times. Each existing front
- * keeps back at least its field strength or its city's blockade requirement, whichever
- * is greater, in the same strength points used for a garrison in normal war scoring.
- * It picks the one it outweighs most. So a rival who stays at home is pressed while
- * minor cities are still left.
- */
-function rivalPressure(
-  { state, world, faction, enemies }: Context,
-  strength: ReadonlyMap<FactionId, number>,
-  own: number,
-  rivals: ReadonlySet<FactionId>,
-  frontOf: (other: FactionId) => unknown,
-): Order[] {
-  if ([...enemies].some((enemy) => rivals.has(enemy))) return [];
-  const homeland = (rival: FactionId) =>
-    world.map.provinces.filter((province) => (province.owner as string) === rival).length;
-  const held = (rival: FactionId) =>
-    sorted(state.cities).filter((city) => city.owner === rival).length;
-  let best: { against: FactionId; odds: number } | undefined;
-  for (const rival of [...rivals].sort()) {
-    if (rival === faction || held(rival) > homeland(rival)) continue;
-    if (truceBetween(state, faction, rival)) continue;
-    const odds = own / Math.max(1, strength.get(rival) ?? 0);
-    if (odds < RIVAL_PRESSURE_ODDS || (best && odds <= best.odds)) continue;
-    if (frontOf(rival)) best = { against: rival, odds };
-  }
-  return best ? [{ kind: 'declareWar', faction, against: best.against }] : [];
 }

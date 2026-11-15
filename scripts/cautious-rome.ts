@@ -36,7 +36,8 @@ export interface CautiousDay {
  * opens its best route by return per gold monthly, improves the route that repays soonest
  * with no route to open, skips a partner at war or a besieged end, and declares no war on
  * a partner whose routes have not repaid. With `peaceful`, Rome declares no war at all,
- * as the tester's cautious Rome did. Plays until the years are out or Rome falls.
+ * as the tester's cautious Rome did. Unlike trade-judge, a war Rome holds back does not
+ * also hold back its trade that month. Plays until the years are out or Rome falls.
  */
 export function playCautiousRome(
   seed: number,
@@ -54,16 +55,18 @@ export function playCautiousRome(
         const other = route?.owner === rome ? route.partner : route?.owner;
         return other === faction && entry.received < entry.paid;
       });
+    const held = (o: Order) =>
+      o.faction === rome && o.kind === 'declareWar' && (peaceful || owing(o.against));
     const orders: Order[] = ai.filter(
       (o) =>
-        o.faction !== rome ||
-        (!['openTrade', 'acceptTrade', 'closeTrade', 'improveTrade'].includes(o.kind) &&
-          !(o.kind === 'declareWar' && (peaceful || owing(o.against)))),
+        !held(o) &&
+        (o.faction !== rome ||
+          !['openTrade', 'acceptTrade', 'closeTrade', 'improveTrade'].includes(o.kind)),
     );
     orders.unshift(
       ...tradeOrders(
         state,
-        ai.filter((o) => o.faction === rome),
+        ai.filter((o) => o.faction === rome && !held(o)),
       ),
     );
     const before = new Set(Object.keys(state.tradeRoutes));
