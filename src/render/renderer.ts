@@ -353,6 +353,7 @@ export async function createRenderer({
     autoStart: false,
   });
   canvas.dataset['renderer'] = app.renderer.name;
+  canvas.dataset['stillPose'] = 'on request';
   canvas.dataset['batchTextures'] = String(app.renderer.limits.maxBatchableTextures);
   performance.measure('startup:pixi-init', { start: started });
   const viewport = (): Size => ({ width: app.screen.width, height: app.screen.height });
@@ -499,8 +500,8 @@ export async function createRenderer({
     state: string;
     revision: number;
     ready: boolean;
-    /** Drawn in the still pose a capture asks for with `data-still`. */
-    still: boolean;
+    /** The `data-still` request this frame was drawn in the still pose for. */
+    still: string | undefined;
     cities: readonly DrawnCity[];
     armies: readonly DrawnArmy[];
     battles: readonly DrawnBattle[];
@@ -521,7 +522,7 @@ export async function createRenderer({
   let seenBy: Sight | undefined;
   let seenBattles: DeepReadonly<Battle>[] = [];
   let swellAt = -Infinity;
-  let stillShown = false;
+  let stillShown: string | undefined;
   let sheetPainted = false;
   let scene: Scene | undefined;
   let sceneReady = true;
@@ -1170,8 +1171,8 @@ export async function createRenderer({
       canvas.dataset['drawnState'] = view.state;
       canvas.dataset['drawnView'] = String(view.revision);
     }
-    if (view.still) canvas.dataset['drawnStill'] = String(finishedFrames);
-    else delete canvas.dataset['drawnStill'];
+    if (view.still === undefined) delete canvas.dataset['drawnStill'];
+    else canvas.dataset['drawnStill'] = view.still;
     canvas.dataset['zoom'] = view.camera.scale.toFixed(4);
   };
   function settleFrame(): boolean {
@@ -1205,10 +1206,11 @@ export async function createRenderer({
       let dirty = cameraMoved;
       // A capture sets `data-still` so men at ease, fires, smoke and the swell hold one
       // pose while it shoots, and two captures of one view match pixel for pixel.
-      const still = canvas.dataset['still'] !== undefined;
+      const stillRequest = canvas.dataset['still'];
+      const still = stillRequest !== undefined;
       const clock = still ? 0 : now;
-      if (still !== stillShown) {
-        stillShown = still;
+      if (stillRequest !== stillShown) {
+        stillShown = stillRequest;
         dirty = true;
       }
       if (washStrength(camera.scale).greatPower !== washedAt) recolour(current);
@@ -1405,7 +1407,7 @@ export async function createRenderer({
         state: given,
         revision: viewRevision,
         ready: sceneReady,
-        still,
+        still: stillRequest,
         cities: drawnCities,
         armies: bannersShown(),
         battles: battlesShown(),
