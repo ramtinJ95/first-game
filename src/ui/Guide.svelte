@@ -81,7 +81,8 @@
         unlike goods. The other city must agree: at peace, with a free slot. War between the two
         ends closes a route, and so does the fall of either city, unless the other end is yours and
         the taker is at peace with you. A siege of either end stops deliveries, and an army at war
-        with either end takes a road's cargo, even one at peace with you.
+        with either end takes a road's cargo, even one at peace with you. Select a city to trace its
+        routes on the map; zoom in to see each city's good and the merchants on the road and at sea.
       </dd>
       <dt>Wars and peace</dt>
       <dd>

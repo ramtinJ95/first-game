@@ -1,0 +1,251 @@
+{
+  "start": 36237.200000047684,
+  "calls": [
+    {
+      "name": "clear",
+      "at": 1.2999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [17664]
+    },
+    {
+      "name": "bufferSubData",
+      "at": 1.7000000476837158,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [36663, 0, 57096, 0, 13383]
+    },
+    {
+      "name": "bufferSubData",
+      "at": 1.7000000476837158,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [34962, 0, 712224, 0, 45804]
+    },
+    {
+      "name": "bufferSubData",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [36663, 0, 1280, 0, 450]
+    },
+    {
+      "name": "bufferSubData",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [34962, 0, 14016, 0, 1848]
+    },
+    {
+      "name": "drawElements",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [4, 6, 5123, 0]
+    },
+    {
+      "name": "bindFramebuffer",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 85,
+      "program": 8,
+      "args": [36160, "object"]
+    },
+    {
+      "name": "clear",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 85,
+      "program": 8,
+      "args": [17664]
+    },
+    {
+      "name": "drawElements",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 85,
+      "program": 8,
+      "args": [4, 6, 5123, 12]
+    },
+    {
+      "name": "bindFramebuffer",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [36160, "object"]
+    },
+    {
+      "name": "useProgram",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 86,
+      "args": ["object"]
+    },
+    {
+      "name": "drawElements",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 86,
+      "args": [4, 6, 5125, 0]
+    },
+    {
+      "name": "useProgram",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": ["object"]
+    },
+    {
+      "name": "drawElements",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [4, 48, 5123, 24]
+    },
+    {
+      "name": "useProgram",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 3,
+      "args": ["object"]
+    },
+    {
+      "name": "drawElements",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 3,
+      "args": [4, 11139, 5123, 0]
+    },
+    {
+      "name": "useProgram",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": ["object"]
+    },
+    {
+      "name": "drawElements",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [4, 13062, 5123, 120]
+    },
+    {
+      "name": "useProgram",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 3,
+      "args": ["object"]
+    },
+    {
+      "name": "drawElements",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 3,
+      "args": [4, 378, 5123, 0]
+    },
+    {
+      "name": "useProgram",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": ["object"]
+    },
+    {
+      "name": "drawElements",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [4, 201, 5123, 26244]
+    },
+    {
+      "name": "drawElements",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [4, 450, 5123, 0]
+    },
+    {
+      "name": "drawElements",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [4, 6, 5123, 26646]
+    },
+    {
+      "name": "useProgram",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 3,
+      "args": ["object"]
+    },
+    {
+      "name": "drawElements",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 3,
+      "args": [4, 3846, 5123, 0]
+    },
+    {
+      "name": "useProgram",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": ["object"]
+    },
+    {
+      "name": "drawElements",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [4, 48, 5123, 26658]
+    },
+    {
+      "name": "drawElements",
+      "at": 1.7999999523162842,
+      "ms": 0,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [4, 6, 5123, 26754]
+    },
+    {
+      "name": "readPixels",
+      "at": 1.7999999523162842,
+      "ms": 19.800000071525574,
+      "framebuffer": 0,
+      "program": 8,
+      "args": [0, 0, 1, 1, 6408, 5121, 4]
+    }
+  ],
+  "framebuffer": 0,
+  "program": 8,
+  "end": 36259.10000002384,
+  "ms": 21.899999976158142,
+  "figures": "4",
+  "paths": "2"
+}

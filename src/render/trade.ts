@@ -1,0 +1,76 @@
+import type { DeepReadonly } from '../sim/deep-readonly.ts';
+import type { City } from '../sim/state/city.ts';
+import type { GameState } from '../sim/state/game-state.ts';
+import type { MapPoint } from '../sim/state/map-point.ts';
+import type { TradeRoute } from '../sim/state/trade-route.ts';
+import { routePoint } from '../sim/trade/routes.ts';
+import type { Sprite } from './armies/scene.ts';
+import { placeLabels, type Box, type LabelRequest } from './labels.ts';
+
+/** An arrival changes direction, not position: interpolate to the old crossing's end. */
+export function tradePose(
+  before: DeepReadonly<TradeRoute> | undefined,
+  route: DeepReadonly<TradeRoute>,
+  progress: number,
+) {
+  if (route.status !== 'running' || route.blocked) return undefined;
+  const crossing = before && before.returning !== route.returning ? before : route;
+  const from = before?.progress ?? route.progress;
+  const to = before && before.returning !== route.returning ? 1 : route.progress;
+  const at = from + (to - from) * progress;
+  const point = routePoint(crossing, at);
+  const behind = routePoint(crossing, Math.max(0, at - 0.001));
+  const ahead = routePoint(crossing, Math.min(1, at + 0.001));
+  const dx = ahead.x - behind.x;
+  const dy = ahead.y - behind.y;
+  const length = Math.sqrt(dx * dx + dy * dy) || 1;
+  return { point, heading: { x: dx / length, y: dy / length } };
+}
+
+export const GOOD_LABEL_SCALE = 0.9;
+export function tradeCityLabel(
+  game: DeepReadonly<GameState>,
+  city: DeepReadonly<City>,
+  scale: number,
+): string {
+  const name = city.rank === 'capital' ? city.name.toUpperCase() : city.name;
+  const good = game.provinces[city.province]?.good;
+  return scale >= GOOD_LABEL_SCALE && good ? `${name} · ${good}` : name;
+}
+
+/**
+ * A merchant that does not fit where its route puts it looks for ground round that
+ * spot; a refugee column, the anchor for other carts and walkers, can be far away.
+ */
+export function anchorOutsideTrade(
+  anchor: (sprite: Sprite) => MapPoint | undefined,
+): (sprite: Sprite) => MapPoint | undefined {
+  return (sprite) => (sprite.trade ? undefined : anchor(sprite));
+}
+
+/**
+ * Places city names, each with its province's good where that fits. A name that finds
+ * no spot with its good is placed again by its plain name, which is shorter, so a good
+ * never costs a city the name that main would show.
+ */
+export function placeNamesWithGoods(
+  requests: readonly (LabelRequest & { readonly plainWidth?: number })[],
+  markers: readonly Box[],
+  viewport: { readonly width: number; readonly height: number },
+  land?: (point: MapPoint) => boolean,
+): { placed: Map<string, Box>; plain: Set<string> } {
+  const placed = placeLabels(requests, markers, viewport, land);
+  const plain = new Set(
+    requests
+      .filter(
+        ({ id, width, plainWidth }) =>
+          !placed.has(id) && plainWidth !== undefined && plainWidth < width,
+      )
+      .map(({ id }) => id),
+  );
+  if (plain.size === 0) return { placed, plain };
+  const shorter = requests.map((request) =>
+    plain.has(request.id) ? { ...request, width: request.plainWidth ?? request.width } : request,
+  );
+  return { placed: placeLabels(shorter, markers, viewport, land), plain };
+}

@@ -1,0 +1,84 @@
+
+== m-after middle
+  rules trace med3 intervalMedian 392.0, intervalP95 459.7, drawMedian 378.6, drawP95 444.5, cpuMedian 1.6, sceneMsMedian 0.7, landMedian 417.0 | samples n=[147, 148, 146] uploads=[0, 0, 0] repaints=[0, 0, 0]
+        sample drawn 381.0/441.8 interval 396.8/454.3
+        sample drawn 378.6/444.5 interval 392.0/459.7
+        sample drawn 375.7/523.3 interval 390.2/541.0
+  rules meter(5s) med3 intervalMedian 400.0, intervalP95 433.3, drawMedian 379.0, drawP95 418.4
+  head  trace med3 intervalMedian 399.7, intervalP95 478.8, drawMedian 384.1, drawP95 449.1, cpuMedian 2.0, sceneMsMedian 0.9, landMedian 143.0 | samples n=[145, 145, 147] uploads=[0, 0, 0] repaints=[0, 0, 0]
+        sample drawn 384.1/456.1 interval 399.7/486.2
+        sample drawn 386.0/449.1 interval 400.8/478.8
+        sample drawn 384.1/435.5 interval 398.5/460.2
+  head  meter(5s) med3 intervalMedian 416.7, intervalP95 700.0, drawMedian 407.3, drawP95 670.6
+  trace change % intervalMedian +2.0, intervalP95 +4.2, drawMedian +1.5, drawP95 +1.0, cpuMedian +25.0
+  meter change % intervalMedian +4.2, intervalP95 +61.6, drawMedian +7.5, drawP95 +60.3
+
+== m-after closest
+  rules trace med3 intervalMedian 418.4, intervalP95 493.4, drawMedian 403.7, drawP95 479.9, cpuMedian 1.8, sceneMsMedian 0.6, landMedian 414.0 | samples n=[132, 138, 142] uploads=[0, 0, 0] repaints=[0, 0, 0]
+        sample drawn 409.9/608.5 interval 422.9/630.1
+        sample drawn 403.7/479.9 interval 418.4/493.4
+        sample drawn 401.9/440.2 interval 416.0/471.4
+  rules meter(5s) med3 intervalMedian 416.6, intervalP95 466.7, drawMedian 400.4, drawP95 441.6
+  head  trace med3 intervalMedian 442.9, intervalP95 515.9, drawMedian 428.0, drawP95 495.8, cpuMedian 2.2, sceneMsMedian 0.8, landMedian 135.0 | samples n=[133, 129, 135] uploads=[0, 0, 0] repaints=[0, 0, 0]
+        sample drawn 428.0/495.8 interval 442.9/515.9
+        sample drawn 441.3/501.9 interval 456.9/525.5
+        sample drawn 426.0/460.9 interval 438.9/482.0
+  head  meter(5s) med3 intervalMedian 433.3, intervalP95 516.6, drawMedian 424.5, drawP95 501.1
+  trace change % intervalMedian +5.9, intervalP95 +4.6, drawMedian +6.0, drawP95 +3.3, cpuMedian +22.2
+  meter change % intervalMedian +4.0, intervalP95 +10.7, drawMedian +6.0, drawP95 +13.5
+
+== m-after-unsel middle
+  rules trace med3 intervalMedian 376.9, intervalP95 524.9, drawMedian 366.4, drawP95 510.1, cpuMedian 1.7, sceneMsMedian 0.8, landMedian 417.0 | samples n=[158, 148, 116] uploads=[0, 0, 0] repaints=[0, 0, 0]
+        sample drawn 364.7/410.6 interval 370.3/415.0
+        sample drawn 366.4/510.1 interval 376.9/524.9
+        sample drawn 490.0/695.4 interval 503.0/716.4
+  rules meter(5s) med3 intervalMedian 416.7, intervalP95 833.3, drawMedian 413.2, drawP95 789.1
+  head  trace med3 intervalMedian 368.7, intervalP95 451.6, drawMedian 363.6, drawP95 444.6, cpuMedian 2.1, sceneMsMedian 0.9, landMedian 143.0 | samples n=[157, 158, 140] uploads=[0, 0, 0] repaints=[0, 0, 0]
+        sample drawn 363.6/444.6 interval 368.7/451.6
+        sample drawn 363.4/430.4 interval 367.8/435.6
+        sample drawn 395.0/525.3 interval 406.2/544.1
+  head  meter(5s) med3 intervalMedian 383.3, intervalP95 500.0, drawMedian 368.5, drawP95 486.0
+  trace change % intervalMedian -2.2, intervalP95 -14.0, drawMedian -0.8, drawP95 -12.8, cpuMedian +23.5
+  meter change % intervalMedian -8.0, intervalP95 -40.0, drawMedian -10.8, drawP95 -38.4
+
+== m-after-unsel closest
+  rules trace med3 intervalMedian 407.1, intervalP95 493.0, drawMedian 398.0, drawP95 486.8, cpuMedian 1.9, sceneMsMedian 0.7, landMedian 414.0 | samples n=[152, 138, 106] uploads=[0, 0, 0] repaints=[0, 0, 0]
+        sample drawn 381.3/428.6 interval 388.5/434.8
+        sample drawn 398.0/486.8 interval 407.1/493.0
+        sample drawn 534.7/696.5 interval 565.6/723.3
+  rules meter(5s) med3 intervalMedian 416.6, intervalP95 466.6, drawMedian 404.6, drawP95 466.8
+  head  trace med3 intervalMedian 388.3, intervalP95 453.2, drawMedian 383.1, drawP95 444.7, cpuMedian 2.1, sceneMsMedian 0.8, landMedian 135.0 | samples n=[151, 151, 131] uploads=[0, 0, 0] repaints=[0, 0, 0]
+        sample drawn 383.0/429.6 interval 388.3/451.0
+        sample drawn 383.1/444.7 interval 388.2/453.2
+        sample drawn 425.8/576.6 interval 432.7/587.0
+  head  meter(5s) med3 intervalMedian 383.4, intervalP95 499.9, drawMedian 385.3, drawP95 503.5
+  trace change % intervalMedian -4.6, intervalP95 -8.1, drawMedian -3.7, drawP95 -8.6, cpuMedian +10.5
+  meter change % intervalMedian -8.0, intervalP95 +7.1, drawMedian -4.8, drawP95 +7.9
+
+== m-steady middle
+  rules trace med3 intervalMedian 423.2, intervalP95 559.8, drawMedian 402.7, drawP95 537.3, cpuMedian 1.8, sceneMsMedian 0.8, landMedian 417.0 | samples n=[114, 136, 136] uploads=[0, 0, 0] repaints=[0, 0, 0]
+        sample drawn 456.3/746.0 interval 477.8/834.9
+        sample drawn 402.7/504.1 interval 423.2/558.7
+        sample drawn 394.0/537.3 interval 414.8/559.8
+  rules meter(5s) med3 intervalMedian 416.7, intervalP95 650.0, drawMedian 410.1, drawP95 611.6
+  head  trace med3 intervalMedian 433.9, intervalP95 708.7, drawMedian 412.8, drawP95 661.0, cpuMedian 2.1, sceneMsMedian 0.8, landMedian 417.0 | samples n=[128, 111, 141] uploads=[0, 0, 0] repaints=[0, 0, 0]
+        sample drawn 412.8/661.0 interval 433.9/708.7
+        sample drawn 491.5/707.4 interval 515.6/727.6
+        sample drawn 388.7/505.1 interval 405.2/539.2
+  head  meter(5s) med3 intervalMedian 400.0, intervalP95 466.7, drawMedian 394.9, drawP95 450.1
+  trace change % intervalMedian +2.5, intervalP95 +26.6, drawMedian +2.5, drawP95 +23.0, cpuMedian +16.7
+  meter change % intervalMedian -4.0, intervalP95 -28.2, drawMedian -3.7, drawP95 -26.4
+
+== m-steady closest
+  rules trace med3 intervalMedian 440.7, intervalP95 590.8, drawMedian 422.3, drawP95 571.0, cpuMedian 1.9, sceneMsMedian 0.7, landMedian 414.0 | samples n=[127, 122, 137] uploads=[0, 0, 0] repaints=[0, 0, 0]
+        sample drawn 422.3/571.0 interval 440.7/590.8
+        sample drawn 433.9/608.0 interval 457.6/622.1
+        sample drawn 409.5/494.6 interval 425.4/508.7
+  rules meter(5s) med3 intervalMedian 450.0, intervalP95 650.0, drawMedian 427.6, drawP95 643.1
+  head  trace med3 intervalMedian 479.8, intervalP95 650.4, drawMedian 462.4, drawP95 636.1, cpuMedian 2.0, sceneMsMedian 0.7, landMedian 414.0 | samples n=[119, 116, 132] uploads=[0, 0, 0] repaints=[0, 0, 0]
+        sample drawn 462.4/636.1 interval 479.8/650.4
+        sample drawn 499.3/642.1 interval 520.1/675.3
+        sample drawn 418.8/510.1 interval 436.4/530.0
+  head  meter(5s) med3 intervalMedian 450.0, intervalP95 633.3, drawMedian 437.8, drawP95 564.2
+  trace change % intervalMedian +8.9, intervalP95 +10.1, drawMedian +9.5, drawP95 +11.4, cpuMedian +5.3
+  meter change % intervalMedian +0.0, intervalP95 -2.6, drawMedian +2.4, drawP95 -12.3

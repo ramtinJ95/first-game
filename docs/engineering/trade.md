@@ -189,5 +189,47 @@ an invitation whose Accept is disabled for want of a slot and refuse it into the
 and check that the partner list leads with agreeing cities and is reachable at 390 px.
 The `trade-told` capture shows the quote with its risk, the list, the war lines, Close
 route, an invitation, the news, and the list on a phone. The first look is intentionally
-a plain moving marker; drawn trade figures, selected routes, map goods and the guide are
-later work.
+a plain moving marker. Drawing trade below covers the drawn figures, selected routes, map
+goods, raids and the guide.
+
+## Drawing trade
+
+`src/render/trade.ts` interpolates a crossing through arrival before reversing it and
+adds a province's stored good to its existing city label from 0.9 px/km. The existing
+label collision rule decides where it fits. A longer name moves an army resting at the
+city, which stands clear of the name: at Roma the First Legion stands on the seaward
+side and is shifted onto land, a search the army scene remembers rather than repeats. Selecting a city draws its active routes
+with the same dashed ink and halo as army paths.
+
+`route-dashes.ts` makes seven-pixel dashes and five-pixel gaps. Moving army/planned
+paths clip to the screen plus the stroke's cap margin before dashing, but skipped
+length still advances the phase. Both ink and halo reuse those segments.
+
+Selected trade paths reuse `cacheDrawing`, the coast ink's bounded view texture with
+a 256 px margin at the renderer's resolution. Their source art uses world coordinates
+and pixel-sized strokes, retaining complete paths so a later pan cannot uncover a
+missing road. Zoom, selected running routes, blockage or path changes rebuild the
+art; crossing progress does not change a road. Covered pans/resizes reuse the texture;
+an uncovered view or WebGL restoration repaints it. One sprite replaces the static
+route vertices, and is hidden when no routes are selected. The sprite shows only the
+ink's conservative bounds (`routeInkBounds`, 4 px for the halo and antialiasing), a
+view on the cache's texture, so the GPU does not blend the transparent rest of the
+view. Merchant motion and moving
+army/planned paths are not cached. Dash length, widths, halo and colours are unchanged;
+covered pans use the same raster reuse as coast ink.
+
+The trade panel explicitly says that paused orders wait: opening gold is paid on
+the next running tick. The queued-order forecast reserves slots and costs, but the
+actual treasury stays unchanged until then. The browser test checks both states.
+
+The army scene reuses its owned cart, civilian walking cycles and ship sheets for
+merchants, with a wake at sea and dry-ground checks on land. Own trade stays known;
+foreign traders require sight. They do not grant sight or reveal hostile armies.
+The last road raid is readonly saved data, under the separate `trade-raid-marks`
+change. It shows a damaged cart, settling dust and a marked location for six days.
+
+`trade-look` captures both zooms for cart and ship, selected routes, goods and the
+raid. It waits for terrain and exact-resolution figure sheets, not a fixed sleep or
+a blurry fallback. It opts into a 90-second **recording cap** so the clip includes
+the ship and raid after the caravan; scenario and test execution timeouts are
+unchanged. Other scenarios keep the existing 12-second recording cap.

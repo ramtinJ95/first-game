@@ -5,14 +5,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import { preview } from 'vite';
 import { SOFTWARE_GL } from '../playwright.config.ts';
-import { fitCamera, mapToScreen, wheelFactor, zoomAt } from '../src/render/camera.ts';
+import { fitCamera, mapToScreen, MAX_SCALE, wheelFactor, zoomAt } from '../src/render/camera.ts';
 import { LAYERS } from '../src/render/renderer.ts';
 import { decideAll } from '../src/sim/ai/decide.ts';
 import { saveGame } from '../src/sim/save.ts';
 import { tick } from '../src/sim/tick.ts';
 import type { MapPoint } from '../src/sim/state/map-point.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
-import { map, openGame, startGame } from './support.ts';
+import { map, openGame, pause, resume, startGame } from './support.ts';
 
 /**
  * Plays the built page under each drawing and prints the frame interval that the
@@ -23,10 +23,11 @@ import { map, openGame, startGame } from './support.ts';
  * march, fight, and besiege on it, and plays on at speed 1.
  *
  * `--zooms widest,middle,closest` measures each drawing at those zooms: the whole map,
- * 1 px per km over Italy, and 4.2 px per km over the Alps, as the map capture pans.
- * `plateau-middle` and `plateau-closest` look at the Persian plateau at 1.6 and 4.2.
- * A zoom waits until the map reports its terrain built, where the build has that flag.
- * `--root <dir>` serves the build of another checkout, to compare commits.
+ * 1 px per km over Italy, and the 4 px per km camera limit over the Alps.
+ * `plateau-middle` and `plateau-closest` look at the Persian plateau at 1.6 and 4.
+ * A loaded game stays paused through camera setup; sampling then runs at speed 1.
+ * `--root <dir>` compares another checkout's build, which must report drawn state
+ * and zoom metadata so the loaded game and measured view can be verified.
  *
  *   node e2e/frame-bench.ts [--rounds 3] [--days 300] [--only full,draw=test] [--zooms widest,middle,closest] [--args "--flag ..."]
  */
@@ -79,7 +80,7 @@ const ZOOMS: Record<string, { at: MapPoint; scale: number } | undefined> = {
 const zooms = values.zooms.split(',');
 for (const zoom of zooms) if (!(zoom in ZOOMS)) throw new Error(`unknown zoom ${zoom}`);
 
-/** Wheels in on `at` from the whole map to about `scale`, then drags `at` to the centre. */
+/** Wheels to the exact requested scale, capped at the camera limit, then centres `at`. */
 async function zoomTo(page: Page, at: MapPoint, scale: number) {
   const viewport = { width: 1280, height: 720 };
   let camera = fitCamera(viewport, map);
@@ -91,7 +92,7 @@ async function zoomTo(page: Page, at: MapPoint, scale: number) {
     camera = zoomAt(camera, cursor, wheelFactor(-100), viewport, map);
     await delay(30);
   }
-  const exactScale = Math.min(scale, 4);
+  const exactScale = Math.min(scale, MAX_SCALE);
   const finalDelta = -Math.log(exactScale / camera.scale) / 0.002;
   await page.mouse.wheel(0, finalDelta);
   camera = zoomAt(camera, cursor, wheelFactor(finalDelta), viewport, map);
@@ -118,24 +119,56 @@ async function measure(browser: Browser, base: string, query: string, zoom: stri
   const meter = page.getByTestId('frame-meter');
   await meter.waitFor();
   if (save) {
+    await pause(page);
+    await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => done())));
+    await page.locator('canvas[data-latest-state]').waitFor();
+    const beforeLoad = await page.locator('canvas').getAttribute('data-latest-state');
+    if (!beforeLoad) throw new Error('Cannot verify save receipt without a state marker');
     const dataTransfer = await page.evaluateHandle((text) => {
       const transfer = new DataTransfer();
       transfer.items.add(new File([text], 'save.json', { type: 'application/json' }));
       return transfer;
     }, save);
     await page.dispatchEvent('canvas', 'drop', { dataTransfer });
+    // The opening game can already have this day. A changed, drawn state while
+    // its predecessor was paused witnesses receipt of this file, not a clock tick.
     await page
-      .getByTestId('time-controls-day')
-      .and(page.locator(`[data-day="${days}"], [data-day="${days + 1}"]`))
-      .waitFor();
+      .waitForFunction(
+        ({ before, day }) => {
+          const canvas = document.querySelector('canvas');
+          const latest = canvas?.dataset['latestState'];
+          return (
+            latest !== undefined &&
+            latest !== before &&
+            latest === canvas?.dataset['drawnState'] &&
+            Number(
+              document.querySelector('[data-testid="time-controls-day"]')?.getAttribute('data-day'),
+            ) >= day
+          );
+        },
+        { before: beforeLoad, day: days },
+      )
+      .catch(async (error: unknown) => {
+        console.error(
+          'Save receipt failed',
+          { beforeLoad, expectedDay: days },
+          await page.evaluate(() => ({
+            canvas: { ...document.querySelector('canvas')?.dataset },
+            day: document.querySelector('[data-testid="time-controls-day"]')?.outerHTML,
+            text: document.body.innerText.slice(-2500),
+          })),
+        );
+        throw error;
+      });
   }
   const view = ZOOMS[zoom];
   if (view) {
     await zoomTo(page, view.at, view.scale);
-    const expected = Math.min(view.scale, 4).toFixed(4);
+    const expected = Math.min(view.scale, MAX_SCALE).toFixed(4);
     const actual = await page.locator('canvas[data-renderer]').getAttribute('data-zoom');
     if (actual !== expected) throw new Error(`${zoom}: expected zoom ${expected}, drew ${actual}`);
   }
+  await resume(page);
   await delay(WARM_MS + WINDOW_MS);
   const reading = await meter.evaluate((el) => ({
     median: Number(el.dataset['median']),

@@ -63,9 +63,11 @@ test('opens a route through the page, watches delivery and gold, and loads a car
     .click();
   await expect(page.getByTestId('trade-forecast')).toContainText('km by land');
   await expect(page.getByTestId('trade-consent')).toContainText('Both ends are yours');
+  await expect(page.getByTestId('trade-payment-timing')).toContainText('paid when the clock runs');
   await page
     .getByRole('button', { name: 'Open trade route to Capua by land', exact: true })
     .click();
+  expect(await amount(page)).toBe(5000);
   await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
   await resume(page);
   await expect(page.getByTestId('alerts')).toContainText('Trade opened: Roma to Capua');

@@ -1,11 +1,14 @@
 import {
   Application,
+  CanvasTextMetrics,
   Container,
   DisplacementFilter,
   Graphics,
+  Rectangle,
   RenderTexture,
   Sprite,
   Text,
+  Texture,
   TilingSprite,
 } from 'pixi.js';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
@@ -15,8 +18,10 @@ import type { City, CityRank } from '../sim/state/city.ts';
 import type { Sight } from '../sim/sight.ts';
 import type { Battle } from '../sim/state/battle.ts';
 import type { GameState } from '../sim/state/game-state.ts';
+import type { TradeRoute } from '../sim/state/trade-route.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
-import { routePoint } from '../sim/trade/routes.ts';
+import { routesAt } from '../sim/trade/routes.ts';
+import { anchorOutsideTrade, placeNamesWithGoods, tradeCityLabel, tradePose } from './trade.ts';
 import {
   clampCamera,
   fitCamera,
@@ -43,7 +48,7 @@ import {
 import { landOutline } from './land-outline.ts';
 import { drawColumnMark, drawnColumns, fitColumnMarker, type DrawnColumn } from './columns.ts';
 import { createFog, fogCircles } from './fog.ts';
-import { LABEL_PRIORITY, placeLabels, type Box, type LabelRequest } from './labels.ts';
+import { LABEL_PRIORITY, type Box, type LabelRequest } from './labels.ts';
 import {
   BANNER,
   BATTLE_HIT_RADIUS,
@@ -68,6 +73,7 @@ import { toPixels } from './lines.ts';
 import { FramePacer } from './frame-pacer.ts';
 import { cityAt, commandIslet, pickAt, type DrawnCity, type FigureHit, type Pick } from './pick.ts';
 import { reconcile } from './reconcile.ts';
+import { routeDashes, routeInkBounds, type RouteBounds } from './route-dashes.ts';
 import { cityDrawingView, citySymbols, fitCitySymbol } from './symbols.ts';
 import { createLife } from './terrain/life.ts';
 import { createPlaces } from './terrain/places-layer.ts';
@@ -207,7 +213,6 @@ const FOCUS_SCALE = 0.8;
 const ALIVE_MS = 90;
 /** How far a pan may move the built scene before it is built again. */
 const PAN_REBUILD_PX = 200;
-const ROUTE_DASH = { dash: 7, gap: 5 } as const;
 
 function mix(from: number, to: number, t: number): number {
   const channel = (shift: number) => {
@@ -309,30 +314,9 @@ function sameArmies(
 }
 
 /** Strokes a dashed line through screen points, carrying the dash across corners. */
-function dashLine(g: Graphics, points: readonly MapPoint[]): Graphics {
-  const period = ROUTE_DASH.dash + ROUTE_DASH.gap;
-  let along = 0;
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1] as MapPoint;
-    const b = points[i] as MapPoint;
-    const length = Math.hypot(b.x - a.x, b.y - a.y);
-    let t = 0;
-    while (t < length) {
-      const phase = along % period;
-      const step = Math.min(
-        length - t,
-        phase < ROUTE_DASH.dash ? ROUTE_DASH.dash - phase : period - phase,
-      );
-      if (phase < ROUTE_DASH.dash) {
-        g.moveTo(a.x + ((b.x - a.x) * t) / length, a.y + ((b.y - a.y) * t) / length);
-        g.lineTo(
-          a.x + ((b.x - a.x) * (t + step)) / length,
-          a.y + ((b.y - a.y) * (t + step)) / length,
-        );
-      }
-      t += step;
-      along += step;
-    }
+function dashLine(g: Graphics, dashes: readonly (readonly [MapPoint, MapPoint])[]): Graphics {
+  for (const [a, b] of dashes) {
+    g.moveTo(a.x, a.y).lineTo(b.x, b.y);
   }
   return g;
 }
@@ -482,6 +466,20 @@ export async function createRenderer({
   const life = createLife(map, terrain.land, lifeLayer);
 
   const routes = new Graphics();
+  const tradePaths = new Graphics();
+  const tradeInk = cacheDrawing(tradePaths, app.renderer, SEA_MARGIN);
+  let tradeFrame: Texture | undefined;
+  let tradeHasInk = false;
+  const tradePathLayer = new Container({ label: 'trade-paths' });
+  tradePathLayer.addChild(tradeInk.sprite);
+  worldLayers.push(tradePathLayer);
+  tradeInk.sprite.visible = false;
+  let tradeDrawn:
+    | {
+        scale: number;
+        paths: readonly DeepReadonly<TradeRoute>[];
+      }
+    | undefined;
   const battleLayer = new Container({ label: 'battles' });
   const bannerLayer = new Container({ label: 'banners' });
   const armyLayer = createArmyLayer(app.renderer.resolution, () => {
@@ -492,7 +490,7 @@ export async function createRenderer({
   layers.settlements.addChild(armyLayer.root);
   const columnLayer = new Container({ label: 'columns' });
   const columnMarks = new Map<RefugeeColumnId, { graphics: Graphics; colour: number }>();
-  layers.markers.addChild(routes, battleLayer, columnLayer, bannerLayer);
+  layers.markers.addChild(routes, tradePathLayer, battleLayer, columnLayer, bannerLayer);
 
   const highlight = new Graphics();
   const armyRing = new Graphics();
@@ -507,6 +505,7 @@ export async function createRenderer({
   let strokedAt = 0;
   let coastOutline = landOutline(map);
   let shown: DeepReadonly<GameState> | undefined;
+  let tradeShown: { state: DeepReadonly<GameState>; progress: number } | undefined;
   // Each game state the page hands over gets a number, and the canvas says the latest it
   // was given and the latest it has drawn, so a test or a capture can wait until the
   // map shows a state it loaded: a click picks what the map last drew.
@@ -743,8 +742,19 @@ export async function createRenderer({
     terrain.repaint();
   }
 
-  function labelText(city: DeepReadonly<City>): string {
-    return city.rank === 'capital' ? city.name.toUpperCase() : city.name;
+  /** Cities whose name with its good found no spot at the last layout. */
+  const plainNames = new Set<CityId>();
+  const textWidths = new Map<string, number>();
+  const textWidth = (text: string, label: Text) => {
+    let width = textWidths.get(text);
+    if (width === undefined) {
+      width = CanvasTextMetrics.measureText(text, label.style).width;
+      textWidths.set(text, width);
+    }
+    return width;
+  };
+  function labelText(city: DeepReadonly<City>, state: DeepReadonly<GameState>): string {
+    return tradeCityLabel(state, city, plainNames.has(city.id) ? 0 : camera.scale);
   }
 
   function syncSettlements(state: DeepReadonly<GameState>) {
@@ -753,7 +763,7 @@ export async function createRenderer({
         const { rank } = city;
         const capital = rank === 'capital';
         const label = new Text({
-          text: labelText(city),
+          text: labelText(city, state),
           style: {
             fontFamily: SERIF,
             fontSize: capital ? 14 : 12,
@@ -775,7 +785,7 @@ export async function createRenderer({
           drawn.symbol.context = symbols[rank];
           drawn.rank = rank;
         }
-        const text = labelText(city);
+        const text = labelText(city, state);
         if (drawn.label.text !== text) drawn.label.text = text;
       },
       remove({ symbol, label }) {
@@ -855,6 +865,8 @@ export async function createRenderer({
       const drawn = cities.get(city.id);
       if (!drawn) continue;
       const { symbol, label, rank } = drawn;
+      const text = labelText(city, state);
+      if (label.text !== text) label.text = text;
       let grow = symbolGrowth(camera.scale);
       let halfWidth = extents[rank].halfWidth * grow;
       let halfHeight = extents[rank].halfHeight * grow;
@@ -881,11 +893,17 @@ export async function createRenderer({
         right: at.x + halfWidth,
         bottom: at.y + halfHeight,
       });
+      // Widths scale with the drawn label, so the name with and without its good are
+      // measured against the text it shows now.
+      const withGood = tradeCityLabel(state, city, camera.scale);
+      const name = tradeCityLabel(state, city, 0);
+      const per = label.width / textWidth(label.text, label);
       requests.push({
         id: city.id,
         anchor: at,
         clearance: { x: halfWidth, y: halfHeight },
-        width: label.width,
+        width: per * textWidth(withGood, label),
+        ...(withGood === name ? {} : { plainWidth: per * textWidth(name, label) }),
         height: label.height,
         priority: rank === 'capital' ? LABEL_PRIORITY.capital : LABEL_PRIORITY.city,
         population: city.population,
@@ -894,12 +912,21 @@ export async function createRenderer({
     const settled = places.layout(camera, view, symbolBoxes, (at, halfWidth, lift, thick) =>
       fitPlace(at, halfWidth, lift, thick, onLand, onRulesWay, camera.scale),
     );
-    const placed = placeLabels(
+    const { placed, plain } = placeNamesWithGoods(
       [...requests, ...settled.requests],
       [...symbolBoxes, ...settled.boxes, ...standingMarkers(state)],
       view,
       onLand,
     );
+    for (const { id } of requests) {
+      const city = state.cities[id as CityId];
+      const label = cities.get(id as CityId)?.label;
+      if (!city || !label) continue;
+      if (plain.has(id)) plainNames.add(city.id);
+      else plainNames.delete(city.id);
+      const text = labelText(city, state);
+      if (label.text !== text) label.text = text;
+    }
     places.placeLabels(placed);
     drawnPlaces = [
       ...settled.boxes,
@@ -1083,10 +1110,24 @@ export async function createRenderer({
     const view = viewport();
     const toScreen = (point: MapPoint) => mapToScreen(camera, view, point);
     routes.clear();
-    const stroke = (points: MapPoint[], width: number, alpha: number) => {
+    // Include the round halo caps outside the view so clipping never shows an end.
+    const bounds: RouteBounds = {
+      left: -4,
+      top: -4,
+      right: view.width + 4,
+      bottom: view.height + 4,
+    };
+    const stroke = (
+      g: Graphics,
+      points: MapPoint[],
+      width: number,
+      alpha: number,
+      clip: RouteBounds | undefined,
+    ) => {
       if (points.length < 2) return;
-      dashLine(routes, points).stroke({ width: width + 3, color: LABEL_HALO, alpha, cap: 'round' });
-      dashLine(routes, points).stroke({ width, color: INK, alpha, cap: 'round' });
+      const dashes = routeDashes(points, clip);
+      dashLine(g, dashes).stroke({ width: width + 3, color: LABEL_HALO, alpha, cap: 'round' });
+      dashLine(g, dashes).stroke({ width, color: INK, alpha, cap: 'round' });
     };
     for (const army of armies) {
       const record = state.armies[army.id];
@@ -1100,9 +1141,78 @@ export async function createRenderer({
             : undefined;
       if (!ahead) continue;
       const selected = selection?.kind === 'army' && selection.army === army.id;
-      stroke([army.position, ...ahead].map(toScreen), selected ? 2.4 : 1.6, selected ? 0.95 : 0.7);
+      stroke(
+        routes,
+        [army.position, ...ahead].map(toScreen),
+        selected ? 2.4 : 1.6,
+        selected ? 0.95 : 0.7,
+        bounds,
+      );
     }
-    for (const path of planned ?? []) stroke(path.map(toScreen), 1.6, 0.45);
+    for (const path of planned ?? []) stroke(routes, path.map(toScreen), 1.6, 0.45, bounds);
+    const city =
+      selection?.kind === 'province' ? state.provinces[selection.province]?.city : undefined;
+    const tradeRoutes = city ? routesAt(state, city).filter((r) => r.status === 'running') : [];
+    const samePaths =
+      tradeDrawn?.paths.length === tradeRoutes.length &&
+      tradeRoutes.every((route, i) => {
+        const old = tradeDrawn?.paths[i];
+        return (
+          old !== undefined &&
+          old.id === route.id &&
+          old.blocked === route.blocked &&
+          old.path.length === route.path.length &&
+          old.path.every((p, j) => p.x === route.path[j]?.x && p.y === route.path[j]?.y)
+        );
+      });
+    if (tradeDrawn?.scale !== camera.scale || !samePaths) {
+      tradePaths.clear();
+      // Like coast ink, use world art with pixel-sized strokes. The bounded cache
+      // handles pans/resizes; do not clip its source art to an earlier view.
+      tradePaths.scale.set(1 / camera.scale);
+      for (const route of tradeRoutes)
+        stroke(
+          tradePaths,
+          route.path.map((p) => ({ x: p.x * camera.scale, y: p.y * camera.scale })),
+          1.4,
+          route.blocked ? 0.35 : 0.75,
+          undefined,
+        );
+      tradeDrawn = { scale: camera.scale, paths: tradeRoutes };
+      tradeInk.invalidate();
+    }
+    if (tradeRoutes.length > 0) {
+      tradeInk.render(camera, view);
+      // The cache assigns its full texture only on repaint. Keep its coverage,
+      // but omit transparent texels outside the ink when compositing the sprite.
+      if (tradeInk.sprite.texture !== tradeFrame) {
+        const full = tradeInk.sprite.texture;
+        tradeFrame?.destroy(false);
+        const origin = tradeInk.sprite.position;
+        const crop = routeInkBounds(
+          tradeRoutes.map((route) =>
+            route.path.map((p) => ({
+              x: (p.x - origin.x) * camera.scale,
+              y: (p.y - origin.y) * camera.scale,
+            })),
+          ),
+          { left: 0, top: 0, right: full.width, bottom: full.height },
+        );
+        tradeHasInk = crop !== undefined;
+        const frame = crop
+          ? new Rectangle(crop.left, crop.top, crop.right - crop.left, crop.bottom - crop.top)
+          : new Rectangle(0, 0, 1, 1);
+        tradeFrame = new Texture({
+          source: full.source,
+          frame,
+          orig: new Rectangle(0, 0, full.width, full.height),
+          trim: frame,
+        });
+        tradeInk.sprite.texture = tradeFrame;
+      }
+    }
+    tradeInk.sprite.visible = tradeRoutes.length > 0 && tradeHasInk;
+    canvas.dataset['tradePaths'] = String(tradeRoutes.length);
   }
 
   function applyCamera() {
@@ -1189,6 +1299,11 @@ export async function createRenderer({
     const a = toMap(from),
       b = toMap(to);
     return terrain.land.land.segmentInside(a.x, a.y, b.x, b.y);
+  };
+  /** The rules' open land, one function for the renderer's life so the scene can remember its answers. */
+  const onOpenLand = (screen: MapPoint) => {
+    const point = toMap(screen);
+    return terrain.land.open(point.x, point.y);
   };
   /** At the zooms that draw figures, a battle's marker stands above its fighting. */
   const battleLift = () =>
@@ -1354,6 +1469,7 @@ export async function createRenderer({
     () => {
       // Restored render textures are empty, even when their view still fits.
       ink.invalidate();
+      tradeInk.invalidate();
       moveCamera();
     },
     { signal: listening.signal },
@@ -1504,10 +1620,7 @@ export async function createRenderer({
           motion: still ? 0 : motion,
           now: clock / 1000,
           growth: symbolGrowth(camera.scale),
-          land: (screen) => {
-            const point = screenToMap(camera, viewport(), screen);
-            return terrain.land.open(point.x, point.y);
-          },
+          land: onOpenLand,
           names: new Map(drawnCities.flatMap(({ id, label }) => (label ? [[id, label]] : []))),
           keepClear: drawnPlaces,
         });
@@ -1516,16 +1629,19 @@ export async function createRenderer({
           onDrawnLand,
           camera.scale,
           onLand,
-          sceneAnchor(
-            current,
-            armies,
-            columns.map((column) => column.position),
-            (point) => mapToScreen(camera, view, point),
+          anchorOutsideTrade(
+            sceneAnchor(
+              current,
+              armies,
+              columns.map((column) => column.position),
+              (point) => mapToScreen(camera, view, point),
+            ),
           ),
         );
         drawnFigures = armyLayer.draw(scene);
         sceneReady =
           drawnFigures.length === scene.sprites.filter((sprite) => sprite.alpha > 0.05).length;
+        canvas.dataset['figureSheets'] = armyLayer.ready ? 'ready' : 'busy';
         canvas.dataset['figures'] = String(drawnFigures.filter((sprite) => sprite.army).length);
         built = {
           previous,
@@ -1551,6 +1667,14 @@ export async function createRenderer({
           dirty = true;
         }
       }
+      if (
+        (tradeShown?.state !== current || tradeShown.progress !== progress) &&
+        Object.values(current.tradeRoutes).some(
+          (route) => route.status === 'running' && !route.blocked,
+        )
+      )
+        dirty = true;
+      tradeShown = { state: current, progress };
       if (!dirty) return false;
       life.update(camera, viewport(), clock, sight, onDrawnLand, (id) => {
         const city = current.cities[id as CityId];
@@ -1565,26 +1689,52 @@ export async function createRenderer({
       placeBanners(current, selection);
       placeColumns(current);
       tradeMarks.clear();
+      let raids = 0;
       for (const route of Object.values(current.tradeRoutes)) {
         if (route.status !== 'running') continue;
-        const before = previous.tradeRoutes[route.id];
-        const p =
-          before && before.returning === route.returning
-            ? before.progress + (route.progress - before.progress) * progress
-            : route.progress;
-        const point = routePoint(route, p);
+        const own = route.owner === current.player || route.partner === current.player;
         if (
-          route.owner !== current.player &&
-          route.partner !== current.player &&
-          !sight.sees(point)
+          route.raid &&
+          current.day + progress - route.raid.on < 6 &&
+          (own || sight.sees(route.raid.position))
+        ) {
+          const at = mapToScreen(camera, viewport(), route.raid.position);
+          if (at.x >= 0 && at.y >= 0 && at.x <= viewport().width && at.y <= viewport().height)
+            raids++;
+          tradeMarks
+            .circle(at.x, at.y, 10)
+            .fill({ color: LABEL_HALO, alpha: 0.9 })
+            .stroke({ color: 0x9b3e2d, width: 1.4 });
+          tradeMarks
+            .moveTo(at.x - 5, at.y - 5)
+            .lineTo(at.x + 5, at.y + 5)
+            .moveTo(at.x + 5, at.y - 5)
+            .lineTo(at.x - 5, at.y + 5)
+            .stroke({ color: 0x9b3e2d, width: 2 });
+        }
+        const pose = tradePose(previous.tradeRoutes[route.id], route, progress);
+        if (
+          !pose ||
+          (!own && !sight.sees(pose.point)) ||
+          drawnFigures.some((sprite) => sprite.trade === route.id)
         )
           continue;
-        const at = mapToScreen(camera, viewport(), point);
-        tradeMarks
-          .circle(at.x, at.y, 3)
-          .fill(route.blocked ? 0x9b3e2d : 0x8b6a33)
-          .stroke({ color: INK, width: 1 });
+        const at = mapToScreen(camera, viewport(), pose.point);
+        tradeMarks.circle(at.x, at.y, 3).fill(0x8b6a33).stroke({ color: INK, width: 1 });
       }
+      const traders = drawnFigures.filter((sprite) => sprite.trade);
+      canvas.dataset['raids'] = String(raids);
+      canvas.dataset['tradeFigures'] = String(traders.length);
+      canvas.dataset['tradeShips'] = String(
+        traders.filter((sprite) => sprite.key.startsWith('ship.')).length,
+      );
+      canvas.dataset['tradeCaravans'] = String(
+        traders.filter((sprite) => sprite.key.startsWith('cart.')).length,
+      );
+      canvas.dataset['goods'] = String(
+        [...cities.values()].filter(({ label }) => label.visible && label.text.includes(' · '))
+          .length,
+      );
       placeBattles(selection);
       if (scene && scene.height > 0 && selection?.kind === 'army') {
         const box = scene.armyBoxes.get(selection.army);
@@ -1641,6 +1791,9 @@ export async function createRenderer({
     destroy() {
       terrain.destroy();
       ink.destroy();
+      tradeInk.sprite.texture = Texture.EMPTY;
+      tradeFrame?.destroy(false);
+      tradeInk.destroy();
       listening.abort();
       app.renderer.off('resize', onResize);
       seaRoot.destroy({ children: true });

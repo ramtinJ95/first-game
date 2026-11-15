@@ -271,6 +271,9 @@
     {#each risks.slice(1) as each, i (i)}<p class="muted" data-testid="trade-risk">
         {riskText(waiting, each)}
       </p>{/each}
+    <p class="muted" data-testid="trade-payment-timing">
+      Orders wait while paused. Opening gold is paid when the clock runs.
+    </p>
     <p data-testid="trade-consent">
       {to.owner === game.player
         ? 'Both ends are yours; no foreign consent needed.'

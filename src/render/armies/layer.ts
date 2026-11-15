@@ -110,6 +110,7 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
   const pool: Sprite[] = [];
   let queue = Promise.resolve();
   let wanted = { size: 0, since: 0 };
+  let ready = true;
 
   function sheetFor(size: number, part: Part): Sheet {
     const key = `${size}:${part}`;
@@ -162,6 +163,9 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
 
   return {
     root,
+    get ready() {
+      return ready;
+    },
     draw(scene: Scene) {
       marks.clear();
       for (const wake of scene.wakes) {
@@ -192,6 +196,7 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
       }
       for (const breach of scene.breaches) drawBreach(marks, breach);
 
+      ready = true;
       let used = 0;
       const shown: SceneSprite[] = [];
       if (scene.height > 0) {
@@ -210,6 +215,7 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
           if (!chosen.has(part)) {
             if (rested || !painted(size, part)) sheetFor(size, part);
             const exact = sheets.get(`${size}:${part}`);
+            if (!exact?.painted) ready = false;
             sheet = exact?.painted ? exact : painted(size, part);
             chosen.set(part, sheet);
           }

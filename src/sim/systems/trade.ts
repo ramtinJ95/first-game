@@ -84,6 +84,8 @@ export function trade(state: GameState): void {
           position: { ...raider.activity.position },
         });
       if (looter && state.day >= route.departsOn) {
+        if (raider && 'position' in raider.activity)
+          route.raid = { on: state.day, position: { ...raider.activity.position } };
         looter.stores.gold += looted;
         route.departsOn = (state.day + route.days) as Day;
       }
