@@ -41,6 +41,30 @@ it('warns of a lasting deficit years away, which the people grow too slowly to c
   expectConsistent(state);
 });
 
+it('names the wait after which stores carry the raise until the people feed it, to the day', () => {
+  const state = foodDeficitAfterSpearmen(-5, 0.1);
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  const wait = required(forecast.holdsAfter);
+  expect(forecast.short.food).toBeDefined();
+  expect(wait).toBeGreaterThan(30);
+  expect(forecast.warning).toContain(
+    `raised in about ${wait.toLocaleString('en-US')} days, these men are fed as the people grow. Raise now only if you need them sooner.`,
+  );
+  expect(forecast.warning).not.toContain('Raise fewer troops');
+  expect(() => firstShortfall(state, 'food', true, 1 + wait)).toThrow('Stores never ran short');
+  expect(firstShortfall(state, 'food', true, wait)).toBeGreaterThan(wait);
+  expectConsistent(state);
+});
+
+it('asks for better income instead of a wait when waiting would not let the stores carry the raise', () => {
+  const state = foodDeficitAfterSpearmen(-20, 0.1);
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  expect(forecast.short.food).toBeDefined();
+  expect(forecast.holdsAfter).toBeUndefined();
+  expect(forecast.warning).toContain('Raise fewer troops or improve income first.');
+  expectConsistent(state);
+});
+
 it('stays plain for a small deficit that the growing people close before the stores run out', () => {
   const state = foodDeficitAfterSpearmen(-1);
   const forecast = recruitForecast(state, [], world, 'spearmen');
@@ -126,12 +150,14 @@ it('projects a queued trade with its world before quoting recruitment, without c
   expectConsistent(projected);
 });
 
-function firstShortfall(initial: GameState, store: 'food' | 'gold', growing = false) {
+function firstShortfall(initial: GameState, store: 'food' | 'gold', growing = false, raiseOn = 1) {
   let state = initial;
   for (let day = 1; day <= 6000; day++) {
     const result = tick(
       state,
-      day === 1 ? [{ kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' }] : [],
+      day === raiseOn
+        ? [{ kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' }]
+        : [],
       fixtureWorld(),
       [
         economy,
@@ -166,8 +192,8 @@ function goldOnly(): GameState {
   return state;
 }
 
-/** Rome's people and full granary as they are, with one army sized so the food balance after a spearmen raise is `after`. */
-function foodDeficitAfterSpearmen(after: number): GameState {
+/** Rome's people as they are and its granary `full`, with one army sized so the food balance after a spearmen raise is `after`. */
+function foodDeficitAfterSpearmen(after: number, full = 1): GameState {
   const state = buildFixture();
   for (const city of Object.values(state.cities))
     if (city.owner === f.rome) city.population = 200_000;
@@ -177,7 +203,7 @@ function foodDeficitAfterSpearmen(after: number): GameState {
   const raised = now - TROOPS.spearmen.recruit.men * UPKEEP_PER_MAN.food;
   first.men += Math.round((raised - after) / UPKEEP_PER_MAN.food);
   const stores = required(state.factions[f.rome]).stores;
-  stores.food = required(limitsOf(state).get(f.rome)).food;
+  stores.food = full * required(limitsOf(state).get(f.rome)).food;
   stores.gold = 100_000;
   stores.manpower = 100_000;
   return state;

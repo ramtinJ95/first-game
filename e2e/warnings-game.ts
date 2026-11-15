@@ -96,3 +96,15 @@ export function slowFoodDeficit(): GameState {
   stores.food = required(limitsOf(state).get(rome)).food;
   return state;
 }
+
+/** A new Rome whose granary is filling, where a regiment more leaves food short in about 600 days unless it waits for the stores. */
+export function foodShortUnlessWaiting(): GameState {
+  const state = startGame();
+  const stores = required(state.factions[rome]).stores;
+  Object.assign(stores, { gold: 20_000, manpower: 20_000, food: 2000 });
+  const formation = required(state.formations[required(armyOf(state, rome).formations[0])]);
+  const food = required(dailyBalances(state).get(rome)).food;
+  const after = food - TROOPS.spearmen.recruit.men * UPKEEP_PER_MAN.food;
+  formation.men += Math.round((after + 3.75) / UPKEEP_PER_MAN.food);
+  return state;
+}

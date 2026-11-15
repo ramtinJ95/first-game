@@ -29,6 +29,7 @@ export function recruitForecast(
         men: TROOPS[r.troop].recruit.men,
       })),
     );
+  const queued = [...schedule];
   if (troop) schedule.push({ inDays: daysToMuster, men: cost.men });
   schedule.sort((a, b) => a.inDays - b.inDays);
   const training = schedule.reduce((sum, recruit) => sum + recruit.men, 0);
@@ -68,14 +69,14 @@ export function recruitForecast(
       schedule,
     ),
   };
-  const short = {
+  const shortWith = (plan: readonly { inDays: number; men: number }[]) => ({
     food: daysUntilShort(
       stores.food,
       balance.food,
       limits.food,
       UPKEEP_PER_MAN.food,
       GRANARY_DAYS * UPKEEP_PER_MAN.food,
-      schedule,
+      plan,
       yearly.food,
     ),
     gold: daysUntilShort(
@@ -84,10 +85,22 @@ export function recruitForecast(
       limits.gold,
       UPKEEP_PER_MAN.gold,
       0,
-      schedule,
+      plan,
       yearly.gold,
     ),
-  };
+  });
+  const short = shortWith(schedule);
+  const holdsAfter =
+    troop && (short.food !== undefined || short.gold !== undefined)
+      ? firstWait((wait) => {
+          const later = shortWith(
+            [...queued, { inDays: daysToMuster + wait, men: cost.men }].sort(
+              (a, b) => a.inDays - b.inDays,
+            ),
+          );
+          return later.food === undefined && later.gold === undefined;
+        })
+      : undefined;
   const warnings = (['food', 'gold'] as const).flatMap((key) => {
     const days = short[key];
     if (days === undefined) return [];
@@ -115,8 +128,13 @@ export function recruitForecast(
               : 'not running short',
       };
     }),
+    holdsAfter,
     warning: warnings.length
-      ? `${warnings.join(' ')} Formations desert when stores run out. Raise fewer troops or improve income first.`
+      ? `${warnings.join(' ')} Formations desert when stores run out. ${
+          holdsAfter === undefined
+            ? 'Raise fewer troops or improve income first.'
+            : `Stores grow while you wait: raised in about ${whole(holdsAfter)} days, these men are fed as the people grow. Raise now only if you need them sooner.`
+        }`
       : undefined,
     upkeepText: `Upkeep ${signed(-upkeep.food)} food, ${signed(-upkeep.gold)} gold/day`,
     balanceText: `${signed(after.food)} food, ${signed(after.gold)} gold/day`,
@@ -138,6 +156,22 @@ function grownRealm(state: DeepReadonly<GameState>): DeepReadonly<GameState> {
 
 /** Full days of stores before the day they run short, as the top bar counts them. */
 const daysLeft = (shortOn: number) => Math.max(0, shortOn - 1);
+
+/** The longest wait the warning names; a raise that needs longer waits for better income instead. */
+const MAX_WAIT = 3650;
+
+/** The fewest days to wait before the raise holds, or undefined if it does not within MAX_WAIT. */
+function firstWait(holds: (wait: number) => boolean): number | undefined {
+  if (!holds(MAX_WAIT)) return undefined;
+  let low = 0;
+  let high = MAX_WAIT;
+  while (high - low > 1) {
+    const middle = Math.floor((low + high) / 2);
+    if (holds(middle)) high = middle;
+    else low = middle;
+  }
+  return high;
+}
 
 /** The people's daily growth factor, as the population system applies it. */
 const DAILY = (1 + YEARLY_GROWTH) ** (1 / 365);
