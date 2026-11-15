@@ -17,6 +17,8 @@ import { defineScenario } from '../scenario.ts';
 
 /** Zembra, an islet off Cap Bon that the atlas draws and no province holds. */
 const ZEMBRA = { x: 2276.8, y: 2842.4 };
+/** The islet east of Cap Bon that Carthago's province holds and no city stands on. */
+const CARTHAGO_ISLET = { x: 2370.5, y: 2895.9 };
 
 /** Rome's four formations besieging Massalia on the fourth day. */
 function siegeOfMassalia() {
@@ -38,7 +40,7 @@ function siegeOfMassalia() {
 export default defineScenario({
   name: 'islet-orders',
   title:
-    'A right click on an islet the atlas draws says no army can land there, and a siege camp at Massalia beside Aquae Sextiae',
+    'A right click on an islet the atlas draws, or on one a province holds with no city on it, says no army can land there, and a siege camp at Massalia beside Aquae Sextiae',
   async run({ page, shot }) {
     await openGame(page);
     await pause(page);
@@ -55,6 +57,17 @@ export default defineScenario({
     await shot(
       'islet-refused',
       'First Legion selected, a right click on Zembra off Cap Bon at the closest zoom: no army can land on that islet',
+    );
+    await view.jumpTo(CARTHAGO_ISLET, 4);
+    await page
+      .getByText('Order refused. No army can land on that islet.')
+      .waitFor({ state: 'hidden' });
+    const held = view.screen(CARTHAGO_ISLET);
+    await page.mouse.click(held.x, held.y, { button: 'right' });
+    await page.getByText('Order refused. No army can land on that islet.').waitFor();
+    await shot(
+      'islet-of-carthago-refused',
+      "A right click on the islet east of Cap Bon, which Carthago's province holds and no city stands on: the same words, no army can land on that islet",
     );
 
     await openGame(page);

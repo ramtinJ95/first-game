@@ -1,3 +1,4 @@
+import { citylessLandKm2 } from '../sim/world/land-reach.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { ArmyId, CityId, FactionId } from '../sim/ids.ts';
 import {
@@ -60,6 +61,11 @@ export function commandTarget(
 
 /** The refusal of an order onto an islet the map draws and no army can reach. */
 export const ISLET_REFUSAL = 'Order refused. No army can land on that islet.';
+/** The refusal of an order onto a larger island with no city, where no army can land either. */
+export const ISLAND_REFUSAL =
+  'Order refused. No army can land on that island: armies land only at a city, and none stands there.';
+/** Land with no city smaller than this, in km², is an islet to the player's eye. */
+const ISLET_KM2 = 1000;
 
 /** One way to a city that a menu offers, with how many days it takes. */
 export interface MenuOption {
@@ -436,6 +442,9 @@ export function planCommand(
   pending: readonly Order[] = [],
 ): Plan {
   if (target.kind === 'islet') return { kind: 'refuse', notice: ISLET_REFUSAL };
+  const stranded = target.kind === 'point' ? citylessLandKm2(world, target.point) : undefined;
+  if (stranded !== undefined)
+    return { kind: 'refuse', notice: stranded < ISLET_KM2 ? ISLET_REFUSAL : ISLAND_REFUSAL };
   const city = target.kind === 'city' ? target.city : undefined;
   const to = target.kind === 'city' ? target.city.position : target.point;
   const march: MoveArmyOrder = {
