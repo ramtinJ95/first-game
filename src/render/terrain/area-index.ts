@@ -322,10 +322,10 @@ export class AreaIndex {
 
   /**
    * Whether the whole straight way from one point to another stays inside, however narrow
-   * the water it would cross. Shared province seams are crossed twice and do not count.
+   * the water it would cross. The way is cut wherever it meets an edge; between two cuts
+   * it meets none, so it is all inside or all outside, and its middle says which.
    */
   segmentInside(ax: number, ay: number, bx: number, by: number): boolean {
-    if (!this.inside(ax, ay) || !this.inside(bx, by)) return false;
     const edges = new Set<Edge>();
     for (
       let band = Math.floor(Math.min(ay, by) / BAND);
@@ -341,24 +341,34 @@ export class AreaIndex {
           for (const edge of list.get(band * BAND_ROW + strip) ?? []) edges.add(edge);
     const rx = bx - ax,
       ry = by - ay;
-    const crossings: number[] = [];
+    const length2 = rx * rx + ry * ry;
+    const cuts = [0, 1];
     for (const [cx, cy, dx, dy] of edges) {
       const sx = dx - cx,
         sy = dy - cy;
       const denominator = rx * sy - ry * sx;
-      if (denominator === 0) continue;
-      const t = ((cx - ax) * sy - (cy - ay) * sx) / denominator;
-      const u = ((cx - ax) * ry - (cy - ay) * rx) / denominator;
-      // Half-open along each edge, so a corner the way passes through counts once.
-      if (t > 0 && t < 1 && u >= 0 && u < 1) crossings.push(t);
+      if (denominator !== 0) {
+        const t = ((cx - ax) * sy - (cy - ay) * sx) / denominator;
+        const u = ((cx - ax) * ry - (cy - ay) * rx) / denominator;
+        if (t > 0 && t < 1 && u >= 0 && u <= 1) cuts.push(t);
+      } else if (length2 > 0 && (cx - ax) * ry - (cy - ay) * rx === 0) {
+        // An edge along the way itself: its ends are where the way may change sides.
+        for (const [px, py] of [
+          [cx, cy],
+          [dx, dy],
+        ] as const) {
+          const t = ((px - ax) * rx + (py - ay) * ry) / length2;
+          if (t > 0 && t < 1) cuts.push(t);
+        }
+      }
     }
-    crossings.sort((a, b) => a - b);
-    for (let i = 0; i < crossings.length;) {
-      let end = i + 1;
-      while (end < crossings.length && (crossings[end] as number) - (crossings[i] as number) < 1e-9)
-        end++;
-      if ((end - i) % 2 !== 0) return false;
-      i = end;
+    cuts.sort((p, q) => p - q);
+    for (let i = 1; i < cuts.length; i++) {
+      const from = cuts[i - 1] as number,
+        to = cuts[i] as number;
+      if (to - from < 1e-12) continue;
+      const t = (from + to) / 2;
+      if (!this.inside(ax + rx * t, ay + ry * t)) return false;
     }
     return true;
   }

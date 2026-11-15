@@ -211,6 +211,29 @@ describe('segmentInside', () => {
     expect(index.segmentInside(10, 20, 50, 21)).toBe(true);
   });
 
+  it('crosses a corner where three outlines meet, as solid land', () => {
+    const index = new AreaIndex([box(0, 0, 10, 10), box(10, 0, 20, 10), box(0, 10, 20, 20)]);
+    expect(index.segmentInside(5, 5, 15, 15)).toBe(true);
+  });
+
+  it('refuses a way between two points of the shore across the water of a bay', () => {
+    const bay: MultiPolygon = [
+      [
+        [
+          [10, 0],
+          [20, 0],
+          [20, 20],
+          [0, 20],
+          [0, 10],
+          [10, 10],
+        ],
+      ],
+    ];
+    const index = new AreaIndex([bay], 0, { seams: false });
+    expect(index.segmentInside(10, 5, 5, 10)).toBe(false);
+    expect(index.segmentInside(15, 5, 5, 15)).toBe(true);
+  });
+
   it('refuses a way that leaves through a horizontal shore', () => {
     const index = new AreaIndex([box(0, 0, 40, 20), box(0, 20.05, 40, 40)], 0, { seams: false });
     expect(index.segmentInside(10, 10, 12, 30)).toBe(false);
