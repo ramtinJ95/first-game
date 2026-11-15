@@ -13,7 +13,7 @@ import { tick } from '../tick.ts';
 import { areAtWar } from '../wars.ts';
 import { OFFER_DAYS } from './offer.ts';
 import { CITY_POINTS, warStanding } from './standing.ts';
-import { TRUCE_DAYS, truceDaysLeft } from './truce.ts';
+import { MAX_PAID_TRUCE_DAYS, TRUCE_DAYS, TRUCE_DAYS_PER_POINT, truceDaysLeft } from './truce.ts';
 
 const world = fixtureWorld();
 const f = FIXTURE;
@@ -220,6 +220,32 @@ describe('the truce', () => {
     expect(declare(f.carthage, f.rome)).toBeUndefined();
     expect(state.truces[warKey(f.rome, f.carthage)]).toBeUndefined();
     expectConsistent(state);
+  });
+
+  test('a paid peace holds longer by what it paid, in gold or cities, up to a limit', () => {
+    const truceAfter = (terms: PeaceTerms) => {
+      const state = atWar();
+      expect(offerAndAccept(state, f.rome, f.carthage, terms)).toBeUndefined();
+      const endsOn = state.day + truceDaysLeft(state, f.rome, f.carthage);
+      expect(run(state, { kind: 'declareWar', faction: f.carthage, against: f.rome })).toBe(
+        `carthage keeps a truce with rome until day ${endsOn}`,
+      );
+      expectConsistent(state);
+      return truceDaysLeft(state, f.rome, f.carthage);
+    };
+    const gold = (payer: FactionId, amount: number): PeaceTerms => ({
+      kind: 'payment',
+      payer,
+      gold: amount,
+      cities: [],
+    });
+    expect(truceAfter(gold(f.rome, 1200))).toBe(TRUCE_DAYS + 12 * TRUCE_DAYS_PER_POINT);
+    expect(truceAfter(gold(f.carthage, 1200))).toBe(TRUCE_DAYS + 12 * TRUCE_DAYS_PER_POINT);
+    expect(truceAfter({ kind: 'payment', payer: f.rome, gold: 0, cities: [f.capua] })).toBe(
+      TRUCE_DAYS +
+        CITY_POINTS[buildFixture().cities[f.capua]?.rank ?? 'capital'] * TRUCE_DAYS_PER_POINT,
+    );
+    expect(truceAfter(gold(f.rome, 4900))).toBe(TRUCE_DAYS + MAX_PAID_TRUCE_DAYS);
   });
 
   test('a truce binds only the two that made peace', () => {

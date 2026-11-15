@@ -127,5 +127,11 @@ export const SMALL_LOSS_SHARE = 0.1;
 export const EVEN_WAR_DAYS = PEACE_RESOLVE * WEARY_DAYS;
 /** After an offer in a war, an AI offers again in it only after this many days. */
 export const OFFER_GAP_DAYS = 90;
+/**
+ * A winner opens no further above the least it would take than this many points, nor
+ * more than halfway to the most the loser would give, so the first price is close to
+ * the one a counter-offer finds.
+ */
+export const OPENING_MARGIN = 5;
 /** Gold in the terms the AI writes is a multiple of this. */
 export const GOLD_STEP = 50;
