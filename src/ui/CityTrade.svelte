@@ -15,8 +15,12 @@
     tradeConsent,
     tradeProblem,
     type TradeForecast,
+    improvementCost,
+    IMPROVE_STEP,
+    MAX_IMPROVEMENTS,
     type TradeMode,
   } from '../sim/trade/routes.ts';
+  import { improveProblem } from '../sim/trade/improve.ts';
   import type { World } from '../sim/world/world.ts';
   import { invitationProblem } from '../sim/ai/trade-consent.ts';
   import type { Actions } from './actions.ts';
@@ -158,6 +162,29 @@
             ? `New cargo departs in ${route.departsOn - game.day} days`
             : `${Math.ceil((1 - route.progress) * route.days)} days to arrival`} ·
         <span data-testid="trade-deliveries">{route.deliveries} deliveries</span>
+        {#if own && route.improvedBy.length < MAX_IMPROVEMENTS}
+          {@const order = { kind: 'improveTrade', faction: game.player, route: route.id } as const}
+          {@const cost = improvementCost(route)}
+          {@const gain =
+            route.daily *
+            IMPROVE_STEP *
+            adminShareOf(waiting, game.player) *
+            (route.owner === route.partner ? 2 : 1)}
+          {@const blocked = improveProblem(waiting, order)}
+          <p class="muted" data-testid="trade-improve">
+            Improve for {cost} gold: +{gain.toFixed(1)} gold a day {route.owner === route.partner
+              ? 'to your realm, from both ends'
+              : 'here'}, repaid in {(cost / gain / 365).toFixed(1)} years. Improved {route
+              .improvedBy.length} of {MAX_IMPROVEMENTS} times; no refund on closing.
+          </p>
+          <button
+            type="button"
+            disabled={!!blocked}
+            title={blocked}
+            onclick={() => actions.issue(order)}>Improve route</button
+          >
+          {#if blocked}<span class="why">{blocked}</span>{/if}
+        {/if}
         {#if risk}<p class="muted">{riskText(waiting, risk)}</p>{/if}
         {#if own && closing === route.id}
           <p data-testid="trade-close-confirm">{closeText(waiting, route)}</p>

@@ -9,6 +9,8 @@ export const TradeRouteSchema = v.object({
   from: CityIdSchema,
   to: CityIdSchema,
   owner: FactionIdSchema,
+  /** The faction that paid to open the route; `owner` changes when the city does. */
+  openedBy: FactionIdSchema,
   partner: FactionIdSchema,
   mode: v.picklist(['land', 'sea']),
   status: v.picklist(['offered', 'running']),
@@ -20,6 +22,10 @@ export const TradeRouteSchema = v.object({
   progress: v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(1)),
   returning: v.boolean(),
   deliveries: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /** Who paid for each improvement, in order; at most two. */
+  improvedBy: v.pipe(v.array(FactionIdSchema), v.maxLength(2)),
+  /** The gold each faction has kept from the route's arrivals, after its treasury's limit. */
+  receipts: v.record(FactionIdSchema, v.pipe(v.number(), v.finite(), v.minValue(0))),
   openedOn: DaySchema,
   departsOn: DaySchema,
   blocked: v.nullable(v.picklist(['siege', 'raid'])),

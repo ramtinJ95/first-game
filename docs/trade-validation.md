@@ -615,3 +615,62 @@ Most wars between one pair in one seed: 7
 | macedon  | 389                  | 217    | 823  |
 | egypt    | 536                  | 196    | 841  |
 | persia   | 573                  | 393    | 1306 |
+
+## Routes a player can keep and improve
+
+Main `55e6293` against `feat/trade-routes-differ` on top of it. The world, AI and peace commands are the defaults: 20 seeds, ten years for the world and peace, five for each AI control.
+
+The trade targets of `npm run sim -- trade` are identical row for row on both: trade 35.9–37.2 % at year 3, no capped days, suitable routes repay in 1.13–2.03 years, and a partner war cuts income by at least 14.8 %. The peaceful Rome of that harness opens routes in peace, so the handover rule never acts and it does not improve routes.
+
+| `sim:world` target                                | main, seeds 1–20 | branch, seeds 1–20  | main, seeds 21–40  | branch, seeds 21–40 |
+| ------------------------------------------------- | ---------------- | ------------------- | ------------------ | ------------------- |
+| The largest power holds at most half the cities   | 20/20            | 20/20               | 20/20              | 20/20               |
+| At least three powers alive                       | 20/20            | 20/20               | 20/20              | 20/20               |
+| No power the largest in more than 8 seeds         | met: Persia 7    | NOT met: Carthage 9 | NOT met: Persia 12 | NOT met: Persia 11  |
+| Armies idle beside an enemy for more than 30 days | 0                | 0                   | 2                  | 2                   |
+| Armies idle overseas for more than 30 days        | 0                | 0                   | 0                  | 0                   |
+
+The leader count is the one target the branch misses that main meets on seeds 1–20. Main misses it on seeds 21–40, the other half the design checks, by more. Each world parts from the other at the first decision that differs, so one route of Rome's that survives in the branch reshapes every later war; the leader changes in most seeds between the two runs. Across the 40 seeds the most any power leads is 19 on main and 17 on the branch.
+
+A first version of the rule kept every route through a change of owner. It broke the `sim:ai` target that a power at peace with every stronger power grows that year: 112 of 129 power-years, under the 90 % needed, because a conqueror inherited its victim's trade. The rule now keeps only the routes whose other end is the player's, and every `sim:ai` target is met on both:
+
+| `sim:ai` target, every faction under the AI               | main             | branch           |
+| --------------------------------------------------------- | ---------------- | ---------------- |
+| Half the 60 minor cities independent at the end of year 2 | 20/20, median 42 | 20/20, median 43 |
+| A fifth independent at the end of year 5                  | 19/20, median 22 | 20/20, median 22 |
+| A power at peace with every stronger power grows          | 106 of 112       | 96 of 102        |
+| Powers take cities from each other or fight from year 2   | 20/20            | 20/20            |
+| A power wiped out before year 3                           | 0/20             | 0/20             |
+
+The passive-Rome control is identical on both, since a Rome that gives no orders holds no routes.
+
+| `sim:peace` target, seeds 1–20 over ten years | main       | branch     |
+| --------------------------------------------- | ---------- | ---------- |
+| Wars between great powers that end in peace   | 622 of 655 | 599 of 633 |
+| Great-power pairs at war for all ten years    | 0          | 0          |
+| Shortest return to war after a peace          | 365 days   | 365 days   |
+| Longest war between great powers              | 376 days   | 582 days   |
+
+Both meet every peace target. The longest war between great powers is longer on the branch, 582 days against 376, and far from the ten years the target rules out.
+
+## The cautious Rome over ten years
+
+`node scripts/sim/trade-judge.ts` plays seeds 1–20 for ten years, or until Rome is defeated. Every faction plays the AI, Rome included, except Rome's trade: monthly, before any other spending and keeping 600 gold, Rome opens its best route by return per gold. `--heed` makes Rome heed what #67 tells it: it skips a partner at war or a besieged end, and declares no war on a partner whose routes have not repaid. `--improve` makes Rome, with no route to open, buy the improvement that repays soonest, if within three years. Lost gold is what Rome paid to open or improve routes that closed or left its hands before their receipts repaid it, less those receipts, at arrival prices. The same file runs on main.
+
+| Cautious Rome, seeds 1–20, ten years | routes opened | closed before repaying | gold lost | trade decisions | longest stretch without one, median / most | day-1 paybacks min / median / max |
+| ------------------------------------ | ------------: | ---------------------: | --------: | --------------: | ------------------------------------------ | --------------------------------- |
+| main, blind (the tester's case)      |         1,081 |                    693 |   732,706 |           1,177 | 330 / 1,410 days                           | 1.13 / 1.13 / 2.03 years          |
+| main, heeding #67                    |           910 |                    458 |   434,640 |           1,065 | 330 / 750 days                             | 1.13 / 1.13 / 2.03 years          |
+| branch, heeding                      |           788 |                    322 |   308,513 |             911 | 510 / 811 days                             | 1.13 / 1.13 / 2.03 years          |
+| branch, heeding and improving        |           551 |                    317 |   403,429 |           1,400 | 390 / 907 days                             | 1.13 / 1.13 / 2.03 years          |
+
+| Gold lost, by what closed the route     | main, blind | main, heeding | branch, heeding | branch, improving |
+| --------------------------------------- | ----------: | ------------: | --------------: | ----------------: |
+| A city changed owner                    |     408,828 |       299,694 |         160,820 |           217,929 |
+| The partner declared war on Rome        |     192,148 |       134,946 |         132,832 |           165,306 |
+| Rome declared war on the partner        |     131,730 |             0 |               0 |                 0 |
+| A partner city fell to an enemy of Rome |           0 |             0 |          14,860 |            20,194 |
+
+Telling the risk and heeding it cuts the gold lost from 732,706 to 434,640. Keeping the player's routes through a partner's peaceful change of owner cuts it to 308,513, 58 % below the tester's case; the losses that remain to a change of owner are Rome's own cities falling. The improving Rome loses more because it invests more in routes that later close: its lost gold includes improvements.
+
+Improvements shorten the quiet stretch but do not end it. The median gap between decisions is 30 days in every run, the harness's monthly turn, and on main many of those decisions buy back a route that died. Once routes stop dying, the longest stretch without a decision grows from a median of 330 days on main to 510; improvements bring it back to 390, since each route takes only two and then nothing new comes up. The spread of paybacks on day 1 is unchanged, since prices are as on main.

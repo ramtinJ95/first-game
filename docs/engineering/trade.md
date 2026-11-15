@@ -11,6 +11,25 @@ Opening costs `ceil(1.15 × (1 + min(distance, 1000) / 1000) × 740)`, doubled f
 domestic route because both receipts go to one realm. Unlike goods repay in about 1.13
 years and identical goods in about 2.03 years before the large-realm penalty.
 
+`improveTrade` (`src/sim/trade/improve.ts`) lets either end of a running route pay half its
+opening price to add `IMPROVE_STEP`, a quarter of the opening rate, at both ends, at most
+`MAX_IMPROVEMENTS` (2) times. `routeRate` gives a route's rate with its improvements; the
+economy, arrivals, raids, war pricing and city balances read it. A step repays in about
+twice the route's own payback, so it pays only when no new route does: after the slots are
+full. The AI does not improve routes.
+
+`changeCityOwner` calls `handRoutesOver`: a running route whose other end is the player's
+passes to the city's new owner, and the trade system closes it the same day as a war between
+the partners if that owner is at war with the player. A peace moves the cities it cedes and
+then ends its war, before the trade system runs, so a ceded city's route whose other end is
+the player's survives the cession; one whose other end is the city's old owner closes. Every other route at the city closes, as before, and
+so do invitations. Handing routes between two other realms to their conquerors was measured and
+dropped: it broke the `sim:ai` target that a power at peace with every stronger power grows
+(112 of 129 power-years, under 90 %). `openedBy` keeps the faction that paid to open a route and `improvedBy` the payer of
+each improvement, so the ledger charges each end only what it paid. The risk reading says the
+same: the player's own city falling closes its routes, and a partner's city falling closes a
+route only to a taker at war with the player, and otherwise hands it over.
+
 Land routes reach 1,000 km at 16 km/day; sea routes require two actual ports and reach
 1,800 km at 28 km/day. Navigation uses the existing constrained mesh, and paths are
 found once and cached outside the state, keyed by world, endpoints and mode. The save
@@ -64,14 +83,17 @@ Every trade act says what it costs and risks before it is done. The rules stay a
 the reading of them is in `src/ui`, so the rules PR that changes survival changes one place.
 
 - `tradeRisk(state, sight, ends, road)` in `src/ui/trade-risk.ts` lists what could stop or
-  close a route under today's rules, gravest first: a siege of either end (deliveries stop,
-  and the route closes if the city falls), a leagued minor that will join its partner's war
-  (on the player, which closes the route, or on another), the partner owner's wars (a change
-  of owner closes the route), and the enemies of either end who could raid a land road.
+  close a route under today's rules, gravest first: a siege of either end (deliveries stop;
+  a fall of the player's city closes the route, and a fall of the partner's closes it if the
+  besieger is at war with the player, or hands it over if not), a leagued minor that will
+  join a war that would close the route, the partner owner's wars with powers also at war
+  with the player (a fall to one of them closes the route), the enemies of either end who
+  could raid a land road, and the player's own wars (a fall of the player's city closes it).
   It names a besieger only while one of its armies is in sight and counts only enemy armies
   in sight within `RAID_KM` of the road, so it reveals nothing the fog hides. `riskText`,
   `riskMark` and `paybackText` turn it into the quote's line ("pays back in 1.1 years;
-  Syracusae is at war with Carthage: if Syracusae changes hands, the route closes."), a
+  Syracusae is at war with Carthage, at war with you too: if Syracusae falls to them, the
+  route closes."), a
   list row's mark, and the lines of an invitation and of a running route.
 - `tradeChoices` in `src/ui/trade-choices.ts` is the partner list: the cities that would agree
   now, each with every open way (land, sea, or both, each a `TradeWay` with its own risks and
@@ -83,12 +105,10 @@ the reading of them is in `src/ui`, so the rules PR that changes survival change
   A row the player cannot afford keeps its place with the gold it still needs. The first
   computation finds the paths of a city once (about 0.3–0.5 s on the full map); later ones
   read the cache (about 20–30 ms).
-- `routeLedger` in `src/ui/trade-ledger.ts` gives what a route cost the player (nothing for an
-  accepted invitation), an estimate of what its arrivals were worth, and the price less that
-  estimate as still unpaid. The route keeps no tally of past pay, so the estimate values every
-  arrival at today's administrative share and cannot see receipts a full treasury refused;
-  every ledger says that receipts which came while the treasury was full were not kept, so the
-  player may have received less. Close route confirms with it, no refund, and today's price to reopen. The
+- `routeLedger` in `src/ui/trade-ledger.ts` gives what the player paid to open and improve a
+  route (`openedBy`, `improvedBy`), the gold the player kept from its arrivals (the route's
+  `receipts`, which the trade system adds after the treasury's limit, so a full treasury adds
+  nothing), and the price less those receipts as still unpaid. Close route confirms with it, no refund, and today's price to reopen. The
   war confirmation lists, under `declarationFacts`, each route the war closes with its ledger,
   including routes with a minor's league partner that joins at once (`warJoiners`), the
   invitations that lapse, and the player's other land roads the enemy could then raid.

@@ -12,6 +12,7 @@ import {
   playDays,
   resizeTo,
   resume,
+  rome,
   startGame,
   untilDay,
   untilDrawn,
@@ -102,9 +103,8 @@ test('declaring war through the page names the route it closes, then closes it a
   const cost = route.cost.toLocaleString('en');
   const lines = page.getByTestId('war-trade');
   await expect(lines).toContainText(
-    `It closes Roma to Carthago by sea: cost ${cost} gold, arrivals worth about 0 gold, about ${cost} still unpaid.`,
+    `It closes Roma to Carthago by sea: cost ${cost} gold, brought 0 gold, ${cost} still unpaid.`,
   );
-  await expect(lines).toContainText('so you may have received less than that.');
   await page.getByRole('button', { name: 'Confirm war', exact: true }).click();
   await resume(page);
   await expect(page.getByTestId('alerts')).toContainText(
@@ -126,7 +126,7 @@ test('Close route asks first, with what the route cost and earned and that there
   await page.getByRole('button', { name: 'Close route', exact: true }).click();
   const confirm = page.getByTestId('trade-close-confirm');
   await expect(confirm).toContainText(
-    `Close Roma to Capua by land? It cost ${route.cost.toLocaleString('en')} gold, arrivals worth about`,
+    `Close Roma to Capua by land? It cost ${route.cost.toLocaleString('en')} gold, brought ${Math.round(route.receipts[rome] ?? 0).toLocaleString('en')} gold`,
   );
   await expect(confirm).toContainText(
     'Closing gives no refund, and opening it again costs the full price',
@@ -220,4 +220,33 @@ test('the partner list leads with cities that agree, says why the rest would not
   });
   await openButton.scrollIntoViewIfNeeded();
   await expect(openButton).toBeInViewport();
+});
+
+test('a running route offers its improvement with price and payback, and an improved route earns more', async ({
+  page,
+}) => {
+  await openGame(page);
+  const saved = playDays(richRome(), 2, [open('capua', 'land')]);
+  const route = Object.values(saved.tradeRoutes)[0];
+  if (!route) throw new Error('expected a running route');
+  await load(page, saved);
+  await openCity(page, 'roma', 'Roma');
+  const offer = page.getByTestId('trade-improve');
+  const price = Math.ceil(route.cost / 2);
+  const gain = route.daily * 0.25 * 2;
+  await expect(offer).toContainText(`Improve for ${price.toLocaleString('en')} gold`);
+  await expect(offer).toContainText(
+    `+${gain.toFixed(1)} gold a day to your realm, from both ends, repaid in ${(price / gain / 365).toFixed(1)} years.`,
+  );
+  await expect(offer).toContainText('Improved 0 of 2 times; no refund on closing.');
+  const gold = saved.factions[rome]?.stores.gold ?? 0;
+  await page.getByRole('button', { name: 'Improve route', exact: true }).click();
+  await resume(page);
+  await untilDay(page, saved.day + 1);
+  await pause(page);
+  await expect(offer).toContainText('Improved 1 of 2 times');
+  const paid = Number((await page.getByTestId('store-gold-amount').innerText()).replace(/,/g, ''));
+  expect(paid).toBeLessThanOrEqual(gold - price + 100);
+  expect(paid).toBeLessThan(gold);
+  await expect(offer).toContainText(`Improve for ${price.toLocaleString('en')} gold`);
 });

@@ -3,7 +3,7 @@ import type { Order } from '../orders/orders.ts';
 import { truceBetween } from '../peace/truce.ts';
 import { BLOCKADE_ODDS } from '../systems/sieges.ts';
 import { distance } from '../world/find-path.ts';
-import { tradeIncome } from '../trade/routes.ts';
+import { routeRate, tradeIncome } from '../trade/routes.ts';
 import type { Context } from './armies.ts';
 import {
   canFight,
@@ -119,7 +119,7 @@ export function warDeclaration(context: Context): Order[] {
           ((r.owner === faction && r.partner === other) ||
             (r.partner === faction && r.owner === other)),
       )
-      .reduce((sum, r) => sum + r.daily, 0);
+      .reduce((sum, r) => sum + routeRate(r), 0);
   const scoreOf = (other: FactionId, theirs: number, km: number) =>
     free /
     Math.max(1, theirs) /

@@ -65,6 +65,7 @@ export default defineScenario({
 
     const syracusaeAtWar = rich();
     declareWar(syracusaeAtWar, carthage, 'syracusae' as FactionId);
+    declareWar(syracusaeAtWar, rome, carthage);
     await load(page, syracusaeAtWar);
     await openCity(page, 'roma', 'Roma');
     const partners = page.getByTestId('trade-partners');
@@ -72,7 +73,7 @@ export default defineScenario({
     await page.getByTestId('trade-payback').scrollIntoViewIfNeeded();
     await shot(
       'quote-risk',
-      'A quote for Roma to Syracusae: the payback set against Syracusae’s war with Carthage, which closes the route if Syracusae falls',
+      'A quote for Roma to Syracusae: the payback set against Syracusae’s war with Carthage, also at war with Rome, which closes the route if Syracusae falls to Carthage',
     );
     await partners.evaluate((list) => {
       list.scrollTop = 0;
@@ -86,6 +87,7 @@ export default defineScenario({
     const trading = playDays(rich(), 24, [
       open('roma', 'carthago', 'sea'),
       open('roma', 'capua', 'land'),
+      open('roma', 'arretium', 'land'),
     ]);
     await load(page, trading);
     await openCity(page, 'carthago', 'Carthago');
@@ -93,7 +95,7 @@ export default defineScenario({
     await page.getByTestId('war-trade').scrollIntoViewIfNeeded();
     await shot(
       'war-routes',
-      'Declare war on Carthage? The route it closes with its price, an estimate of its arrivals and of what is still unpaid, and the roads it exposes',
+      'Declare war on Carthage? The route it closes with its price, what it has brought, and what is still unpaid, and the roads it exposes',
     );
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 
@@ -102,9 +104,15 @@ export default defineScenario({
     await page.getByTestId('trade-close-confirm').scrollIntoViewIfNeeded();
     await shot(
       'close-route',
-      'Close route asks first: what the route cost, about what its arrivals were worth and what is unpaid, no refund, and the price to open it again',
+      'Close route asks first: what the route cost, what it has brought and what is unpaid, no refund, and the price to open it again',
     );
     await page.getByRole('button', { name: 'Keep route', exact: true }).click();
+    await expect(page.getByTestId('trade-slots')).toHaveText('0 of 3 route slots free');
+    await page.getByTestId('trade-improve').first().scrollIntoViewIfNeeded();
+    await shot(
+      'improve-route',
+      'With the slots full, a running route can be improved twice: half its opening price for a quarter more gold a day at both ends, with its payback and no refund on closing',
+    );
 
     const invited = playDays(rich(), 1, [
       open('carthago', 'roma', 'sea', carthage),
@@ -140,16 +148,15 @@ export default defineScenario({
     await load(page, troubled);
     await resume(page);
     const alerts = page.getByTestId('alerts');
-    await alerts.getByText(/Trade closed: Roma to Syracusae, a city changed owner/).waitFor();
+    await alerts.getByText(/The siege of Syracusae stops trade: Roma to Syracusae\./).waitFor();
+    await alerts.getByText(/Macedon raided the road Roma to Capua/).waitFor();
     await pause(page);
-    await expect(alerts).toContainText('The siege of Syracusae stops trade: Roma to Syracusae.');
-    await expect(alerts).toContainText('Macedon raided the road Roma to Capua');
     await page.getByRole('button', { name: 'Chronicle', exact: true }).click();
     const chronicle = page.getByTestId('chronicle');
     await expect(chronicle).toContainText('The siege of Syracusae stops trade');
     await shot(
       'news',
-      'The news of trade: Carthage’s siege of Syracusae warns that the route closes if it falls, Macedon’s raid is one line with its loss, and the fall closes the route',
+      'The news of trade: Carthage’s siege of Syracusae stops the route, which would close only if Syracusae fell to a power at war with Rome, and Macedon’s raid is one line with its loss',
     );
 
     await page.getByRole('button', { name: 'Chronicle', exact: true }).click();

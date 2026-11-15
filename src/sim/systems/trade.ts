@@ -4,7 +4,13 @@ import type { Day } from '../state/day.ts';
 import type { FactionId } from '../ids.ts';
 import { adminShareOf, limitsOf, menOf } from './economy.ts';
 import { warSides } from '../state/war.ts';
-import { closeRoute, distanceToRoute, RAID_KM, TRADE_INVITATION_DAYS } from '../trade/routes.ts';
+import {
+  closeRoute,
+  distanceToRoute,
+  RAID_KM,
+  routeRate,
+  TRADE_INVITATION_DAYS,
+} from '../trade/routes.ts';
 
 /** Sieges stand in for a sea blockade until war fleets exist; ships cannot be raided offshore. */
 export function trade(state: GameState): void {
@@ -63,7 +69,7 @@ export function trade(state: GameState): void {
         owners: [route.owner, route.partner],
       } as const;
       const looter = raider && state.factions[raider.owner];
-      const looted = looter && state.day >= route.departsOn ? route.daily * route.days : 0;
+      const looted = looter && state.day >= route.departsOn ? routeRate(route) * route.days : 0;
       if (blocked === 'siege') {
         const at = sieged.has(route.from) ? from : to;
         emit(state, { ...base, cause: 'siege', position: { ...at.position } });
@@ -78,7 +84,7 @@ export function trade(state: GameState): void {
           position: { ...raider.activity.position },
         });
       if (looter && state.day >= route.departsOn) {
-        looter.stores.gold += route.daily * route.days;
+        looter.stores.gold += looted;
         route.departsOn = (state.day + route.days) as Day;
       }
       route.progress = 0;
@@ -92,11 +98,13 @@ export function trade(state: GameState): void {
       limits ??= limitsOf(state);
       const limit = limits.get(owner);
       if (!faction || !limit) throw new Error(`trade ${route.id} has no treasury for ${owner}`);
-      const pay = route.daily * route.days * adminShareOf(state, owner);
-      faction.stores.gold = Math.max(
-        faction.stores.gold,
-        Math.min(limit.gold, faction.stores.gold + pay),
-      );
+      const pay = routeRate(route) * route.days * adminShareOf(state, owner);
+      const before = faction.stores.gold;
+      faction.stores.gold = Math.max(before, Math.min(limit.gold, before + pay));
+      route.receipts = {
+        ...route.receipts,
+        [owner]: (route.receipts[owner] ?? 0) + faction.stores.gold - before,
+      };
     }
     route.deliveries++;
     route.progress = 0;

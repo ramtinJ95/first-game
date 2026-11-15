@@ -3,6 +3,7 @@ import { bestTrade, trading } from '../ai/trade.ts';
 import { tradeReserve } from '../ai/budget.ts';
 import { decideAll, decideOrders } from '../ai/decide.ts';
 import { changeCityOwner } from '../cities.ts';
+import { makePeace } from '../peace/make-peace.ts';
 import { recordEvents } from '../events.ts';
 import { buildFixture, fixtureWorld, FIXTURE as f } from '../fixture.ts';
 import { newGame } from '../new-game.ts';
@@ -529,10 +530,97 @@ describe('caravans, interruption, and saves', () => {
     expectConsistent(state);
   });
 
-  test('a captured city closes its routes immediately, without transferring their investment', () => {
-    const { state } = opened();
-    changeCityOwner(state, f.capua, f.carthage);
-    expect(state.tradeRoutes).toEqual({});
+  test('a route outlives a change of owner while the new ends stay at peace, under its new owner', () => {
+    const { state, route } = opened();
+    const events = recordEvents(state, () => changeCityOwner(state, f.capua, f.carthage));
+    expect(state.tradeRoutes[route.id]).toMatchObject({ owner: f.rome, partner: f.carthage });
+    expect(events.filter((e) => e.kind === 'tradeClosed')).toEqual([]);
+    expectConsistent(state);
+  });
+
+  test('a route at a city taken by an enemy of the other end closes that day as a war between the partners', () => {
+    const { state, route } = opened();
+    state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);
+    const events = recordEvents(state, () => {
+      changeCityOwner(state, f.capua, f.carthage);
+      trade(state);
+    });
+    expect(state.tradeRoutes[route.id]).toBeUndefined();
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        kind: 'tradeClosed',
+        route: route.id,
+        cause: 'war between the partners',
+      }),
+    );
+    expectConsistent(state);
+  });
+
+  test('a route between two other realms closes when one end changes hands, so no conqueror inherits it', () => {
+    const state = buildFixture();
+    need(state.factions[f.carthage]).stores.gold = 10_000;
+    const invite = {
+      kind: 'openTrade',
+      faction: f.carthage,
+      from: f.carthago,
+      to: f.syracusae,
+      mode: 'sea',
+    } as const;
+    expect(openTrade(state, invite, world)).toBeUndefined();
+    const route = need(Object.values(state.tradeRoutes)[0]);
+    expect(route.status).toBe('running');
+    const events = recordEvents(state, () => changeCityOwner(state, f.syracusae, f.rome));
+    expect(state.tradeRoutes[route.id]).toBeUndefined();
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        kind: 'tradeClosed',
+        route: route.id,
+        cause: 'a city changed owner',
+      }),
+    );
+    expectConsistent(state);
+  });
+
+  test('a route at a city ceded in a peace survives under the new owner', () => {
+    const { state, route } = opened();
+    state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);
+    makePeace(state, f.rome, f.carthage, {
+      kind: 'payment',
+      payer: f.rome,
+      gold: 0,
+      cities: [f.capua],
+    });
+    trade(state);
+    expect(state.cities[f.capua]?.owner).toBe(f.carthage);
+    expect(state.tradeRoutes[route.id]).toMatchObject({ owner: f.rome, partner: f.carthage });
+    expectConsistent(state);
+  });
+
+  test('an improvement in a tick leaves the day before unchanged', () => {
+    const { state, route } = opened();
+    need(state.factions[f.rome]).stores.gold = 10_000;
+    const before = structuredClone(state);
+    const next = tick(state, [{ kind: 'improveTrade', faction: f.rome, route: route.id }], world);
+    expect(next.rejected).toEqual([]);
+    expect(next.state.tradeRoutes[route.id]?.improvedBy).toEqual([f.rome]);
+    expect(state).toEqual(before);
+    expectConsistent(next.state);
+  });
+
+  test('an improvement costs half the opening price and raises both ends a quarter, twice at most', () => {
+    const { state, route } = opened();
+    const rome = need(state.factions[f.rome]);
+    rome.stores.gold = 10_000;
+    const before = tradeIncome(state).get(f.rome) ?? 0;
+    const improve = { kind: 'improveTrade', faction: f.rome, route: route.id } as const;
+    expect(executeOrder(state, improve, world)).toBeUndefined();
+    expect(rome.stores.gold).toBe(10_000 - Math.ceil(route.cost / 2));
+    expect(tradeIncome(state).get(f.rome)).toBeCloseTo(before * 1.25);
+    expect(executeOrder(state, improve, world)).toBeUndefined();
+    expect(executeOrder(state, improve, world)?.reason).toBe(
+      'this route is improved 2 times already',
+    );
+    expect(tradeIncome(state).get(f.rome)).toBeCloseTo(before * 1.5);
     expectConsistent(state);
   });
 
@@ -615,6 +703,22 @@ describe('caravans, interruption, and saves', () => {
     expectConsistent(state);
   });
 
+  test.each(['openedBy', 'improvedBy', 'receipts'] as const)(
+    'loading refuses a route whose %s names a faction that does not exist',
+    (field) => {
+      const { state, route } = opened();
+      const broken = structuredClone(state);
+      const r = broken.tradeRoutes[route.id];
+      if (!r) throw new Error('missing route');
+      const ghost = 'ghost' as typeof f.rome;
+      if (field === 'openedBy') r.openedBy = ghost;
+      if (field === 'improvedBy') r.improvedBy = [ghost];
+      if (field === 'receipts') r.receipts = { [ghost]: 10 };
+      expect(loadGame(saveGame(broken))).toMatchObject({ ok: false });
+      expectConsistent(state);
+    },
+  );
+
   test.each([f.carthage, f.syracusaeFaction])(
     '%s trades deterministically without a random draw',
     (faction) => {
@@ -655,3 +759,8 @@ describe('caravans, interruption, and saves', () => {
     expectConsistent(state);
   });
 });
+
+function need<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('missing trade fixture record');
+  return value;
+}
