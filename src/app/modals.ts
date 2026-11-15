@@ -1,21 +1,10 @@
+import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { CityId, FactionId } from '../sim/ids.ts';
+import type { Order } from '../sim/orders/orders.ts';
+import { standingOffer } from '../sim/peace/offer.ts';
+import type { GameState } from '../sim/state/game-state.ts';
+import { warSides } from '../sim/state/war.ts';
 import type { TurningPoint } from './turning-points.ts';
-import type { Page } from './page.ts';
-
-/** Loading a saved automatic stop must not turn it into a player-owned pause. */
-export function restoreModalResume({
-  saved,
-  hasModal,
-  paused,
-  forcePause,
-}: {
-  saved: Pick<Page, 'paused' | 'resumeOnClose'> | undefined;
-  hasModal: boolean;
-  paused: boolean;
-  forcePause: boolean;
-}): boolean {
-  return hasModal && (saved?.resumeOnClose ?? (!forcePause && !(saved?.paused ?? paused)));
-}
 
 /**
  * What covers the game, one at a time. The start screen and the loss replace whatever
@@ -25,7 +14,7 @@ export function restoreModalResume({
 export type Modal =
   | { readonly kind: 'start' }
   | { readonly kind: 'leave' }
-  | Extract<TurningPoint, { kind: 'lost' | 'won' | 'fate' | 'peaceOffer' }>
+  | Extract<TurningPoint, { kind: 'lost' | 'won' | 'fate' }>
   | { readonly kind: 'guide' };
 
 const RANK: Record<Modal['kind'], number> = {
@@ -34,8 +23,7 @@ const RANK: Record<Modal['kind'], number> = {
   lost: 1,
   won: 2,
   fate: 3,
-  peaceOffer: 4,
-  guide: 5,
+  guide: 4,
 };
 
 export function enqueue(queue: readonly Modal[], modal: Modal): Modal[] {
@@ -47,19 +35,35 @@ export function enqueue(queue: readonly Modal[], modal: Modal): Modal[] {
 
 function same(a: Modal, b: Modal): boolean {
   if (a.kind === 'fate' && b.kind === 'fate') return a.city === b.city;
-  if (a.kind === 'peaceOffer' && b.kind === 'peaceOffer') return a.from === b.from;
   return a.kind === b.kind;
 }
 
-/** A fate prompt waits only while its city's fate is open, and an offer of peace while it stands. */
-export function keepOpen(
-  queue: readonly Modal[],
-  open: (city: CityId) => boolean,
-  offers: (from: FactionId) => boolean = () => true,
-): Modal[] {
-  return queue.filter(
-    (modal) =>
-      (modal.kind !== 'fate' || open(modal.city)) &&
-      (modal.kind !== 'peaceOffer' || offers(modal.from)),
-  );
+/** A fate prompt waits only while its city's fate is open. */
+export function keepOpen(queue: readonly Modal[], open: (city: CityId) => boolean): Modal[] {
+  return queue.filter((modal) => modal.kind !== 'fate' || open(modal.city));
+}
+
+/** The first enemy whose offer of peace stands for the player with no answer yet queued. */
+export function unansweredOffer(
+  state: DeepReadonly<GameState>,
+  pending: readonly Order[],
+): FactionId | undefined {
+  const player = state.player;
+  return Object.keys(state.peaceOffers)
+    .sort()
+    .flatMap((key) => {
+      const sides = warSides(key);
+      if (!sides?.includes(player)) return [];
+      const enemy = sides[0] === player ? sides[1] : sides[0];
+      if (standingOffer(state, player, enemy)?.from !== enemy) return [];
+      const answered = pending.some(
+        (order) =>
+          (order.kind === 'acceptPeace' ||
+            order.kind === 'refusePeace' ||
+            order.kind === 'offerPeace') &&
+          order.faction === player &&
+          (order.kind === 'offerPeace' ? order.to : order.from) === enemy,
+      );
+      return answered ? [] : [enemy];
+    })[0];
 }

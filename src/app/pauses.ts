@@ -1,16 +1,24 @@
 import * as v from 'valibot';
 import { PAUSE_KINDS, type Alert, type PauseKind } from './alerts.ts';
+import { BATTLE_PAUSE_MEN } from './battle-importance.ts';
 
 /** Which news stops the game, as the player set it in the Game menu. */
 export type PauseSettings = Readonly<Record<PauseKind, boolean>>;
 
 /** What each setting says in the Game menu. */
 export const PAUSE_LABELS: Record<PauseKind, string> = {
-  battle: 'A battle begins with 500 of your men or a tenth of your field army',
+  battle: `A battle begins against ${BATTLE_PAUSE_MEN} enemy men, or fewer with half your men in the fight and a tenth of your army`,
   weakSiege: 'Your siege is too weak to starve the city',
   sighted: 'An enemy army first nears your land in a war',
   ownCity: 'Your city is besieged, in danger, or falls',
 };
+
+/** The Game menu's setting for the prompt to choose a captured city's fate. */
+export const FATE_PAUSE_LABEL = 'You take a city, so you choose its fate';
+
+/** An offer of peace always stops the game, and only the player runs it again. */
+export const OFFER_PAUSE_TEXT =
+  'An offer of peace comes to you. The game stays paused until you resume it, whatever you answer.';
 
 export const ALL_PAUSES: PauseSettings = {
   battle: true,

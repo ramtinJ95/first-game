@@ -93,7 +93,7 @@
       capitals {capitals.join(', ')}. You have won.
     </p>
     <div class="row">
-      <button type="button" onclick={() => actions.closeModal()}>Play on</button>
+      <button type="button" onclick={() => actions.playOn()}>Play on</button>
       <button type="button" onclick={() => actions.showStart()}>Start again</button>
     </div>
   {/if}

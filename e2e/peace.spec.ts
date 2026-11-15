@@ -74,7 +74,7 @@ test.describe('peace', () => {
     await panel.getByLabel('Carthage pays you').check();
     await panel.getByTestId('peace-gold').fill('3000');
     await expect(panel.getByTestId('peace-verdict')).toHaveText(
-      'Carthage would refuse. It wants terms worth 2 points more, such as 200 gold more.',
+      'Carthage would refuse. It would give terms worth 2 points less, such as 200 gold less.',
     );
     await expect(panel).toContainText('Carthage is losing the war +35');
     await expect(panel).toContainText('Carthage does not end a war for nothing -15');
@@ -88,11 +88,13 @@ test.describe('peace', () => {
     await resume(page);
     await expect(page.getByTestId('alerts')).toContainText('Carthage refused your offer of peace');
     await pause(page);
-    await expect(page.getByTestId('alerts')).toContainText(/It wants terms worth \d+ points more/);
+    await expect(page.getByTestId('alerts')).toContainText(
+      /It would give terms worth \d+ points less/,
+    );
     await panel.getByRole('button', { name: 'Close' }).click();
     await page.getByRole('button', { name: 'Chronicle' }).click();
     await expect(page.getByTestId('chronicle')).toContainText(
-      /Carthage refused your offer of peace.*It wants terms worth \d+ points more/,
+      /Carthage refused your offer of peace.*It would give terms worth \d+ points less/,
     );
     await page.getByRole('button', { name: 'Chronicle' }).click();
     await openWars(page);
@@ -237,7 +239,7 @@ test.describe('peace', () => {
     await resume(page);
     const panel = page.getByTestId('wars-panel');
     await expect(panel.getByTestId('peace-paused')).toHaveText(
-      'The game is paused for your answer.',
+      'The game is paused for your answer. It runs again only when you resume it.',
     );
     await expect(page.getByRole('button', { name: 'Resume' })).toBeVisible();
     const offer = panel.getByTestId('their-offer');
@@ -246,7 +248,11 @@ test.describe('peace', () => {
       'Refuse, and the war goes on. Carthage makes no new offer for 90 days.',
     );
     await offer.getByTestId('refuse-peace').click();
-    await expect(panel).toHaveCount(0);
+    await expect(offer.getByTestId('peace-answered')).toHaveText(
+      'You refuse. Carthage hears it with the next day.',
+    );
+    await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
+    await resume(page);
     await expect(page.getByTestId('alerts')).toContainText(
       'You refused peace with Carthage, and the war goes on',
     );
@@ -275,7 +281,7 @@ test.describe('peace', () => {
 
   for (const accept of [true, false]) {
     for (const manual of [false, true]) {
-      test(`export/load preserves ${manual ? 'manual' : 'offer-owned'} pause before ${accept ? 'accepting' : 'refusing'}`, async ({
+      test(`export/load keeps the ${manual ? 'manual' : "offer's"} pause through ${accept ? 'accepting' : 'refusing'}`, async ({
         page,
       }) => {
         await load(page, carthageOffersPeace());
@@ -292,16 +298,12 @@ test.describe('peace', () => {
         const file = await (await download).path();
         if (!file) throw new Error('the exported save was not downloaded');
         const text = readFileSync(file, 'utf8');
-        expect(JSON.parse(text).page).toMatchObject({ paused: true, resumeOnClose: !manual });
+        expect(JSON.parse(text).page).toMatchObject({ paused: true });
         await dropSave(page, text);
         await expect(panel.getByTestId('peace-paused')).toBeVisible();
         await panel.getByTestId(accept ? 'accept-peace' : 'refuse-peace').click();
-        if (manual) {
-          await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
-          await resume(page);
-        } else {
-          await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
-        }
+        await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused');
+        await resume(page);
         await expect(page.getByTestId('alerts')).toContainText(
           accept ? 'Peace with Carthage' : 'You refused peace with Carthage',
         );

@@ -83,9 +83,11 @@
     <ul class="pick-list" data-testid="overview-wars">
       {#each overview.wars as war (war.against)}
         <li>
-          <button type="button" class="pick bad" onclick={openWars}
-            >At war with {war.name} since {dateText(war.since)}</button
-          >
+          <button type="button" class="pick bad" onclick={openWars}>
+            <span class="swatch" style:background={cssColour(game, war.against)}></span>
+            <span class="who">At war with {war.name}</span>
+            <span class="what">Since {dateText(war.since)}</span>
+          </button>
         </li>
       {:else}
         <li>At peace with everyone</li>
