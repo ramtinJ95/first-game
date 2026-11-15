@@ -17,6 +17,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { buildWorld } from '../sim/world/world.ts';
 import { locate } from '../sim/world/find-path.ts';
+import { changeCityOwner } from '../sim/cities.ts';
 import { executeOrder } from '../sim/orders/orders.ts';
 import { movement } from '../sim/systems/movement.ts';
 import { drawnColumns, fitColumnMarker } from './columns.ts';
@@ -460,52 +461,7 @@ test('a banner sailing from Roma to Carthago keeps to land inland and to the sea
         const ashore = physical.land.inside(banner.position.x, banner.position.y);
         expect(ashore ? walkable(fitted) : !drawnLand(fitted)).toBe(true);
         surfaces.add(ashore ? 'land' : 'sea');
-        const sight = seeAll(current);
-        const scene = fitCoastalScene(
-          buildScene({
-            previous,
-            current,
-            progress,
-            camera,
-            viewport,
-            previousSight: seeAll(previous),
-            sight,
-            growth: symbolGrowth(scale),
-            motion: 0,
-            now: 0,
-            land: (p) => {
-              const at = toMap(p);
-              return physical.open(at.x, at.y);
-            },
-          }),
-          drawnLand,
-          scale,
-          walkable,
-          sceneAnchor(
-            current,
-            drawnArmies(previous, current, progress).map((other) => ({
-              id: other.id,
-              position: toMap(
-                fitBanner(
-                  other,
-                  previous,
-                  current,
-                  physical.land,
-                  mapToScreen(camera, viewport, other.position),
-                  drawnLand,
-                  scale,
-                  walkable,
-                ),
-              ),
-            })),
-            (p) => mapToScreen(camera, viewport, p),
-          ),
-        );
-        for (const sprite of scene.sprites) {
-          if (sprite.alpha <= 0.05) continue;
-          if (sprite.key.startsWith('ship.')) expect(groundFits(sprite, drawnLand)).toBe(true);
-          else expect(groundFits(sprite, walkable)).toBe(true);
-        }
+        expectWholeSceneFits(previous, current, progress, camera);
       }
     expect([name, ...[...surfaces].sort()]).toEqual([name, 'land', 'sea']);
     expectConsistent(current);
@@ -547,5 +503,107 @@ test('an army the rules march into Lake Van stands where they put it, as on the 
     );
     expect(fitted).toEqual(at);
   }
+  expectConsistent(current);
+});
+
+/** Builds and fits a whole scene as the renderer does, and checks every visible sprite's ground. */
+function expectWholeSceneFits(
+  previous: GameState,
+  current: GameState,
+  progress: number,
+  camera: { centre: MapPoint; scale: number },
+) {
+  const { scale } = camera;
+  const toMap = (p: MapPoint) => screenToMap(camera, viewport, p);
+  const toScreen = (p: MapPoint) => mapToScreen(camera, viewport, p);
+  const drawnLand = coastalSurface(() => drawn, toMap);
+  const walkable = coastalSurface(() => drawn, toMap, physical.land);
+  const banners = drawnArmies(previous, current, progress).map((army) => ({
+    id: army.id,
+    position: toMap(
+      fitBanner(
+        army,
+        previous,
+        current,
+        physical.land,
+        toScreen(army.position),
+        drawnLand,
+        scale,
+        walkable,
+      ),
+    ),
+  }));
+  const columns = drawnColumns(previous, current, progress, seeAll(current));
+  const scene = fitCoastalScene(
+    buildScene({
+      previous,
+      current,
+      progress,
+      camera,
+      viewport,
+      previousSight: seeAll(previous),
+      sight: seeAll(current),
+      growth: symbolGrowth(scale),
+      motion: 0,
+      now: 0,
+      land: (p) => {
+        const at = toMap(p);
+        return physical.open(at.x, at.y);
+      },
+    }),
+    drawnLand,
+    scale,
+    walkable,
+    sceneAnchor(
+      current,
+      banners,
+      columns.map((column) => column.position),
+      toScreen,
+    ),
+  );
+  for (const sprite of scene.sprites) {
+    if (sprite.alpha <= 0.05) continue;
+    if (sprite.key.startsWith('ship.')) expect(groundFits(sprite, drawnLand)).toBe(true);
+    else expect(groundFits(sprite, walkable)).toBe(true);
+  }
+  return scene;
+}
+
+test('refugees from Roma to Massalia, trailing back over the sea, stand on land', () => {
+  const start = newGame(map, { seed: 1, player: 'rome' });
+  changeCityOwner(start, 'massalia' as CityId, start.player);
+  expect(
+    executeOrder(
+      start,
+      {
+        kind: 'evacuate',
+        faction: start.player,
+        city: 'roma' as CityId,
+        to: 'massalia' as CityId,
+        share: 0.5,
+      },
+      world,
+    ),
+  ).toBeUndefined();
+  let previous = start;
+  let current = start;
+  for (let day = 0; day < 30; day++) {
+    previous = current;
+    current = tick(previous, [], world).state;
+  }
+  const column = Object.values(current.refugeeColumns)[0];
+  if (!column) throw new Error('the evacuation has no column');
+  const original = JSON.stringify([previous, current]);
+  let refugees = 0;
+  for (const scale of [1, 4])
+    for (const progress of [0, 0.5, 1]) {
+      const scene = expectWholeSceneFits(previous, current, progress, {
+        centre: column.position,
+        scale,
+      });
+      refugees += scene.sprites.filter((s) => /^(refugee|cart\.)/.test(s.key)).length;
+    }
+  expect(refugees).toBeGreaterThan(0);
+  expect(JSON.stringify([previous, current])).toBe(original);
   expectConsistent(current);
 });

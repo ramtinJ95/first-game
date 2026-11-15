@@ -186,17 +186,32 @@ export function fitBanner(
 }
 
 /**
- * Where a sprite that does not fit on its own spot regroups: by its army's banner, or a
- * ship by its convoy, which is at sea or in harbour while the banner may still be walking
- * to the port.
+ * Where a sprite that does not fit on its own spot regroups: by its army's banner, a ship
+ * by its convoy, which is at sea or in harbour while the banner may still be walking to
+ * the port, and a refugee by the nearest column, whose people trail back to the city they
+ * left in a straight line that can cross the sea.
  */
 export function sceneAnchor(
   current: DeepReadonly<GameState>,
   armies: readonly { readonly id: ArmyId; readonly position: MapPoint }[],
+  columns: readonly MapPoint[],
   toScreen: (point: MapPoint) => MapPoint,
 ): (sprite: Sprite) => MapPoint | undefined {
   return (sprite) => {
-    if (!sprite.army) return undefined;
+    if (!sprite.army) {
+      if (!/^(refugee|cart\.)/.test(sprite.key)) return undefined;
+      let nearest: MapPoint | undefined;
+      for (const column of columns) {
+        const at = toScreen(column);
+        if (
+          !nearest ||
+          Math.hypot(at.x - sprite.x, at.y - sprite.y) <
+            Math.hypot(nearest.x - sprite.x, nearest.y - sprite.y)
+        )
+          nearest = at;
+      }
+      return nearest;
+    }
     const activity = current.armies[sprite.army]?.activity;
     const convoy =
       sprite.key.startsWith('ship.') && activity?.kind === 'embarked'

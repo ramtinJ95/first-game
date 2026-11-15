@@ -1499,7 +1499,12 @@ export async function createRenderer({
           onDrawnLand,
           camera.scale,
           onLand,
-          sceneAnchor(current, armies, (point) => mapToScreen(camera, view, point)),
+          sceneAnchor(
+            current,
+            armies,
+            columns.map((column) => column.position),
+            (point) => mapToScreen(camera, view, point),
+          ),
         );
         drawnFigures = armyLayer.draw(scene);
         sceneReady =
