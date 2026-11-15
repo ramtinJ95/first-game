@@ -3,6 +3,7 @@ import { buildFixture, fixtureWorld, FIXTURE as f } from '../sim/fixture.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { warKey } from '../sim/state/war.ts';
+import { limitsOf } from '../sim/systems/economy.ts';
 import { acceptTrade, openTrade } from '../sim/trade/orders.ts';
 import { whole } from '../app/names.ts';
 import { closeText, warJoiners, warTradeLines } from './trade-ledger.ts';
@@ -20,12 +21,27 @@ function trading(state: GameState, to: typeof f.roma, mode: 'land' | 'sea', deli
 }
 
 describe('what closing trade costs the player', () => {
-  test('Close route tells the price, the receipts, what is still unpaid, and the price to reopen', () => {
+  test('Close route tells the price, an estimate of the arrivals and of what is unpaid, and the price to reopen', () => {
     const state = buildFixture();
     const route = trading(state, f.carthago, 'sea');
-    const received = 2 * route.daily * route.days;
+    const worth = 2 * route.daily * route.days;
     expect(closeText(state, route)).toBe(
-      `Close Roma to Carthago by sea? It cost ${whole(route.cost)} gold, brought about ${whole(received)}, ${whole(route.cost - received)} still unpaid. Closing gives no refund, and opening it again costs the full price, ${whole(route.cost)} gold.`,
+      `Close Roma to Carthago by sea? It cost ${whole(route.cost)} gold, arrivals worth about ${whole(worth)} gold, about ${whole(route.cost - worth)} still unpaid. Closing gives no refund, and opening it again costs the full price, ${whole(route.cost)} gold.`,
+    );
+  });
+
+  test('with the treasury at its limit, the ledger says receipts above it were not kept', () => {
+    const state = buildFixture();
+    const route = trading(state, f.carthago, 'sea');
+    const full = 'Your treasury is full, and receipts above a full treasury were not kept';
+    expect(closeText(state, route)).not.toContain(full);
+    expect(warTradeLines(state, f.carthage).join(' ')).not.toContain(full);
+    const rome = state.factions[f.rome];
+    if (!rome) throw new Error('missing Rome');
+    rome.stores.gold = limitsOf(state).get(f.rome)?.gold ?? Infinity;
+    expect(closeText(state, route)).toContain(full);
+    expect(warTradeLines(state, f.carthage)).toContain(
+      `${full}, so you may have received less than that.`,
     );
   });
 
@@ -49,7 +65,7 @@ describe('what closing trade costs the player', () => {
     ).toBeUndefined();
     route.deliveries = 1;
     expect(closeText(state, route)).toContain(
-      `It cost you nothing, as Carthage paid, brought about ${whole(route.daily * route.days)}, 0 still unpaid.`,
+      `It cost you nothing, as Carthage paid, arrivals worth about ${whole(route.daily * route.days)} gold, about 0 still unpaid.`,
     );
   });
 
@@ -57,9 +73,9 @@ describe('what closing trade costs the player', () => {
     const state = buildFixture();
     const sea = trading(state, f.carthago, 'sea');
     trading(state, f.capua, 'land', 0);
-    const received = 2 * sea.daily * sea.days;
+    const worth = 2 * sea.daily * sea.days;
     expect(warTradeLines(state, f.carthage)).toEqual([
-      `It closes Roma to Carthago by sea: cost ${whole(sea.cost)} gold, brought about ${whole(received)}, ${whole(sea.cost - received)} still unpaid.`,
+      `It closes Roma to Carthago by sea: cost ${whole(sea.cost)} gold, arrivals worth about ${whole(worth)} gold, about ${whole(sea.cost - worth)} still unpaid.`,
       'Their armies could then raid your other land road.',
     ]);
     expect(warTradeLines(state, f.syracusaeFaction)).toEqual([
@@ -78,7 +94,7 @@ describe('what closing trade costs the player', () => {
     expect(warJoiners(state, f.syracusaeFaction)).toEqual([f.syracusaeFaction, f.carthage]);
     expect(warTradeLines(state, f.syracusaeFaction)).toEqual([
       expect.stringMatching(
-        /^It closes Roma to Carthago by sea: cost [\d,]+ gold, brought about 0/,
+        /^It closes Roma to Carthago by sea: cost [\d,]+ gold, arrivals worth about 0 gold/,
       ),
       "Carthage joins as Syracusae's league partner, so its routes close too.",
     ]);

@@ -7,27 +7,28 @@ import { adminShareOf } from '../sim/systems/economy.ts';
 import { routeOpeningCost } from '../sim/trade/routes.ts';
 import { areAtWar } from '../sim/wars.ts';
 import { whole } from '../app/names.ts';
+import { treasuryFull } from './trade-caution.ts';
 
 type State = DeepReadonly<GameState>;
 type Route = DeepReadonly<TradeRoute>;
 
 /**
- * What a route has meant to one of its ends: the price that end paid, the gold its
- * arrivals have brought it, and the part of the price not yet earned back. Arrivals are
- * counted at today's administrative share, since the route keeps no tally of past pay.
+ * What a route has meant to one of its ends: the price that end paid, an estimate of what
+ * its arrivals were worth, and the price less that estimate. The route keeps no tally of
+ * past pay, so arrivals are valued at today's administrative share, and receipts a full
+ * treasury refused are counted as if kept.
  */
 export interface RouteLedger {
   readonly cost: number;
-  readonly received: number;
+  readonly worth: number;
   readonly owed: number;
 }
 
 export function routeLedger(state: State, route: Route, faction: FactionId): RouteLedger {
   const ends = Number(route.owner === faction) + Number(route.partner === faction);
   const cost = route.owner === faction ? route.cost : 0;
-  const received =
-    route.deliveries * route.daily * route.days * adminShareOf(state, faction) * ends;
-  return { cost, received, owed: Math.max(0, cost - received) };
+  const worth = route.deliveries * route.daily * route.days * adminShareOf(state, faction) * ends;
+  return { cost, worth, owed: Math.max(0, cost - worth) };
 }
 
 const cityName = (state: State, route: Route, end: 'from' | 'to') =>
@@ -37,19 +38,32 @@ export function routeName(state: State, route: Route): string {
   return `${cityName(state, route, 'from')} to ${cityName(state, route, 'to')} by ${route.mode}`;
 }
 
-/** "cost 1,345 gold, brought about 137, 1,208 still unpaid", from the player's side. */
+/** "cost 1,345 gold, arrivals worth about 137 gold, about 1,208 still unpaid", from the player's side. */
 export function ledgerText(state: State, route: Route): string {
-  const { cost, received, owed } = routeLedger(state, route, state.player);
+  const { cost, worth, owed } = routeLedger(state, route, state.player);
   const paid = cost
     ? `cost ${whole(cost)} gold`
     : `cost you nothing, as ${state.factions[route.owner]?.name ?? route.owner} paid`;
-  return `${paid}, brought about ${whole(received)}, ${whole(owed)} still unpaid`;
+  return `${paid}, arrivals worth about ${whole(worth)} gold, about ${whole(owed)} still unpaid`;
+}
+
+/** Said beside a ledger when the player's treasury is at its limit today. */
+function fullTreasuryText(state: State): string | undefined {
+  return treasuryFull(state, state.player)
+    ? 'Your treasury is full, and receipts above a full treasury were not kept, so you may have received less than that.'
+    : undefined;
 }
 
 /** The question Close route asks before it ends a running route. */
 export function closeText(state: State, route: Route): string {
   const domestic = route.owner === route.partner;
-  return `Close ${routeName(state, route)}? It ${ledgerText(state, route)}. Closing gives no refund, and opening it again costs the full price, ${whole(routeOpeningCost(route.km, domestic))} gold.`;
+  return [
+    `Close ${routeName(state, route)}? It ${ledgerText(state, route)}.`,
+    fullTreasuryText(state),
+    `Closing gives no refund, and opening it again costs the full price, ${whole(routeOpeningCost(route.km, domestic))} gold.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 /**
@@ -77,6 +91,8 @@ export function warTradeLines(state: State, against: FactionId): string[] {
   const running = routes.filter((r) => r.status === 'running');
   const offered = routes.length - running.length;
   const lines = running.map((r) => `It closes ${routeName(state, r)}: ${ledgerText(state, r)}.`);
+  const full = running.length ? fullTreasuryText(state) : undefined;
+  if (full) lines.push(full);
   const [, joiner] = [...enemies];
   if (joiner && routes.some((r) => r.owner === joiner || r.partner === joiner))
     lines.push(

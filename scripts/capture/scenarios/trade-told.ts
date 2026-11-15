@@ -93,7 +93,7 @@ export default defineScenario({
     await page.getByTestId('war-trade').scrollIntoViewIfNeeded();
     await shot(
       'war-routes',
-      'Declare war on Carthage? The route it closes with its price, its receipts and what is still unpaid, and the roads it exposes',
+      'Declare war on Carthage? The route it closes with its price, an estimate of its arrivals and of what is still unpaid, and the roads it exposes',
     );
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 
@@ -102,7 +102,7 @@ export default defineScenario({
     await page.getByTestId('trade-close-confirm').scrollIntoViewIfNeeded();
     await shot(
       'close-route',
-      'Close route asks first: what the route cost and brought, what is unpaid, no refund, and the price to open it again',
+      'Close route asks first: what the route cost, about what its arrivals were worth and what is unpaid, no refund, and the price to open it again',
     );
     await page.getByRole('button', { name: 'Keep route', exact: true }).click();
 

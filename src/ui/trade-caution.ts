@@ -1,7 +1,15 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
+import type { FactionId } from '../sim/ids.ts';
 import type { City } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
+
+/** Whether `owner` holds as much gold as its limit, so more receipts are lost today. */
+export function treasuryFull(game: DeepReadonly<GameState>, owner: FactionId): boolean {
+  const treasury = game.factions[owner]?.stores.gold;
+  const limit = limitsOf(game).get(owner)?.gold;
+  return treasury !== undefined && limit !== undefined && treasury >= limit;
+}
 
 /**
  * A full treasury loses its own owner's receipts above the limit, and only those, so the
@@ -12,12 +20,7 @@ export function tradeCaution(
   from: DeepReadonly<City>,
   to: DeepReadonly<City>,
 ): string | undefined {
-  const limits = limitsOf(game);
-  const full = [...new Set([from.owner, to.owner])].filter((owner) => {
-    const treasury = game.factions[owner]?.stores.gold;
-    const limit = limits.get(owner)?.gold;
-    return treasury !== undefined && limit !== undefined && treasury >= limit;
-  });
+  const full = [...new Set([from.owner, to.owner])].filter((owner) => treasuryFull(game, owner));
   if (!full.length) return undefined;
   return full
     .map((owner) => {
