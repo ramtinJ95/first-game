@@ -6,11 +6,12 @@ import type { Day } from '../state/day.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { PeaceTerms } from '../state/peace.ts';
 import { warKey } from '../state/war.ts';
-import { payTerms } from './terms.ts';
-import { TRUCE_DAYS } from './truce.ts';
+import { payTerms, termsPoints } from './terms.ts';
+import { truceLength } from './truce.ts';
 
 /**
- * Ends the war between the two on the terms, which the caller checked, and starts a truce.
+ * Ends the war between the two on the terms, which the caller checked, and starts a truce
+ * that a payment lengthens by what it was worth to the receiver.
  * Their armies leave at once the battles they fight against each other and the sieges of
  * each other's cities, so no later order of the day storms or fights on, and no army is
  * lost. That comes before any city changes hands, so a siege of a ceded city ends too.
@@ -18,11 +19,13 @@ import { TRUCE_DAYS } from './truce.ts';
  */
 export function makePeace(state: GameState, a: FactionId, b: FactionId, terms: PeaceTerms): void {
   const key = warKey(a, b);
+  const receiver = terms.kind === 'payment' && terms.payer === a ? b : a;
+  const paid = termsPoints(state, terms, receiver);
   part(state, a, b);
-  if (terms.kind === 'payment') payTerms(state, terms, terms.payer === a ? b : a);
+  if (terms.kind === 'payment') payTerms(state, terms, receiver);
   removeRecord(state.wars, key);
   removeRecord(state.peaceOffers, key);
-  state.truces[key] = { since: state.day, endsOn: (state.day + TRUCE_DAYS) as Day };
+  state.truces[key] = { since: state.day, endsOn: (state.day + truceLength(paid)) as Day };
   emit(state, { kind: 'peaceMade', between: [a, b], terms });
 }
 

@@ -11,6 +11,21 @@ import { warKey } from '../state/war.ts';
  */
 export const TRUCE_DAYS = 365;
 
+/**
+ * A paid peace binds longer, by this many days for each point the payer gave, so the
+ * side that took the price cannot come back for more the day a year runs out.
+ */
+export const TRUCE_DAYS_PER_POINT = 30;
+/** The most a payment adds to a truce, so no price buys a frozen border for good. */
+export const MAX_PAID_TRUCE_DAYS = 730;
+
+/** The days a truce lasts after a peace whose terms gave the receiver `paid` points. */
+export function truceLength(paid: number): number {
+  return (
+    TRUCE_DAYS + Math.min(MAX_PAID_TRUCE_DAYS, Math.round(Math.max(0, paid) * TRUCE_DAYS_PER_POINT))
+  );
+}
+
 /** The truce that still binds the two factions today, if any. */
 export function truceBetween(
   state: DeepReadonly<GameState>,

@@ -14,7 +14,13 @@ import type { Order } from '../sim/orders/orders.ts';
 import { standingOffer } from '../sim/peace/offer.ts';
 import { warStanding, type WarStanding } from '../sim/peace/standing.ts';
 import { AS_THINGS_STAND, copyTerms, termsPoints, termsProblem } from '../sim/peace/terms.ts';
-import { TRUCE_DAYS, truceDaysLeft } from '../sim/peace/truce.ts';
+import {
+  MAX_PAID_TRUCE_DAYS,
+  TRUCE_DAYS,
+  TRUCE_DAYS_PER_POINT,
+  truceDaysLeft,
+  truceLength,
+} from '../sim/peace/truce.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { PeaceTerms } from '../sim/state/peace.ts';
 import { warSides } from '../sim/state/war.ts';
@@ -50,6 +56,8 @@ export interface WarRow {
         readonly funds: string | undefined;
         readonly change: string | undefined;
         readonly problem: string | undefined;
+        /** How long the truce these terms start would hold. */
+        readonly truce: string;
         /** The player's answer, queued for the next day. */
         readonly answered: string | undefined;
         /** Cheaper terms the enemy would take today, which the player can send as a counter-offer. */
@@ -164,7 +172,7 @@ export function cheaperCounter(
       : `${name} would accept terms better for you.`;
   return {
     ...cheapest,
-    text: `${lead} By its reckoning today it would accept ${instead}. A counter-offer replaces its demand, and ${name} answers with the next day.`,
+    text: `${lead} By its reckoning today it would accept ${instead}. A counter-offer replaces its demand, and ${name} answers with the next day. ${truceText(state, cheapest.terms)}`,
   };
 }
 
@@ -181,6 +189,13 @@ export function newestOfferToPlayer(
     )
     .map(([, offer]) => ({ from: offer.from, madeOn: offer.madeOn }))
     .sort((a, b) => b.madeOn - a.madeOn || (a.from < b.from ? -1 : 1))[0];
+}
+
+/** How long a truce peace on the terms would start, which a payment lengthens. */
+export function truceText(state: State, terms: DeepReadonly<PeaceTerms>): string {
+  const paid = terms.kind === 'payment' ? -termsPoints(state, terms, terms.payer) : 0;
+  const days = truceLength(paid);
+  return `This peace starts a truce of ${whole(days)} days, until ${dateText(state.day + days)}.`;
 }
 
 /** Every war the player is in and how it stands, what peace is on offer, and the truces that hold. */
@@ -225,6 +240,7 @@ export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
                   change: offer.change,
                   problem: termsProblem(state, [player, enemy], offer.terms),
                   refusing: `Refuse, and the war goes on. ${name} makes no new offer for ${OFFER_GAP_DAYS} days.`,
+                  truce: truceText(state, offer.terms),
                   answered:
                     reply?.kind === 'acceptPeace'
                       ? `You accept. Peace comes with the next day.`
@@ -295,14 +311,15 @@ export function declarationFacts(state: State, against: FactionId): string[] {
     facts.push(
       `${whole(routes)} trade ${routes === 1 ? 'route' : 'routes'} with ${name} ${routes === 1 ? 'closes' : 'close'}.`,
     );
-  facts.push(
-    `${name} will not talk of peace for ${whole(MIN_WAR_DAYS)} days. A peace starts a truce of ${whole(TRUCE_DAYS)} days.`,
-  );
+  facts.push(`${name} will not talk of peace for ${whole(MIN_WAR_DAYS)} days. ${TRUCE_RULE}`);
   return facts;
 }
+
+/** How long a peace binds, as the confirmation, the panel at peace, and the guide tell it. */
+const TRUCE_RULE = `A peace starts a truce of ${whole(TRUCE_DAYS)} days, and ${whole(TRUCE_DAYS_PER_POINT)} more for each 100 gold, or its worth in cities, that one side pays, up to ${whole(MAX_PAID_TRUCE_DAYS)} more.`;
 
 /** How a war starts and ends, as the wars panel at peace and the guide both tell it. */
 export const PEACE_TEXT = {
   start: `A war starts when you declare it from a city's panel, with Declare war on its owner, or when another power declares war on you. A minor city's league partner joins a war on it.`,
-  end: `The wars panel then shows how each war stands, the enemy's offers of peace, and terms to send. Either side may offer peace once a war is ${whole(MIN_WAR_DAYS)} days old. A peace starts a truce of ${whole(TRUCE_DAYS)} days, in which neither side may declare war on the other.`,
+  end: `The wars panel then shows how each war stands, the enemy's offers of peace, and terms to send. Either side may offer peace once a war is ${whole(MIN_WAR_DAYS)} days old. ${TRUCE_RULE} Neither side may declare war during it.`,
 } as const;

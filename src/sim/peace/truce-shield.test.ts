@@ -13,6 +13,7 @@ import { advanceDay } from '../systems/advance-day.ts';
 import { tick } from '../tick.ts';
 import { AS_THINGS_STAND, GOLD_PER_POINT } from './terms.ts';
 import { warStanding } from './standing.ts';
+import { truceLength } from './truce.ts';
 
 const world = fixtureWorld();
 const key = warKey(f.rome, f.carthage);
@@ -153,7 +154,7 @@ describe('peace cannot turn a token war into a free truce shield', () => {
     expect(sent.rejected).toEqual([]);
     expect(made.rejected).toEqual([]);
     expect(made.state.factions[f.rome]?.stores.gold).toBe((before ?? 0) - 100);
-    expect(made.state.truces[key]).toEqual({ since: 63, endsOn: 428 });
+    expect(made.state.truces[key]).toEqual({ since: 63, endsOn: 63 + truceLength(1) });
     expectConsistent(made.state);
   });
 
@@ -332,7 +333,7 @@ describe('peace cannot turn a token war into a free truce shield', () => {
     );
     expect(made.rejected).toEqual([]);
     expect(made.state.factions[f.rome]?.stores.gold).toBe(before - 1100);
-    expect(made.state.truces[key]).toMatchObject({ since: 62, endsOn: 427 });
+    expect(made.state.truces[key]).toMatchObject({ since: 62, endsOn: 62 + truceLength(11) });
     expectConsistent(made.state);
   });
 
