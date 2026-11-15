@@ -198,27 +198,27 @@ The scaled truce was best on every row. The AI-odds candidate leaves the shortes
 
 ### Before/after, the branch rule (scaled truce and opening margin)
 
-| `npm run sim -- truce`, 10 years                              | Main 1–20     | Branch 1–20 | Main 21–40    | Branch 21–40   | Main 1–40     | Branch 1–40   |
-| ------------------------------------------------------------- | ------------- | ----------- | ------------- | -------------- | ------------- | ------------- |
-| Paid peaces                                                   | 74            | 62          | 67            | 66             | 141           | 128           |
-| Median truce after a paid peace                               | 365           | 1,040       | 365           | 1,010          | 365           | about 1,030   |
-| Paid peace to the same power's next declaration, median       | 437           | 1,040       | 430           | 1,040          | 435           | 1,040         |
-| The same, with none counted as never                          | 526           | 1,202       | 458           | 1,200          | 464           | 1,200         |
-| Day Rome falls, pays / refuses, median                        | 2,399 / 1,045 | 2,304 / 998 | 2,456 / 1,074 | 2,666 / 1,066  | 2,438 / 1,063 | 2,304 / 1,037 |
-| Rome survives ten years, pays / refuses                       | 2 / 0         | 0 / 0       | 3 / 0         | 3 / 0          | 5 / 0         | 3 / 0         |
-| Seeds where paying lives longer                               | 20 / 20       | 20 / 20     | 20 / 20       | 20 / 20        | 40 / 40       | 40 / 40       |
-| Median days gained by paying                                  | 1,233         | 1,291       | 1,428         | 1,140          | 1,331         | 1,224         |
-| Priced offers to Rome, asked / least taken, median points     | 31 / 20       | 22.5 / 22   | 29 / 17       | 22.5 / 20      |               |               |
-| Ask above that least: median / 90th percentile / most, points | 5 / 41 / 67   | 0.5 / 5 / 6 | 8 / 40 / 74.5 | 4.5 / 5 / 17.5 |               |               |
-| Offers more than 500 gold above that least                    | 87 of 177     | 6 of 159    | 90 of 178     | 8 of 184       |               |               |
+| `npm run sim -- truce`, 10 years                              | Main 1–20     | Branch 1–20 | Main 21–40    | Branch 21–40  | Main 1–40     | Branch 1–40   |
+| ------------------------------------------------------------- | ------------- | ----------- | ------------- | ------------- | ------------- | ------------- |
+| Paid peaces                                                   | 74            | 62          | 67            | 66            | 141           | 128           |
+| Median truce after a paid peace                               | 365           | 1,040       | 365           | 1,010         | 365           | about 1,030   |
+| Paid peace to the same power's next declaration, median       | 437           | 1,040       | 430           | 1,040         | 435           | 1,040         |
+| The same, with none counted as never                          | 526           | 1,202       | 458           | 1,200         | 464           | 1,200         |
+| Day Rome falls, pays / refuses, median                        | 2,399 / 1,045 | 2,304 / 998 | 2,456 / 1,074 | 2,666 / 1,066 | 2,438 / 1,063 | 2,304 / 1,037 |
+| Rome survives ten years, pays / refuses                       | 2 / 0         | 0 / 0       | 3 / 0         | 3 / 0         | 5 / 0         | 3 / 0         |
+| Seeds where paying lives longer                               | 20 / 20       | 20 / 20     | 20 / 20       | 20 / 20       | 40 / 40       | 40 / 40       |
+| Median days gained by paying                                  | 1,233         | 1,291       | 1,428         | 1,140         | 1,331         | 1,224         |
+| Priced offers to Rome, asked / least taken, median points     | 31 / 17       | 22.5 / 21   | 29 / 20       | 22.5 / 20     |               |               |
+| Ask above that least: median / 90th percentile / most, points | 5 / 41 / 67   | 2.5 / 5 / 5 | 5 / 40 / 74.5 | 4.5 / 5 / 5   |               |               |
+| Offers more than 500 gold above that least                    | 88 of 177     | 0 of 159    | 87 of 178     | 0 of 184      |               |               |
 
-The 40-seed columns are recomputed from the per-seed lines. The few asks above the margin come from the script reading the least on the day after the offer, when the war's facts had moved.
+The 40-seed columns are recomputed from the per-seed lines. The three opening rows read the AI's least on the day it set the price, as review asked. A first run had read it a day later, after the war's facts moved, and showed a few asks above the margin that the rule never made.
 
 What this shows:
 
 - A paid truce now holds. The same power's return after a paid peace moved from a median of 435 days to 1,040, and a return in the first year after the truce is gone.
 - Paying still saves an idle Rome in every seed, by 1,224 days at the median, but not by more than on main. The day Rome falls when paying moves by up to 1,500 days in either direction between rule variants on the same seed, so 20 or 40 seeds cannot separate 2,438 from 2,304. Measured cause: an idle Rome raises no men during the truce, while its enemy grows. The war that follows the last re-declaration kills Rome in a median 149 days on the branch and 181 on main, and that re-declaration comes later (median day 2,058 against 1,949). So the truce buys a player who uses it about three years. It cannot save a player who does nothing.
-- The opening price is now near the floor. On main half the priced offers asked more than 500 gold above what the AI would take, and a tenth asked 4,000 gold more. On the branch the 90th percentile is the 500-gold margin.
+- The opening price is now near the floor. On main half the priced offers asked more than 500 gold above what the AI would take, and a tenth asked 4,000 gold more. On the branch no offer asks more than the 500-gold margin.
 
 ### World, AI and peace
 
