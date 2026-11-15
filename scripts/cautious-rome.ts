@@ -12,6 +12,10 @@ import * as routes from '../src/sim/trade/routes.ts';
 import { areAtWar } from '../src/sim/wars.ts';
 import { distance } from '../src/sim/world/find-path.ts';
 import { buildWorld, type World } from '../src/sim/world/world.ts';
+import { threatNewsOfDay } from '../src/app/threat-news.ts';
+import { GUARD_GOLD, GUARD_UPKEEP, GUARD_BAND, guardRefusal } from '../src/sim/guards.ts';
+import { dailyBalances, limitsOf } from '../src/sim/systems/economy.ts';
+import { homeCapital } from '../src/sim/ai/situation.ts';
 
 export const map = parseMap(
   JSON.parse(readFileSync(new URL('../data/map/map.json', import.meta.url), 'utf8')),
@@ -36,15 +40,17 @@ export interface CautiousDay {
  * opens its best route by return per gold monthly, improves the route that repays soonest
  * with no route to open, skips a partner at war or a besieged end, and declares no war on
  * a partner whose routes have not repaid. With `peaceful`, Rome declares no war at all,
- * as the tester's cautious Rome did. Unlike trade-judge, a war Rome holds back does not
+ * as the tester's cautious Rome did. With `guards`, it also hires guards (`guardOrders`). Unlike trade-judge, a war Rome holds back does not
  * also hold back its trade that month. Plays until the years are out or Rome falls.
  */
 export function playCautiousRome(
   seed: number,
   years: number,
   onDay: (day: CautiousDay) => void,
-  { peaceful = false }: { peaceful?: boolean } = {},
+  { peaceful = false, guards = false }: { peaceful?: boolean; guards?: boolean } = {},
 ): GameState {
+  const told = new Set<string>();
+  let warnedAt: CityId | undefined;
   let state: GameState = newGame(map, { seed, player: 'rome' });
   const ledger = new Map<TradeRouteId, { paid: number; received: number; deliveries: number }>();
   for (let day = 0; day < years * 365; day++) {
@@ -63,12 +69,11 @@ export function playCautiousRome(
         (o.faction !== rome ||
           !['openTrade', 'acceptTrade', 'closeTrade', 'improveTrade'].includes(o.kind)),
     );
-    orders.unshift(
-      ...tradeOrders(
-        state,
-        ai.filter((o) => o.faction === rome && !held(o)),
-      ),
+    const trade = tradeOrders(
+      state,
+      ai.filter((o) => o.faction === rome && !held(o)),
     );
+    orders.unshift(...trade, ...(guards && trade.length === 0 ? guardOrders(state, warnedAt) : []));
     const before = new Set(Object.keys(state.tradeRoutes));
     const { state: next, rejected, events } = tick(state, orders, world);
     const accepted = orders.filter(
@@ -108,11 +113,37 @@ export function playCautiousRome(
       }
       if (!route || (route.owner !== rome && route.partner !== rome)) ledger.delete(id);
     }
+    for (const alert of threatNewsOfDay(state, next, world, told)) {
+      const at = alert.focus?.at;
+      warnedAt = Object.values(next.cities).find(
+        (city) => at && city.owner === rome && city.position.x === at.x && city.position.y === at.y,
+      )?.id;
+    }
     onDay({ before: state, after: next, events, accepted });
     state = next;
     if (state.factions[rome]?.defeatedOn !== null) break;
   }
   return state;
+}
+
+/**
+ * On its monthly turn with no trade to buy, Rome hires a band of guards while its gold is
+ * at least half its limit and its daily gold stays above zero with their upkeep: at the
+ * city the last warning of a coming war named, else at its capital.
+ */
+function guardOrders(state: GameState, warnedAt: CityId | undefined): Order[] {
+  if (state.day % 30 !== 0) return [];
+  const gold = state.factions[rome]?.stores.gold ?? 0;
+  const limit = limitsOf(state).get(rome)?.gold ?? Infinity;
+  const balance = dailyBalances(state).get(rome)?.gold ?? 0;
+  if (gold - GUARD_GOLD < limit / 2 || balance - GUARD_BAND * GUARD_UPKEEP <= 0) return [];
+  const capital = homeCapital(state, world, rome);
+  for (const id of [warnedAt, capital?.id]) {
+    const city = id && state.cities[id];
+    if (city && !guardRefusal(state, city, rome))
+      return [{ kind: 'hireGuards', faction: rome, city: city.id }];
+  }
+  return [];
 }
 
 function tradeOrders(state: GameState, ai: readonly Order[]): Order[] {
