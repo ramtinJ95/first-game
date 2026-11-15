@@ -287,6 +287,6 @@ test('a real offshore island is painted as land but cannot select a province or 
   await expect(page.getByTestId('army-panel')).toBeVisible();
   await page.mouse.click(screen.x, screen.y, { button: 'right' });
   await expect(page.getByTestId('notice')).toHaveText(
-    'Order refused. The destination is in the sea.',
+    'Order refused. No army can land on that islet.',
   );
 });
