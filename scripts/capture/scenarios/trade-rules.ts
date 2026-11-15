@@ -40,14 +40,10 @@ export default defineScenario({
       .click();
     await expect(page.getByTestId('store-gold-amount')).toHaveText('5,000');
     await page.getByTestId('trade-routes').scrollIntoViewIfNeeded();
+    await expect(page.getByTestId('trade-payment-timing')).toBeInViewport();
     await shot(
       'trade-ordered',
-      'The queued opening order reserves a route slot at both ends; the treasury still holds 5,000 gold while paused',
-    );
-    await page.getByTestId('trade-payment-timing').scrollIntoViewIfNeeded();
-    await shot(
-      'trade-payment-queued',
-      'Opening gold is paid when the clock runs, not when a paused order is queued',
+      'The queued opening order reserves a route slot at both ends; the treasury still holds 5,000 gold while paused, and the panel says opening gold is paid when the clock runs',
     );
   },
 });
