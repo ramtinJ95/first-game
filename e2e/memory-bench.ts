@@ -21,7 +21,9 @@ import { dropSave, map, openGame, startGame } from './support.ts';
  * page created them, and the resident memory of the renderer and GPU processes.
  * Build first with `npm run build`; `--root <dir>` serves another checkout's build.
  *
- * `--bound 0.1` fails the run when the last load holds more than a tenth over the third.
+ * `--bound 0.1` fails the run when the JS heap of the last three loads is more than a tenth
+ * over that of loads 3 to 5, and `--process-bound` sets the share for the renderer and GPU
+ * processes, whose memory in software rises for about fifty loads to a plateau.
  *
  *   node e2e/memory-bench.ts [--loads 30 | --years 10] [--days 300] [--draw full] [--out file.csv]
  */
@@ -29,6 +31,7 @@ const { values } = parseArgs({
   options: {
     loads: { type: 'string' },
     bound: { type: 'string' },
+    'process-bound': { type: 'string' },
     years: { type: 'string' },
     days: { type: 'string', default: '300' },
     draw: { type: 'string', default: 'full' },
@@ -47,10 +50,12 @@ const VIEWPORT = { width: 1280, height: 720 };
 /**
  * A long session looks at many places, so each zoom goes in over the next of these:
  * the Persian plateau where the tester's tab crashed, then every third city of the map
- * from west to east.
+ * from west to east. Each step then zooms in over the plateau too, so every sample holds
+ * the same last view and differs only by what the places before it left behind.
  */
+const PLATEAU: MapPoint = { x: 6080, y: 3330 };
 const PLACES: MapPoint[] = [
-  { x: 6080, y: 3330 },
+  PLATEAU,
   ...map.provinces
     .map(({ city: [x, y] }) => ({ x, y }))
     .sort((a, b) => a.x - b.x || a.y - b.y)
@@ -308,6 +313,7 @@ try {
         .and(page.locator(`[data-day="${days}"]`))
         .waitFor();
       await zoomCycle(page, PLACES[(load - 1) % PLACES.length] as MapPoint);
+      await zoomCycle(page, PLATEAU);
       print(await sample(page, `load ${load}`));
       if (errors.length > 0) throw new Error(errors.join('; '));
       if ((rows.at(-1)?.freeMb ?? Infinity) < LOW_MB) {
@@ -331,6 +337,7 @@ try {
         { timeout: 1_800_000, polling: 1000 },
       );
       await zoomCycle(page, PLACES[(year - 1) % PLACES.length] as MapPoint);
+      await zoomCycle(page, PLATEAU);
       print(await sample(page, `year ${year}`));
       if (errors.length > 0) throw new Error(errors.join('; '));
     }
@@ -353,21 +360,35 @@ try {
 }
 
 if (values.bound) {
-  const share = Number(values.bound);
-  const third = rows.find((row) => row.step === 'load 3');
-  const last = rows.at(-1);
-  if (!third || !last || last === third) throw new Error('--bound needs more than three loads');
-  const tab = (row: typeof third) => row.rendererMb + row.gpuMb;
+  const loads = rows.filter((row) => row.step.startsWith('load '));
+  if (loads.length < 6) throw new Error('--bound needs at least six loads');
+  if (loads.at(-1)?.step !== `load ${values.loads}`) {
+    throw new Error(
+      `--bound: the run stopped after ${loads.at(-1)?.step} of ${values.loads} loads`,
+    );
+  }
+  // One load's heap swings by a fifth with what the last view left built, so each end is
+  // the mean of three loads: loads 3 to 5, and the last three.
+  const mean = (some: typeof loads, pick: (row: (typeof loads)[number]) => number) =>
+    Math.round(some.reduce((sum, row) => sum + pick(row), 0) / some.length);
+  const early = loads.slice(2, 5);
+  const late = loads.slice(-3);
   const checks = [
-    ['the renderer and GPU processes', tab(third), tab(last)],
-    ['the JS heap', third.heapMb, last.heapMb],
+    ['the JS heap', (row: (typeof loads)[number]) => row.heapMb, Number(values.bound)],
+    [
+      'the renderer and GPU processes',
+      (row: (typeof loads)[number]) => row.rendererMb + row.gpuMb,
+      Number(values['process-bound'] ?? values.bound),
+    ],
   ] as const;
   let held = true;
-  for (const [what, before, after] of checks) {
+  for (const [what, pick, share] of checks) {
+    const before = mean(early, pick);
+    const after = mean(late, pick);
     const ok = after <= before * (1 + share);
     held &&= ok;
     console.log(
-      `${ok ? 'held' : 'NOT held'}: ${what} hold ${after} MB after ${last.step}, against ${before} MB after load 3 (bound ${Math.round(before * (1 + share))} MB)`,
+      `${ok ? 'held' : 'NOT held'}: ${what} hold ${after} MB over the last three loads, against ${before} MB over loads 3 to 5 (bound ${Math.round(before * (1 + share))} MB)`,
     );
   }
   if (!held) process.exitCode = 1;
