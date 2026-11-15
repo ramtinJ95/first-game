@@ -19,11 +19,11 @@ import {
   TRUCE_DAYS,
   TRUCE_DAYS_PER_POINT,
   truceDaysLeft,
-  truceLength,
 } from '../sim/peace/truce.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { PeaceTerms } from '../sim/state/peace.ts';
 import { warSides } from '../sim/state/war.ts';
+import { peaceTruceDays } from '../sim/peace/make-peace.ts';
 
 type State = DeepReadonly<GameState>;
 
@@ -37,6 +37,8 @@ export interface PeaceChoice {
   readonly label: string;
   readonly terms: PeaceTerms;
   readonly answer: PeaceAnswer;
+  /** The truce these terms buy if sent today and accepted with the next day. */
+  readonly truce: string;
 }
 
 /** One war of the player's as the wars panel shows it. */
@@ -142,7 +144,9 @@ export function peaceChoices(state: State, enemy: FactionId): PeaceChoice[] {
   }
   return options.flatMap(({ label, terms }) => {
     const answer = terms && peaceAnswer(state, enemy, player, terms);
-    return terms && answer ? [{ label, terms, answer }] : [];
+    return terms && answer
+      ? [{ label, terms, answer, truce: truceText(state, enemy, terms, state.day + 1) }]
+      : [];
   });
 }
 
@@ -172,7 +176,7 @@ export function cheaperCounter(
       : `${name} would accept terms better for you.`;
   return {
     ...cheapest,
-    text: `${lead} By its reckoning today it would accept ${instead}. A counter-offer replaces its demand, and ${name} answers with the next day. ${truceText(state, cheapest.terms, state.day + 1)}`,
+    text: `${lead} By its reckoning today it would accept ${instead}. A counter-offer replaces its demand, and ${name} answers with the next day. ${cheapest.truce}`,
   };
 }
 
@@ -198,11 +202,11 @@ export function newestOfferToPlayer(
  */
 export function truceText(
   state: State,
+  enemy: FactionId,
   terms: DeepReadonly<PeaceTerms>,
   madeOn: number = state.day,
 ): string {
-  const paid = terms.kind === 'payment' ? -termsPoints(state, terms, terms.payer) : 0;
-  const days = truceLength(paid);
+  const days = peaceTruceDays(state, state.player, enemy, terms);
   return `This peace starts a truce of ${whole(days)} days, until ${dateText(madeOn + days)}.`;
 }
 
@@ -248,7 +252,7 @@ export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
                   change: offer.change,
                   problem: termsProblem(state, [player, enemy], offer.terms),
                   refusing: `Refuse, and the war goes on. ${name} makes no new offer for ${OFFER_GAP_DAYS} days.`,
-                  truce: truceText(state, offer.terms),
+                  truce: truceText(state, enemy, offer.terms),
                   answered:
                     reply?.kind === 'acceptPeace'
                       ? `You accept. Peace comes with the next day.`

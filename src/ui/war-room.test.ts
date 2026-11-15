@@ -16,6 +16,9 @@ import { peaceAnswer } from '../sim/ai/peace.ts';
 import { tick } from '../sim/tick.ts';
 import { expectConsistent } from '../sim/references.ts';
 import { newWar, warKey } from '../sim/state/war.ts';
+import type { PeaceTerms } from '../sim/state/peace.ts';
+import { decideOrders } from '../sim/ai/decide.ts';
+import { dateText } from '../app/names.ts';
 
 const world = fixtureWorld();
 const f = FIXTURE;
@@ -288,11 +291,84 @@ describe('the truce a written offer buys', () => {
     const state = buildFixture();
     state.day = 100 as Day;
     const pay = (gold: number) =>
-      truceText(state, { kind: 'payment', payer: FIXTURE.rome, gold, cities: [] }, state.day + 1);
-    expect(truceText(state, { kind: 'asThingsStand' }, state.day + 1)).toBe(
+      truceText(
+        state,
+        FIXTURE.carthage,
+        { kind: 'payment', payer: FIXTURE.rome, gold, cities: [] },
+        state.day + 1,
+      );
+    expect(truceText(state, FIXTURE.carthage, { kind: 'asThingsStand' }, state.day + 1)).toBe(
       'This peace starts a truce of 365 days, until Year 2, day 101.',
     );
     expect(pay(1_000)).toBe('This peace starts a truce of 665 days, until Year 3, day 36.');
     expect(pay(2_500)).toBe('This peace starts a truce of 1,095 days, until Year 4, day 101.');
+  });
+});
+
+describe('the truce shown before terms are sent is the truce they buy', () => {
+  const key = warKey(f.rome, f.carthage);
+
+  /** Carthage took Capua in a war Rome declared 225 days ago, so it wants gold for peace. */
+  function carthageAhead(): GameState {
+    const state = warOn(226);
+    changeCityOwner(state, f.capua, f.carthage);
+    const rome = state.factions[f.rome];
+    if (!rome) throw new Error('fixture');
+    rome.stores.gold = 20_000;
+    return state;
+  }
+
+  /** The line for the truce the peace in the state made, as the panel words it. */
+  function made(state: GameState): string {
+    const truce = state.truces[key];
+    if (!truce) throw new Error('no peace was made');
+    expect(state.wars[key]).toBeUndefined();
+    expectConsistent(state);
+    return `This peace starts a truce of ${(truce.endsOn - truce.since).toLocaleString('en-GB')} days, until ${dateText(truce.endsOn)}.`;
+  }
+
+  /** Rome sends the terms, and Carthage answers the next day as the AI does. */
+  function sent(state: GameState, terms: PeaceTerms): GameState {
+    const offered = tick(
+      state,
+      [{ kind: 'offerPeace', faction: f.rome, to: f.carthage, terms }],
+      world,
+    );
+    return tick(offered.state, decideOrders(offered.state, world, f.carthage), world).state;
+  }
+
+  test('a one-click suggestion', () => {
+    const state = carthageAhead();
+    const choice = warRoomOf(state, []).wars[0]?.choices.find((c) => c.terms.kind === 'payment');
+    if (!choice) throw new Error('no paid suggestion');
+    expect(choice.answer.accepts).toBe(true);
+    expect(choice.truce).toBe(made(sent(state, choice.terms)));
+  });
+
+  test('terms written on the form', () => {
+    const state = carthageAhead();
+    const terms: PeaceTerms = { kind: 'payment', payer: f.rome, gold: 4_000, cities: [] };
+    expect(peaceAnswer(state, f.carthage, f.rome, terms)?.accepts).toBe(true);
+    expect(truceText(state, f.carthage, terms, state.day + 1)).toBe(made(sent(state, terms)));
+  });
+
+  test("an enemy's offer accepted, and the cheaper counter-offer to it", () => {
+    const state = carthageAhead();
+    const demand: PeaceTerms = { kind: 'payment', payer: f.rome, gold: 9_000, cities: [] };
+    const offered = tick(
+      state,
+      [{ kind: 'offerPeace', faction: f.carthage, to: f.rome, terms: demand }],
+      world,
+    ).state;
+    const theirs = warRoomOf(offered, []).wars[0]?.theirOffer;
+    if (!theirs?.counter) throw new Error('no offer with a cheaper counter-offer');
+    const accepted = tick(
+      offered,
+      [{ kind: 'acceptPeace', faction: f.rome, from: f.carthage, terms: demand }],
+      world,
+    ).state;
+    expect(theirs.truce).toBe(made(accepted));
+    expect(theirs.counter.truce).toBe(made(sent(offered, theirs.counter.terms)));
+    expect(theirs.counter.text).toContain(theirs.counter.truce);
   });
 });

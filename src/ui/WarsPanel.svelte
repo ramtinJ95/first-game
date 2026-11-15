@@ -235,6 +235,7 @@
             <span class={choice.answer.accepts ? 'good' : 'bad'}
               >{peaceVerdict(game, choice.answer)}</span
             >
+            <span class="muted" data-testid="peace-choice-truce">{choice.truce}</span>
           </li>
         {/each}
       </ul>
@@ -279,7 +280,7 @@
         </p>
         {@render reckoning(draftAnswer)}
         {#if war.ourOffer === undefined}
-          <p data-testid="peace-draft-truce">{truceText(game, draft, game.day + 1)}</p>
+          <p data-testid="peace-draft-truce">{truceText(game, war.enemy, draft, game.day + 1)}</p>
         {/if}
         <div class="row">
           <button
