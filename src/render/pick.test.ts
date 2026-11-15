@@ -77,6 +77,12 @@ describe('islets off Carthago at the closest zoom', () => {
     expect(click(zembra)).toBeUndefined();
   });
 
+  it('counts no reachable shore as an islet, even where no province outline holds the point', () => {
+    const shore = { x: 2228.7, y: 2943.1 };
+    expect(provinceAt(MAP, shore)).toBeUndefined();
+    expect(isletAt(MAP, shore)).toBe(false);
+  });
+
   it("selects Carthago's province on Cossyra, which the rules give to Carthago, 146 km out", () => {
     const cossyra = { x: 2372.4, y: 2898.2 };
     expect(isletAt(MAP, cossyra)).toBe(false);

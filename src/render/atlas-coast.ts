@@ -5,6 +5,7 @@ import { AreaIndex } from './terrain/area-index.ts';
 
 const checked = new WeakSet<GameMap>();
 let index: AreaIndex | undefined;
+let scenery: AreaIndex | undefined;
 let coast: { land: MultiPolygon; lines: Point[][] } | undefined;
 export const ATLAS_COAST_SCALE = 0.6;
 
@@ -50,4 +51,13 @@ export function atlasLand(map: GameMap): AreaIndex {
   const { land } = atlasCoast(map);
   index ??= new AreaIndex([land], 0, { seams: false });
   return index;
+}
+
+/** The islets the atlas draws that no province holds, so no army can land on them. */
+export function atlasScenery(map: GameMap): AreaIndex {
+  const { land } = atlasCoast(map);
+  scenery ??= new AreaIndex([drawing.scenery.flatMap((p) => (land[p] ? [land[p]] : []))], 0, {
+    seams: false,
+  });
+  return scenery;
 }
