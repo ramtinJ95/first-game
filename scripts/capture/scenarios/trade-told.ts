@@ -144,11 +144,15 @@ export default defineScenario({
     await pause(page);
     await expect(alerts).toContainText('The siege of Syracusae stops trade: Roma to Syracusae.');
     await expect(alerts).toContainText('Macedon raided the road Roma to Capua');
+    await page.getByRole('button', { name: 'Chronicle', exact: true }).click();
+    const chronicle = page.getByTestId('chronicle');
+    await expect(chronicle).toContainText('The siege of Syracusae stops trade');
     await shot(
       'news',
       'The news of trade: Carthage’s siege of Syracusae warns that the route closes if it falls, Macedon’s raid is one line with its loss, and the fall closes the route',
     );
 
+    await page.getByRole('button', { name: 'Chronicle', exact: true }).click();
     await load(page, syracusaeAtWar);
     await openCity(page, 'roma', 'Roma');
     await resizeTo(page, { width: 390, height: 844 });
