@@ -80,6 +80,7 @@
       {#if view.current.panel === 'wars'}
         <WarsPanel
           {game}
+          {world}
           pending={view.current.pending}
           paused={view.current.paused}
           {actions}

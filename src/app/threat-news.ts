@@ -1,5 +1,6 @@
 import { warReadiness } from '../sim/ai/war.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
+import type { FactionId } from '../sim/ids.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { truceBetween } from '../sim/peace/truce.ts';
 import { areAtWar } from '../sim/wars.ts';
@@ -70,18 +71,75 @@ export function threatNewsOfDay(
     if (!threat || readiness < THREAT_WARN || remembered.has(key)) continue;
     remembered.add(key);
     const front = after.cities[threat.front];
-    const gold = after.factions[player]?.stores.gold ?? 0;
-    const hoard =
-      threat.hoard > 0 && !threat.pressed
-        ? ` Your treasury of ${whole(gold)} gold lowers what it needs by ${Math.round(threat.hoard * 100)}%, since a peace would make you pay it.`
-        : '';
     news.push({
       kind: 'warThreat',
       day: before.day,
       tone: 'bad',
-      text: `${factionName(after, power.id)} could soon declare war on you: its armies have ${Math.round(Math.min(1, threat.readiness) * 100)}% of the strength it needs against your forces near ${front?.name ?? 'your land'}.${hoard}${front && !threat.pressed ? ` Guards hired at ${front.name} count against it.` : ''}`,
+      text: `${factionName(after, power.id)} could soon declare war on you: its armies have ${percent(threat)} of the strength it needs against your forces near ${front?.name ?? 'your land'}.${whatCounts(after, threat)}`,
       ...(front ? { focus: { at: front.position } } : {}),
     });
   }
   return news;
+}
+
+type Threat = NonNullable<ReturnType<typeof warReadiness>>;
+
+const percent = (threat: Threat) => `${Math.round(Math.min(1, threat.readiness) * 100)}%`;
+
+/** What the player's treasury takes off what the power needs, and that guards count against it, as the news and the wars panel both say. */
+function whatCounts(state: State, threat: Threat): string {
+  if (threat.pressed) return '';
+  const front = state.cities[threat.front];
+  const gold = state.factions[state.player]?.stores.gold ?? 0;
+  const hoard =
+    threat.hoard > 0
+      ? ` Your treasury of ${whole(gold)} gold lowers what it needs by ${Math.round(threat.hoard * 100)}%, since a peace would make you pay it.`
+      : '';
+  return `${hoard}${front ? ` Guards hired at ${front.name} count against it.` : ''}`;
+}
+
+/** How near one great power at peace with the player stands to declaring war on it today, as the wars panel lists it. */
+export interface StandingThreat {
+  readonly power: FactionId;
+  readonly name: string;
+  /** Its share of the strength it needs, 0 to 1, or undefined when it weighs no war on the player. */
+  readonly readiness: number | undefined;
+  readonly text: string;
+}
+
+/**
+ * Each great power at peace with the player and bound by no truce, by id, with how near
+ * it stands to the strength it needs to declare war on the player by the rule the AI
+ * declares by, in the news's words. A truce row says when a power bound by one may.
+ */
+export function standingThreats(state: State, world: World): StandingThreat[] {
+  const player = state.player;
+  return Object.values(state.factions)
+    .filter(
+      (power) =>
+        power.id !== player &&
+        power.kind === 'greatPower' &&
+        power.defeatedOn === null &&
+        !areAtWar(state, power.id, player) &&
+        !truceBetween(state, power.id, player),
+    )
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .map((power) => {
+      const name = factionName(state, power.id);
+      const threat = warReadiness(state, world, power.id, player);
+      if (!threat)
+        return {
+          power: power.id,
+          name,
+          readiness: undefined,
+          text: `${name} is not weighing a war on you now: none of its cities is near enough to yours, or none of its armies stands ready to march.`,
+        };
+      const front = state.cities[threat.front];
+      return {
+        power: power.id,
+        name,
+        readiness: Math.min(1, threat.readiness),
+        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${threat.pressed ? 'weighing all your armies in the field' : `against your forces near ${front?.name ?? 'your land'}`}.${whatCounts(state, threat)}`,
+      };
+    });
 }

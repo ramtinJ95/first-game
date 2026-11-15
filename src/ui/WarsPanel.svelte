@@ -10,6 +10,8 @@
   import type { PeaceTerms } from '../sim/state/peace.ts';
   import type { Actions } from './actions.ts';
   import { unansweredOffer } from '../app/modals.ts';
+  import { standingThreats, THREAT_WARN } from '../app/threat-news.ts';
+  import type { World } from '../sim/world/world.ts';
   import {
     newestOfferToPlayer,
     PEACE_TEXT,
@@ -21,12 +23,14 @@
 
   let {
     game,
+    world,
     pending,
     paused,
     actions,
     close,
   }: {
     game: DeepReadonly<GameState>;
+    world: World;
     pending: readonly Order[];
     paused: boolean;
     actions: Actions;
@@ -36,6 +40,7 @@
   type Payer = 'nobody' | 'us' | 'them';
 
   const room = $derived(warRoomOf(game, pending));
+  const threats = $derived(standingThreats(game, world));
   let open = $state<FactionId | undefined>(undefined);
   let payer = $state<Payer>('nobody');
   let gold = $state(0);
@@ -297,6 +302,16 @@
     </div>
   {/if}
 
+  {#if threats.length > 0}
+    <h3>At peace</h3>
+    <ul class="facts" data-testid="threats">
+      {#each threats as threat (threat.power)}
+        <li data-testid="threat-row" class:bad={(threat.readiness ?? 0) >= THREAT_WARN}>
+          {threat.text}
+        </li>
+      {/each}
+    </ul>
+  {/if}
   {#if room.truces.length > 0}
     <h3>Truces</h3>
     <ul class="facts" data-testid="truces">
