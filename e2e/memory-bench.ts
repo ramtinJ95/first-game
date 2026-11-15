@@ -21,11 +21,14 @@ import { dropSave, map, openGame, startGame } from './support.ts';
  * page created them, and the resident memory of the renderer and GPU processes.
  * Build first with `npm run build`; `--root <dir>` serves another checkout's build.
  *
+ * `--bound 0.1` fails the run when the last load holds more than a tenth over the third.
+ *
  *   node e2e/memory-bench.ts [--loads 30 | --years 10] [--days 300] [--draw full] [--out file.csv]
  */
 const { values } = parseArgs({
   options: {
     loads: { type: 'string' },
+    bound: { type: 'string' },
     years: { type: 'string' },
     days: { type: 'string', default: '300' },
     draw: { type: 'string', default: 'full' },
@@ -347,4 +350,25 @@ try {
       'step,heapMb,nodes,listeners,textures,textureMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb';
     writeFileSync(values.out, [header, ...rows.map((r) => Object.values(r).join(','))].join('\n'));
   }
+}
+
+if (values.bound) {
+  const share = Number(values.bound);
+  const third = rows.find((row) => row.step === 'load 3');
+  const last = rows.at(-1);
+  if (!third || !last || last === third) throw new Error('--bound needs more than three loads');
+  const tab = (row: typeof third) => row.rendererMb + row.gpuMb;
+  const checks = [
+    ['the renderer and GPU processes', tab(third), tab(last)],
+    ['the JS heap', third.heapMb, last.heapMb],
+  ] as const;
+  let held = true;
+  for (const [what, before, after] of checks) {
+    const ok = after <= before * (1 + share);
+    held &&= ok;
+    console.log(
+      `${ok ? 'held' : 'NOT held'}: ${what} hold ${after} MB after ${last.step}, against ${before} MB after load 3 (bound ${Math.round(before * (1 + share))} MB)`,
+    );
+  }
+  if (!held) process.exitCode = 1;
 }
