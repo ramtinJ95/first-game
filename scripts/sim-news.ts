@@ -8,6 +8,7 @@ import {
   type Alert,
 } from '../src/app/alerts.ts';
 import { alertsInSight } from '../src/app/sighted.ts';
+import { tradeNews, type TradeTrouble } from '../src/app/trade-news.ts';
 import { worldNewsOfDay } from '../src/app/world-news.ts';
 import { decideAll } from '../src/sim/ai/decide.ts';
 import { parseMap } from '../src/sim/map.ts';
@@ -55,6 +56,7 @@ function linesBefore(alert: Alert): number {
 function play(seed: number, active: boolean): Year[] {
   let state: GameState = newGame(map, { seed, player: 'rome' });
   let weak = new Map();
+  let troubles: TradeTrouble[] = [];
   const years: Year[] = [];
   for (let day = 1; day <= YEARS * YEAR; day++) {
     const year = Math.floor((day - 1) / YEAR);
@@ -65,10 +67,13 @@ function play(seed: number, active: boolean): Year[] {
     const sees = sightOf(next, world, state.player);
     const weakNews = weakSiegeNews(state, next, weak);
     weak = weakNews.watched;
+    const trade = tradeNews(state, next, events, troubles);
+    troubles = trade.watched;
     const own = groupAlerts([
       ...alertsInSight(alertsOfDay(state, next, events), saw, sees),
       ...sightingsOfDay(state, next, saw, sees, world),
       ...weakNews.alerts,
+      ...trade.alerts,
     ]);
     const news = worldNewsOfDay(state, next, events, world);
     counts.before += own.reduce((sum, alert) => sum + linesBefore(alert), 0);

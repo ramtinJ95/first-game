@@ -1,11 +1,10 @@
 import { emit } from '../events.ts';
-import { removeRecord } from '../records.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { Day } from '../state/day.ts';
 import type { FactionId } from '../ids.ts';
 import { adminShareOf, limitsOf, menOf } from './economy.ts';
 import { warSides } from '../state/war.ts';
-import { distanceToRoute, RAID_KM, routePoint } from '../trade/routes.ts';
+import { closeRoute, distanceToRoute, RAID_KM, TRADE_INVITATION_DAYS } from '../trade/routes.ts';
 
 /** Sieges stand in for a sea blockade until war fleets exist; ships cannot be raided offshore. */
 export function trade(state: GameState): void {
@@ -32,20 +31,11 @@ export function trade(state: GameState): void {
         ? 'a city changed owner'
         : threats.get(route.owner)?.has(route.partner)
           ? 'war between the partners'
-          : route.status === 'offered' && state.day - route.openedOn >= 90
+          : route.status === 'offered' && state.day - route.openedOn >= TRADE_INVITATION_DAYS
             ? 'the invitation expired'
             : undefined;
     if (cause || !from || !to) {
-      emit(state, {
-        kind: 'tradeClosed',
-        route: route.id,
-        from: route.from,
-        to: route.to,
-        owners: [route.owner, route.partner],
-        cause,
-        position: routePoint(route),
-      });
-      removeRecord(state.tradeRoutes, route.id);
+      closeRoute(state, route, cause ?? 'a city changed owner');
       continue;
     }
     if (route.status !== 'running') continue;
@@ -65,18 +55,27 @@ export function trade(state: GameState): void {
         : undefined;
     const blocked = siege ? 'siege' : raider ? 'raid' : null;
     if (blocked && blocked !== route.blocked) {
-      const position =
-        raider && 'position' in raider.activity ? raider.activity.position : from.position;
-      emit(state, {
+      const base = {
         kind: 'tradeRaided',
         route: route.id,
         from: route.from,
         to: route.to,
         owners: [route.owner, route.partner],
-        cause: blocked,
-        position: { ...position },
-      });
+      } as const;
       const looter = raider && state.factions[raider.owner];
+      if (blocked === 'raid' && raider && 'position' in raider.activity) {
+        const looted = looter && state.day >= route.departsOn ? route.daily * route.days : 0;
+        emit(state, {
+          ...base,
+          cause: 'raid',
+          raider: raider.owner,
+          looted,
+          position: { ...raider.activity.position },
+        });
+      } else {
+        const at = sieged.has(route.from) ? from : to;
+        emit(state, { ...base, cause: 'siege', position: { ...at.position } });
+      }
       if (looter && state.day >= route.departsOn) {
         looter.stores.gold += route.daily * route.days;
         route.departsOn = (state.day + route.days) as Day;

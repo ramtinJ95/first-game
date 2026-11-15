@@ -5,6 +5,14 @@ import type { GameState } from './state/game-state.ts';
 import type { MapPoint } from './state/map-point.ts';
 import type { PeaceTerms } from './state/peace.ts';
 
+interface TradeEvent {
+  route: TradeRouteId;
+  from: CityId;
+  to: CityId;
+  owners: readonly [FactionId, FactionId];
+  position: MapPoint;
+}
+
 export type BattleSideName = 'attackers' | 'defenders';
 
 export interface BattleSideOutcome {
@@ -22,15 +30,21 @@ export type ArmyLoss = 'battle' | 'surrender' | 'storm' | 'sally' | 'defeat';
  * gone by the end of the day.
  */
 export type DayEvent =
-  | {
-      kind: 'tradeOpened' | 'tradeOffered' | 'tradeClosed' | 'tradeRaided';
-      route: TradeRouteId;
-      from: CityId;
-      to: CityId;
-      owners: readonly [FactionId, FactionId];
-      position: MapPoint;
-      cause?: string;
-    }
+  | (TradeEvent & { kind: 'tradeOpened' | 'tradeOffered' })
+  | (TradeEvent & {
+      kind: 'tradeClosed';
+      cause: string;
+      /** The route was an invitation still waiting for consent, so it never ran. */
+      invitation: boolean;
+    })
+  | (TradeEvent & { kind: 'tradeRaided'; cause: 'siege' })
+  | (TradeEvent & {
+      kind: 'tradeRaided';
+      cause: 'raid';
+      raider: FactionId;
+      /** The raider's gold: one shipment, or nothing when no fresh cargo was on the road. */
+      looted: number;
+    })
   | {
       kind: 'battleBegan';
       battle: BattleId;

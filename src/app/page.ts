@@ -15,6 +15,7 @@ import { MapPointSchema } from '../sim/state/map-point.ts';
 import { PeaceForecastSchema, PeaceTermsSchema } from '../sim/state/peace.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import { DesertionSchema, type Desertion } from './desertion.ts';
+import { TradeTroublesSchema, type TradeTrouble } from './trade-news.ts';
 import {
   ALERT_KINDS,
   PAUSE_KINDS,
@@ -56,6 +57,7 @@ const AlertSchema = v.object({
 
 const PageSchema = v.object({
   desertion: v.optional(DesertionSchema),
+  tradeTroubles: v.optional(TradeTroublesSchema),
   paused: v.optional(v.boolean()),
   pendingPeace: v.optional(
     v.array(
@@ -110,6 +112,7 @@ const PageSchema = v.object({
  */
 export interface Page {
   readonly desertion?: Desertion;
+  readonly tradeTroubles?: readonly TradeTrouble[];
   readonly paused?: boolean;
   readonly pendingPeace?: readonly Extract<
     Order,
@@ -152,6 +155,7 @@ export function parsePage(
   }
   const {
     desertion,
+    tradeTroubles,
     chronicle,
     camera,
     selection,
@@ -166,6 +170,7 @@ export function parsePage(
     ok: true,
     page: {
       desertion,
+      tradeTroubles,
       paused,
       pendingPeace,
       chronicle,
