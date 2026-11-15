@@ -58,8 +58,13 @@ console.log(
 console.log('| --- | ---: | ---: | ---: | ---: | ---: | ---: |');
 const BANDS = [365, 730, 1460, Infinity] as const;
 let chosen: Forecast | undefined;
-const audited: { day: number; forecast: Forecast; shortOn: number | undefined; seed?: number }[] =
-  [];
+const audited: {
+  day: number;
+  forecast: Forecast;
+  shortOn: number | undefined;
+  seed?: number;
+  until?: number;
+}[] = [];
 const sorted = new Map<string, { growthWarns: number; growthClears: number }>(
   (['food', 'gold'] as const).flatMap((store) =>
     BANDS.map((band) => [bandKey(store, band), { growthWarns: 0, growthClears: 0 }]),
@@ -80,7 +85,9 @@ for (const rule of rules) {
 function play(seed: number, warns: (forecast: Forecast) => boolean) {
   let state: GameState = newGame(map, { seed, player: 'rome' });
   const row = { raised: 0, hunger: 0, unpaid: 0, lost: 0, defeated: 0, warned: 0 };
+  let lastDay = 0;
   for (let day = 0; day < years * 365; day++) {
+    lastDay = day;
     const orders: Order[] = decideAll(state, world, []).filter(
       (order) => !(order.kind === 'recruit' && order.faction === rome),
     );
@@ -91,7 +98,8 @@ function play(seed: number, warns: (forecast: Forecast) => boolean) {
     const { state: next, events, rejected } = tick(state, orders, world);
     if (raise && raise !== 'warned' && !rejected.some((r) => r.order === raise)) {
       row.raised++;
-      if (values.audit && chosen) audited.push({ day, forecast: chosen, shortOn: undefined });
+      if (values.audit && warns === RULES.none && chosen)
+        audited.push({ day, forecast: chosen, shortOn: undefined });
     }
     const stores = next.factions[rome]?.stores;
     if (stores && (stores.food < 0 || stores.gold < 0))
@@ -110,7 +118,10 @@ function play(seed: number, warns: (forecast: Forecast) => boolean) {
       break;
     }
   }
-  for (const entry of audited) entry.seed ??= seed;
+  for (const entry of audited) {
+    entry.until ??= lastDay;
+    entry.seed ??= seed;
+  }
   return row;
 }
 
@@ -177,16 +188,19 @@ function bandKey(store: string, band: number): string {
 
 if (values.audit) {
   console.log(
-    '\nEvery raise Rome made, scored by each rule against what followed: did food or gold run short within two or four years of it?\n',
+    '\nEvery raise of the no-warning history, scored by each rule against what followed. Each cell counts the raises followed by a food or gold shortage within two or four years, of those the run followed that long: a raise late in the game or before a defeat drops out of the longer window.\n',
   );
   console.log(
-    '| warning rule | raises it warns of | short within 2 y | within 4 y | raises it lets pass | short within 2 y | within 4 y |',
+    '| warning rule | raises it warns of | short within 2 y | short within 4 y | raises it lets pass | short within 2 y | short within 4 y |',
   );
   console.log('| --- | ---: | ---: | ---: | ---: | ---: | ---: |');
+  const within = (list: typeof audited, days: number) => {
+    const seen = list.filter((e) => (e.until ?? e.day) - e.day >= days);
+    const short = seen.filter((e) => e.shortOn !== undefined && e.shortOn - e.day <= days);
+    return `${short.length} of ${seen.length}`;
+  };
   for (const [name, warns] of Object.entries(RULES)) {
     if (name === 'none') continue;
-    const within = (list: typeof audited, days: number) =>
-      list.filter((e) => e.shortOn !== undefined && e.shortOn - e.day <= days).length;
     const warned = audited.filter((e) => warns(e.forecast));
     const passed = audited.filter((e) => !warns(e.forecast));
     console.log(
