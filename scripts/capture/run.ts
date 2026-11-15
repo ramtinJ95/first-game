@@ -1,6 +1,13 @@
 import { chromium, type Browser } from '@playwright/test';
 import { clipFrame } from './clip.ts';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
@@ -19,6 +26,7 @@ import {
 import { SOFTWARE_GL } from '../../playwright.config.ts';
 import type { Scenario } from './scenario.ts';
 import { shardScenarios } from './shard.ts';
+import { timesAnnotation } from './timings.ts';
 import { stillScreenshot } from './still.ts';
 import measuredSeconds from './scenario-seconds.json' with { type: 'json' };
 
@@ -184,6 +192,32 @@ async function captureScenario(
   return { failures, outputs };
 }
 
+/**
+ * Tells each scenario's seconds in the log, as an annotation for `capture:timings`, and in
+ * the job summary on CI, where the shard planner's `scenario-seconds.json` comes from.
+ */
+function reportSeconds(shard: string, seconds: Readonly<Record<string, number>>) {
+  if (Object.keys(seconds).length === 0) return;
+  console.log(timesAnnotation({ shard, seconds }));
+  const summary = process.env['GITHUB_STEP_SUMMARY'];
+  if (!summary) return;
+  const total = Object.values(seconds).reduce((sum, value) => sum + value, 0);
+  const rows = Object.entries(seconds)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, value]) => `| ${name} | ${value.toFixed(1)} |`);
+  appendFileSync(
+    summary,
+    [
+      `### Capture shard ${shard}: ${total.toFixed(0)} s`,
+      '',
+      '| Scenario | Seconds |',
+      '| --- | --- |',
+      ...rows,
+      '',
+    ].join('\n'),
+  );
+}
+
 async function main(names: string[], shard: string | undefined): Promise<number> {
   const all = await loadScenarios(names);
   const durations: Readonly<Record<string, number>> = measuredSeconds;
@@ -201,6 +235,7 @@ async function main(names: string[], shard: string | undefined): Promise<number>
     preview: { host: '127.0.0.1', port, strictPort: true, open: false },
   });
   const results: ScenarioResult[] = [];
+  const seconds: Record<string, number> = {};
   try {
     const browser = await chromium.launch({ args: [...SOFTWARE_GL] });
     try {
@@ -208,9 +243,10 @@ async function main(names: string[], shard: string | undefined): Promise<number>
         console.log(`capturing ${scenario.name}`);
         const started = performance.now();
         const result = await captureScenario(browser, `http://127.0.0.1:${port}`, scenario);
-        console.log(
-          `captured ${scenario.name} in ${((performance.now() - started) / 1000).toFixed(1)}s`,
-        );
+        const took = Math.round((performance.now() - started) / 100) / 10;
+        // A failed scenario stops early, so its seconds would understate the next plan.
+        if (result.failures.length === 0) seconds[scenario.name] = took;
+        console.log(`captured ${scenario.name} in ${took.toFixed(1)}s`);
         for (const failure of result.failures) {
           console.error(`::error::${scenario.name}: ${failure.replaceAll('\n', ' | ')}`);
         }
@@ -221,6 +257,7 @@ async function main(names: string[], shard: string | undefined): Promise<number>
     }
   } finally {
     await server.close();
+    reportSeconds(shard ?? 'all', seconds);
   }
 
   if (results.some((result) => result.failures.length > 0)) return 1;
