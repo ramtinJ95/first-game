@@ -404,5 +404,28 @@ if (values.bound) {
       `${ok ? 'held' : 'NOT held'}: ${what} hold ${after} MB over the last three loads, against ${before} MB over loads 3 to 5 (bound ${Math.round(before * (1 + share))} MB)`,
     );
   }
+  // The brief's own condition, load 30 against load 3, printed beside the checks above.
+  // One load swings by a fifth, so it does not fail the run.
+  const third = loads[2];
+  const last = loads.at(-1);
+  if (third && last) {
+    for (const [what, pick] of [
+      ['the JS heap', (row: (typeof loads)[number]) => row.heapMb],
+      [
+        'the live WebGL textures and buffers',
+        (row: (typeof loads)[number]) => row.textureMb + row.bufferMb,
+      ],
+      [
+        'the renderer and GPU processes',
+        (row: (typeof loads)[number]) => row.rendererMb + row.gpuMb,
+      ],
+    ] as const) {
+      const before = pick(third);
+      const after = pick(last);
+      console.log(
+        `${after <= before * 1.1 ? 'within' : 'NOT within'} a tenth, reported only: ${what} hold ${after} MB after ${last.step}, against ${before} MB after load 3`,
+      );
+    }
+  }
   if (!held) process.exitCode = 1;
 }
