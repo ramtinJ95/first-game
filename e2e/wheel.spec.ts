@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { fitCamera, wheelFactor, zoomAt } from '../src/render/camera.ts';
-import { camera, map, openGame, pause, untilDrawn } from './support.ts';
+import { saveGame } from '../src/sim/save.ts';
+import { camera, dropSave, map, openGame, pause, startGame, untilDrawn } from './support.ts';
 
 /** Short of the closest zoom, so a notch lost would show and not vanish in the clamp. */
 const NOTCHES = 14;
@@ -29,19 +30,46 @@ test.describe('the wheel', () => {
     await page.mouse.move(persia.x, persia.y);
     for (let i = 0; i < NOTCHES; i++) await page.mouse.wheel(0, -100);
     await untilDrawn(page);
-    await expect.poll(() => drawnZoom(page)).toBeCloseTo(expected.scale, 3);
+    expect(await drawnZoom(page)).toBeCloseTo(expected.scale, 3);
     const quick = await drawnZoom(page);
 
-    await openGame(page);
-    await pause(page);
+    const view = () =>
+      page
+        .locator('canvas[data-renderer]')
+        .getAttribute('data-latest-view')
+        .then((revision) => Number(revision));
+    const before = await view();
+    // A save that puts the camera back where the game opened, without reloading the page.
+    await dropSave(
+      page,
+      saveGame(startGame(), {
+        paused: true,
+        chronicle: [],
+        camera: fitCamera(viewport, map),
+        occupied: [],
+        told: [],
+        weakSieges: [],
+      }),
+    );
+    // The page reads the dropped file after the drop event, so wait for the camera it sets.
+    await page.waitForFunction(
+      (revision) =>
+        Number(
+          document.querySelector<HTMLCanvasElement>('canvas[data-renderer]')?.dataset['latestView'],
+        ) > revision,
+      before,
+    );
+    await untilDrawn(page);
+    expect(await drawnZoom(page)).toBeCloseTo(fitCamera(viewport, map).scale, 3);
     await page.mouse.move(persia.x, persia.y);
-    let step = fitCamera(viewport, map);
     for (let i = 0; i < NOTCHES; i++) {
-      step = zoomAt(step, persia, wheelFactor(-100), viewport, map);
       await page.mouse.wheel(0, -100);
-      await untilDrawn(page);
-      await expect.poll(() => drawnZoom(page)).toBeCloseTo(step.scale, 3);
+      // The page's next animation frame runs before the next notch, so the notches are a
+      // frame apart. Waiting for the map to draw each zoom would only add a slow draw per notch.
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(done)));
     }
+    await untilDrawn(page);
+    expect(await drawnZoom(page)).toBeCloseTo(expected.scale, 3);
     expect(await drawnZoom(page)).toBeCloseTo(quick, 3);
   });
 });
