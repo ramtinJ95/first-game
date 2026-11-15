@@ -79,6 +79,25 @@ it('pays a delayed raise on the day it is given, after the treasury has refilled
   expectConsistent(state);
 });
 
+it('names no wait on which the treasury could not pay the raise before the day’s income', () => {
+  const state = buildFixture();
+  for (const city of Object.values(state.cities))
+    if (city.owner === f.rome) {
+      city.population = 500_000;
+      city.buildings = ['canals'];
+    }
+  required(state.formations[f.hastati]).men = 42_700;
+  Object.assign(required(state.factions[f.rome]).stores, {
+    gold: 2400,
+    food: 200_000,
+    manpower: 50_000,
+  });
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  expect(forecast.holdsAfter).toBe(866);
+  expect(() => firstShortfall(state, 'gold', true, 867)).toThrow('Stores never ran short');
+  expectConsistent(state);
+});
+
 it('tries each wait while other recruits are still training, since a later muster can lose granary room', () => {
   const state = buildFixture();
   for (const city of Object.values(state.cities))

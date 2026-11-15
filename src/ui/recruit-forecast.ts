@@ -219,6 +219,8 @@ function daysUntilShort(
       limit += men * capPerMan;
       next++;
     }
+    // An order is paid before the day's income comes in, so it must be affordable then.
+    if (amount < 0) return day;
     const today = change + yearly.change * grown(day);
     if (next === schedule.length) {
       if (today >= -ROUNDING) return undefined;
