@@ -11,6 +11,18 @@ Opening costs `ceil(1.15 × (1 + min(distance, 1000) / 1000) × 740)`, doubled f
 domestic route because both receipts go to one realm. Unlike goods repay in about 1.13
 years and identical goods in about 2.03 years before the large-realm penalty.
 
+`improveTrade` (`src/sim/trade/improve.ts`) lets either end of a running route pay half its
+opening price to add `IMPROVE_STEP`, a quarter of the opening rate, at both ends, at most
+`MAX_IMPROVEMENTS` (2) times. `routeRate` gives a route's rate with its improvements; the
+economy, arrivals, raids, war pricing and city balances read it. A step repays in about
+twice the route's own payback, so it pays only when no new route does: after the slots are
+full. The AI does not improve routes.
+
+`changeCityOwner` calls `handRoutesOver`: each running route at the city passes to the new
+owner unless the new owners of its two ends are at war, when it closes with the cause "a
+city fell to an enemy of its partner". An invitation at the city closes, since its inviter
+or its invitee changed.
+
 Land routes reach 1,000 km at 16 km/day; sea routes require two actual ports and reach
 1,800 km at 28 km/day. Navigation uses the existing constrained mesh, and paths are
 found once and cached outside the state, keyed by world, endpoints and mode. The save

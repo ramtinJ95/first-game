@@ -20,6 +20,8 @@ export const TradeRouteSchema = v.object({
   progress: v.pipe(v.number(), v.finite(), v.minValue(0), v.maxValue(1)),
   returning: v.boolean(),
   deliveries: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /** Who paid for each improvement, in order; at most two. */
+  improvedBy: v.pipe(v.array(FactionIdSchema), v.maxLength(2)),
   openedOn: DaySchema,
   departsOn: DaySchema,
   blocked: v.nullable(v.picklist(['siege', 'raid'])),

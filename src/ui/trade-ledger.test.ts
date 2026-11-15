@@ -5,6 +5,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import { warKey } from '../sim/state/war.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
 import { acceptTrade, openTrade } from '../sim/trade/orders.ts';
+import { improveTrade } from '../sim/trade/improve.ts';
 import { whole } from '../app/names.ts';
 import { closeText, warJoiners, warTradeLines } from './trade-ledger.ts';
 
@@ -27,6 +28,22 @@ describe('what closing trade costs the player', () => {
     const worth = 2 * route.daily * route.days;
     expect(closeText(state, route)).toBe(
       `Close Roma to Carthago by sea? It cost ${whole(route.cost)} gold, arrivals worth about ${whole(worth)} gold, about ${whole(route.cost - worth)} still unpaid. Receipts that came while your treasury was full were not kept, so you may have received less than that. Closing gives no refund, and opening it again costs the full price, ${whole(route.cost)} gold.`,
+    );
+  });
+
+  test('an improvement the player paid for counts in the price, and arrivals at the improved rate', () => {
+    const state = buildFixture();
+    const route = trading(state, f.carthago, 'sea');
+    const rome = state.factions[f.rome];
+    if (!rome) throw new Error('missing Rome');
+    rome.stores.gold = 10_000;
+    expect(
+      improveTrade(state, { kind: 'improveTrade', faction: f.rome, route: route.id }),
+    ).toBeUndefined();
+    const cost = route.cost + Math.ceil(route.cost / 2);
+    const worth = 2 * route.daily * 1.25 * route.days;
+    expect(closeText(state, route)).toContain(
+      `It cost ${whole(cost)} gold, arrivals worth about ${whole(worth)} gold, about ${whole(cost - worth)} still unpaid.`,
     );
   });
 

@@ -4,7 +4,7 @@ import { truceBetween } from '../sim/peace/truce.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { TradeRoute } from '../sim/state/trade-route.ts';
 import { adminShareOf } from '../sim/systems/economy.ts';
-import { routeOpeningCost } from '../sim/trade/routes.ts';
+import { improvementCost, routeOpeningCost, routeRate } from '../sim/trade/routes.ts';
 import { areAtWar } from '../sim/wars.ts';
 import { whole } from '../app/names.ts';
 import { treasuryFull } from './trade-caution.ts';
@@ -15,8 +15,8 @@ type Route = DeepReadonly<TradeRoute>;
 /**
  * What a route has meant to one of its ends: the price that end paid, an estimate of what
  * its arrivals were worth, and the price less that estimate. The route keeps no tally of
- * past pay, so arrivals are valued at today's administrative share, and receipts a full
- * treasury refused are counted as if kept.
+ * past pay, so arrivals are valued at today's rate and administrative share, and receipts a
+ * full treasury refused are counted as if kept. The price includes the improvements it paid for.
  */
 export interface RouteLedger {
   readonly cost: number;
@@ -26,8 +26,10 @@ export interface RouteLedger {
 
 export function routeLedger(state: State, route: Route, faction: FactionId): RouteLedger {
   const ends = Number(route.owner === faction) + Number(route.partner === faction);
-  const cost = route.owner === faction ? route.cost : 0;
-  const worth = route.deliveries * route.daily * route.days * adminShareOf(state, faction) * ends;
+  const improved = route.improvedBy.filter((by) => by === faction).length;
+  const cost = (route.owner === faction ? route.cost : 0) + improved * improvementCost(route);
+  const worth =
+    route.deliveries * routeRate(route) * route.days * adminShareOf(state, faction) * ends;
   return { cost, worth, owed: Math.max(0, cost - worth) };
 }
 

@@ -78,6 +78,7 @@ export function openTrade(state: GameState, order: OpenTrade, world: World): str
     progress: 0,
     returning: false,
     deliveries: 0,
+    improvedBy: [],
     openedOn: state.day,
     departsOn: state.day,
     blocked: null,

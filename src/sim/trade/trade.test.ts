@@ -529,10 +529,43 @@ describe('caravans, interruption, and saves', () => {
     expectConsistent(state);
   });
 
-  test('a captured city closes its routes immediately, without transferring their investment', () => {
-    const { state } = opened();
-    changeCityOwner(state, f.capua, f.carthage);
-    expect(state.tradeRoutes).toEqual({});
+  test('a route outlives a change of owner while the new ends stay at peace, under its new owner', () => {
+    const { state, route } = opened();
+    const events = recordEvents(state, () => changeCityOwner(state, f.capua, f.carthage));
+    expect(state.tradeRoutes[route.id]).toMatchObject({ owner: f.rome, partner: f.carthage });
+    expect(events.filter((e) => e.kind === 'tradeClosed')).toEqual([]);
+    expectConsistent(state);
+  });
+
+  test('a route closes when its city falls to an enemy of the other end', () => {
+    const { state, route } = opened();
+    state.wars[warKey(f.rome, f.carthage)] = newWar(f.rome, f.carthage, state.day);
+    const events = recordEvents(state, () => changeCityOwner(state, f.capua, f.carthage));
+    expect(state.tradeRoutes[route.id]).toBeUndefined();
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        kind: 'tradeClosed',
+        route: route.id,
+        cause: 'a city fell to an enemy of its partner',
+      }),
+    );
+    expectConsistent(state);
+  });
+
+  test('an improvement costs half the opening price and raises both ends a quarter, twice at most', () => {
+    const { state, route } = opened();
+    const rome = need(state.factions[f.rome]);
+    rome.stores.gold = 10_000;
+    const before = tradeIncome(state).get(f.rome) ?? 0;
+    const improve = { kind: 'improveTrade', faction: f.rome, route: route.id } as const;
+    expect(executeOrder(state, improve, world)).toBeUndefined();
+    expect(rome.stores.gold).toBe(10_000 - Math.ceil(route.cost / 2));
+    expect(tradeIncome(state).get(f.rome)).toBeCloseTo(before * 1.25);
+    expect(executeOrder(state, improve, world)).toBeUndefined();
+    expect(executeOrder(state, improve, world)?.reason).toBe(
+      'this route is improved 2 times already',
+    );
+    expect(tradeIncome(state).get(f.rome)).toBeCloseTo(before * 1.5);
     expectConsistent(state);
   });
 
@@ -655,3 +688,8 @@ describe('caravans, interruption, and saves', () => {
     expectConsistent(state);
   });
 });
+
+function need<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('missing trade fixture record');
+  return value;
+}

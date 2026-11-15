@@ -19,6 +19,9 @@ export const TRADE_RANGE = { land: 1000, sea: 1800 } as const;
 export const TRADE_BASE = 1.15;
 export const DIFFERENT_GOODS = 1.8;
 export const TRADE_PAYBACK_DAYS = 740;
+/** An improvement raises a route's rate at both ends by this share of its opening rate. */
+export const IMPROVE_STEP = 0.25;
+export const MAX_IMPROVEMENTS = 2;
 export const RAID_KM = 20;
 /** An invitation the player leaves unanswered this many days lapses. */
 export const TRADE_INVITATION_DAYS = 90;
@@ -45,8 +48,39 @@ export function closeRoute(state: GameState, route: DeepReadonly<TradeRoute>, ca
   removeRecord(state.tradeRoutes, route.id);
 }
 
-export function closeRoutesAt(state: GameState, city: CityId): void {
-  for (const route of routesAt(state, city)) closeRoute(state, route, 'a city changed owner');
+/**
+ * A route outlives a change of owner at either end while the two ends' owners stay at peace:
+ * the new owner takes over that end. An invitation, which waits on its inviter's consent, and a
+ * route whose new owners are at war close.
+ */
+export function handRoutesOver(state: GameState, city: CityId, owner: FactionId): void {
+  for (const route of routesAt(state, city)) {
+    const ends = {
+      owner: route.from === city ? owner : route.owner,
+      partner: route.to === city ? owner : route.partner,
+    };
+    const war = ends.owner !== ends.partner && areAtWar(state, ends.owner, ends.partner);
+    const record = state.tradeRoutes[route.id];
+    if (record && route.status === 'running' && !war) {
+      Object.assign(record, ends);
+      continue;
+    }
+    closeRoute(
+      state,
+      route,
+      war ? 'a city fell to an enemy of its partner' : 'a city changed owner',
+    );
+  }
+}
+
+/** Gold a day at each end, before administration. */
+export function routeRate(route: DeepReadonly<TradeRoute>): number {
+  return route.daily * (1 + IMPROVE_STEP * route.improvedBy.length);
+}
+
+/** An improvement costs half the route's opening price. */
+export function improvementCost(route: DeepReadonly<TradeRoute>): number {
+  return Math.ceil(route.cost / 2);
 }
 
 /** Size provides one or two slots; civic markets and a harbour each support one more. */
@@ -214,7 +248,7 @@ export function tradeIncome(state: State): Map<FactionId, number> {
       continue;
     for (const owner of [route.owner, route.partner]) {
       const share = shares.get(owner) ?? 1;
-      income.set(owner, (income.get(owner) ?? 0) + route.daily * share);
+      income.set(owner, (income.get(owner) ?? 0) + routeRate(route) * share);
     }
   }
   return income;
