@@ -156,9 +156,9 @@ export function fitCoastalSprite(
 }
 
 /**
- * A banner stands on the surface its army is on. A landing army's banner crosses the
- * sea from yesterday's convoy to today's shore, so it stays afloat until it reaches
- * the physical land.
+ * A banner stands on the surface its army is on. On the day an army embarks or lands its
+ * banner is drawn between yesterday's place and today's, across the shore, so it is
+ * afloat exactly where that point is off the physical land.
  */
 export function fitBanner(
   army: { readonly id: ArmyId; readonly position: MapPoint },
@@ -171,9 +171,9 @@ export function fitBanner(
   walkable: Land,
 ): MapPoint {
   const afloat =
-    current.armies[army.id]?.activity.kind === 'embarked' ||
-    (previous.armies[army.id]?.activity.kind === 'embarked' &&
-      !physical.inside(army.position.x, army.position.y));
+    (current.armies[army.id]?.activity.kind === 'embarked' ||
+      previous.armies[army.id]?.activity.kind === 'embarked') &&
+    !physical.inside(army.position.x, army.position.y);
   const fitted = fitCoastalSprite(
     {
       key: afloat ? 'ship.0' : 'standard.0',

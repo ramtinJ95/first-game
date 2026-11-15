@@ -404,53 +404,63 @@ test.each(COAST_VIEWS.filter((v) => !v.name.endsWith('middle')))(
   },
 );
 
-test('a banner landing at Carthago from Roma crosses the open sea afloat, then stands on land', () => {
-  let previous = newGame(map, { seed: 1, player: 'rome' });
-  const army = Object.values(previous.armies).find((a) => a.owner === previous.player);
+test('a banner sailing from Roma to Carthago keeps to land inland and to the sea offshore', () => {
+  const start = newGame(map, { seed: 1, player: 'rome' });
+  const army = Object.values(start.armies).find((a) => a.owner === start.player);
   if (!army) throw new Error('Rome has no army');
-  expect(
-    executeOrder(
-      previous,
-      { kind: 'embark', faction: previous.player, army: army.id, to: 'carthago' as CityId },
-      world,
-    ),
-  ).toBeUndefined();
-  let current = previous;
-  for (let day = 0; day < 120; day++) {
-    current = tick(previous, [], world).state;
+  const order = {
+    kind: 'embark',
+    faction: start.player,
+    army: army.id,
+    to: 'carthago' as CityId,
+  } as const;
+  const departure: [GameState, GameState] = [start, tick(start, [order], world).state];
+  let landing: [GameState, GameState] | undefined;
+  let previous = departure[1];
+  for (let day = 0; day < 120 && !landing; day++) {
+    const current = tick(previous, [], world).state;
     if (
       previous.armies[army.id]?.activity.kind === 'embarked' &&
       current.armies[army.id]?.activity.kind !== 'embarked'
     )
-      break;
+      landing = [previous, current];
     previous = current;
   }
-  expect(current.armies[army.id]?.activity.kind).not.toBe('embarked');
-  const original = JSON.stringify([previous, current]);
-  const surfaces = new Set<string>();
-  for (const scale of [0.6, 1, 4])
-    for (let progress = 0; progress <= 1; progress += 0.05) {
-      const banner = drawnArmies(previous, current, progress).find((a) => a.id === army.id);
-      if (!banner) throw new Error('the landing army has no banner');
-      const camera = { centre: banner.position, scale };
-      const toMap = (p: MapPoint) => screenToMap(camera, viewport, p);
-      const drawnLand = coastalSurface(() => drawn, physical.lakes, toMap);
-      const walkable = coastalSurface(() => drawn, physical.lakes, toMap, physical.land);
-      const fitted = fitBanner(
-        banner,
-        previous,
-        current,
-        physical.land,
-        mapToScreen(camera, viewport, banner.position),
-        drawnLand,
-        scale,
-        walkable,
-      );
-      const ashore = physical.land.inside(banner.position.x, banner.position.y);
-      expect(ashore ? walkable(fitted) : !drawnLand(fitted)).toBe(true);
-      surfaces.add(ashore ? 'land' : 'sea');
-    }
-  expect([...surfaces].sort()).toEqual(['land', 'sea']);
-  expect(JSON.stringify([previous, current])).toBe(original);
-  expectConsistent(current);
+  if (!landing) throw new Error('the convoy never landed');
+  expect(departure[0].armies[army.id]?.activity.kind).not.toBe('embarked');
+  expect(departure[1].armies[army.id]?.activity.kind).toBe('embarked');
+  expect(landing[0].armies[army.id]?.activity.kind).toBe('embarked');
+  expect(landing[1].armies[army.id]?.activity.kind).not.toBe('embarked');
+  const original = JSON.stringify([departure, landing]);
+  for (const [name, [previous, current]] of [
+    ['departure', departure],
+    ['landing', landing],
+  ] as const) {
+    const surfaces = new Set<string>();
+    for (const scale of [0.6, 1, 4])
+      for (let progress = 0; progress <= 1; progress += 0.05) {
+        const banner = drawnArmies(previous, current, progress).find((a) => a.id === army.id);
+        if (!banner) throw new Error(`the army has no banner on its ${name} day`);
+        const camera = { centre: banner.position, scale };
+        const toMap = (p: MapPoint) => screenToMap(camera, viewport, p);
+        const drawnLand = coastalSurface(() => drawn, physical.lakes, toMap);
+        const walkable = coastalSurface(() => drawn, physical.lakes, toMap, physical.land);
+        const fitted = fitBanner(
+          banner,
+          previous,
+          current,
+          physical.land,
+          mapToScreen(camera, viewport, banner.position),
+          drawnLand,
+          scale,
+          walkable,
+        );
+        const ashore = physical.land.inside(banner.position.x, banner.position.y);
+        expect(ashore ? walkable(fitted) : !drawnLand(fitted)).toBe(true);
+        surfaces.add(ashore ? 'land' : 'sea');
+      }
+    expect([name, ...[...surfaces].sort()]).toEqual([name, 'land', 'sea']);
+    expectConsistent(current);
+  }
+  expect(JSON.stringify([departure, landing])).toBe(original);
 });
