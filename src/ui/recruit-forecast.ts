@@ -190,6 +190,7 @@ function fallingStores(
 ): number | undefined {
   const at = (day: number) => {
     const days = day - from;
+    if (gain === 0) return amount + days * change;
     const compound = (DAILY ** from * (DAILY ** days - 1)) / (DAILY - 1);
     return amount + days * (change - gain / YEARLY_GROWTH) + (gain / YEARLY_GROWTH) * compound;
   };
