@@ -4,20 +4,14 @@ import {
   camera,
   cityPoint,
   dropSave,
-  map,
   openGame,
   pause,
-  playAi,
-  resume,
   rome,
   setRich,
   siegeToEndInPeace,
   startGame,
   untilDrawn,
 } from '../../../e2e/support.ts';
-import { untilDay } from '../../../e2e/watch.ts';
-import type { FactionId } from '../../../src/sim/ids.ts';
-import { newGame } from '../../../src/sim/new-game.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
 import { defineScenario } from '../scenario.ts';
 
@@ -31,14 +25,10 @@ async function load(page: Page, state: GameState) {
   await untilDrawn(page);
 }
 
-/** Seed 5 under the AI, a few days before Persia takes the lead it then holds through four ties. */
-const BEFORE_PERSIA_LEADS = 2735;
-const AFTER_THE_TIES = 2885;
-
 export default defineScenario({
   name: 'round-six-panels',
   title:
-    'Declare war from the army panel at peace, the truce a written peace buys at two payments, and the leading-power news of a ten-year game told once for each change of lead',
+    'Declare war from the army panel at peace, and the truce a written peace buys at two payments',
   async run({ page, shot }) {
     await openGame(page);
 
@@ -81,24 +71,5 @@ export default defineScenario({
       'You pay 2,500 gold: the truce grows to its longest, 1,095 days, with its new last day',
     );
     await wars.getByRole('button', { name: 'Close' }).click();
-
-    // An idle Rome has fallen by then, so the page plays the same world as Macedon.
-    const tenYears = playAi(newGame(map, { seed: 5, player: 'rome' }), BEFORE_PERSIA_LEADS - 1);
-    tenYears.player = 'macedon' as FactionId;
-    await load(page, tenYears);
-    await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
-    await resume(page);
-    await untilDay(page, AFTER_THE_TIES, 0, 120_000);
-    await pause(page);
-    await page.getByRole('button', { name: 'Chronicle' }).click();
-    const chronicle = page.getByTestId('chronicle');
-    await chronicle
-      .getByText(/is now the leading power/)
-      .first()
-      .scrollIntoViewIfNeeded();
-    await shot(
-      'leader-news',
-      'Seed 5, Year 8, 150 days around a change of lead: each power that takes the lead is told once, and a lead that comes back through a tie is not told again',
-    );
   },
 });
