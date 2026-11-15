@@ -72,7 +72,7 @@ test('shore detailing is deterministic, keeps every geographic anchor, and stays
               nearest,
               distance(point, a, source[(i + 1) % source.length] as Point),
             );
-          if (nearest > 0.6) far.push(`${lake.name} ${point} ${nearest}`);
+          if (!(nearest <= 0.6)) far.push(`${lake.name} ${point} ${nearest}`);
         }
       }),
     );
@@ -192,14 +192,14 @@ test('sea coast keeps every control point in order, stays within 0.6 km, and has
       if (!same(line[n], b)) problems.push(`coast ${i} lost control point ${b}`);
     }
     if (n !== line.length - 1) problems.push(`coast ${i} runs past its last control point`);
-    if (deviation > 0.6) problems.push(`coast ${i} strays ${deviation} km`);
-    if (straightRun(line, false) > 3.5) problems.push(`coast ${i} has a straight run`);
+    if (!(deviation <= 0.6)) problems.push(`coast ${i} strays ${deviation} km`);
+    if (!(straightRun(line, false) <= 3.5)) problems.push(`coast ${i} has a straight run`);
     const pixels = toPixels(line, 4, 0.75);
     const drawn = Array.from({ length: pixels.length / 2 }, (_, n): Point => [
       (pixels[n * 2] as number) / 4,
       (pixels[n * 2 + 1] as number) / 4,
     ]);
-    if (straightRun(drawn, false) > 3.5) problems.push(`drawn coast ${i} has a straight run`);
+    if (!(straightRun(drawn, false) <= 3.5)) problems.push(`drawn coast ${i} has a straight run`);
   }
   expect(problems).toEqual([]);
 });
