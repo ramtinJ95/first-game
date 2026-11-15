@@ -20,7 +20,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import type { TradeRoute } from '../sim/state/trade-route.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { routesAt } from '../sim/trade/routes.ts';
-import { tradeCityLabel, tradePose } from './trade.ts';
+import { anchorOutsideTrade, tradeCityLabel, tradePose } from './trade.ts';
 import {
   clampCamera,
   fitCamera,
@@ -285,16 +285,6 @@ function traceLines(
     }
   }
   return g;
-}
-
-/**
- * A merchant that does not fit where its route puts it looks for ground round that
- * spot; a refugee column, the anchor for other carts and walkers, can be far away.
- */
-function anchorOutsideTrade(
-  anchor: (sprite: SceneSprite) => MapPoint | undefined,
-): (sprite: SceneSprite) => MapPoint | undefined {
-  return (sprite) => (sprite.trade ? undefined : anchor(sprite));
 }
 
 function sameSelection(a: Pick | undefined, b: Pick | undefined): boolean {

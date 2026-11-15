@@ -87,6 +87,3 @@ the bench serves each checkout's `dist/`.
 
 - The full three-round matrix, selected and unselected, on main at the time, ideally
   on a faster idle host where the 5-second meter's p95 is steadier.
-- A test that a merchant that cannot stand at its own spot looks for ground there,
-  not by a distant refugee column (`anchorOutsideTrade` in `renderer.ts`). No
-  fixture on the current map needs that search.

@@ -2,8 +2,12 @@ import { expect, test } from 'vitest';
 import { buildFixture, fixtureWorld, FIXTURE as f } from '../sim/fixture.ts';
 import { openTrade } from '../sim/trade/orders.ts';
 import { routePoint } from '../sim/trade/routes.ts';
-import { tradeCityLabel, tradePose } from './trade.ts';
-import { buildScene, type SceneInput } from './armies/scene.ts';
+import { anchorOutsideTrade, tradeCityLabel, tradePose } from './trade.ts';
+import { buildScene, type Scene, type SceneInput, type Sprite } from './armies/scene.ts';
+import { fitCoastalScene, sceneAnchor } from './coastal-ground.ts';
+import { groundSpan } from './figures/sheet.ts';
+import type { MapPoint } from '../sim/state/map-point.ts';
+import type { TradeRouteId } from '../sim/ids.ts';
 import { sightOf } from '../sim/sight.ts';
 import { surfaceAt } from '../sim/world/find-path.ts';
 import { screenToMap } from './camera.ts';
@@ -117,4 +121,41 @@ test('goods join city names only where the existing label layout has room at fig
   if (!city) throw new Error('missing city');
   expect(tradeCityLabel(state, city, 0.5)).toBe('ROMA');
   expect(tradeCityLabel(state, city, 1.2)).toBe('ROMA · grain');
+});
+
+test('a merchant with no room at its spot shrinks there rather than joining a distant refugee column', () => {
+  const size = 20;
+  const half = groundSpan('cart') * size;
+  // A strip of road too narrow for a full-size cart, and wide land far away by a refugee column.
+  const land = (p: MapPoint) => (Math.abs(p.x) <= 0.8 * half && Math.abs(p.y) < 50) || p.x >= 1000;
+  const merchant: Sprite = {
+    key: 'cart.0@1',
+    x: 0,
+    y: 0,
+    size,
+    mirror: false,
+    alpha: 1,
+    rotation: 0,
+    depth: 0,
+    trade: 'trade-1' as TradeRouteId,
+  };
+  const scene: Scene = {
+    height: size,
+    sprites: [merchant],
+    wakes: [],
+    works: [],
+    breaches: [],
+    battleAnchors: new Map(),
+    armyBoxes: new Map(),
+  };
+  const column = sceneAnchor(buildFixture(), [], [{ x: 1100, y: 0 }], (point) => point);
+  const placed = (anchor: (sprite: Sprite) => MapPoint | undefined) => {
+    const [sprite] = fitCoastalScene(scene, land, 1, land, anchor).sprites;
+    if (!sprite) throw new Error('the merchant was not drawn');
+    return sprite;
+  };
+  const kept = placed(anchorOutsideTrade(column));
+  expect(Math.hypot(kept.x, kept.y)).toBeLessThan(13);
+  expect(kept.size).toBeLessThan(size);
+  expect(placed(column).x).toBeGreaterThan(1000);
 });

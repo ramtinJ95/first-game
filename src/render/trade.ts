@@ -1,8 +1,10 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { City } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
+import type { MapPoint } from '../sim/state/map-point.ts';
 import type { TradeRoute } from '../sim/state/trade-route.ts';
 import { routePoint } from '../sim/trade/routes.ts';
+import type { Sprite } from './armies/scene.ts';
 
 /** An arrival changes direction, not position: interpolate to the old crossing's end. */
 export function tradePose(
@@ -33,4 +35,14 @@ export function tradeCityLabel(
   const name = city.rank === 'capital' ? city.name.toUpperCase() : city.name;
   const good = game.provinces[city.province]?.good;
   return scale >= GOOD_LABEL_SCALE && good ? `${name} · ${good}` : name;
+}
+
+/**
+ * A merchant that does not fit where its route puts it looks for ground round that
+ * spot; a refugee column, the anchor for other carts and walkers, can be far away.
+ */
+export function anchorOutsideTrade(
+  anchor: (sprite: Sprite) => MapPoint | undefined,
+): (sprite: Sprite) => MapPoint | undefined {
+  return (sprite) => (sprite.trade ? undefined : anchor(sprite));
 }
