@@ -8,7 +8,7 @@
 - **Owner decision:** accept the measured 88-day decision interval for PR51, rather than the original 60. The next slice, goods required by troops and buildings, adds choices. The raw harness still prints its original 60-day target as not met.
 - Every previously met world, AI and peace guard remains met. The largest-power distribution was already not met on main (Persia leads 9/20); after trade Carthage leads 11/20. This is not claimed as a newly met target.
 - **Rules frame guard met in the tested views:** all four median/p95 comparisons are within +10% at both zooms over three balanced rounds on automatic merges with current main #57.
-- **Look frame guard met in one round, not yet over three:** the slow frames came from the goods suffix pushing a resting army off land, so `landShift` ran about 28,000 land tests per frame. With that shift remembered, all eight median/p95 changes against main `aef5b10` are within +10% at both zooms in one 60-second round of every drawn frame. The three-round matrix is left for a follow-up. See [trade frame checks](trade-handover.md).
+- **Look frame guard NOT met:** the slow frames came from the goods suffix pushing a resting army off land, so `landShift` ran about 28,000 land tests per frame. With that shift remembered, three rounds against main `aef5b10` keep every median and every per-frame p95 within +10%, selected and unselected. With Roma selected the 5-second meter's p95 is still over: +62% interval and +60% drawn at middle, +11% and +14% at closest. The cause of that tail is not established. See [trade frame checks](trade-handover.md).
 
 ## Rules delivery source and verification
 
