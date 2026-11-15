@@ -80,9 +80,24 @@ function insideRing(ring: Ring, { x, y }: MapPoint): boolean {
 }
 
 /** The province whose land holds `point`, in map km, or nothing at sea. */
+const outerBoxes = new WeakMap<GameMap, (readonly [number, number, number, number])[][]>();
+
 export function provinceAt(map: GameMap, point: MapPoint): ProvinceId | undefined {
-  for (const province of map.provinces) {
-    for (const [outer, ...holes] of province.outline) {
+  let boxes = outerBoxes.get(map);
+  if (!boxes) {
+    boxes = map.provinces.map((province) =>
+      province.outline.map(([outer = []]) => {
+        const xs = outer.map(([x]) => x),
+          ys = outer.map(([, y]) => y);
+        return [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)] as const;
+      }),
+    );
+    outerBoxes.set(map, boxes);
+  }
+  for (const [i, province] of map.provinces.entries()) {
+    for (const [j, [outer, ...holes]] of province.outline.entries()) {
+      const [left, right, top, bottom] = boxes[i]?.[j] ?? [0, 0, 0, 0];
+      if (point.x < left || point.x > right || point.y < top || point.y > bottom) continue;
       if (outer && insideRing(outer, point) && !holes.some((hole) => insideRing(hole, point))) {
         return province.id;
       }
