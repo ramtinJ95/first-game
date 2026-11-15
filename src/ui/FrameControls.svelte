@@ -1,7 +1,7 @@
 <script lang="ts">
   import { dateText } from '../app/names.ts';
   import { PAUSE_KINDS } from '../app/alerts.ts';
-  import { PAUSE_LABELS } from '../app/pauses.ts';
+  import { FATE_PAUSE_LABEL, OFFER_PAUSE_TEXT, PAUSE_LABELS } from '../app/pauses.ts';
   import { SLOTS, type Slot } from '../app/saves.ts';
   import type { Frame } from '../app/view.svelte.ts';
   import type { FrameActions } from './frame-actions.ts';
@@ -80,8 +80,9 @@
             checked={frame.pauseOnFate}
             onchange={(event) => actions.setPauseOnFate(event.currentTarget.checked)}
           />
-          A city falls to you
+          {FATE_PAUSE_LABEL}
         </label>
+        <p class="muted hint" data-testid="pause-offer">{OFFER_PAUSE_TEXT}</p>
       </fieldset>
       <hr />
       <button type="button" role="menuitem" onclick={() => act(() => actions.askToLeave())}

@@ -865,6 +865,20 @@ export function carthageOffersPeace(): GameState {
 }
 
 /**
+ * Carthage took Capua 300 days into a war it declared, so the day after this one it asks
+ * Rome for more gold than it would take, and Rome holds the gold to pay either.
+ */
+export function carthageDemandsPeace(): GameState {
+  const state = startGame();
+  declareWar(state, carthage, rome);
+  changeCityOwner(state, 'capua' as CityId, carthage);
+  state.day = (state.day + 300) as Day;
+  const stores = state.factions[rome]?.stores;
+  if (stores) stores.gold = 5000;
+  return state;
+}
+
+/**
  * The tester's case in year 2: Carthage and Macedon declared war on Rome on day 400.
  * Carthage took Capua and Macedon took Epidamnos, and Macedon besieges Salona, so Rome
  * holds five cities on two fronts.

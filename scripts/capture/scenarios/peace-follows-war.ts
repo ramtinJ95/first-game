@@ -78,7 +78,9 @@ export default defineScenario({
     await resume(page);
     await expect(page.getByTestId('alerts')).toContainText('Carthage refused your offer of peace');
     await pause(page);
-    await expect(page.getByTestId('alerts')).toContainText(/It wants terms worth \d+ points more/);
+    await expect(page.getByTestId('alerts')).toContainText(
+      /It would give terms worth \d+ points less/,
+    );
     await shot(
       'refusal-reason',
       'An actual next-day refusal remains in the alerts and Chronicle with the amount still wanted, rather than silently clearing the offer',

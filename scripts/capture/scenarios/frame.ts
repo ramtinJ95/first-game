@@ -64,6 +64,8 @@ export default defineScenario({
       await page.getByTestId('fate-sack').click();
 
       await dropSave(page, romeWinsTomorrow());
+      // The fate stopped the game, and only the player runs it again.
+      await resume(page);
       await page.getByTestId('victory').waitFor();
       await settle(page);
       await shot(

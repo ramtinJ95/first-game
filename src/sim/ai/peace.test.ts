@@ -3,6 +3,7 @@ import { changeCityOwner } from '../cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import type { FactionId } from '../ids.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
+import { termsPoints } from '../peace/terms.ts';
 import { TRUCE_DAYS } from '../peace/truce.ts';
 import { expectConsistent } from '../references.ts';
 import type { Day } from '../state/day.ts';
@@ -117,6 +118,57 @@ describe("the AI's answer", () => {
       short: 26,
     });
     expect(proposal(state, f.rome, f.carthage)).toBeUndefined();
+    expectConsistent(state);
+  });
+
+  test('a refusing payer asks to give less, and one asked to pay that wants paying says so', () => {
+    const state = warOn(200);
+    changeCityOwner(state, f.capua, f.carthage);
+    const treasury = state.factions[f.rome];
+    if (!treasury) throw new Error('no Rome');
+    treasury.stores.gold = 20_000;
+    const wish = peaceWish(state, f.rome, f.carthage)?.wish ?? 0;
+    expect(wish).toBeGreaterThan(0);
+    const tooMuch = peaceAnswer(state, f.rome, f.carthage, gold(f.rome, (wish + 3) * 100));
+    expect(tooMuch?.verdict).toBe(
+      'Rome would refuse. It would give terms worth 3 points less, such as 300 gold less.',
+    );
+    const early = warOn(1 + WEARY_DAYS * (PEACE_RESOLVE - 5));
+    expect(peaceAnswer(early, f.carthage, f.rome, gold(f.carthage, 300))?.verdict).toBe(
+      'Carthage would refuse. It would give nothing, and wants terms worth 5 points from Rome, such as 500 gold.',
+    );
+    const even = warOn(1 + WEARY_DAYS * PEACE_RESOLVE);
+    expect(peaceAnswer(even, f.carthage, f.rome, AS_THINGS_STAND)?.accepts).toBe(true);
+    expect(peaceAnswer(even, f.carthage, f.rome, gold(f.carthage, 50))?.verdict).toMatch(
+      /^Carthage would (accept\.|refuse\. It would give terms worth 1 point less\.)$/,
+    );
+    expectConsistent(state);
+    expectConsistent(early);
+    expectConsistent(even);
+  });
+
+  test('a refusing payer of cities gives no gold example that gold alone cannot meet', () => {
+    const state = buildFixture();
+    changeCityOwner(state, f.syracusae, f.carthage);
+    run(state, { kind: 'declareWar', faction: f.rome, against: f.carthage });
+    state.day = 200 as Day;
+    const war = state.wars[warKey(f.rome, f.carthage)];
+    const losing = war?.sides[f.carthage];
+    if (!losing) throw new Error('no war');
+    losing.lost = 400;
+    const wish = peaceWish(state, f.carthage, f.rome)?.wish ?? 0;
+    const city: PeaceTerms = { kind: 'payment', payer: f.carthage, gold: 0, cities: [f.syracusae] };
+    const cityPoints = -termsPoints(state, city, f.carthage);
+    expect(cityPoints).toBeGreaterThan(wish + 1);
+    expect(wish).toBeGreaterThanOrEqual(0);
+    const less = Math.ceil(cityPoints - wish);
+    expect(peaceAnswer(state, f.carthage, f.rome, city)?.verdict).toBe(
+      `Carthage would refuse. It would give terms worth ${less} points less.`,
+    );
+    const mixed: PeaceTerms = { ...city, gold: 100 };
+    expect(peaceAnswer(state, f.carthage, f.rome, mixed)?.verdict).toBe(
+      `Carthage would refuse. It would give terms worth ${less + 1} points less.`,
+    );
     expectConsistent(state);
   });
 

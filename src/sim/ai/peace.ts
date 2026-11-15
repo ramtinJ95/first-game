@@ -245,7 +245,8 @@ export function peaceAnswer(
         : `${terms.payer === faction ? `${name} gives` : `${name} gains`} ${goodsText(state, terms)}`,
   };
   const problem = termsProblem(state, [faction, enemy], terms);
-  const short = Math.max(0, Math.ceil(-(wish.wish + worth)));
+  const needed = Math.max(0, -(wish.wish + worth));
+  const short = Math.ceil(needed);
   const accepts = !problem && wish.talksFrom === undefined && short === 0;
   const verdict = problem
     ? `These terms cannot be met: ${problem}.`
@@ -253,8 +254,32 @@ export function peaceAnswer(
       ? `${name} will not talk of peace before day ${wish.talksFrom}.`
       : accepts
         ? `${name} would accept.`
-        : `${name} would refuse. It wants terms worth ${short} ${short === 1 ? 'point' : 'points'} more, such as ${gold(short * GOLD_PER_POINT)} more.`;
+        : `${name} would refuse. ${wantedText(state, faction, enemy, terms, needed)}`;
   return { accepts, problem, wish, terms: termsFactor, short, verdict };
+}
+
+/**
+ * What a refusing faction wants changed, the right way round for its side: a payer that
+ * refuses wants to give less, and a side that is paid or paid nothing wants more.
+ */
+function wantedText(
+  state: State,
+  faction: FactionId,
+  enemy: FactionId,
+  terms: DeepReadonly<PeaceTerms>,
+  needed: number,
+): string {
+  const points = (n: number) => `${n} ${n === 1 ? 'point' : 'points'}`;
+  const short = Math.ceil(needed);
+  if (terms.kind !== 'payment' || terms.payer !== faction)
+    return `It wants terms worth ${points(short)} more, such as ${gold(short * GOLD_PER_POINT)} more.`;
+  const given = -termsPoints(state, terms, faction);
+  if (needed <= given)
+    return short * GOLD_PER_POINT <= terms.gold
+      ? `It would give terms worth ${points(short)} less, such as ${gold(short * GOLD_PER_POINT)} less.`
+      : `It would give terms worth ${points(short)} less.`;
+  const rest = Math.ceil(needed - given);
+  return `It would give nothing, and wants terms worth ${points(rest)} from ${nameOf(state, enemy)}, such as ${gold(rest * GOLD_PER_POINT)}.`;
 }
 
 /** A payer's cities it could hand over: neither its capital nor its last, besieged by the receiver first, then nearest the receiver. */

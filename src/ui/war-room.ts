@@ -4,16 +4,17 @@ import {
   peaceAnswer,
   peaceWish,
   peaceText,
+  termsText,
   type PeaceAnswer,
 } from '../sim/ai/peace.ts';
-import { OFFER_GAP_DAYS } from '../sim/ai/thresholds.ts';
+import { MIN_WAR_DAYS, OFFER_GAP_DAYS } from '../sim/ai/thresholds.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { CityId, FactionId } from '../sim/ids.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import { standingOffer } from '../sim/peace/offer.ts';
 import { warStanding, type WarStanding } from '../sim/peace/standing.ts';
-import { AS_THINGS_STAND, copyTerms, termsProblem } from '../sim/peace/terms.ts';
-import { truceDaysLeft } from '../sim/peace/truce.ts';
+import { AS_THINGS_STAND, copyTerms, termsPoints, termsProblem } from '../sim/peace/terms.ts';
+import { TRUCE_DAYS, truceDaysLeft } from '../sim/peace/truce.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { PeaceTerms } from '../sim/state/peace.ts';
 import { warSides } from '../sim/state/war.ts';
@@ -49,6 +50,10 @@ export interface WarRow {
         readonly funds: string | undefined;
         readonly change: string | undefined;
         readonly problem: string | undefined;
+        /** The player's answer, queued for the next day. */
+        readonly answered: string | undefined;
+        /** Cheaper terms the enemy would take today, which the player can send as a counter-offer. */
+        readonly counter: (PeaceChoice & { readonly text: string }) | undefined;
       }
     | undefined;
   /** The player's offer that waits, sent or still queued for the next day. */
@@ -133,6 +138,51 @@ export function peaceChoices(state: State, enemy: FactionId): PeaceChoice[] {
   });
 }
 
+/**
+ * The cheapest terms the enemy would accept today when they cost the player less than
+ * the enemy's own demand, with the saving in words.
+ */
+export function cheaperCounter(
+  state: State,
+  enemy: FactionId,
+  asked: DeepReadonly<PeaceTerms>,
+): (PeaceChoice & { readonly text: string }) | undefined {
+  const player = state.player;
+  const cost = (terms: DeepReadonly<PeaceTerms>) => -termsPoints(state, terms, player);
+  const [cheapest] = peaceChoices(state, enemy)
+    .filter((choice) => choice.answer.accepts && cost(choice.terms) < cost(asked))
+    .sort((a, b) => cost(a.terms) - cost(b.terms));
+  if (!cheapest) return undefined;
+  const name = factionName(state, enemy);
+  const instead =
+    cheapest.terms.kind === 'asThingsStand'
+      ? 'peace as things stand'
+      : `peace in which ${termsText(state, cheapest.terms, player)}`;
+  const lead =
+    asked.kind === 'payment' && asked.payer === player
+      ? `${name} asks more than it would take.`
+      : `${name} would accept terms better for you.`;
+  return {
+    ...cheapest,
+    text: `${lead} By its reckoning today it would accept ${instead}. A counter-offer replaces its demand, and ${name} answers with the next day.`,
+  };
+}
+
+/** The newest offer made to the player after the given day, in a war of the player's only. */
+export function newestOfferToPlayer(
+  state: State,
+  after: number,
+): { readonly from: FactionId; readonly madeOn: number } | undefined {
+  const player = state.player;
+  return Object.entries(state.peaceOffers)
+    .filter(
+      ([key, offer]) =>
+        offer.from !== player && offer.madeOn > after && warSides(key)?.includes(player),
+    )
+    .map(([, offer]) => ({ from: offer.from, madeOn: offer.madeOn }))
+    .sort((a, b) => b.madeOn - a.madeOn || (a.from < b.from ? -1 : 1))[0];
+}
+
 /** Every war the player is in and how it stands, what peace is on offer, and the truces that hold. */
 export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
   const player = state.player;
@@ -144,6 +194,12 @@ export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
       if (!enemy || !standing) return [];
       const name = factionName(state, enemy);
       const offer = standingOffer(state, player, enemy);
+      const reply = pending.findLast(
+        (order) =>
+          (order.kind === 'acceptPeace' || order.kind === 'refusePeace') &&
+          order.faction === player &&
+          order.from === enemy,
+      );
       const queued = pending.findLast(
         (order) => order.kind === 'offerPeace' && order.faction === player && order.to === enemy,
       );
@@ -169,6 +225,13 @@ export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
                   change: offer.change,
                   problem: termsProblem(state, [player, enemy], offer.terms),
                   refusing: `Refuse, and the war goes on. ${name} makes no new offer for ${OFFER_GAP_DAYS} days.`,
+                  answered:
+                    reply?.kind === 'acceptPeace'
+                      ? `You accept. Peace comes with the next day.`
+                      : reply?.kind === 'refusePeace'
+                        ? `You refuse. ${name} hears it with the next day.`
+                        : undefined,
+                  counter: cheaperCounter(state, enemy, offer.terms),
                 }
               : undefined,
           ourOffer: ours,
@@ -205,3 +268,41 @@ export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
     });
   return { wars, truces };
 }
+
+/** What a declaration of war on the faction sets in motion, a line for each, as the confirmation lists it. */
+export function declarationFacts(state: State, against: FactionId): string[] {
+  const player = state.player;
+  const name = factionName(state, against);
+  const facts = [`The war begins with the next day, and ${name} may march on your cities.`];
+  const partner = state.factions[against]?.league;
+  const ally = partner ? state.factions[partner] : undefined;
+  if (
+    ally &&
+    ally.defeatedOn === null &&
+    !truceDaysLeft(state, player, ally.id) &&
+    Object.values(state.cities).some((city) => city.owner === ally.id)
+  ) {
+    facts.push(
+      `${ally.name} is leagued with ${name}. It declares war on you too, and marches to lift any siege of ${name}.`,
+    );
+  }
+  const routes = Object.values(state.tradeRoutes).filter(
+    (route) =>
+      (route.owner === player && route.partner === against) ||
+      (route.owner === against && route.partner === player),
+  ).length;
+  if (routes > 0)
+    facts.push(
+      `${whole(routes)} trade ${routes === 1 ? 'route' : 'routes'} with ${name} ${routes === 1 ? 'closes' : 'close'}.`,
+    );
+  facts.push(
+    `${name} will not talk of peace for ${whole(MIN_WAR_DAYS)} days. A peace starts a truce of ${whole(TRUCE_DAYS)} days.`,
+  );
+  return facts;
+}
+
+/** How a war starts and ends, as the wars panel at peace and the guide both tell it. */
+export const PEACE_TEXT = {
+  start: `A war starts when you declare it from a city's panel, with Declare war on its owner, or when another power declares war on you. A minor city's league partner joins a war on it.`,
+  end: `The wars panel then shows how each war stands, the enemy's offers of peace, and terms to send. Either side may offer peace once a war is ${whole(MIN_WAR_DAYS)} days old. A peace starts a truce of ${whole(TRUCE_DAYS)} days, in which neither side may declare war on the other.`,
+} as const;

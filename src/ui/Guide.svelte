@@ -1,11 +1,14 @@
 <script lang="ts">
+  import { PAUSE_KINDS } from '../app/alerts.ts';
   import { factionName } from '../app/names.ts';
+  import { FATE_PAUSE_LABEL, OFFER_PAUSE_TEXT, PAUSE_LABELS } from '../app/pauses.ts';
   import type { Frame } from '../app/view.svelte.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { GameState } from '../sim/state/game-state.ts';
   import { STANCES } from '../sim/state/army.ts';
   import { reformCostText, stanceMatchText } from './describe.ts';
   import type { FrameActions } from './frame-actions.ts';
+  import { PEACE_TEXT } from './war-room.ts';
 
   let {
     game,
@@ -73,16 +76,19 @@
       </dd>
       <dt>Wars and peace</dt>
       <dd>
-        Wars in the top bar lists your wars and waiting offers. Offer peace as things stand, or with
-        gold or cities; it shows what the enemy would accept. Peace sends armies home and starts a
-        truce.
+        {PEACE_TEXT.start} Wars in the top bar lists your wars and waiting offers. Offer peace as things
+        stand, or with gold or cities; it shows what the enemy would accept, and when it would take less
+        than it asks. {PEACE_TEXT.end} Peace sends armies home.
       </dd>
       <dt>Pause and speed</dt>
-      <dd>
+      <dd data-testid="guide-pauses">
         Space pauses and resumes. The buttons 1, 2, and 3 in the top bar set the speed. Orders given
-        while paused wait for the next day. Battles, weak sieges, and the first approaching enemy in
-        a war can pause for you; the Game menu changes these stops. An offer of peace pauses for
-        your answer.
+        while paused wait for the next day. The game pauses for you when:
+        <ul>
+          {#each PAUSE_KINDS as kind (kind)}<li>{PAUSE_LABELS[kind]}</li>{/each}
+          <li>{FATE_PAUSE_LABEL}</li>
+        </ul>
+        The Game menu turns each of these on or off under Pause the game when. {OFFER_PAUSE_TEXT}
       </dd>
       <dt>Overview and Chronicle</dt>
       <dd>
@@ -105,14 +111,6 @@
         save.
       </dd>
     </dl>
-    <label class="fate">
-      <input
-        type="checkbox"
-        checked={frame.pauseOnFate}
-        onchange={(event) => actions.setPauseOnFate(event.currentTarget.checked)}
-      />
-      Pause and ask when a city falls to you
-    </label>
     <div class="row end">
       <span class="muted">Enter or Escape closes this. The Guide button opens it again.</span>
       <button type="button" onclick={() => actions.closeModal()}>Close</button>
@@ -159,13 +157,6 @@
 
   dd {
     margin: 1px 0 0;
-  }
-
-  .fate {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    margin-top: 6px;
   }
 
   .end {
