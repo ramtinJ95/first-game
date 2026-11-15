@@ -21,6 +21,7 @@ import {
   loadWarnings,
   ownCityInDangerTomorrow,
   ownSiegeTomorrow,
+  foodShortUnlessWaiting,
   showOwnCity,
   slowFoodDeficit,
   smallSallyTomorrow,
@@ -76,6 +77,28 @@ test('a lasting gold deficit more than two years away still asks Raise anyway', 
   await expect(page.getByTestId('recruit-runway-gold')).toHaveClass('bad');
   await expect(page.getByTestId('recruit-forecast')).toContainText('−21.6 gold/day');
   await expect(page.getByTestId('city-raising')).not.toContainText('ordered');
+  await warning.getByRole('button', { name: 'Raise anyway' }).click();
+  await expect(page.getByTestId('city-raising')).toContainText(
+    'Spearmen · ordered for the next day',
+  );
+});
+
+test('a shortfall the filling granary would carry names the day to raise instead of refusing', async ({
+  page,
+}) => {
+  await openGame(page);
+  await loadWarnings(page, foodShortUnlessWaiting());
+  await showOwnCity(page, 'Roma');
+  await page
+    .getByTestId('recruit-cards')
+    .getByRole('button', { name: /^Spearmen/ })
+    .click();
+  const warning = page.getByTestId('recruit-warning');
+  await expect(warning).toContainText('Food shortfall: stores last about 602 days');
+  await expect(warning).toContainText(
+    'Stores grow while you wait: raised in about 838 days, these men are fed as the people grow. Raise now only if you need them sooner.',
+  );
+  await expect(warning).not.toContainText('Raise fewer troops');
   await warning.getByRole('button', { name: 'Raise anyway' }).click();
   await expect(page.getByTestId('city-raising')).toContainText(
     'Spearmen · ordered for the next day',
