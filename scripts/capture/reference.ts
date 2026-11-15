@@ -86,7 +86,9 @@ if (import.meta.main) {
         .artifacts,
   );
   if (!chosen) {
-    console.error(`no ${baseRef} run has screenshots to compare with; every scenario counts as new`);
+    console.error(
+      `no ${baseRef} run has screenshots to compare with; every scenario counts as new`,
+    );
   } else {
     downloadScreenshots(repo, chosen.run, resolve(values.out));
     const info: ReferenceInfo = {

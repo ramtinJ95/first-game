@@ -18,7 +18,12 @@ import { publishCaptures, stageNumber, type PublishOptions } from './publish.ts'
 
 const REMOTE_URL = 'https://github.com/acme/strategy-game.git';
 const RAW = 'https://raw.githubusercontent.com/acme/strategy-game/refs/heads/pr-assets';
-const REFERENCE = { branch: 'main', commit: 'c0ffee', runUrl: 'https://ci.example/runs/7', exact: true };
+const REFERENCE = {
+  branch: 'main',
+  commit: 'c0ffee',
+  runUrl: 'https://ci.example/runs/7',
+  exact: true,
+};
 
 const field = picture();
 const recoloured = picture((x, y) => (x < 10 && y < 10 ? texture(x, y) + 40 : texture(x, y)));

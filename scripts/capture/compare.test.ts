@@ -28,7 +28,12 @@ describe('screenshotChanged', () => {
   });
 
   it('notices a view moved by one pixel', () => {
-    expect(screenshotChanged(picture(), picture((x, y) => texture(x - 1, y)))).toBe(true);
+    expect(
+      screenshotChanged(
+        picture(),
+        picture((x, y) => texture(x - 1, y)),
+      ),
+    ).toBe(true);
   });
 
   it('counts a picture of another size as changed everywhere', () => {
