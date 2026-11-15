@@ -20,8 +20,9 @@ full. The AI does not improve routes.
 
 `changeCityOwner` calls `handRoutesOver`: a running route whose other end is the player's
 passes to the city's new owner, and the trade system closes it the same day as a war between
-the partners if that owner is at war with the player. A peace that cedes a city ends its war
-first, so its routes survive the cession. Every other route at the city closes, as before, and
+the partners if that owner is at war with the player. A peace moves the cities it cedes and
+then ends its war, before the trade system runs, so a ceded city's route whose other end is
+the player's survives the cession; one whose other end is the city's old owner closes. Every other route at the city closes, as before, and
 so do invitations. Handing routes between two other realms to their conquerors was measured and
 dropped: it broke the `sim:ai` target that a power at peace with every stronger power grows
 (112 of 129 power-years, under 90 %). `openedBy` keeps the faction that paid to open a route and `improvedBy` the payer of

@@ -52,7 +52,7 @@ export function closeRoute(state: GameState, route: DeepReadonly<TradeRoute>, ca
  * A running route whose other end is the player's passes to a city's new owner, so a partner
  * taken in a war the player is not part of keeps trading with the player. If the new owner is
  * at war with the player, the trade system closes it the same day as a war between the
- * partners; a peace that cedes the city ends its war first, so the route survives the cession.
+ * partners; a peace moves the city and then ends its war before that, so the route survives.
  * Every other route at the city closes, as do invitations, whose inviter or invitee changed.
  * Keeping routes between two other realms open would let a conqueror inherit its victim's
  * trade and tip the balance between the powers.
