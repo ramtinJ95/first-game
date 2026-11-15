@@ -244,6 +244,31 @@ describe('buildScene', () => {
     expect(still.map((s) => [s.x, s.y])).toEqual(free.map((s) => [s.x, s.y]));
   });
 
+  test('an army at rest on a coast is placed once: the next frame draws it alike with few land tests', () => {
+    const state = buildFixture();
+    const army = state.armies[FIXTURE.romanArmy];
+    if (!army) throw new Error('fixture');
+    const at = { x: 2530, y: 2300 };
+    army.activity = { kind: 'idle', position: at };
+    const camera = { centre: at, scale: 4 };
+    const coast = viewport.width / 2 + 60;
+    let tests = 0;
+    const land = (p: MapPoint) => {
+      tests++;
+      return p.x > coast;
+    };
+    const figures = () =>
+      buildScene(input(state, state, { camera, land }))
+        .sprites.filter((s) => s.army === FIXTURE.romanArmy)
+        .map((s) => [s.x, s.y]);
+    const first = figures();
+    expect(first.length).toBeGreaterThan(20);
+    const placing = tests;
+    tests = 0;
+    expect(figures()).toEqual(first);
+    expect(tests).toBeLessThan(placing / 10);
+  });
+
   test('an army at rest on the Dalmatian shore keeps every figure on the land of the map', () => {
     const land = new Land(fixtureWorld().map);
     const state = buildFixture();

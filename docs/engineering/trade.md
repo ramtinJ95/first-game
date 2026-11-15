@@ -196,7 +196,9 @@ goods, raids and the guide.
 
 `src/render/trade.ts` interpolates a crossing through arrival before reversing it and
 adds a province's stored good to its existing city label from 0.9 px/km. The existing
-label collision rule decides where it fits. Selecting a city draws its active routes
+label collision rule decides where it fits. A longer name moves an army resting at the
+city, which stands clear of the name: at Roma the First Legion stands on the seaward
+side and is shifted onto land, a search the army scene remembers rather than repeats. Selecting a city draws its active routes
 with the same dashed ink and halo as army paths.
 
 `route-dashes.ts` makes seven-pixel dashes and five-pixel gaps. Moving army/planned
@@ -209,7 +211,10 @@ and pixel-sized strokes, retaining complete paths so a later pan cannot uncover 
 missing road. Zoom, selected running routes, blockage or path changes rebuild the
 art; crossing progress does not change a road. Covered pans/resizes reuse the texture;
 an uncovered view or WebGL restoration repaints it. One sprite replaces the static
-route vertices, and is hidden when no routes are selected. Merchant motion and moving
+route vertices, and is hidden when no routes are selected. The sprite shows only the
+ink's conservative bounds (`routeInkBounds`, 4 px for the halo and antialiasing), a
+view on the cache's texture, so the GPU does not blend the transparent rest of the
+view. Merchant motion and moving
 army/planned paths are not cached. Dash length, widths, halo and colours are unchanged;
 covered pans use the same raster reuse as coast ink.
 

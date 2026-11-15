@@ -331,6 +331,38 @@ class Context {
     );
   }
 
+  /**
+   * `landShift` for this camera, remembered for each land test: an army at rest asks for
+   * the same shift on every frame, and one at a coast can take thousands of land tests.
+   * A land test must keep its answers, as the map's `Land` does.
+   */
+  landShift(samples: readonly MapPoint[]): MapPoint {
+    const land = this.input.land;
+    if (!land) return { x: 0, y: 0 };
+    const { camera, viewport } = this.input;
+    const key = [
+      camera.centre.x,
+      camera.centre.y,
+      camera.scale,
+      viewport.width,
+      viewport.height,
+      this.h,
+      ...samples.flatMap((p) => [p.x, p.y]),
+    ].join();
+    let shifts = SHIFTS.get(land);
+    if (!shifts) {
+      shifts = new Map();
+      SHIFTS.set(land, shifts);
+    }
+    let shift = shifts.get(key);
+    if (!shift) {
+      shift = landShift(land, samples, this.h);
+      if (shifts.size >= SHIFT_MEMORY) shifts.clear();
+      shifts.set(key, shift);
+    }
+    return shift;
+  }
+
   /** A km distance on the map in screen px. */
   px(km: number): number {
     return km * this.input.camera.scale;
@@ -519,7 +551,7 @@ class Context {
         );
         if (layout instanceof LineLayout) samples.push(...layout.positions());
       }
-      const extra = landShift(land, samples, h);
+      const extra = this.landShift(samples);
       shift = { x: shift.x + extra.x, y: shift.y + extra.y };
     }
     const scale = this.input.camera.scale;
@@ -1714,7 +1746,7 @@ class LineLayout implements Layout {
     // A battle's lines are kept on land by its anchor, which both sides share.
     if (mode.kind === 'line' && ctx.input.land) {
       const samples = this.positions();
-      const extra = landShift(ctx.input.land, samples, ctx.h);
+      const extra = ctx.landShift(samples);
       this.shift = { x: this.shift.x + extra.x, y: this.shift.y + extra.y };
     }
   }
@@ -1918,6 +1950,9 @@ class ColumnLayout implements Layout {
   }
 }
 
+/** The shifts found for each land test, by camera and samples. */
+const SHIFTS = new WeakMap<(screen: MapPoint) => boolean, Map<string, MapPoint>>();
+const SHIFT_MEMORY = 64;
 /** Rings of candidate shifts tried, each `LAND_STEP` figure heights further out, in 16 directions. */
 const LAND_RINGS = 12;
 const LAND_STEP = 0.5;
