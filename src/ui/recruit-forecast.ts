@@ -3,7 +3,7 @@ import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { dailyBalances, limitsOf, GRANARY_DAYS, UPKEEP_PER_MAN } from '../sim/systems/economy.ts';
 import { TROOPS, type Troop } from '../sim/troops.ts';
-import { whole } from '../app/names.ts';
+import { dateText, whole } from '../app/names.ts';
 import { afterWaiting } from './buildings-text.ts';
 import { signed } from './describe.ts';
 import type { World } from '../sim/world/world.ts';
@@ -135,7 +135,11 @@ export function recruitForecast(
       ? `${warnings.join(' ')} Formations desert when stores run out. ${
           holdsAfter === undefined
             ? 'Raise fewer troops or improve income first.'
-            : `Stores grow while you wait: raised in about ${whole(holdsAfter)} days, these men are fed as the people grow. Raise now only if you need them sooner.`
+            : `Stores grow while you wait: raised in about ${whole(holdsAfter)} days, on ${dateText(game.day + holdsAfter)}, these men are fed as the people grow, ${
+                short.gold === undefined
+                  ? 'if you raise no other troops and lose no city before then'
+                  : 'if you raise no other troops, spend no gold, and your income holds until then'
+              }. Raise now only if you need them sooner.`
         }`
       : undefined,
     upkeepText: `Upkeep ${signed(-upkeep.food)} food, ${signed(-upkeep.gold)} gold/day`,

@@ -16,6 +16,7 @@ import {
   outnumberedAt,
 } from './support.ts';
 import { allocateId } from '../src/sim/ids.ts';
+import { dateText } from '../src/app/names.ts';
 import {
   foodShortfall,
   loadWarnings,
@@ -87,7 +88,8 @@ test('a shortfall the filling granary would carry names the day to raise instead
   page,
 }) => {
   await openGame(page);
-  await loadWarnings(page, foodShortUnlessWaiting());
+  const state = foodShortUnlessWaiting();
+  await loadWarnings(page, state);
   await showOwnCity(page, 'Roma');
   await page
     .getByTestId('recruit-cards')
@@ -96,7 +98,7 @@ test('a shortfall the filling granary would carry names the day to raise instead
   const warning = page.getByTestId('recruit-warning');
   await expect(warning).toContainText('Food shortfall: stores last about 602 days');
   await expect(warning).toContainText(
-    'Stores grow while you wait: raised in about 838 days, these men are fed as the people grow. Raise now only if you need them sooner.',
+    `Stores grow while you wait: raised in about 838 days, on ${dateText(state.day + 838)}, these men are fed as the people grow, if you raise no other troops and lose no city before then. Raise now only if you need them sooner.`,
   );
   await expect(warning).not.toContainText('Raise fewer troops');
   await warning.getByRole('button', { name: 'Raise anyway' }).click();
