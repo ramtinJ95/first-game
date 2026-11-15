@@ -96,8 +96,8 @@ function refusal(
 ): string {
   if (land === sea) return land ?? 'no trade path joins these cities';
   const noPort = [from, to].find((city) => !world.harbours.has(city.id));
-  const bySea = noPort
-    ? `${noPort.name} has no port`
-    : `no sea lane within ${whole(TRADE_RANGE.sea)} km`;
-  return `no land road within ${whole(TRADE_RANGE.land)} km, and ${bySea}`;
+  return `${NO_ROAD}, and ${noPort ? `${noPort.name} has no port` : NO_LANE}`;
 }
+
+const NO_ROAD = `no land road within ${whole(TRADE_RANGE.land)} km`;
+const NO_LANE = `no sea lane within ${whole(TRADE_RANGE.sea)} km`;
