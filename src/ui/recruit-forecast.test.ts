@@ -5,6 +5,7 @@ import { newGame } from '../sim/new-game.ts';
 import { UNREST_DAYS } from '../sim/cities.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { Day } from '../sim/state/day.ts';
+import { dateText } from '../app/names.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { dailyBalances, economy, limitsOf, UPKEEP_PER_MAN } from '../sim/systems/economy.ts';
 import { tick } from '../sim/tick.ts';
@@ -49,7 +50,7 @@ it('names the wait after which stores carry the raise until the people feed it, 
   expect(forecast.short.food).toBeDefined();
   expect(wait).toBeGreaterThan(30);
   expect(forecast.warning).toContain(
-    `raised in about ${wait.toLocaleString('en-US')} days, these men are fed as the people grow. Raise now only if you need them sooner.`,
+    `raised in about ${wait.toLocaleString('en-US')} days, on ${dateText(state.day + wait)}, these men are fed as the people grow, if you raise no other troops and lose no city before then. Raise now only if you need them sooner.`,
   );
   expect(forecast.warning).not.toContain('Raise fewer troops');
   expect(() => firstShortfall(state, 'food', true, 1 + wait)).toThrow('Stores never ran short');
@@ -73,6 +74,9 @@ it('pays a delayed raise on the day it is given, after the treasury has refilled
   const forecast = recruitForecast(state, [], world, 'spearmen');
   const wait = required(forecast.holdsAfter);
   expect(forecast.short.gold).toBeDefined();
+  expect(forecast.warning).toContain(
+    `on ${dateText(state.day + wait)}, these men are fed as the people grow, if you raise no other troops, spend no gold, and your income holds until then, though trade gold comes as each caravan arrives and can move the day by some weeks.`,
+  );
   expect(() => firstShortfall(state, 'gold', true, 1 + wait)).toThrow('Stores never ran short');
   expect(() => firstShortfall(state, 'food', true, 1 + wait)).toThrow('Stores never ran short');
   expect(firstShortfall(state, 'gold', true, wait)).toBeGreaterThan(wait);

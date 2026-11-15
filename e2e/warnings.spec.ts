@@ -16,6 +16,9 @@ import {
   outnumberedAt,
 } from './support.ts';
 import { allocateId } from '../src/sim/ids.ts';
+import { dateText } from '../src/app/names.ts';
+import { fixtureWorld } from '../src/sim/fixture.ts';
+import { tick } from '../src/sim/tick.ts';
 import {
   foodShortfall,
   loadWarnings,
@@ -87,7 +90,8 @@ test('a shortfall the filling granary would carry names the day to raise instead
   page,
 }) => {
   await openGame(page);
-  await loadWarnings(page, foodShortUnlessWaiting());
+  const state = foodShortUnlessWaiting();
+  await loadWarnings(page, state);
   await showOwnCity(page, 'Roma');
   await page
     .getByTestId('recruit-cards')
@@ -96,13 +100,36 @@ test('a shortfall the filling granary would carry names the day to raise instead
   const warning = page.getByTestId('recruit-warning');
   await expect(warning).toContainText('Food shortfall: stores last about 602 days');
   await expect(warning).toContainText(
-    'Stores grow while you wait: raised in about 838 days, these men are fed as the people grow. Raise now only if you need them sooner.',
+    `Stores grow while you wait: raised in about 838 days, on ${dateText(state.day + 838)}, these men are fed as the people grow, if you raise no other troops and lose no city before then. Raise now only if you need them sooner.`,
   );
   await expect(warning).not.toContainText('Raise fewer troops');
   await warning.getByRole('button', { name: 'Raise anyway' }).click();
   await expect(page.getByTestId('city-raising')).toContainText(
     'Spearmen · ordered for the next day',
   );
+});
+
+test('on the day a warned raise named, the same card raises at once and the old warning does not stay open', async ({
+  page,
+}) => {
+  await openGame(page);
+  const state = foodShortUnlessWaiting();
+  await loadWarnings(page, state);
+  await showOwnCity(page, 'Roma');
+  const cards = page.getByTestId('recruit-cards');
+  await cards.getByRole('button', { name: /^Spearmen/ }).click();
+  const warning = page.getByTestId('recruit-warning');
+  await expect(warning).toContainText('raised in about 838 days');
+  const world = fixtureWorld();
+  let named = state;
+  for (let day = 0; day < 838; day++) named = tick(named, [], world).state;
+  await loadWarnings(page, named);
+  await showOwnCity(page, 'Roma');
+  await cards.getByRole('button', { name: /^Spearmen/ }).click();
+  await expect(page.getByTestId('city-raising')).toContainText(
+    'Spearmen · ordered for the next day',
+  );
+  await expect(warning).toHaveCount(0);
 });
 
 test('a small deficit that the growing people close stays plain and raises at once', async ({
