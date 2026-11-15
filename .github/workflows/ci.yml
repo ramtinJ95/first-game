@@ -119,7 +119,11 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - name: Memory over thirty loads
-        run: node e2e/memory-bench.ts --loads 30 --draw test --bound 0.1 | tee -a "$GITHUB_STEP_SUMMARY"
+        run: node e2e/memory-bench.ts --loads 30 --draw test --bound 0.1 --out memory.csv | tee -a "$GITHUB_STEP_SUMMARY"
+      # The curve as an annotation too, which the API serves to readers who cannot fetch logs.
+      - name: The curve as an annotation
+        if: ${{ !cancelled() }}
+        run: test -f memory.csv && echo "::notice title=memory curve::$(sed ':a;N;$!ba;s/\n/%0A/g' memory.csv)"
 
   capture-shards:
     timeout-minutes: 12
