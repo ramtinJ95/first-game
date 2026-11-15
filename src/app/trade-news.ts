@@ -18,9 +18,13 @@ import { dateText, whole } from './names.ts';
 /** Days without a raid on a road, or a siege of a city, that end an episode of them. */
 export const TRADE_QUIET_DAYS = 60;
 
+/** The most days a raid episode that stays open keeps its new losses before telling them. */
+export const TRADE_TALLY_DAYS = 30;
+
 /**
  * An episode the trade news is telling: one enemy's raids on the player's roads, counted
- * so the player hears of the first and of the whole once the roads are quiet, or a siege
+ * so the player hears of the first, of new losses at most `TRADE_TALLY_DAYS` later while
+ * the raids go on, and of the whole once the roads are quiet, or a siege
  * of a partner's city that has stopped the player's routes, told once however often it
  * breaks and resumes.
  */
@@ -34,8 +38,10 @@ const TradeTroubleSchema = v.variant('kind', [
     raids: v.number(),
     cargoes: v.number(),
     gold: v.number(),
-    /** The cargoes the first line told of, so the tally speaks only of more. */
+    /** The cargoes and gold the lines so far told of, and the day of the last line. */
     told: v.number(),
+    toldGold: v.number(),
+    toldOn: DaySchema,
   }),
   v.object({ kind: v.literal('siege'), city: CityIdSchema, last: DaySchema }),
 ]);
@@ -52,8 +58,9 @@ type Interruption = Extract<TradeEvent, { kind: 'tradeRaided' }>;
  * than one for each route: routes that open, invitations and their end, routes that
  * close for one cause on one day, a siege of a partner's city that stops the player's
  * routes, and an enemy's raids on the player's roads. The first raid of an episode is
- * told at once with what it took; later raids are counted and told when the roads have
- * been quiet for `TRADE_QUIET_DAYS` or their routes close, if they took more.
+ * told at once with what it took; later losses are told at most `TRADE_TALLY_DAYS` after
+ * the last line while the raids go on, and the whole episode once the roads have been
+ * quiet for `TRADE_QUIET_DAYS` or their routes close, if it took more.
  */
 export function tradeNews(
   before: State,
@@ -172,6 +179,8 @@ export function tradeNews(
         cargoes: 0,
         gold: 0,
         told: 0,
+        toldGold: 0,
+        toldOn: day,
       };
       troubles.push(raids);
       opened.push(raids);
@@ -181,7 +190,7 @@ export function tradeNews(
     raids.cargoes += cargo;
     raids.gold += gold;
     raids.last = day;
-    if (opened.includes(raids)) raids.told = raids.cargoes;
+    if (opened.includes(raids)) Object.assign(raids, { told: raids.cargoes, toldGold: raids.gold });
   }
   for (const raids of opened) {
     const [first] = raids.roads;
@@ -212,6 +221,18 @@ export function tradeNews(
     if (open.some((r) => after.tradeRoutes[r.route]?.blocked === 'raid')) trouble.last = day;
     if (open.length && day - trouble.last < TRADE_QUIET_DAYS) {
       kept.push(trouble);
+      const [first] = trouble.roads;
+      if (!first || trouble.cargoes <= trouble.told || day - trouble.toldOn < TRADE_TALLY_DAYS)
+        continue;
+      tell(
+        {
+          kind: 'tradeRaided',
+          tone: 'bad',
+          text: `${faction(trouble.raider)}'s raids on ${list(trouble.roads.map(routeName))} took ${moreText(trouble.cargoes - trouble.told)} worth about ${whole(trouble.gold - trouble.toldGold)} gold to you since ${dateText(trouble.toldOn)}.`,
+        },
+        playerEnd(after, first),
+      );
+      Object.assign(trouble, { told: trouble.cargoes, toldGold: trouble.gold, toldOn: day });
       continue;
     }
     if (trouble.cargoes <= trouble.told) continue;
@@ -238,6 +259,7 @@ function playerEnd(state: State, route: { from: CityId; to: CityId }): CityId {
 }
 
 const cargoText = (n: number) => (n === 1 ? 'a cargo' : `${n} cargoes`);
+const moreText = (n: number) => (n === 1 ? 'another cargo' : `${n} more cargoes`);
 
 function list(items: readonly string[]): string {
   return items.length > 1

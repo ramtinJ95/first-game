@@ -11,7 +11,7 @@ import { routePoint } from '../sim/trade/routes.ts';
 import { expectConsistent } from '../sim/references.ts';
 import { alertsOfDay, type Alert } from './alerts.ts';
 import { whole } from './names.ts';
-import { TRADE_QUIET_DAYS, tradeNews, type TradeTrouble } from './trade-news.ts';
+import { TRADE_QUIET_DAYS, TRADE_TALLY_DAYS, tradeNews, type TradeTrouble } from './trade-news.ts';
 
 const world = fixtureWorld();
 
@@ -56,11 +56,46 @@ describe('trade news', () => {
       `Carthage raided the road Roma to Capua and took a cargo worth about ${cargo} gold to you. Deliveries stop while its armies stay within reach.`,
     ]);
     for (let i = 0; i < TRADE_QUIET_DAYS; i++) day(false);
-    const both = whole(route.daily * route.days * 4);
     expect(told.map((a) => a.text)).toEqual([
       expect.stringContaining('Carthage raided the road Roma to Capua'),
-      `Carthage's raids have stopped: 3 raids on Roma to Capua since Year 1, day 1 took 2 cargoes worth about ${both} gold to you.`,
+      `Carthage's raids on Roma to Capua took another cargo worth about ${cargo} gold to you since Year 1, day 1.`,
     ]);
+    expect(told[1]?.day).toBe(1 + TRADE_TALLY_DAYS);
+    expectConsistent(state);
+  });
+
+  test('raids that go on for a year tell their new losses at most a month after the last line', () => {
+    const { state, route, day, told } = road();
+    const carthage = state.factions[f.carthage];
+    if (!carthage) throw new Error('missing Carthage');
+    const thefts: number[] = [];
+    while (state.day < 365) {
+      const gold = carthage.stores.gold;
+      const on = state.day;
+      day(state.day >= route.departsOn);
+      if (carthage.stores.gold > gold) thefts.push(on);
+    }
+    const lines = told.map((a) => ({
+      day: a.day,
+      cargoes: /took (a|another) cargo/.test(a.text)
+        ? 1
+        : Number(/took (\d+) (more )?cargoes/.exec(a.text)?.[1]),
+    }));
+    expect(thefts.length).toBeGreaterThan(12);
+    expect(told[0]?.text).toContain('Carthage raided the road Roma to Capua and took a cargo');
+    expect(told.slice(1).map((a) => a.text)).toEqual(
+      Array.from({ length: told.length - 1 }, () =>
+        expect.stringMatching(
+          /^Carthage's raids on Roma to Capua took (another cargo|\d+ more cargoes) worth about [\d,]+ gold to you since Year 1, day \d+\.$/,
+        ),
+      ),
+    );
+    for (const theft of thefts.filter((d) => d < 365 - TRADE_TALLY_DAYS))
+      expect(lines.some((l) => l.day >= theft && l.day <= theft + TRADE_TALLY_DAYS)).toBe(true);
+    const toldCargoes = lines.reduce((sum, l) => sum + l.cargoes, 0);
+    const lastLine = lines.at(-1)?.day ?? 0;
+    expect(toldCargoes).toBe(thefts.filter((d) => d <= lastLine).length);
+    expect(told.length).toBeLessThanOrEqual(1 + Math.ceil(365 / TRADE_TALLY_DAYS));
     expectConsistent(state);
   });
 
@@ -97,7 +132,7 @@ describe('trade news', () => {
     for (let i = 0; i < TRADE_QUIET_DAYS; i++) play({ x: 1, y: 1 });
     expect(told).toEqual([
       `Carthage raided the road Roma to Capua and took a cargo worth about ${cargo} gold to you. Deliveries stop while its armies stay within reach.`,
-      `Carthage's raids have stopped: 2 raids on Roma to Capua and Capua to Roma since Year 1, day 1 took 2 cargoes worth about ${whole(route.daily * route.days * 4)} gold to you.`,
+      `Carthage's raids on Roma to Capua and Capua to Roma took another cargo worth about ${cargo} gold to you since Year 1, day 1.`,
     ]);
   });
 
