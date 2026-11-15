@@ -736,6 +736,16 @@ function eventAlert(
         },
       };
     }
+    case 'sailingRefused': {
+      if (event.owner !== player) return undefined;
+      const port = after.cities[event.to]?.name ?? 'the port';
+      return {
+        kind: 'sailingRefused',
+        tone: 'bad',
+        text: `${calledOf(before, after, event.army)} did not sail for ${port} ${placeName(after, event.position)}. ${reasonText(after, event.reason.replace(`army ${event.army}`, 'it'))}, and waits for orders.`,
+        focus: { at: event.position, select: { kind: 'army', army: event.army } },
+      };
+    }
     case 'warDeclared':
       if (event.against === player) {
         return {

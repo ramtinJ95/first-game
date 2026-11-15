@@ -1086,3 +1086,32 @@ describe('peace', () => {
     ]);
   });
 });
+
+describe('a march that ends in a crossing', () => {
+  it('tells the player why the army stands idle when it cannot sail where its march ended', () => {
+    const state = buildFixture();
+    const army = state.armies[f.romanArmy];
+    if (!army) throw new Error('no Roman army');
+    army.activity = { kind: 'idle', position: { x: 2600, y: 2400 } };
+    const roma = state.cities[f.roma];
+    if (!roma) throw new Error('no Roma');
+    const order: Order = {
+      kind: 'embark',
+      faction: f.rome,
+      army: f.romanArmy,
+      to: f.syracusae,
+      from: roma.position,
+    };
+    const marching = structuredClone(tick(state, [order], world).state);
+    changeCityOwner(marching, f.roma, f.carthage);
+    const idle = (current: GameState) => current.armies[f.romanArmy]?.activity.kind === 'idle';
+    const { state: after, alerts } = play(marching, [], idle);
+    expect(idle(after)).toBe(true);
+    expect(ofKind(alerts, 'sailingRefused')).toMatchObject([
+      {
+        tone: 'bad',
+        text: 'First Legion did not sail for Syracusae at Roma. It stands at no port of Rome and on no shore of the sea to Syracusae, and waits for orders.',
+      },
+    ]);
+  });
+});
