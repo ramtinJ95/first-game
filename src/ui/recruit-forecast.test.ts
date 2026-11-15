@@ -54,6 +54,16 @@ it('stays plain for a small deficit that the growing people close before the sto
   expectConsistent(state);
 });
 
+it('still warns of a deficit that outlasts a century, with no horizon to hide it', () => {
+  const state = goldOnly();
+  required(state.cities[f.capua]).population = 2000;
+  required(state.factions[f.rome]).stores.gold = 2_000_000;
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  expect(forecast.short.gold).toBeGreaterThan(100 * 365);
+  expect(forecast.warning).toContain('Gold shortfall');
+  expectConsistent(state);
+});
+
 it('gives the realm forecast without adding a hypothetical troop, and keeps card text troop-specific', () => {
   const state = buildFixture();
   const balance = required(dailyBalances(state).get(f.rome));

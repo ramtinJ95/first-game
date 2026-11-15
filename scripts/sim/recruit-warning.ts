@@ -12,6 +12,7 @@ import { beleaguered } from '../../src/sim/systems/sieges.ts';
 import { tick } from '../../src/sim/tick.ts';
 import { TROOPS } from '../../src/sim/troops.ts';
 import { buildWorld } from '../../src/sim/world/world.ts';
+import { afterWaiting } from '../../src/ui/buildings-text.ts';
 import { recruitForecast } from '../../src/ui/recruit-forecast.ts';
 
 const RULES = {
@@ -79,14 +80,12 @@ function play(seed: number, warns: (forecast: Forecast) => boolean) {
     const orders: Order[] = decideAll(state, world, []).filter(
       (order) => !(order.kind === 'recruit' && order.faction === rome),
     );
-    const raise = cautiousRaise(state, warns);
+    const raise = cautiousRaise(state, orders, warns);
     if (raise === 'warned') row.warned++;
-    else if (raise) {
-      orders.push(raise);
-      row.raised++;
-    }
+    else if (raise) orders.push(raise);
     const owned = citiesOf(state);
-    const { state: next, events } = tick(state, orders, world);
+    const { state: next, events, rejected } = tick(state, orders, world);
+    if (raise && raise !== 'warned' && !rejected.some((r) => r.order === raise)) row.raised++;
     const stores = next.factions[rome]?.stores;
     for (const event of events) {
       if (event.kind !== 'armyDeserted' || event.owner !== rome || !stores) continue;
@@ -104,15 +103,19 @@ function play(seed: number, warns: (forecast: Forecast) => boolean) {
   return row;
 }
 
+/** Rome's other orders of the day apply first, as the panel counts orders already given. */
 function cautiousRaise(
-  state: GameState,
+  today: GameState,
+  others: readonly Order[],
   warns: (forecast: Forecast) => boolean,
 ): Order | 'warned' | undefined {
-  const stores = state.factions[rome]?.stores;
-  if (!stores) return undefined;
-  const troop = mostNeeded(state, rome);
+  const troop = mostNeeded(today, rome);
   const { gold, men, days } = TROOPS[troop].recruit;
-  if (stores.gold < gold || stores.manpower < men) return undefined;
+  const before = today.factions[rome]?.stores;
+  if (!before || before.gold < gold || before.manpower < men) return undefined;
+  const state = afterWaiting(today, others, world);
+  const stores = state.factions[rome]?.stores;
+  if (!stores || stores.gold < gold || stores.manpower < men) return undefined;
   const city = Object.values(state.cities)
     .filter((c) => c.owner === rome && c.unrestDays === 0 && !beleaguered(state, c))
     .sort((a, b) => Number(b.id === 'roma') - Number(a.id === 'roma') || (a.id < b.id ? -1 : 1))[0];
@@ -145,7 +148,9 @@ function sortForecast(forecast: Forecast) {
 }
 
 if (values.sort) {
-  console.log('\nRaise days a fixed-yield forecast runs short, by store and distance:\n');
+  console.log(
+    '\nDays Rome could pay for a raise on which the fixed-yield forecast runs short, by store and distance. A blocked raise counts again each day it waits:\n',
+  );
   console.log(
     '| fixed-yield shortfall | the growing realm runs short too | growth closes the gap first |',
   );

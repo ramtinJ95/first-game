@@ -9,9 +9,6 @@ import { signed } from './describe.ts';
 import type { World } from '../sim/world/world.ts';
 import { YEARLY_GROWTH } from '../sim/systems/population.ts';
 
-/** The growing realm is followed this far; a deficit growth has not closed by then never closes. */
-const FORECAST_YEARS = 100;
-
 export function recruitForecast(
   game: DeepReadonly<GameState>,
   pending: readonly Order[],
@@ -139,11 +136,14 @@ function grownRealm(state: DeepReadonly<GameState>): DeepReadonly<GameState> {
   return { ...state, cities } as DeepReadonly<GameState>;
 }
 
+/** The people's daily growth factor, as the population system applies it. */
+const DAILY = (1 + YEARLY_GROWTH) ** (1 / 365);
+
 /**
- * The day a store first runs short, played day by day as the economy plays it: upkeep starts
- * on each muster day and gains stop at the limit. Without `yearly`, yields stay as they are
- * today; with it, the balance and the limit grow with the people, by `yearly` for each
- * YEARLY_GROWTH of them, from the second day on as the population system grows them.
+ * The day a store first runs short, as the economy plays it: upkeep starts on each muster
+ * day and gains stop at the limit. Without `yearly`, yields stay as they are today; with it,
+ * the balance and the limit grow with the people, by `yearly` for each YEARLY_GROWTH of them,
+ * from the second day on as the population system grows them.
  */
 function daysUntilShort(
   amount: number,
@@ -155,20 +155,52 @@ function daysUntilShort(
   yearly = { change: 0, limit: 0 },
 ): number | undefined {
   if (amount < 0) return 0;
+  const grown = (day: number) => (DAILY ** (day - 1) - 1) / YEARLY_GROWTH;
   let next = 0;
-  for (let day = 1; day <= FORECAST_YEARS * 365; day++) {
+  for (let day = 1; ; day++) {
     while (next < schedule.length && (schedule[next]?.inDays ?? Infinity) < day) {
       const men = schedule[next]?.men ?? 0;
       change -= men * upkeep;
       limit += men * capPerMan;
       next++;
     }
-    const grown = ((1 + YEARLY_GROWTH) ** ((day - 1) / 365) - 1) / YEARLY_GROWTH;
-    const today = change + yearly.change * grown;
-    if (next === schedule.length && today >= 0 && yearly.change >= 0) return undefined;
-    const cap = limit + yearly.limit * grown;
+    const today = change + yearly.change * grown(day);
+    if (next === schedule.length) {
+      if (today >= 0) return undefined;
+      return fallingStores(day - 1, amount, change, yearly.change);
+    }
+    const cap = limit + yearly.limit * grown(day);
     amount = today > 0 ? Math.max(amount, Math.min(cap, amount + today)) : amount + today;
     if (amount < 0) return day;
   }
-  return undefined;
+}
+
+/**
+ * Once every recruit has mustered and the balance is falling, no limit applies and the stores
+ * follow a closed form: they fall until the growing people close the gap, so they run short
+ * only if they run out before that day.
+ */
+function fallingStores(
+  from: number,
+  amount: number,
+  change: number,
+  gain: number,
+): number | undefined {
+  const at = (day: number) => {
+    const days = day - from;
+    const compound = (DAILY ** from * (DAILY ** days - 1)) / (DAILY - 1);
+    return amount + days * (change - gain / YEARLY_GROWTH) + (gain / YEARLY_GROWTH) * compound;
+  };
+  let high =
+    gain > 0
+      ? Math.ceil(1 + Math.log(1 + (YEARLY_GROWTH * -change) / gain) / Math.log(DAILY)) - 1
+      : from + Math.ceil(amount / -change) + 1;
+  if (at(high) >= 0) return undefined;
+  let low = from;
+  while (high - low > 1) {
+    const middle = Math.floor((low + high) / 2);
+    if (at(middle) < 0) high = middle;
+    else low = middle;
+  }
+  return high;
 }
