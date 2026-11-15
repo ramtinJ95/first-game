@@ -69,7 +69,9 @@ export function recruitForecast(
       schedule,
     ),
   };
-  const shortWith = (plan: readonly { inDays: number; men: number }[]) => ({
+  type Plan = readonly Muster[];
+  const byDay = (plan: Plan) => [...plan].sort((a, b) => a.inDays - b.inDays);
+  const shortWith = (plan: Plan, paysOn?: number) => ({
     food: daysUntilShort(
       stores.food,
       balance.food,
@@ -80,23 +82,23 @@ export function recruitForecast(
       yearly.food,
     ),
     gold: daysUntilShort(
-      stores.gold - cost.gold,
+      stores.gold - (paysOn === undefined ? cost.gold : 0),
       balance.gold,
       limits.gold,
       UPKEEP_PER_MAN.gold,
       0,
-      plan,
+      paysOn === undefined ? plan : byDay([...plan, { inDays: paysOn, men: 0, pay: cost.gold }]),
       yearly.gold,
     ),
   });
   const short = shortWith(schedule);
   const holdsAfter =
     troop && (short.food !== undefined || short.gold !== undefined)
-      ? firstWait((wait) => {
+      ? firstWait(Math.max(0, ...queued.map((r) => r.inDays)), (wait) => {
+          // The delayed order pays its gold on the day it is given, while the treasury may have refilled to its limit.
           const later = shortWith(
-            [...queued, { inDays: daysToMuster + wait, men: cost.men }].sort(
-              (a, b) => a.inDays - b.inDays,
-            ),
+            byDay([...queued, { inDays: daysToMuster + wait, men: cost.men }]),
+            wait,
           );
           return later.food === undefined && later.gold === undefined;
         })
@@ -157,13 +159,26 @@ function grownRealm(state: DeepReadonly<GameState>): DeepReadonly<GameState> {
 /** Full days of stores before the day they run short, as the top bar counts them. */
 const daysLeft = (shortOn: number) => Math.max(0, shortOn - 1);
 
+/** A recruit's start of upkeep, and for a raise not yet ordered, the gold it pays that day. */
+interface Muster {
+  inDays: number;
+  men: number;
+  pay?: number;
+}
+
 /** The longest wait the warning names; a raise that needs longer waits for better income instead. */
 const MAX_WAIT = 3650;
 
-/** The fewest days to wait before the raise holds, or undefined if it does not within MAX_WAIT. */
-function firstWait(holds: (wait: number) => boolean): number | undefined {
+/**
+ * The fewest days to wait before the raise holds, or undefined if it does not within MAX_WAIT.
+ * Until the last queued recruit musters, a later muster can lose granary room the stores needed,
+ * so those days are each tried; after it, waiting only adds stores and people, and halving finds the day.
+ */
+function firstWait(queuedUntil: number, holds: (wait: number) => boolean): number | undefined {
+  const tried = Math.min(queuedUntil, MAX_WAIT);
+  for (let wait = 1; wait <= tried; wait++) if (holds(wait)) return wait;
   if (!holds(MAX_WAIT)) return undefined;
-  let low = 0;
+  let low = tried;
   let high = MAX_WAIT;
   while (high - low > 1) {
     const middle = Math.floor((low + high) / 2);
@@ -190,7 +205,7 @@ function daysUntilShort(
   limit: number,
   upkeep: number,
   capPerMan: number,
-  schedule: readonly { inDays: number; men: number }[],
+  schedule: readonly Muster[],
   yearly = { change: 0, limit: 0 },
 ): number | undefined {
   if (amount < 0) return 0;
@@ -199,6 +214,7 @@ function daysUntilShort(
   for (let day = 1; ; day++) {
     while (next < schedule.length && (schedule[next]?.inDays ?? Infinity) < day) {
       const men = schedule[next]?.men ?? 0;
+      amount -= schedule[next]?.pay ?? 0;
       change -= men * upkeep;
       limit += men * capPerMan;
       next++;

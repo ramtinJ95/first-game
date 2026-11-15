@@ -12,6 +12,7 @@ import { recruitForecast } from './recruit-forecast.ts';
 import { population } from '../sim/systems/population.ts';
 import { TROOPS } from '../sim/troops.ts';
 import { executeOrder } from '../sim/orders/orders.ts';
+import { recruit } from '../sim/orders/recruit.ts';
 
 const world = fixtureWorld();
 
@@ -53,6 +54,50 @@ it('names the wait after which stores carry the raise until the people feed it, 
   expect(forecast.warning).not.toContain('Raise fewer troops');
   expect(() => firstShortfall(state, 'food', true, 1 + wait)).toThrow('Stores never ran short');
   expect(firstShortfall(state, 'food', true, wait)).toBeGreaterThan(wait);
+  expectConsistent(state);
+});
+
+it('pays a delayed raise on the day it is given, after the treasury has refilled to its limit', () => {
+  const state = buildFixture();
+  for (const city of Object.values(state.cities))
+    if (city.owner === f.rome) {
+      city.population = 20_000;
+      city.buildings = ['canals'];
+    }
+  required(state.formations[f.hastati]).men = 700;
+  Object.assign(required(state.factions[f.rome]).stores, {
+    gold: 4032,
+    food: required(limitsOf(state).get(f.rome)).food,
+    manpower: 2000,
+  });
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  const wait = required(forecast.holdsAfter);
+  expect(forecast.short.gold).toBeDefined();
+  expect(() => firstShortfall(state, 'gold', true, 1 + wait)).toThrow('Stores never ran short');
+  expect(() => firstShortfall(state, 'food', true, 1 + wait)).toThrow('Stores never ran short');
+  expect(firstShortfall(state, 'gold', true, wait)).toBeGreaterThan(wait);
+  expectConsistent(state);
+});
+
+it('tries each wait while other recruits are still training, since a later muster can lose granary room', () => {
+  const state = buildFixture();
+  for (const city of Object.values(state.cities))
+    if (city.owner === f.rome) city.population = 40_000;
+  required(state.formations[f.hastati]).men = 585;
+  Object.assign(required(state.factions[f.rome]).stores, {
+    gold: 100_000,
+    food: 3082.4,
+    manpower: 100_000,
+  });
+  for (let i = 0; i < 3; i++)
+    expect(
+      recruit(state, { kind: 'recruit', faction: f.rome, city: f.capua, troop: 'heavyCavalry' }),
+    ).toBeUndefined();
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  expect(forecast.short.food).toBeDefined();
+  expect(forecast.holdsAfter).toBe(11);
+  expect(() => firstShortfall(state, 'food', true, 12)).toThrow('Stores never ran short');
+  expect(firstShortfall(state, 'food', true, 13)).toBeGreaterThan(13);
   expectConsistent(state);
 });
 
