@@ -37,3 +37,11 @@ export function shardScenarios<T>(
   }
   return scenarios.filter((_, i) => selected.has(i));
 }
+
+/**
+ * The most measured scenario seconds one CI capture shard may be planned to hold. A
+ * capture job also spends about 65 s on setup, the build, and upload (measured on run
+ * 43732214778), so 450 s of scenarios ends near 8.6 minutes, over three minutes inside
+ * the 12-minute job limit. It is also the floor: `stage-three` alone measured 439 s.
+ */
+export const SHARD_BUDGET_SECONDS = 450;

@@ -90,6 +90,16 @@ export type DayEvent =
       men: number;
     }
   | { kind: 'armyDeserted'; army: ArmyId; owner: FactionId; position: MapPoint; men: number }
+  | {
+      kind: 'sailingRefused';
+      army: ArmyId;
+      owner: FactionId;
+      /** Where the march ended and the army now stands. */
+      position: MapPoint;
+      /** The port the army was to sail for. */
+      to: CityId;
+      reason: string;
+    }
   | { kind: 'warDeclared'; by: FactionId; against: FactionId }
   | {
       kind: 'buildingFinished';

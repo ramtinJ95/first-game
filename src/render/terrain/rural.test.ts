@@ -109,3 +109,20 @@ test('hill strike reads a real nonzero depth field and changes with differently 
   const along = vertical.strike(4032, 2528, 'hills');
   expect(Math.abs(Math.sin(across - along))).toBeGreaterThan(0.95);
 });
+
+test('the broad uplands round Lake Urmia vary their folds more than the Zagros belt keeps its grain', () => {
+  const axialSpread = (angles: number[]) => {
+    const c = angles.reduce((sum, a) => sum + Math.cos(2 * a), 0);
+    const s = angles.reduce((sum, a) => sum + Math.sin(2 * a), 0);
+    return Math.sqrt(-2 * Math.log(Math.hypot(c, s) / angles.length)) / 2;
+  };
+  const folds = (rect: typeof PLATEAU) =>
+    placeRelief(land, rect, 'close')
+      .filter((m) => m.kind === 'fold')
+      .map((m) => m.angle);
+  const urmia = folds({ left: 5110, top: 2480, right: 5410, bottom: 2780 });
+  const zagros = folds(PLATEAU);
+  expect(urmia.length).toBeGreaterThan(100);
+  expect(axialSpread(urmia)).toBeGreaterThan((40 * Math.PI) / 180);
+  expect(axialSpread(zagros)).toBeLessThan(axialSpread(urmia) - (8 * Math.PI) / 180);
+});

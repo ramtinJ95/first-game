@@ -22,8 +22,7 @@ export const NEAR_KM = 400;
 /**
  * The news of the world beyond the player's own affairs, which every power hears
  * whether it sees the place or not: a war between two other great powers and a peace
- * between them, a great capital that falls, a great power destroyed, a new leading
- * power, and a city near the player's land that changes hands, in war or by a peace. The player's own wars,
+ * between them, a great capital that falls, a great power destroyed, and a city near the player's land that changes hands, in war or by a peace. The player's own wars,
  * cities, and defeat are told by `alertsOfDay`, so none of these is about the player.
  */
 export function worldNewsOfDay(
@@ -119,20 +118,36 @@ export function worldNewsOfDay(
     });
   }
 
-  const leader = leadingPower(after);
-  if (leader && leader !== leadingPower(before)) {
-    const cities = Object.values(after.cities).filter((city) => city.owner === leader).length;
-    add({
-      kind: 'newLeader',
-      world: 'corner',
-      text:
-        leader === player
-          ? `You are now the leading power, with ${cities} cities: the other powers will join against you`
-          : `${factionName(after, leader)} is now the leading power, with ${cities} cities: the other powers will join against it`,
-    });
-  }
-
   return news;
+}
+
+/**
+ * The news of a new leading power: a great power that leads, other than the one the player
+ * was last told leads. A lead that passes through a tie or falls below the share and comes
+ * back to the same power is no news, so two powers near the share do not fill the corner,
+ * and every change of the power the others join against is still told. It gives the leader
+ * last told, to pass to the next day.
+ */
+export function leaderNews(
+  before: State,
+  after: State,
+  told: FactionId | undefined,
+): { readonly alerts: Alert[]; readonly told: FactionId | undefined } {
+  const leader = leadingPower(after);
+  if (!leader || leader === told) return { alerts: [], told };
+  const cities = Object.values(after.cities).filter((city) => city.owner === leader).length;
+  const text =
+    leader === after.player
+      ? `You are now the leading power, with ${cities} cities: the other powers will join against you`
+      : `${factionName(after, leader)} is now the leading power, with ${cities} cities: the other powers will join against it`;
+  const alert: Alert = {
+    kind: 'newLeader',
+    day: before.day,
+    tone: 'neutral',
+    world: 'corner',
+    text,
+  };
+  return { alerts: [alert], told: leader };
 }
 
 /**

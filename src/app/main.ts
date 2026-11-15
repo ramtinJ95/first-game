@@ -6,7 +6,7 @@ import { createRenderer, type Command, type Insets } from '../render/renderer.ts
 import { decideAll } from '../sim/ai/decide.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import { FATE_DAYS } from '../sim/cities.ts';
-import type { CityId, SiegeId } from '../sim/ids.ts';
+import type { CityId, FactionId, SiegeId } from '../sim/ids.ts';
 import { parseMap, POWERS, type GameMap, type PowerId } from '../sim/map.ts';
 import { newGame, POWER_NAMES } from '../sim/new-game.ts';
 import type { Order } from '../sim/orders/orders.ts';
@@ -32,7 +32,7 @@ import {
 import { createClock } from './clock.ts';
 import { desertionNews, type Desertion } from './desertion.ts';
 import { tradeNews, type TradeTrouble } from './trade-news.ts';
-import { planCommand, plannedRoutes, type CommandTarget, type Plan } from './command.ts';
+import { commandTarget, planCommand, plannedRoutes, type Plan } from './command.ts';
 import { fateChoices, type FateChoice } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
 import { refusalText } from './names.ts';
@@ -52,7 +52,7 @@ import {
   type Slot,
 } from './saves.ts';
 import { turningPoints } from './turning-points.ts';
-import { worldNewsOfDay } from './world-news.ts';
+import { leaderNews, leadingPower, worldNewsOfDay } from './world-news.ts';
 import {
   createView,
   type CommandMenu,
@@ -170,6 +170,8 @@ let weakSieges = new Map<SiegeId, WeakSiege>();
 let desertion: Desertion | undefined;
 /** The raids and sieges of the player's trade that the news is in the middle of telling. */
 let tradeTroubles: readonly TradeTrouble[] = [];
+/** The leading power the player was last told of. A save keeps it; a new game or an older save starts from the one that leads. */
+let leaderTold: FactionId | undefined;
 
 function fateOpen(state: DeepReadonly<GameState>, id: CityId): boolean {
   const city = state.cities[id];
@@ -245,6 +247,8 @@ const clock = createClock({
     desertion = shortage.watched;
     const trade = tradeNews(before, after, events, tradeTroubles);
     tradeTroubles = trade.watched;
+    const leader = leaderNews(before, after, leaderTold);
+    leaderTold = leader.told;
     const stops = stopsOfDay(
       groupAlerts([
         ...alertsInSight(alertsOfDay(before, after, events, occupied, toldOnce), saw, sees),
@@ -254,6 +258,7 @@ const clock = createClock({
         ...trade.alerts,
         // The world's news reaches every power, whether it sees the place or not.
         ...worldNewsOfDay(before, after, events, world),
+        ...leader.alerts,
       ]),
       newsPauses ? pauses : NO_PAUSES,
       toldOnce,
@@ -329,15 +334,12 @@ function tellIssued(plan: Extract<Plan, { kind: 'issue' }>) {
 }
 
 /** A right click with one of the player's armies selected plans an order for the city or point. */
-function command({ point, city, screen }: Command) {
+function command({ point, city, screen, islet }: Command) {
   menu = undefined;
   const state = clock.state;
   const army = selection?.kind === 'army' ? state.armies[selection.army] : undefined;
-  const clicked = city && state.cities[city];
   if (army && army.owner === state.player) {
-    const target: CommandTarget = clicked
-      ? { kind: 'city', city: clicked }
-      : { kind: 'point', point };
+    const target = commandTarget(state, { point, city, islet });
     const plan = planCommand(state, world, army, target, clock.pending);
     if (plan.kind === 'issue') {
       clock.issue(plan.order);
@@ -460,6 +462,7 @@ function pageNow(): Page {
     weakSieges,
     desertion,
     tradeTroubles,
+    leaderTold,
   };
 }
 
@@ -487,6 +490,7 @@ function enter(
   weakSieges = new Map(page?.weakSieges);
   desertion = page?.desertion;
   tradeTroubles = page?.tradeTroubles ?? [];
+  leaderTold = page?.leaderTold ?? leadingPower(state);
   menu = undefined;
   stopAsked = false;
   const outcome = outcomeOf(state, world, state.player);

@@ -24,6 +24,7 @@
     "capture": "npm run build && node scripts/capture/run.ts",
     "capture:publish": "node scripts/capture/publish.ts",
     "capture:fetch": "node scripts/capture/fetch.ts",
+    "capture:timings": "node scripts/capture/timings.ts",
     "map:cities": "node scripts/map/pleiades.ts",
     "map:routes": "node scripts/movement/routes-picture.ts",
     "sim:paths": "node scripts/sim.ts paths",
