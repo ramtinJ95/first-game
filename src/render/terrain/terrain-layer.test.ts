@@ -2,14 +2,56 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Container, type Renderer } from 'pixi.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { parseMap } from '../../sim/map.ts';
+import { parseMap, type GameMap, type Point } from '../../sim/map.ts';
 import { createTerrain } from './terrain-layer.ts';
 
-const map = parseMap(
-  JSON.parse(readFileSync(resolve(import.meta.dirname, '../../../data/map/map.json'), 'utf8')),
+/** The Persian plateau, open dry land with few marks to draw at the closest zoom. */
+const PLATEAU = { x: 6080, y: 3330 };
+const HALF_KM = 64;
+
+/**
+ * The map's provinces, terrain, rivers, coasts, peaks, and places within HALF_KM of the
+ * plateau, moved to a map of their own. Building the layer for the whole map took a second
+ * of every test, and what a test asks of the layer holds for any land it draws.
+ */
+function plateauMap(map: GameMap): GameMap {
+  const near = ([x, y]: Point) =>
+    Math.abs(x - PLATEAU.x) < HALF_KM && Math.abs(y - PLATEAU.y) < HALF_KM;
+  const touches = (rings: readonly (readonly Point[])[]) => rings.some((ring) => ring.some(near));
+  const shift = (value: unknown): unknown =>
+    Array.isArray(value)
+      ? value.length === 2 && typeof value[0] === 'number' && typeof value[1] === 'number'
+        ? [value[0] - PLATEAU.x + HALF_KM, value[1] - PLATEAU.y + HALF_KM]
+        : value.map(shift)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, shift(inner)]))
+        : value;
+  const side = 2 * HALF_KM;
+  const cropped = {
+    ...map,
+    extent: [
+      [PLATEAU.x - HALF_KM, PLATEAU.y - HALF_KM],
+      [PLATEAU.x + HALF_KM, PLATEAU.y - HALF_KM],
+      [PLATEAU.x + HALF_KM, PLATEAU.y + HALF_KM],
+      [PLATEAU.x - HALF_KM, PLATEAU.y + HALF_KM],
+    ],
+    provinces: map.provinces.filter((province) => province.outline.some(touches)),
+    terrain: map.terrain.filter((area) => area.outline.some(touches)),
+    rivers: map.rivers.filter((river) => river.line.some(near)),
+    coastline: map.coastline.filter((line) => line.some(near)),
+    peaks: map.peaks.filter((peak) => near(peak.at)),
+    settlements: map.settlements.filter((place) => near(place.at)),
+  };
+  return { ...(shift(cropped) as GameMap), width: side, height: side };
+}
+
+const map = plateauMap(
+  parseMap(
+    JSON.parse(readFileSync(resolve(import.meta.dirname, '../../../data/map/map.json'), 'utf8')),
+  ),
 );
-const viewport = { width: 1280, height: 720 };
-const closest = { centre: { x: 2420, y: 1880 }, scale: 4.2 };
+const viewport = { width: 320, height: 180 };
+const closest = { centre: { x: HALF_KM, y: HALF_KM }, scale: 4.2 };
 
 function renderer() {
   let renders = 0;
