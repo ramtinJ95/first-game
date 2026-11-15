@@ -625,7 +625,7 @@ describe('the stance texts', () => {
     };
     expect(line('holdTheLine', 'skirmishAndWithdraw')).toBe('Their skirmishers beat your line');
     expect(line('holdTheLine', 'allOutAssault')).toBe('Your line beats their assault');
-    expect(line('allOutAssault', 'allOutAssault')).toBe('Neither stance beats the other');
+    expect(line('allOutAssault', 'allOutAssault')).toBe('Neither stance has the edge');
     expect(line('holdTheLine', 'allOutAssault', { mine: 1 })).toBe(
       'Your army re-forms, so their assault beats it',
     );
@@ -633,7 +633,7 @@ describe('the stance texts', () => {
       'Their army re-forms, so your line beats it',
     );
     expect(line('holdTheLine', 'skirmishAndWithdraw', { mine: 1, theirs: 1 })).toBe(
-      'Neither stance beats the other',
+      'Neither stance has the edge',
     );
   });
 

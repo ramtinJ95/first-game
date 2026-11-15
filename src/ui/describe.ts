@@ -845,7 +845,7 @@ export function standingText(
       ? `Your army re-forms, so their ${theirs.noun} ${theirs.beats} it`
       : `Their ${theirs.noun} ${theirs.beats} your ${mine.noun}`;
   }
-  return 'Neither stance beats the other';
+  return 'Neither stance has the edge';
 }
 
 /**
