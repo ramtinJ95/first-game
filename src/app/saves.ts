@@ -1,6 +1,6 @@
 import * as v from 'valibot';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import { saveGame } from '../sim/save.ts';
+import { saveGame, type Refusal } from '../sim/save.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 
 /** The game keeps one save the player writes and one it writes itself each month. */
@@ -77,3 +77,16 @@ export function writeSaved(
 export function latestSaved(saves: Partial<Record<Slot, Saved>>): Saved | undefined {
   return SLOTS.flatMap((slot) => saves[slot] ?? []).sort((a, b) => b.savedAt - a.savedAt)[0];
 }
+
+/**
+ * What the page tells a player whose save was refused, in one sentence that says what
+ * to do. The detail of why goes to the console, for a developer.
+ */
+export const REFUSED_SAVE: Readonly<Record<Refusal, string>> = {
+  older:
+    'This save is from an older version of the game and cannot be opened, so choose a power on the start screen to begin a new game.',
+  newer:
+    'This save is from a newer version of the game and cannot be opened here, so open it in that version or choose a power on the start screen to begin a new game.',
+  damaged:
+    'This file is not a save the game can open, so drop another save on the page or choose a power on the start screen to begin a new game.',
+};

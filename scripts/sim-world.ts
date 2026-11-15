@@ -4,13 +4,13 @@ import { decideAll } from '../src/sim/ai/decide.ts';
 import { createRouter } from '../src/sim/ai/routes.ts';
 import { canFight, enemiesOf, sorted } from '../src/sim/ai/situation.ts';
 import { GARRISON_ODDS } from '../src/sim/ai/thresholds.ts';
-import type { CityId, FactionId } from '../src/sim/ids.ts';
+import type { CityId, FactionId, SiegeId } from '../src/sim/ids.ts';
 import { parseMap, POWERS, type PowerId } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
 import type { Order } from '../src/sim/orders/orders.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { SYSTEMS, type System } from '../src/sim/systems.ts';
-import { sieges } from '../src/sim/systems/sieges.ts';
+import { fullDefences, sieges } from '../src/sim/systems/sieges.ts';
 import { tick } from '../src/sim/tick.ts';
 import { areAtWar } from '../src/sim/wars.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
@@ -38,6 +38,8 @@ const CONQUEST_SEEDS = Number(values.conquests);
 const YEAR = 365;
 /** A siege begun again within this many days of the same power's last siege of the city ended. */
 const RESTART_DAYS = 30;
+/** A city that changes hands again within this many days of its capture counts as retaken. */
+const RETAKE_DAYS = 30;
 /** A battle this close to a city, in km, counts as a battle for it. */
 const BATTLE_KM = 40;
 
@@ -53,6 +55,9 @@ interface Conquest {
   siegeOn?: number;
   fellOn: number;
 }
+
+/** How a city fell: stormed, its garrison starved out, or given up behind broken walls with men left. */
+type FallCause = 'stormed' | 'starved' | 'gave up';
 
 interface Seed {
   seed: number;
@@ -76,6 +81,10 @@ interface Seed {
   quietStrong: { power: PowerId; days: number; from: number };
   conquests: Partial<Record<PowerId, Conquest>>;
   standoffs: Standoffs;
+  /** Every change of a city's owner: the share of its full food it held that day, and whether it changed hands again within RETAKE_DAYS. */
+  captures: { food: number; retaken: boolean }[];
+  /** Sieges begun within RETAKE_DAYS of the city's capture: the days of food it held, and the days until it fell, or undefined if it held. */
+  counterSieges: { food: number; fellAfter: number | undefined; how?: FallCause }[];
 }
 
 function play(seed: number): Seed {
@@ -107,6 +116,13 @@ function play(seed: number): Seed {
   const firstActs: (number | undefined)[] = [];
   const stanceChanges = new Map<string, number>();
   const standoffs = createStandoffCounter(world);
+  const captures: Seed['captures'] = [];
+  const takenOn = new Map<CityId, { day: number; capture: Seed['captures'][number] }>();
+  const counterSieges: Seed['counterSieges'] = [];
+  const counterOf = new Map<
+    CityId,
+    { day: number; id: SiegeId; siege: Seed['counterSieges'][number] }
+  >();
 
   for (let day = 1; day <= YEARS * YEAR; day++) {
     const orders: Order[] = decideAll(state, world, []);
@@ -231,11 +247,39 @@ function play(seed: number): Seed {
           console.error(`restart seed ${seed} day ${day} ${key} ended ${ended}`);
       }
       if (!firstSiege.has(key)) firstSiege.set(key, day);
+      const taken = takenOn.get(siege.city);
+      const city = next.cities[siege.city];
+      if (taken && city && day - taken.day <= RETAKE_DAYS && !counterOf.has(siege.city)) {
+        const counter = { food: Math.round(city.foodDays), fellAfter: undefined };
+        counterSieges.push(counter);
+        counterOf.set(siege.city, { day, id: siege.id, siege: counter });
+      }
     }
     for (const city of Object.values(next.cities)) {
       const was = before.cities[city.id];
       if (!was || was.owner === city.owner) continue;
       ownerChanged.set(city.id, day);
+      // A treaty hands a city over without a siege, and leaves `fellOn` as it was.
+      const bySiege = city.fellOn !== null && city.fellOn !== was.fellOn;
+      const earlier = takenOn.get(city.id);
+      const counter = counterOf.get(city.id);
+      counterOf.delete(city.id);
+      takenOn.delete(city.id);
+      if (bySiege && earlier && day - earlier.day <= RETAKE_DAYS) earlier.capture.retaken = true;
+      if (bySiege && counter) {
+        counter.siege.fellAfter = day - counter.day;
+        const held = was.garrison;
+        counter.siege.how = orders.some((o) => o.kind === 'storm' && o.city === city.id)
+          ? 'stormed'
+          : held <= Math.ceil(fullDefences(was).garrison * 0.05)
+            ? 'starved'
+            : 'gave up';
+      }
+      if (bySiege) {
+        const capture = { food: city.foodDays / fullDefences(city).foodDays, retaken: false };
+        captures.push(capture);
+        takenOn.set(city.id, { day, capture });
+      }
       const power = city.owner as string as PowerId;
       if (!(POWERS as readonly string[]).includes(power) || conquests[power]) continue;
       const fought = battles.filter(
@@ -261,6 +305,10 @@ function play(seed: number): Seed {
         }),
         fellOn: day,
       };
+    }
+    // A counter-siege lifted or broken leaves the city held.
+    for (const [city, counter] of counterOf) {
+      if (!next.sieges[counter.id]) counterOf.delete(city);
     }
 
     for (const power of POWERS) {
@@ -314,6 +362,8 @@ function play(seed: number): Seed {
     quietStrong,
     conquests,
     standoffs: standoffs.result(),
+    captures,
+    counterSieges,
   };
 }
 
@@ -461,6 +511,16 @@ console.log(
 const changes = games.flatMap((g) => g.stanceChanges);
 console.log(
   `- Changes of stance by one army in one battle, over ${changes.length} army-battles: median ${median(changes)}, most ${Math.max(0, ...changes)}, none in ${changes.filter((n) => n === 0).length}.`,
+);
+const captures = games.flatMap((g) => g.captures);
+const retaken = captures.filter((c) => c.retaken).length;
+console.log(
+  `- Cities taken: ${captures.length}, holding a median ${Math.round(100 * median(captures.map((c) => c.food)))}% of their full food on the day. Retaken within ${RETAKE_DAYS} days: ${retaken} (${Math.round((100 * retaken) / Math.max(1, captures.length))}%).`,
+);
+const counters = games.flatMap((g) => g.counterSieges);
+const fell = counters.flatMap((c) => (c.fellAfter === undefined ? [] : [c.fellAfter]));
+console.log(
+  `- Sieges begun within ${RETAKE_DAYS} days of a capture: ${counters.length}, with a median ${median(counters.map((c) => c.food))} days of food at their start. Fell: ${fell.length}, after a median ${median(fell)} days, the quickest after ${Math.min(...fell)}; ${(['stormed', 'starved', 'gave up'] as const).map((how) => `${how} ${counters.filter((c) => c.how === how).length}`).join(', ')}.`,
 );
 console.log(
   `- Armies lost to sallies: ${sum((g) => g.sallyArmies)}. Men lost to sallies: ${sum((g) => g.sallyMen)}.`,
