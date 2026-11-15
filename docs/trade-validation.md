@@ -655,14 +655,14 @@ Both meet every peace target. The longest war between great powers is longer on 
 
 ## The cautious Rome over ten years
 
-`node scripts/sim/trade-judge.ts` plays seeds 1–20 for ten years. Every faction plays the AI, Rome included, except Rome's trade: monthly, before any other spending and keeping 600 gold, Rome opens its best route by return per gold. `--heed` makes Rome heed what #67 tells it: it skips a partner at war or a besieged end, and declares no war on a partner whose routes have not repaid. `--improve` makes Rome, with no route to open, buy the improvement that repays soonest, if within three years. Lost gold is what Rome paid to open or improve routes that closed or left its hands before their receipts repaid it, less those receipts, at arrival prices. The same file runs on main.
+`node scripts/sim/trade-judge.ts` plays seeds 1–20 for ten years, or until Rome is defeated. Every faction plays the AI, Rome included, except Rome's trade: monthly, before any other spending and keeping 600 gold, Rome opens its best route by return per gold. `--heed` makes Rome heed what #67 tells it: it skips a partner at war or a besieged end, and declares no war on a partner whose routes have not repaid. `--improve` makes Rome, with no route to open, buy the improvement that repays soonest, if within three years. Lost gold is what Rome paid to open or improve routes that closed or left its hands before their receipts repaid it, less those receipts, at arrival prices. The same file runs on main.
 
 | Cautious Rome, seeds 1–20, ten years | routes opened | closed before repaying | gold lost | trade decisions | longest stretch without one, median / most | day-1 paybacks min / median / max |
 | ------------------------------------ | ------------: | ---------------------: | --------: | --------------: | ------------------------------------------ | --------------------------------- |
-| main, blind (the tester's case)      |         1,081 |                    693 |   732,706 |           1,177 | 390 / 2,781 days                           | 1.13 / 1.13 / 2.03 years          |
-| main, heeding #67                    |           910 |                    458 |   434,640 |           1,065 | 360 / 2,271 days                           | 1.13 / 1.13 / 2.03 years          |
-| branch, heeding                      |           788 |                    322 |   308,513 |             911 | 510 / 1,611 days                           | 1.13 / 1.13 / 2.03 years          |
-| branch, heeding and improving        |           551 |                    317 |   403,429 |           1,400 | 711 / 2,631 days                           | 1.13 / 1.13 / 2.03 years          |
+| main, blind (the tester's case)      |         1,081 |                    693 |   732,706 |           1,177 | 330 / 1,410 days                           | 1.13 / 1.13 / 2.03 years          |
+| main, heeding #67                    |           910 |                    458 |   434,640 |           1,065 | 330 / 750 days                             | 1.13 / 1.13 / 2.03 years          |
+| branch, heeding                      |           788 |                    322 |   308,513 |             911 | 510 / 811 days                             | 1.13 / 1.13 / 2.03 years          |
+| branch, heeding and improving        |           551 |                    317 |   403,429 |           1,400 | 390 / 907 days                             | 1.13 / 1.13 / 2.03 years          |
 
 | Gold lost, by what closed the route     | main, blind | main, heeding | branch, heeding | branch, improving |
 | --------------------------------------- | ----------: | ------------: | --------------: | ----------------: |
@@ -673,4 +673,4 @@ Both meet every peace target. The longest war between great powers is longer on 
 
 Telling the risk and heeding it cuts the gold lost from 732,706 to 434,640. Keeping the player's routes through a partner's peaceful change of owner cuts it to 308,513, 58 % below the tester's case; the losses that remain to a change of owner are Rome's own cities falling. The improving Rome loses more because it invests more in routes that later close: its lost gold includes improvements.
 
-Improvements do not end the quiet stretch. The median gap between decisions is 30 days in every run, the harness's monthly turn, and on main many of those decisions buy back a route that died. The longest stretch without one grows in the branch, because its routes no longer die and each route takes only two improvements: once they are bought, nothing new comes up. The spread of paybacks on day 1 is unchanged, since prices are as on main.
+Improvements shorten the quiet stretch but do not end it. The median gap between decisions is 30 days in every run, the harness's monthly turn, and on main many of those decisions buy back a route that died. Once routes stop dying, the longest stretch without a decision grows from a median of 330 days on main to 510; improvements bring it back to 390, since each route takes only two and then nothing new comes up. The spread of paybacks on day 1 is unchanged, since prices are as on main.
