@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { countObjects } from './count-objects.ts';
+import { collectGarbage, countObjects } from './count-objects.ts';
 
 /**
  * Takes the last round's subtree out of the page and attaches a new one of 51 nodes and
@@ -20,25 +20,32 @@ test('counting detached nodes and canvases keeps none of them, and still finds t
   await page.setContent('<!doctype html><body><p>count</p></body>');
   const cdp = await page.context().newCDPSession(page);
   const counts = async () => {
-    await cdp.send('HeapProfiler.collectGarbage');
-    await cdp.send('HeapProfiler.collectGarbage');
+    await collectGarbage(cdp);
     return {
       detached: await countObjects(cdp, 'Node.prototype', '!node.isConnected'),
       canvases: await countObjects(cdp, 'HTMLCanvasElement.prototype', 'true'),
     };
   };
 
+  // A count that kept what it found would keep each replaced subtree, seven by the last
+  // round. The collector may still find one just replaced, so no round may read more
+  // than one subtree over the first.
+  // The box, its 50 spans and canvas, and its id, an attribute node.
+  const SUBTREE = 53;
   const rounds = [];
-  for (let round = 0; round < 5; round++) {
+  for (let round = 0; round < 8; round++) {
     await page.evaluate(NEXT_ROUND);
     rounds.push(await counts());
   }
   const [first] = rounds;
-  for (const round of rounds) expect(round).toEqual(first);
+  for (const round of rounds) {
+    expect(round.detached).toBeLessThanOrEqual((first?.detached ?? 0) + SUBTREE);
+    expect(round.canvases).toBeLessThanOrEqual((first?.canvases ?? 0) + 1);
+  }
 
   await page.evaluate(`window.kept = document.getElementById('round')`);
   await page.evaluate(NEXT_ROUND);
   const kept = await counts();
-  expect(kept.detached).toBeGreaterThanOrEqual((first?.detached ?? 0) + 51);
+  expect(kept.detached).toBeGreaterThanOrEqual((first?.detached ?? 0) + SUBTREE);
   expect(kept.canvases).toBe((first?.canvases ?? 0) + 1);
 });

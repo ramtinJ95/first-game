@@ -35,3 +35,18 @@ export async function countObjects(
     await session.send('Runtime.releaseObjectGroup', { objectGroup });
   }
 }
+
+/**
+ * Collects garbage until what the page let go of is gone. The collector may find a
+ * stale pointer to a freed object on the stack of the message that asked for it, so each
+ * collection after the first waits for a task of its own.
+ */
+export async function collectGarbage(session: CDPSession) {
+  for (let i = 0; i < 3; i++) {
+    await session.send('HeapProfiler.collectGarbage');
+    await session.send('Runtime.evaluate', {
+      expression: 'new Promise((done) => setTimeout(done, 0))',
+      awaitPromise: true,
+    });
+  }
+}

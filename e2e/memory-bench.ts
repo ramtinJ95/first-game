@@ -16,7 +16,7 @@ import { figureHeight, FIGURE_SCALE } from '../src/render/armies/scene.ts';
 import { sheetSizeFor } from '../src/render/armies/layer.ts';
 import { MAX_SCALE } from '../src/render/camera.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
-import { countObjects } from './count-objects.ts';
+import { collectGarbage, countObjects } from './count-objects.ts';
 import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
 
 /**
@@ -255,8 +255,7 @@ function residentMb(type: string): number {
 
 async function sample(page: Page, step: string) {
   const session = await page.context().newCDPSession(page);
-  await session.send('HeapProfiler.collectGarbage');
-  await session.send('HeapProfiler.collectGarbage');
+  await collectGarbage(session);
   await session.send('Performance.enable');
   const { metrics } = await session.send('Performance.getMetrics');
   const metric = (name: string) => metrics.find((m) => m.name === name)?.value ?? 0;
