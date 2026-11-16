@@ -38,8 +38,9 @@ import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
  * through all three zooms over the power's capital and over the plateau, and plays
  * `--play` seconds at the fastest speed. Each cycle is then sampled with the day-1 save
  * dropped again and drawn over the whole map, the same state every time.
- * `--cycle-bound 0.1` fails the run when the collected heap, the DOM nodes, or the live
- * texture bytes after any later cycle are more than a tenth over cycle 1. `--snapshots 2,6`
+ * `--cycle-bound 0.1` fails the run when the collected heap, the DOM nodes, the detached
+ * DOM nodes, the live canvases, or the live texture bytes after any later cycle are more
+ * than a tenth over cycle 1. `--snapshots 2,6`
  * writes heap snapshots after those cycles, named after `--snapshot`, and `--texture-shapes`
  * prints the live textures by size that each cycle added or freed.
  *
@@ -251,6 +252,42 @@ function residentMb(type: string): number {
   return Math.round(kb / 1024);
 }
 
+/**
+ * The live objects of a prototype for which `test`, an expression of `node`, holds. `queryObjects` hands back an array
+ * that DevTools keeps until its group is released, and a kept array keeps every node in
+ * it, so a count that did not release it would itself hold each old page it counted.
+ */
+async function countObjects(
+  session: import('@playwright/test').CDPSession,
+  prototype: string,
+  test: string,
+): Promise<number> {
+  const objectGroup = 'memory-bench-count';
+  try {
+    const { result } = await session.send('Runtime.evaluate', {
+      expression: prototype,
+      objectGroup,
+    });
+    const { objects } = await session.send('Runtime.queryObjects', {
+      prototypeObjectId: result.objectId ?? '',
+      objectGroup,
+    });
+    const counted = await session.send('Runtime.callFunctionOn', {
+      objectId: objects.objectId ?? '',
+      // Prototypes come back with the instances, and reading a node's fields from one throws.
+      functionDeclaration: `function () {
+        return this.filter((node) => {
+          try { return typeof node.isConnected === 'boolean' && (${test}); } catch { return false; }
+        }).length;
+      }`,
+      returnByValue: true,
+    });
+    return Number(counted.result.value);
+  } finally {
+    await session.send('Runtime.releaseObjectGroup', { objectGroup });
+  }
+}
+
 async function sample(page: Page, step: string) {
   const session = await page.context().newCDPSession(page);
   await session.send('HeapProfiler.collectGarbage');
@@ -272,12 +309,16 @@ async function sample(page: Page, step: string) {
     ).textureReport(),
   );
   if (values.sites) await printSites(page);
+  const detached = await countObjects(session, 'Node.prototype', '!node.isConnected');
+  const canvases = await countObjects(session, 'HTMLCanvasElement.prototype', 'true');
   await session.detach();
   return {
     step,
     heapMb: Math.round(metric('JSHeapUsedSize') / 2 ** 20),
     nodes: metric('Nodes'),
     listeners: metric('JSEventListeners'),
+    detached,
+    canvases,
     textures: textures.count,
     textureMb: Math.round(textures.bytes / 2 ** 20),
     sheetMb: Math.round(textures.sheetBytes / 2 ** 20),
@@ -529,7 +570,7 @@ try {
     console.log(Object.values(row).join(','));
   };
   console.log(
-    'step,heapMb,nodes,listeners,textures,textureMb,sheetMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb',
+    'step,heapMb,nodes,listeners,detached,canvases,textures,textureMb,sheetMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb',
   );
   if (values.sites) {
     const session = await page.context().newCDPSession(page);
@@ -747,7 +788,7 @@ try {
   await server.close();
   if (values.out) {
     const header =
-      'step,heapMb,nodes,listeners,textures,textureMb,sheetMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb';
+      'step,heapMb,nodes,listeners,detached,canvases,textures,textureMb,sheetMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb';
     writeFileSync(values.out, [header, ...rows.map((r) => Object.values(r).join(','))].join('\n'));
   }
 }
@@ -765,6 +806,8 @@ if (values['cycle-bound']) {
   for (const [what, pick] of [
     ['the collected JS heap (MB)', (row: (typeof rows)[number]) => row.heapMb],
     ['the DOM nodes', (row: (typeof rows)[number]) => row.nodes],
+    ['the detached DOM nodes', (row: (typeof rows)[number]) => row.detached],
+    ['the live canvases', (row: (typeof rows)[number]) => row.canvases],
     ['the live texture bytes (MB)', (row: (typeof rows)[number]) => row.textureMb],
   ] as const) {
     const bound = Math.round(pick(first) * (1 + share));
