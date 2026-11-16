@@ -7,6 +7,7 @@ import { newGame } from '../sim/new-game.ts';
 import { executeOrder } from '../sim/orders/orders.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
+import type { Stores } from '../sim/state/faction.ts';
 import { warKey } from '../sim/state/war.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
 import { buildWorld } from '../sim/world/world.ts';
@@ -168,24 +169,68 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     roma.garrison = 80_000;
     const carthaginian = standingThreats(state, world).find((t) => t.power === 'carthage');
     expect(carthaginian?.text).toMatch(
-      /^Carthage has \d+% of the strength it needs to declare war on you, against all your armies in the field\. More men lower it: Skirmishers cost 900 gold and train in 10 days\. Guards do not\. It weighs you so only while you hold no more cities than at the start\.$/,
+      /^Carthage has \d+% of the strength it needs to declare war on you, against all your armies in the field\. More men lower it, not guards: Skirmishers cost 900 gold and train in 10 days\. It weighs you so only while you hold no more cities than at the start\.$/,
     );
     expect(newsOf(state, new Set()).map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against all your armies in the field, and may declare from Year \d+, day \d+ if it holds it\. More men lower it.*Guards do not.*See At peace in Wars\.$/,
+        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against all your armies in the field, and may declare from Year \d+, day \d+ if it holds it\. More men lower it, not guards.*See At peace in Wars\.$/,
       ),
     ]);
   });
 
-  test('says what the cheapest troop costs when you cannot afford it', () => {
+  /** Carthage pressing Rome by its field armies, with Rome's stores as given. */
+  function pressedWith(stores: { gold: number; manpower: number }): GameState {
     const state = game(8000, 'empty');
     const roma = state.cities['roma' as CityId];
-    if (!roma) throw new Error('no Roma');
+    const romans = state.factions[rome];
+    if (!roma || !romans) throw new Error('no Roma');
     roma.garrison = 80_000;
-    const carthaginian = standingThreats(state, world).find((t) => t.power === 'carthage');
-    expect(carthaginian?.text).toContain(
-      'More men lower it, but Skirmishers, the cheapest, cost 900 gold; you have 0. Guards do not.',
+    Object.assign(romans.stores, stores);
+    return state;
+  }
+  const lineOf = (state: GameState, stores?: Stores) =>
+    standingThreats(state, world, stores).find((t) => t.power === carthage)?.text ?? '';
+
+  test('names the cheapest troop you can afford now, or what the cheapest costs and what you lack', () => {
+    expect(lineOf(pressedWith({ gold: 2229, manpower: 5000 }))).toContain(
+      'More men lower it, not guards: Skirmishers cost 900 gold and train in 10 days.',
     );
+    expect(lineOf(pressedWith({ gold: 2229, manpower: 450 }))).toContain(
+      'More men lower it, not guards: Light cavalry cost 1,800 gold and train in 20 days.',
+    );
+    expect(lineOf(pressedWith({ gold: 729, manpower: 5000 }))).toContain(
+      'More men lower it, not guards, but even Skirmishers cost 900 gold, 10 days; you have 729.',
+    );
+    expect(lineOf(pressedWith({ gold: 5000, manpower: 350 }))).toContain(
+      'More men lower it, not guards, but even Skirmishers need 500 men, 10 days; you have 350.',
+    );
+  });
+
+  test('counts only the cities that may recruit now', () => {
+    const state = pressedWith({ gold: 2229, manpower: 5000 });
+    for (const city of Object.values(state.cities)) if (city.owner === rome) city.unrestDays = 30;
+    expect(lineOf(state)).toContain(
+      'More men lower it, not guards, but no city of yours may recruit now.',
+    );
+  });
+
+  test('reckons what you can afford after the orders waiting, as the wars panel gives them', () => {
+    const state = pressedWith({ gold: 2229, manpower: 5000 });
+    expect(lineOf(state, { gold: 429, food: 0, manpower: 4000 })).toContain(
+      'but even Skirmishers cost 900 gold, 10 days; you have 429.',
+    );
+  });
+
+  test('the field-army warning is no longer than it was before it named a troop, whatever the stores', () => {
+    for (const stores of [
+      { gold: 2229, manpower: 5000 },
+      { gold: 2229, manpower: 450 },
+      { gold: 899, manpower: 5000 },
+      { gold: 5000, manpower: 499 },
+    ]) {
+      const [warning] = newsOf(pressedWith(stores), new Set());
+      expect(warning?.text.length ?? 0).toBeLessThanOrEqual(355);
+    }
   });
 
   test('leaves out a power at war with you or bound by a truce', () => {

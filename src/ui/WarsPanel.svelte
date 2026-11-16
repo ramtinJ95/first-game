@@ -11,6 +11,7 @@
   import type { Actions } from './actions.ts';
   import { unansweredOffer } from '../app/modals.ts';
   import { standingThreats, THREAT_WARN } from '../app/threat-news.ts';
+  import { afterWaiting } from './buildings-text.ts';
   import type { World } from '../sim/world/world.ts';
   import {
     newestOfferToPlayer,
@@ -40,7 +41,9 @@
   type Payer = 'nobody' | 'us' | 'them';
 
   const room = $derived(warRoomOf(game, pending));
-  const threats = $derived(standingThreats(game, world));
+  const threats = $derived(
+    standingThreats(game, world, afterWaiting(game, pending, world).factions[game.player]?.stores),
+  );
   let open = $state<FactionId | undefined>(undefined);
   let payer = $state<Payer>('nobody');
   let gold = $state(0);
