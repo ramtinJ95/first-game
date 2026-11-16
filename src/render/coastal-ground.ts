@@ -78,21 +78,38 @@ function dryRuns(points: readonly MapPoint[], land: Land): { points: MapPoint[] 
 }
 
 /** Sample the entire ground contact, not just feet at either end across a little inlet. */
+/**
+ * The rows of a ship above and below its waterline that must be at sea, as a share of its
+ * size up the sprite and of its waterline's half width. With only the waterline at sea, a
+ * lane round a cape drew the hull and sail over it.
+ */
+const SHIP_ROWS = [
+  { up: -0.12, wide: 1 },
+  { up: 0.45, wide: 0.8 },
+  { up: 0.9, wide: 0.5 },
+] as const;
+
 export function groundFits(sprite: Sprite, land: Land): boolean {
   const art = sprite.key.split('.')[0] as GroundArt;
   if (AIR.has(art)) return true;
   const sea = art === 'ship';
   const half = groundSpan(art) * sprite.size;
-  if (land.span)
+  const rows = sea ? SHIP_ROWS : [];
+  if (land.span) {
+    const span = land.span;
     return (
-      land.span(sprite.x - half, sprite.x + half, sprite.y, !sea) &&
-      (!sea || land.span(sprite.x - half, sprite.x + half, sprite.y + sprite.size * 0.12, false))
+      span(sprite.x - half, sprite.x + half, sprite.y, !sea) &&
+      rows.every(({ up, wide }) =>
+        span(sprite.x - half * wide, sprite.x + half * wide, sprite.y - sprite.size * up, false),
+      )
     );
+  }
   const steps = Math.max(2, Math.ceil(half * 8));
   for (let i = 0; i <= steps; i++) {
-    const x = sprite.x - half + (2 * half * i) / steps;
-    if (land({ x, y: sprite.y }) === sea) return false;
-    if (sea && land({ x, y: sprite.y + sprite.size * 0.12 }) === sea) return false;
+    const t = -1 + (2 * i) / steps;
+    if (land({ x: sprite.x + half * t, y: sprite.y }) === sea) return false;
+    for (const { up, wide } of rows)
+      if (land({ x: sprite.x + half * wide * t, y: sprite.y - sprite.size * up })) return false;
   }
   return true;
 }

@@ -45,6 +45,15 @@ export default defineScenario({
       'middle-roma',
       'A month on, Roma selected: its three routes traced, ships along both lanes and caravans on the road north',
     );
+    // The rules' lane to Massalia turns at Corsica's northern cape, where a ship was drawn over land.
+    await view.jumpTo({ x: 2292, y: 2164 }, 1.2);
+    await settled(page);
+    await shot(
+      'massalia-lane',
+      "Roma selected, at Corsica's northern cape: the lane to Massalia rounds it at sea, and so do its ships",
+    );
+    await view.jumpTo(cityPoint('roma'), 1);
+    await settled(page);
     await page.keyboard.press('Escape');
     await expect(page.locator('canvas')).toHaveAttribute('data-trade-paths', '0');
     await settled(page);

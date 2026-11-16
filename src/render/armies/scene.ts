@@ -14,6 +14,7 @@ import type { City, CityRank } from '../../sim/state/city.ts';
 import type { Formation } from '../../sim/state/formation.ts';
 import type { GameState } from '../../sim/state/game-state.ts';
 import type { MapPoint } from '../../sim/state/map-point.ts';
+import type { TradeRoute } from '../../sim/state/trade-route.ts';
 import { fullDefences } from '../../sim/systems/sieges.ts';
 import { TROOPS, type Troop } from '../../sim/troops.ts';
 import { mapToScreen, type Camera, type Size } from '../camera.ts';
@@ -36,6 +37,7 @@ import {
 import { FADE_FROM, FALL_DAYS, STEP_DAYS, formationDay, type FormationDay } from './losses.ts';
 import { seeded } from './seed.ts';
 import { alongTrail, dayPath, trailLength } from './trail.ts';
+import type { DrawnLane } from '../drawn-lane.ts';
 import { merchantPoses } from '../trade.ts';
 
 /** The colours the sheet paints, in its order: the five powers, then every minor city. */
@@ -129,6 +131,8 @@ export interface SceneInput {
   readonly names?: ReadonlyMap<CityId, Box>;
   /** The town and village symbols and names drawn on screen, which a siege camp keeps clear of. */
   readonly keepClear?: readonly Box[];
+  /** A trade route's way as the map draws it, which its merchants walk. */
+  readonly lane?: (route: DeepReadonly<TradeRoute>) => DrawnLane;
 }
 
 type State = DeepReadonly<GameState>;
@@ -1527,7 +1531,13 @@ class Context {
             });
         }
       }
-      const poses = merchantPoses(previous.tradeRoutes[route.id], route, progress, current.day);
+      const poses = merchantPoses(
+        previous.tradeRoutes[route.id],
+        route,
+        progress,
+        current.day,
+        this.input.lane?.(route),
+      );
       for (const [k, pose] of poses.entries()) {
         if (
           route.owner !== current.player &&

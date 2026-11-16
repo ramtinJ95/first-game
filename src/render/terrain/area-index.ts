@@ -321,11 +321,12 @@ export class AreaIndex {
   }
 
   /**
-   * Whether the whole straight way from one point to another stays inside, however narrow
-   * the water it would cross. The way is cut wherever it meets an edge; between two cuts
-   * it meets none, so it is all inside or all outside, and its middle says which.
+   * Whether the whole straight way from one point to another stays inside, or with
+   * `wanted` false outside, however narrow the land or water it would cross. The way is
+   * cut wherever it meets an edge; between two cuts it meets none, so it is all inside or
+   * all outside, and its middle says which.
    */
-  segmentInside(ax: number, ay: number, bx: number, by: number): boolean {
+  segmentInside(ax: number, ay: number, bx: number, by: number, wanted = true): boolean {
     const edges = new Set<Edge>();
     for (
       let band = Math.floor(Math.min(ay, by) / BAND);
@@ -368,7 +369,7 @@ export class AreaIndex {
         to = cuts[i] as number;
       if (to - from < 1e-12) continue;
       const t = (from + to) / 2;
-      if (!this.inside(ax + rx * t, ay + ry * t)) return false;
+      if (this.inside(ax + rx * t, ay + ry * t) !== wanted) return false;
     }
     return true;
   }
