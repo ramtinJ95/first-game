@@ -205,6 +205,18 @@ describe('a war warning stops the game', () => {
     expect(macedonian.stop).toBe(true);
   });
 
+  test('two powers warning on one day are one stopped line that names both', () => {
+    const both = game(5300, 'full', 100);
+    spearmenOf(both, macedon).men = 30_000;
+    const news = newsOf(both, new Set());
+    expect(news.map((alert) => alert.text)).toEqual([
+      expect.stringMatching(
+        /^Carthage and Macedon could soon declare war on you, with \d+% and \d+% of the strength each needs\. If they hold it, Carthage may declare from Year \d+, day \d+ and Macedon may declare from Year \d+, day \d+\. What lowers each is under At peace in Wars\.$/,
+      ),
+    ]);
+    expect(stopsOfDay(news, ALL_PAUSES, new Set()).stop).toBe(true);
+  });
+
   test('the Game menu setting turns the stop off', () => {
     const news = newsOf(game(5300, 'full'), new Set());
     expect(stopsOfDay(news, { ...ALL_PAUSES, warThreat: false }, new Set()).stop).toBe(false);

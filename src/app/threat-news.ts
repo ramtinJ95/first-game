@@ -60,7 +60,7 @@ export function threatNewsOfDay(
   remembered: Set<string>,
 ): Alert[] {
   const player = after.player;
-  const news: Alert[] = [];
+  const warned: { name: string; threat: Threat; since: number }[] = [];
   for (const power of Object.values(after.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (power.id === player || power.kind !== 'greatPower' || power.defeatedOn !== null) continue;
     if (areAtWar(after, power.id, player) || truceBetween(after, power.id, player)) {
@@ -75,20 +75,31 @@ export function threatNewsOfDay(
     if (!threat) continue;
     forget(remembered, power.id);
     remembered.add(`${prefixOf(power.id)}${before.day}`);
-    const front = after.cities[threat.front];
-    news.push({
+    warned.push({ name: factionName(after, power.id), threat, since: power.noticeSince });
+  }
+  const [first, ...others] = warned;
+  if (!first) return [];
+  const front = after.cities[first.threat.front];
+  // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
+  const text =
+    others.length === 0
+      ? `${first.name} could soon declare war on you: its armies have ${percent(first.threat)} of the strength it needs ${weighed(after, first.threat)}.${whatCounts(after, first.threat)} ${declaresFrom(first.since)}: watch it under At peace in Wars.`
+      : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => percent(w.threat)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name} may declare from ${dateText(w.since + NOTICE_DAYS)}`))}. What lowers each is under At peace in Wars.`;
+  return [
+    {
       kind: 'warThreat',
       day: before.day,
       tone: 'bad',
       pause: { kind: 'warThreat' },
-      text: `${factionName(after, power.id)} could soon declare war on you: its armies have ${percent(threat)} of the strength it needs ${weighed(after, threat)}.${whatCounts(after, threat)} ${declaresFrom(power.noticeSince)}: watch it under At peace in Wars.`,
+      text,
       ...(front ? { focus: { at: front.position } } : {}),
-    });
-  }
-  return news;
+    },
+  ];
 }
 
-/** Where the warning sends the player to watch the threat between warnings. */
+const listed = (items: readonly string[]) =>
+  items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+
 /** The first day a power on notice since the day may declare, if it holds the strength. */
 const declaresFrom = (since: number) =>
   `If it holds this strength it may declare from ${dateText(since + NOTICE_DAYS)}`;

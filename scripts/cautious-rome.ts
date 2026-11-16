@@ -23,6 +23,8 @@ const THREAT_CLEAR = 0.6;
 import { WAR_REACH_KM } from '../src/sim/ai/thresholds.ts';
 import { limitsOf } from '../src/sim/systems/economy.ts';
 import { homeCapital } from '../src/sim/ai/situation.ts';
+import { NOTICE_DAYS } from '../src/sim/ai/thresholds.ts';
+import { TROOPS, type Troop } from '../src/sim/troops.ts';
 
 export const map = parseMap(
   JSON.parse(readFileSync(new URL('../data/map/map.json', import.meta.url), 'utf8')),
@@ -75,9 +77,14 @@ export function playCautiousRome(
   seed: number,
   years: number,
   onDay: (day: CautiousDay) => void,
-  { peaceful = false, guards = 'never' }: { peaceful?: boolean; guards?: GuardPlay } = {},
+  {
+    peaceful = false,
+    guards = 'never',
+    answer = false,
+  }: { peaceful?: boolean; guards?: GuardPlay; answer?: boolean } = {},
 ): GameState {
   const told = new Set<string>();
+  let answering: { city: CityId; until: number; raise: boolean } | undefined;
   let warnedAt: CityId | undefined;
   const named = new Set<CityId>();
   let threatened: Threat[] = [];
@@ -118,6 +125,17 @@ export function playCautiousRome(
               : [];
     threatened = [];
     orders.unshift(...trade, ...hires);
+    if (answering && state.day >= answering.until) answering = undefined;
+    if (answering) {
+      const answers = answerOrders(state, answering.city, answering.raise);
+      answering.raise = false;
+      const moved = new Set(answers.flatMap((o) => (o.kind === 'moveArmy' ? [o.army] : [])));
+      for (let i = orders.length - 1; i >= 0; i--) {
+        const order = orders[i];
+        if (order && 'army' in order && moved.has(order.army)) orders.splice(i, 1);
+      }
+      orders.unshift(...answers);
+    }
     const before = new Set(Object.keys(state.tradeRoutes));
     const { state: next, rejected, events } = tick(state, orders, world);
     const accepted = orders.filter(
@@ -162,6 +180,12 @@ export function playCautiousRome(
       warnedAt = Object.values(next.cities).find(
         (city) => at && city.owner === rome && city.position.x === at.x && city.position.y === at.y,
       )?.id;
+      if (answer)
+        answering = {
+          city: warnedAt ?? homeCapital(next, world, rome)?.id ?? ('roma' as CityId),
+          until: next.day + NOTICE_DAYS,
+          raise: true,
+        };
       if (warnedAt) {
         named.delete(warnedAt);
         named.add(warnedAt);
@@ -180,6 +204,38 @@ export function playCautiousRome(
     if (state.factions[rome]?.defeatedOn !== null) break;
   }
   return state;
+}
+
+/**
+ * A Rome that answers a warning as it advises: on the day it comes, it raises the cheapest
+ * troop it can afford at its capital, and for the notice's days it holds every army of its
+ * own that is not in a battle or a siege at the city the warning names.
+ */
+function answerOrders(state: GameState, city: CityId, raise: boolean): Order[] {
+  const orders: Order[] = [];
+  const at = state.cities[city];
+  if (!at || at.owner !== rome) return orders;
+  const stores = state.factions[rome]?.stores;
+  const capital = homeCapital(state, world, rome);
+  if (raise && stores && capital) {
+    const troop = (Object.keys(TROOPS) as Troop[])
+      .sort((a, b) => TROOPS[a].recruit.gold - TROOPS[b].recruit.gold)
+      .find(
+        (t) => TROOPS[t].recruit.gold <= stores.gold && TROOPS[t].recruit.men <= stores.manpower,
+      );
+    if (troop) orders.push({ kind: 'recruit', faction: rome, city: capital.id, troop });
+  }
+  for (const army of Object.values(state.armies)) {
+    if (army.owner !== rome) continue;
+    const { activity } = army;
+    if (activity.kind !== 'idle' && activity.kind !== 'marching') continue;
+    const here = activity.kind === 'idle' ? activity.position : undefined;
+    if (here && distance(here, at.position) <= 5) continue;
+    const bound = activity.kind === 'marching' ? activity.waypoints.at(-1) : undefined;
+    if (bound && distance(bound, at.position) <= 5) continue;
+    orders.push({ kind: 'moveArmy', faction: rome, army: army.id, to: { ...at.position } });
+  }
+  return orders;
 }
 
 /**
