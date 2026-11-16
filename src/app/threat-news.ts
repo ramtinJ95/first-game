@@ -76,6 +76,7 @@ export function threatNewsOfDay(
       kind: 'warThreat',
       day: before.day,
       tone: 'bad',
+      pause: { kind: 'warThreat' },
       text: `${factionName(after, power.id)} could soon declare war on you: its armies have ${percent(threat)} of the strength it needs against your forces near ${front?.name ?? 'your land'}.${whatCounts(after, threat)} ${WATCH}`,
       ...(front ? { focus: { at: front.position } } : {}),
     });

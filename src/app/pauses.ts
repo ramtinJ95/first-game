@@ -11,6 +11,7 @@ export const PAUSE_LABELS: Record<PauseKind, string> = {
   weakSiege: 'Your siege is too weak to starve the city',
   sighted: 'An enemy army first nears your land in a war',
   ownCity: 'Your city is besieged, in danger, or falls',
+  warThreat: 'A great power at peace with you could soon declare war on you',
 };
 
 /** The Game menu's setting for the prompt to choose a captured city's fate. */
@@ -25,6 +26,7 @@ export const ALL_PAUSES: PauseSettings = {
   weakSiege: true,
   sighted: true,
   ownCity: true,
+  warThreat: true,
 };
 
 /** Local storage keeps the settings under this key, across games. */

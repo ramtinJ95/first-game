@@ -108,6 +108,14 @@ export default defineScenario({
     await resizeTo(page, { width: 1280, height: 720 });
 
     await resume(page);
+    // Macedon warns of a coming war on Year 1, day 3, while this battle runs to day 8, and the warning stops the game.
+    await page
+      .getByTestId('alerts')
+      .getByRole('listitem')
+      .filter({ hasText: /^.*Macedon could soon declare war on you/ })
+      .getByTestId('alert-paused')
+      .waitFor({ timeout: 60_000 });
+    await resume(page);
     await page
       .getByTestId('alerts')
       .getByText(/held the field/)

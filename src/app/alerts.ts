@@ -39,7 +39,7 @@ export type AlertKind = (typeof ALERT_KINDS)[number];
  * Decision points: an important battle, an own city besieged/in danger/lost, a weak
  * offensive siege, or the first enemy near the player's land. The Game menu sets each.
  */
-export const PAUSE_KINDS = ['battle', 'weakSiege', 'sighted', 'ownCity'] as const;
+export const PAUSE_KINDS = ['battle', 'weakSiege', 'sighted', 'ownCity', 'warThreat'] as const;
 export type PauseKind = (typeof PAUSE_KINDS)[number];
 
 export interface Alert {
