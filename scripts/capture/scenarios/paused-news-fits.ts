@@ -33,6 +33,9 @@ function carthagePresses(): GameState {
   if (!punic || !roman) throw new Error('no armies');
   punic.men = 2000;
   roman.men = 1000;
+  const stores = state.factions[rome]?.stores;
+  if (!stores) throw new Error('no Roman stores');
+  stores.gold = 2229;
   return state;
 }
 
@@ -83,7 +86,7 @@ const STOPS: readonly { name: string; make: () => GameState; line: RegExp; shot?
   {
     name: 'a warning by field armies',
     make: carthagePresses,
-    line: /all your armies in the field/,
+    line: /all your armies in the field.*Skirmishers cost 900 gold/,
     shot: 'field-warning',
   },
   {

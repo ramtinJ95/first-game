@@ -168,13 +168,24 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     roma.garrison = 80_000;
     const carthaginian = standingThreats(state, world).find((t) => t.power === 'carthage');
     expect(carthaginian?.text).toMatch(
-      /^Carthage has \d+% of the strength it needs to declare war on you, against all your armies in the field\. More men under arms lower it, wherever they stand; guards do not, as it weighs no garrison\. It weighs you so only while you hold no more cities than you began with\.$/,
+      /^Carthage has \d+% of the strength it needs to declare war on you, against all your armies in the field\. More men lower it: Skirmishers cost 900 gold and train in 10 days\. Guards do not\. It weighs you so only while you hold no more cities than at the start\.$/,
     );
     expect(newsOf(state, new Set()).map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against all your armies in the field, and may declare from Year \d+, day \d+ if it holds it\. More men under arms lower it.*guards do not.*See At peace in Wars\.$/,
+        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against all your armies in the field, and may declare from Year \d+, day \d+ if it holds it\. More men lower it.*Guards do not.*See At peace in Wars\.$/,
       ),
     ]);
+  });
+
+  test('says what the cheapest troop costs when you cannot afford it', () => {
+    const state = game(8000, 'empty');
+    const roma = state.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    roma.garrison = 80_000;
+    const carthaginian = standingThreats(state, world).find((t) => t.power === 'carthage');
+    expect(carthaginian?.text).toContain(
+      'More men lower it, but Skirmishers, the cheapest, cost 900 gold; you have 0. Guards do not.',
+    );
   });
 
   test('leaves out a power at war with you or bound by a truce', () => {

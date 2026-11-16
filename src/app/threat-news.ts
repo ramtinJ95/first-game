@@ -6,7 +6,9 @@ import { truceBetween } from '../sim/peace/truce.ts';
 import { areAtWar } from '../sim/wars.ts';
 import type { World } from '../sim/world/world.ts';
 import type { Alert } from './alerts.ts';
-import { dateText, factionName, whole } from './names.ts';
+import { dateText, factionName, TROOP_NAMES, whole } from './names.ts';
+import { trainingDaysAt } from '../sim/buildings/buildings.ts';
+import { TROOPS, type Troop } from '../sim/troops.ts';
 import { GUARD_DETER_DAYS } from '../sim/guards.ts';
 import { NOTICE_DAYS, NOTICE_SHARE } from '../sim/ai/thresholds.ts';
 
@@ -136,7 +138,7 @@ function weighed(state: State, threat: Threat): string {
  */
 function whatCounts(state: State, threat: Threat): string {
   if (threat.pressed)
-    return ' More men under arms lower it, wherever they stand; guards do not, as it weighs no garrison. It weighs you so only while you hold no more cities than you began with.';
+    return ` ${raiseAdvice(state)}. Guards do not. It weighs you so only while you hold no more cities than at the start.`;
   const front = state.cities[threat.front];
   const gold = state.factions[state.player]?.stores.gold ?? 0;
   const hoard =
@@ -195,4 +197,26 @@ export function standingThreats(state: State, world: World): StandingThreat[] {
 export function powersNearWar(state: State, world: World): number {
   return standingThreats(state, world).filter((threat) => (threat.readiness ?? 0) >= THREAT_WARN)
     .length;
+}
+
+/**
+ * What raising men takes today, as the field-army threat advises it: the cheapest troop and
+ * its price and quickest training among the player's cities, or the gold or men the player
+ * lacks for it, so the advice is something the player can do now or says why not.
+ */
+function raiseAdvice(state: State): string {
+  const [troop] = (Object.keys(TROOPS) as Troop[]).sort(
+    (a, b) => TROOPS[a].recruit.gold - TROOPS[b].recruit.gold,
+  );
+  if (!troop) return 'Raising men lowers it';
+  const { gold, men, days } = TROOPS[troop].recruit;
+  const name = TROOP_NAMES[troop];
+  const stores = state.factions[state.player]?.stores;
+  const cities = Object.values(state.cities).filter((city) => city.owner === state.player);
+  const quickest = Math.min(days, ...cities.map((city) => trainingDaysAt(city, days)));
+  if (stores && stores.gold < gold)
+    return `More men lower it, but ${name}, the cheapest, cost ${whole(gold)} gold; you have ${whole(stores.gold)}`;
+  if (stores && stores.manpower < men)
+    return `More men lower it, but ${name}, the cheapest, need ${whole(men)} men; you can call up ${whole(stores.manpower)}`;
+  return `More men lower it: ${name} cost ${whole(gold)} gold and train in ${whole(quickest)} days`;
 }
