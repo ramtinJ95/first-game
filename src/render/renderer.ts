@@ -484,17 +484,9 @@ export async function createRenderer({
     | undefined;
   const battleLayer = new Container({ label: 'battles' });
   const bannerLayer = new Container({ label: 'banners' });
-  const armyLayer = createArmyLayer(
-    app.renderer.resolution,
-    () => {
-      sheetPainted = true;
-    },
-    {
-      budgetBytes:
-        drawing?.sheetBudgetMb === undefined ? undefined : drawing.sheetBudgetMb * 2 ** 20,
-      order: drawing?.sheetOrder,
-    },
-  );
+  const armyLayer = createArmyLayer(app.renderer.resolution, () => {
+    sheetPainted = true;
+  });
   // The figures stand over the city symbols and under the city names, so a name stays
   // readable when an army, a battle, or a siege stands at its city.
   layers.settlements.addChild(armyLayer.root);
