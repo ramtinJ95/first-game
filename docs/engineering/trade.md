@@ -230,6 +230,21 @@ near Roma at the closest zoom a few days in a crossing. The rules still carry on
 string is how a route looks. A raided route waiting for its replacement shows its one
 merchant at the start. Where figures are not drawn, a route stays one dot at its crossing.
 
+The rules find a lane on their own coastline, and it runs along that coast. From 0.6 px/km
+the atlas draws a finer coast up to 8 km away, so the rules' lanes cut drawn capes, Corsica's
+among them on the way to Massalia, and their ships sailed over land: 49 of the capitals' sea
+lanes on day 1 crossed more than half a kilometre of drawn land. `drawnLane` in
+`src/render/drawn-lane.ts` keeps a lane on the drawn side, at sea for a lane and on land for
+a road: each stretch more than 0.3 km on the wrong side is searched round on a grid of
+0.25 km cells and pulled tight. The ends stay, since a harbour of the rules can stand on an
+islet the atlas draws. The trade ink and the merchants both follow it (`laneOf` in the
+renderer, `lane` in the scene's input), at the same share of its length as the crossing is of
+the route's; below 0.6 px/km the rules' coast is drawn, and so is the rules' path. A lane is
+worked out once for each path, when it first comes near the view. `drawn-lane.test.ts` checks
+every lane and road out of every capital on day 1. One road crosses drawn water that the
+rules call land: the atlas parts the land between Persepolis and Gerrha, so that road has
+no drawn way round.
+
 The army scene reuses its owned cart, civilian walking cycles and ship sheets for
 merchants, with a wake at sea and dry-ground checks on land. Own trade stays known;
 foreign traders require sight. They do not grant sight or reveal hostile armies.
