@@ -77,7 +77,7 @@ export function threatNewsOfDay(
       day: before.day,
       tone: 'bad',
       pause: { kind: 'warThreat' },
-      text: `${factionName(after, power.id)} could soon declare war on you: its armies have ${percent(threat)} of the strength it needs against your forces near ${front?.name ?? 'your land'}.${whatCounts(after, threat)} ${WATCH}`,
+      text: `${factionName(after, power.id)} could soon declare war on you: its armies have ${percent(threat)} of the strength it needs ${weighed(after, threat)}.${whatCounts(after, threat)} ${WATCH}`,
       ...(front ? { focus: { at: front.position } } : {}),
     });
   }
@@ -108,16 +108,29 @@ function readinessOf(state: State, world: World, power: FactionId): Threat | und
 
 const percent = (threat: Threat) => `${Math.round(Math.min(1, threat.readiness) * 100)}%`;
 
-/** What the player's treasury takes off what the power needs, and that guards count against it, as the news and the wars panel both say. */
+/** What the power weighs: the forces near one of the player's cities, or every army the player has in the field. */
+function weighed(state: State, threat: Threat): string {
+  if (threat.pressed) return 'against all your armies in the field, wherever they stand';
+  return `against your forces near ${state.cities[threat.front]?.name ?? 'your land'}`;
+}
+
+/**
+ * What lowers the threat, as the news and the wars panel both say. Weighing a city, the
+ * power counts the armies near it, its garrison and its guards for their first
+ * GUARD_DETER_DAYS, less what the player's treasury takes off. Pressing a rival that
+ * has kept to the cities it began with, it counts only the rival's armies, so guards
+ * do nothing there and more men under arms, wherever they stand, are what help.
+ */
 function whatCounts(state: State, threat: Threat): string {
-  if (threat.pressed) return '';
+  if (threat.pressed)
+    return ' More men under arms lower it, wherever they stand; guards do not, since it weighs no garrison. It weighs you so only while you hold no more cities than you began with.';
   const front = state.cities[threat.front];
   const gold = state.factions[state.player]?.stores.gold ?? 0;
   const hoard =
     threat.hoard > 0
       ? ` Your treasury of ${whole(gold)} gold lowers what it needs by ${Math.round(threat.hoard * 100)}%, since a peace would make you pay it.`
       : '';
-  return `${hoard}${front ? ` Guards hired at ${front.name} count against it for their first ${GUARD_DETER_DAYS} days.` : ''}`;
+  return `${hoard}${front ? ` Guards hired at ${front.name} count against it for their first ${GUARD_DETER_DAYS} days. Your armies near ${front.name} count against it too.` : ''}`;
 }
 
 /** How near one great power at peace with the player stands to declaring war on it today, as the wars panel lists it. */
@@ -161,7 +174,7 @@ export function standingThreats(state: State, world: World): StandingThreat[] {
         power: power.id,
         name,
         readiness: Math.min(1, threat.readiness),
-        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${threat.pressed ? 'weighing all your armies in the field' : `against your forces near ${front?.name ?? 'your land'}`}.${whatCounts(state, threat)}`,
+        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${whatCounts(state, threat)}`,
       };
     });
 }

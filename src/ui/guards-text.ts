@@ -85,7 +85,8 @@ function hireChange(state: State, city: DeepReadonly<City>, world: World): strin
 /**
  * Each great power that weighs the city before it declares on the owner, by the AI's own
  * reckoning, today and with one more band, played through the rules' handler. A power
- * drawn by rival pressure weighs field armies only, so the line says guards change nothing.
+ * drawn by rival pressure weighs field armies only, wherever they stand, so every city's
+ * section names it and says guards change nothing.
  */
 function hireThreats(state: State, city: DeepReadonly<City>, world: World): string[] {
   const hired = structuredClone(state) as GameState;
@@ -96,7 +97,7 @@ function hireThreats(state: State, city: DeepReadonly<City>, world: World): stri
   for (const power of Object.values(state.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (power.id === city.owner || power.kind !== 'greatPower') continue;
     const now = warReadiness(state, world, power.id, city.owner);
-    if (!now || now.front !== city.id) continue;
+    if (!now || (now.front !== city.id && !now.pressed)) continue;
     if (now.pressed) {
       lines.push(
         `${factionName(state, power.id)} ${percent(now.readiness)} of the strength it needs to declare war, by its field armies against yours: guards do not hold that back`,

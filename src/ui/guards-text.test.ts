@@ -131,6 +131,36 @@ describe('a threat guards cannot answer', () => {
   });
 });
 
+describe('a power that presses by its field armies, at a city it does not weigh', () => {
+  it("is named in every city's section, so no hire there looks like an answer to it", () => {
+    const realWorld = fixtureWorld();
+    const state = newGame(realWorld.map, { seed: 1, player: 'rome' });
+    const carthage = 'carthage' as FactionId;
+    for (const faction of Object.values(state.factions))
+      if (faction.kind === 'minor')
+        state.truces[warKey(carthage, faction.id)] = {
+          since: state.day,
+          endsOn: (state.day + 365) as Day,
+        };
+    const punic = Object.values(state.armies).find((army) => army.owner === carthage);
+    const spearmen = punic && state.formations[punic.formations[0] as never];
+    const roma = state.cities['roma' as CityId];
+    const capua = state.cities['capua' as CityId];
+    const romans = state.factions['rome' as FactionId];
+    if (!spearmen || !roma || !capua || !romans) throw new Error('no records');
+    spearmen.men = 8000;
+    roma.garrison = 80_000;
+    capua.garrison = 80_000;
+    romans.stores.gold = 20_000;
+    const threat = warReadiness(state, realWorld, carthage, 'rome' as FactionId);
+    if (!threat?.pressed) throw new Error('Carthage does not press Rome');
+    const elsewhere = threat.front === capua.id ? roma : capua;
+    expect(cityGuards(state, [], elsewhere, realWorld).hire.threats).toContain(
+      `Carthage ${Math.round(Math.min(1, threat.readiness) * 100)}% of the strength it needs to declare war, by its field armies against yours: guards do not hold that back`,
+    );
+  });
+});
+
 describe('cityGuards', () => {
   it("gives a hire's price and the garrison before and after, from the rules", () => {
     expect(shown(withGold(5000))).toEqual({
