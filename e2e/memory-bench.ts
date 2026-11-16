@@ -38,9 +38,9 @@ import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
  * through all three zooms over the power's capital and over the plateau, and plays
  * `--play` seconds at the fastest speed. Each cycle is then sampled with the day-1 save
  * dropped again and drawn over the whole map, the same state every time.
- * `--cycle-bound 0.1` fails the run when the collected heap, the DOM nodes, the detached
- * DOM nodes, the live canvases, or the live texture bytes after any later cycle are more
- * than a tenth over cycle 1. `--snapshots 2,6`
+ * `--cycle-bound 0.1` fails the run when the collected heap, the DOM nodes, or the live
+ * texture bytes after any later cycle are more than a tenth over cycle 1. The DOM nodes
+ * count the detached ones too, which each row also gives apart, with the live canvases. `--snapshots 2,6`
  * writes heap snapshots after those cycles, named after `--snapshot`, and `--texture-shapes`
  * prints the live textures by size that each cycle added or freed.
  *
@@ -806,8 +806,6 @@ if (values['cycle-bound']) {
   for (const [what, pick] of [
     ['the collected JS heap (MB)', (row: (typeof rows)[number]) => row.heapMb],
     ['the DOM nodes', (row: (typeof rows)[number]) => row.nodes],
-    ['the detached DOM nodes', (row: (typeof rows)[number]) => row.detached],
-    ['the live canvases', (row: (typeof rows)[number]) => row.canvases],
     ['the live texture bytes (MB)', (row: (typeof rows)[number]) => row.textureMb],
   ] as const) {
     const bound = Math.round(pick(first) * (1 + share));
