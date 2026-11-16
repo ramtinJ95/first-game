@@ -54,24 +54,26 @@ On a GPU (inference, not measured): fills and a composited panel cost little the
 forecasts of tens of milliseconds ten times a second stall a 5 ms frame, so the panel's
 republish is the cost a player would feel and is the one removed.
 
-CI's `frame-benches` job runs `--alternate 4 --segment 4 --budget`: at closest and middle,
-one page each, four 4 s sweeps of the pan select nothing, Roma, Roma, nothing, so each
-selection gets two sweeps, 8 s and about 13 frames. The frame rule compares frame rates (the
-frames between each sweep's first and last, over the time they span), so a sweep's edges do
-not move it by a frame; the gap and panel rules are as in the full minute. One page and
-that order put the host's drift on both selections alike, and the run takes about a minute
-(63 s in CI).
+CI's `frame-benches` job runs `--alternate 4 --segment 4 --panel-budget` (about a minute;
+63 s in CI): at closest and middle, one page each, four 4 s sweeps of the pan select
+nothing, Roma, Roma, nothing, so each selection gets two sweeps, 8 s and about 13 frames. It
+prints each selection's frame rate (the frames between each sweep's first and last, over
+the time they span), frames drawn and longest gap, and fails only when a selected city's
+panels run more than 1.5 times a day played: 5.0 on `main`, 1.0 on the branch, every run.
 
-It is not a stable pass on this pylon. On the unchanged head the step passed 3 of 5 runs
-counting frames and 2 of 4 comparing rates: once Roma selected drew 1.55 frames a second
-against a floor of 1.57 at closest, and twice its longest middle gap was 2 to 4 % over the
-tenth (1,844 against 1,815 ms, 2,018 against 1,974 ms). Roma selected's longest middle gap
-was the longer one in every run. A selected city still costs about 7 % of a frame in
-software GL, near the tenth, and 8 s a side cannot separate the two reliably. The long
-middle frames are GPU time (no main-thread task over 110 ms in a trace of them). Drawing
-the selected routes each frame instead of from their cached texture did not shorten them,
-so that was not done. On `main` the step fails on its panels every time, 5.1 and 4.9
-refreshes a day.
+The owner chose not to assert frames and gaps there. On the unchanged head the short check
+with them asserted passed 3 of 5 runs counting frames and 2 of 4 comparing rates, and CI
+failed it once: the selected-to-unselected ratio swings about 7 % between runs in 8 s a
+side (closest frame-rate ratios 1.006, 1.038, 1.064 and 0.891; middle longest-gap ratios
+1.006, 1.115, 1.086 and 1.128), so a check at a tenth goes red without a regression. The
+full minute spreads by more than a tenth between rounds on this kind of host as well, so a
+longer CI run would not buy a reliable tenth either. The full minute,
+`node e2e/trade-minute-bench.ts --roots <a>,<b> --budget`, is the measure run by hand.
+
+The middle zoom's long frames (1.6 to 1.8 s) are GPU time: no main-thread task over 110 ms
+in a trace of them. Roma selected's longest middle gap was about 8 % longer on average in
+the short runs. Drawing the selected routes each frame instead of from their cached texture
+did not shorten it, so that was not done.
 
 ## Merchants a player sees
 
