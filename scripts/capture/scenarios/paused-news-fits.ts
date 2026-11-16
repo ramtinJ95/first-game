@@ -17,7 +17,10 @@ import {
 } from '../../../e2e/support.ts';
 import { ownCityInDangerTomorrow } from '../../../e2e/warnings-game.ts';
 import type { FormationId } from '../../../src/sim/ids.ts';
+import type { Day } from '../../../src/sim/state/day.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
+import { warKey } from '../../../src/sim/state/war.ts';
+import { areAtWar } from '../../../src/sim/wars.ts';
 import { defineScenario } from '../scenario.ts';
 
 /** Rome with 1,000 men in the field beside a Carthage of 2,000: Carthage presses it by its field armies. */
@@ -37,6 +40,27 @@ function battleTomorrow(): GameState {
   return state;
 }
 
+/**
+ * The save with every great power that is not at war with the player bound by a truce, so
+ * the news that stops the game is the save's own and no war warning comes before it.
+ */
+function alone(make: () => GameState): () => GameState {
+  return () => {
+    const state = make();
+    for (const power of Object.values(state.factions))
+      if (
+        power.kind === 'greatPower' &&
+        power.id !== state.player &&
+        !areAtWar(state, power.id, state.player)
+      )
+        state.truces[warKey(power.id, state.player)] = {
+          since: state.day,
+          endsOn: (state.day + 365) as Day,
+        };
+    return state;
+  };
+}
+
 /** The news of each kind that stops the game, with its longest text the saves give. */
 const STOPS: readonly { name: string; make: () => GameState; line: RegExp; shot?: string }[] = [
   {
@@ -51,10 +75,10 @@ const STOPS: readonly { name: string; make: () => GameState; line: RegExp; shot?
     line: /all your armies in the field/,
     shot: 'field-warning',
   },
-  { name: 'a city in danger', make: ownCityInDangerTomorrow, line: /is in danger/ },
-  { name: 'fleets sighted', make: fiveFleetsOnRoma, line: /sail|march/ },
-  { name: 'a weak siege', make: weakSiegeOfMediolanum, line: /Too few|too weak/ },
-  { name: 'a battle', make: battleTomorrow, line: /Battle at Roma/ },
+  { name: 'a city in danger', make: alone(ownCityInDangerTomorrow), line: /is in danger/ },
+  { name: 'fleets sighted', make: alone(fiveFleetsOnRoma), line: /sail|march/ },
+  { name: 'a weak siege', make: alone(weakSiegeOfMediolanum), line: /Too few|too weak/ },
+  { name: 'a battle', make: alone(battleTomorrow), line: /Battle at Roma/ },
 ];
 
 async function stopOn(page: Page, state: GameState, line: RegExp) {
