@@ -76,7 +76,7 @@ jobs:
         run: test "$RESULT" = success
 
   frame-benches:
-    timeout-minutes: 3
+    timeout-minutes: 5
     continue-on-error: true
     runs-on: ubuntu-latest
     steps:
