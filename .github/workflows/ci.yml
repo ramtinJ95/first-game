@@ -138,12 +138,19 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node e2e/memory-bench.ts --cycles 10 --draw full --play 5 --cycle-bound 0.1 --out cycles.csv | tee -a "$GITHUB_STEP_SUMMARY"
+      # Three colours of army at every size of figure sheet a screen of twice the density
+      # rests at would hold about 148 MB of sheets; the budget keeps them to 128 MB.
+      - name: Figure sheets in one game
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: node e2e/memory-bench.ts --sheets 3 --dpr 2 --viewport 640x360 --draw full --sheet-bound 128 --out sheets.csv | tee -a "$GITHUB_STEP_SUMMARY"
       # The curve as an annotation too, which the API serves to readers who cannot fetch logs.
       - name: The curve as an annotation
         if: ${{ !cancelled() }}
         run: |
           test -f memory.csv && echo "::notice title=memory curve::$(sed ':a;N;$!ba;s/\n/%0A/g' memory.csv)"
           test -f cycles.csv && echo "::notice title=memory cycles::$(sed ':a;N;$!ba;s/\n/%0A/g' cycles.csv)"
+          test -f sheets.csv && echo "::notice title=memory sheets::$(sed ':a;N;$!ba;s/\n/%0A/g' sheets.csv)"
 
   capture-shards:
     timeout-minutes: 12

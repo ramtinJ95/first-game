@@ -1,14 +1,9 @@
 import { CanvasSource, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import type { CityRank } from '../../sim/state/city.ts';
-import {
-  layoutSheet,
-  paintSheetBand,
-  sheetArt,
-  sheetRows,
-  type SheetLayout,
-} from '../figures/sheet.ts';
+import { layoutSheet, paintSheetCells, sheetArt, type SheetLayout } from '../figures/sheet.ts';
 import { INK, PAPER } from '../palette.ts';
 import { SHEET_COLOURS, type Scene, type Sprite as SceneSprite } from './scene.ts';
+import { sheetsOverBudget } from './sheet-budget.ts';
 
 /** Broken water behind a ship, lighter than the sea. */
 const FOAM = 0xf3f1e4;
@@ -34,7 +29,20 @@ interface Sheet {
   readonly textures: Map<string, Texture>;
   painted: boolean;
   dropped: boolean;
+  /** When a frame last drew from this sheet or asked for it, in ms. */
+  usedAt: number;
 }
+
+/**
+ * The most the figure sheets may hold, in texture bytes, beyond those a frame draws from;
+ * each also holds its canvas. Two colours and the shared art at every size a screen of
+ * twice the density rests at come to about 100 MB, so a player who zooms in and out over
+ * their own armies and one enemy's never waits for a sheet twice. Every colour at every
+ * size would be 303 MB.
+ */
+export const SHEET_BUDGET_BYTES = 128 * 2 ** 20;
+
+const bytesOf = (sheet: Sheet) => sheet.layout.width * sheet.layout.height * 4;
 
 // The art is posed when a sheet is first needed, so a page that never zooms in to
 // figures never pays for it.
@@ -62,10 +70,13 @@ const partOf = (key: string): { part: Part; cell: string } => {
     : { part: Number(key.slice(at + 1)), cell: key.slice(0, at) };
 };
 
-/** A band of a sheet painted in one task: about this many px of rows at a time. */
-const BAND_PX = 160;
+/**
+ * The pictures of a sheet painted in one task. Each costs about the same to draw at
+ * every size, so a task takes about as long on a small sheet as on a large one.
+ */
+const CELLS_PER_TASK = 40;
 
-/** Lets the page draw and answer input between two bands of a paint. */
+/** Lets the page draw and answer input between two tasks of a paint. */
 function yieldToPage(): Promise<void> {
   const scheduler = Reflect.get(globalThis, 'scheduler') as
     { yield?: () => Promise<void> } | undefined;
@@ -73,8 +84,8 @@ function yieldToPage(): Promise<void> {
 }
 
 /**
- * Paints a sheet band by band, yielding between bands, so that no paint holds the
- * page's main thread long enough to miss frames. Each paint is timed as the
+ * Paints a sheet a few pictures at a time, yielding between them, so that no paint holds
+ * the page's main thread long enough to miss frames. Each paint is timed as the
  * user-timing measure `sheet`.
  */
 async function paint(sheet: Sheet, canvas: HTMLCanvasElement) {
@@ -85,18 +96,13 @@ async function paint(sheet: Sheet, canvas: HTMLCanvasElement) {
   canvas.height = layout.height;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('armies: no 2D canvas context');
-  const rows = sheetRows(layout);
-  for (let i = 0; i < rows.length;) {
-    const top = rows[i] as number;
-    let j = i + 1;
-    while (j < rows.length && (rows[j] as number) - top < BAND_PX) j++;
-    const bottom = rows[j] ?? layout.height;
+  const cells = art().filter((cell) => layout.cells.has(cell.key));
+  for (let i = 0; i < cells.length; i += CELLS_PER_TASK) {
     // Drawn with the 2D context rather than decoded as an SVG image: Chromium keeps the
-    // source of every SVG image a page decodes, about a megabyte a band, for the page's life.
-    paintSheetBand(context, layout, art(), colour, top, bottom);
+    // source of every SVG image a page decodes for the page's life.
+    paintSheetCells(context, layout, cells.slice(i, i + CELLS_PER_TASK), colour);
     await yieldToPage();
     if (sheet.dropped) return;
-    i = j;
   }
   sheet.source.resize(layout.width, layout.height);
   sheet.source.update();
@@ -137,6 +143,7 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
       textures: new Map(),
       painted: false,
       dropped: false,
+      usedAt: performance.now(),
     };
     sheets.set(key, sheet);
     queue = queue
@@ -177,22 +184,38 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
     return { texture: found, anchorX: cell.anchorX, anchorY: cell.anchorY };
   }
 
-  function forget() {
-    marks.clear();
-    ready = true;
+  function drop(key: string, sheet: Sheet) {
+    sheet.dropped = true;
     for (const sprite of pool) {
+      if (sprite.texture.source !== sheet.source) continue;
       sprite.texture = Texture.EMPTY;
       sprite.visible = false;
     }
-    for (const sheet of sheets.values()) {
-      sheet.dropped = true;
-      for (const t of sheet.textures.values()) t.destroy();
-      const canvas = sheet.source.resource;
-      sheet.source.destroy();
-      canvas.width = 0;
-      canvas.height = 0;
+    for (const t of sheet.textures.values()) t.destroy();
+    const canvas = sheet.source.resource;
+    sheet.source.destroy();
+    canvas.width = 0;
+    canvas.height = 0;
+    sheets.delete(key);
+  }
+
+  function trim(inUse: ReadonlySet<Sheet>) {
+    const held = [...sheets].map(([key, sheet]) => ({
+      key,
+      bytes: bytesOf(sheet),
+      usedAt: sheet.usedAt,
+      inUse: inUse.has(sheet),
+    }));
+    for (const key of sheetsOverBudget(held, SHEET_BUDGET_BYTES)) {
+      const sheet = sheets.get(key);
+      if (sheet) drop(key, sheet);
     }
-    sheets.clear();
+  }
+
+  function forget() {
+    marks.clear();
+    ready = true;
+    for (const [key, sheet] of [...sheets]) drop(key, sheet);
     wanted = { size: 0, since: 0 };
   }
 
@@ -234,6 +257,7 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
       ready = true;
       let used = 0;
       const shown: SceneSprite[] = [];
+      const inUse = new Set<Sheet>();
       if (scene.height > 0) {
         const size = sheetSizeFor(scene.height * resolution);
         const now = performance.now();
@@ -253,6 +277,11 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
             if (!exact?.painted) ready = false;
             sheet = exact?.painted ? exact : painted(size, part);
             chosen.set(part, sheet);
+            for (const use of [exact, sheet]) {
+              if (!use) continue;
+              use.usedAt = now;
+              inUse.add(use);
+            }
           }
           const found = sheet && texture(sheet, cell);
           if (!sheet || !found) continue;
@@ -276,6 +305,7 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
         }
       }
       for (let i = used; i < pool.length; i++) (pool[i] as Sprite).visible = false;
+      trim(inUse);
       return shown;
     },
     /**
