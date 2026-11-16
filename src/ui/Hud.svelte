@@ -190,6 +190,11 @@
     max-height: min(30vh, 11.5rem);
   }
 
+  /* News that stops the game is read in full before the player resumes, so the corner grows to hold it. */
+  .alerts:has(:global(.paused)) {
+    max-height: min(62vh, 30rem);
+  }
+
   .latest {
     display: flex;
     flex-direction: column;
