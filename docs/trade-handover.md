@@ -55,13 +55,23 @@ forecasts of tens of milliseconds ten times a second stall a 5 ms frame, so the 
 republish is the cost a player would feel and is the one removed.
 
 CI's `frame-benches` job runs `--alternate 4 --segment 4 --budget`: at closest and middle,
-one page each, four 4 s sweeps of the pan select nothing, Roma, Roma, nothing, and the
-frame, gap and panel rules all apply. One page and that order put the host's drift on both
-selections alike, and the run takes about a minute. Here the branch passed with 13 frames
-each way at both zooms and 1.0 refreshes a day; `main` failed on its panels, 5.1 and 4.9 a
-day, while its frames were 14 and 13 against 13, so in 16 s a side one frame is about 8 % and
-the short check catches a halving, not a few percent. The full minute (`--budget` without
-`--alternate`) is the measure of a tenth.
+one page each, four 4 s sweeps of the pan select nothing, Roma, Roma, nothing, so each
+selection gets two sweeps, 8 s and about 13 frames. The frame rule compares frame rates (the
+frames between each sweep's first and last, over the time they span), so a sweep's edges do
+not move it by a frame; the gap and panel rules are as in the full minute. One page and
+that order put the host's drift on both selections alike, and the run takes about a minute
+(63 s in CI).
+
+It is not a stable pass on this pylon. On the unchanged head the step passed 3 of 5 runs
+counting frames and 2 of 4 comparing rates: once Roma selected drew 1.55 frames a second
+against a floor of 1.57 at closest, and twice its longest middle gap was 2 to 4 % over the
+tenth (1,844 against 1,815 ms, 2,018 against 1,974 ms). Roma selected's longest middle gap
+was the longer one in every run. A selected city still costs about 7 % of a frame in
+software GL, near the tenth, and 8 s a side cannot separate the two reliably. The long
+middle frames are GPU time (no main-thread task over 110 ms in a trace of them). Drawing
+the selected routes each frame instead of from their cached texture did not shorten them,
+so that was not done. On `main` the step fails on its panels every time, 5.1 and 4.9
+refreshes a day.
 
 ## Merchants a player sees
 

@@ -32,7 +32,8 @@ import { camera, cityPoint, dropSave, openGame, pause, untilDrawn } from './supp
  *
  * `--alternate <n>` plays each zoom in one page and one game instead, in `n` segments of
  * `--segment` seconds that select Roma and nothing in the order none, Roma, Roma, none, so
- * a drift of the host or of the game falls on both alike. Each segment is one sweep of the
+ * a drift of the host or of the game falls on both alike, and compares frame rates: the
+ * frames between each segment's first and last over the time they span. Each segment is one sweep of the
  * pan out and back, so the camera stands over Roma again when the next one picks. That is
  * short enough for CI's frame job.
  */
@@ -76,6 +77,12 @@ const rounds = Number(values.rounds);
 
 interface Run {
   frames: number;
+  /**
+   * The frames between the first and the last of each segment, and the ms they span: a
+   * frame rate that a segment's edges, which cut a frame in two, do not shift.
+   */
+  spannedFrames: number;
+  spanned: number;
   longestGap: number;
   medianGap: number;
   days: number;
@@ -211,8 +218,11 @@ async function measure(
       writeFileSync(join(values.profile ?? '', `${label}.cpuprofile`), JSON.stringify(profile));
     }
     const canvas = page.locator('canvas[data-renderer]');
+    const inside = at.slice(1, -1);
     const run: Run = {
       frames: at.length - 2,
+      spannedFrames: Math.max(0, inside.length - 1),
+      spanned: (inside.at(-1) ?? 0) - (inside[0] ?? 0),
       longestGap: Math.max(...at.slice(1).map((t, i) => t - (at[i] ?? t))),
       medianGap: median(at.slice(2, -1).map((t, i) => t - (at[i + 1] ?? t))),
       days: (await dayOf(page)) - firstDay,
@@ -300,6 +310,8 @@ async function alternate(
     const runs: Record<'roma' | 'none', Run> = {
       roma: {
         frames: 0,
+        spannedFrames: 0,
+        spanned: 0,
         longestGap: 0,
         medianGap: 0,
         days: 0,
@@ -309,6 +321,8 @@ async function alternate(
       },
       none: {
         frames: 0,
+        spannedFrames: 0,
+        spanned: 0,
         longestGap: 0,
         medianGap: 0,
         days: 0,
@@ -342,6 +356,11 @@ async function alternate(
       const at = [before.now, ...after.at.filter((t) => t > before.now), after.now];
       const run = runs[selection];
       run.frames += at.length - 2;
+      const inside = at.slice(1, -1);
+      if (inside.length >= 2) {
+        run.spannedFrames += inside.length - 1;
+        run.spanned += (inside.at(-1) ?? 0) - (inside[0] ?? 0);
+      }
       run.longestGap = Math.max(run.longestGap, ...at.slice(1).map((t, i) => t - (at[i] ?? t)));
       intervals[selection].push(...at.slice(2, -1).map((t, i) => t - (at[i + 1] ?? t)));
       run.days += (await dayOf(page)) - firstDay;
@@ -401,7 +420,7 @@ try {
             const key = `${root} | ${zoom} | ${selection}`;
             results.set(key, [...(results.get(key) ?? []), run]);
             console.error(
-              `round ${round + 1} ${key}: ${run.frames} frames, longest gap ${(run.longestGap / 1000).toFixed(2)} s, median ${run.medianGap.toFixed(0)} ms, ${run.days} days, ${run.refreshes} panel refreshes, paths ${run.paths}, merchants ${run.merchants}`,
+              `round ${round + 1} ${key}: ${run.frames} frames (${((1000 * run.spannedFrames) / run.spanned).toFixed(2)} a second), longest gap ${(run.longestGap / 1000).toFixed(2)} s, median ${run.medianGap.toFixed(0)} ms, ${run.days} days, ${run.refreshes} panel refreshes, paths ${run.paths}, merchants ${run.merchants}`,
             );
           }
           continue;
@@ -412,7 +431,7 @@ try {
           const run = await measure(browser, base, world, zoom, selection === 'roma');
           results.set(key, [...(results.get(key) ?? []), run]);
           console.error(
-            `round ${round + 1} ${key}: ${run.frames} frames, longest gap ${(run.longestGap / 1000).toFixed(2)} s, median ${run.medianGap.toFixed(0)} ms, ${run.days} days, ${run.refreshes} panel refreshes, paths ${run.paths}, merchants ${run.merchants}`,
+            `round ${round + 1} ${key}: ${run.frames} frames (${((1000 * run.spannedFrames) / run.spanned).toFixed(2)} a second), longest gap ${(run.longestGap / 1000).toFixed(2)} s, median ${run.medianGap.toFixed(0)} ms, ${run.days} days, ${run.refreshes} panel refreshes, paths ${run.paths}, merchants ${run.merchants}`,
           );
         }
       }
@@ -444,13 +463,19 @@ if (values.budget || values['panel-budget']) {
     for (const zoom of zooms) {
       const selected = results.get(`${root} | ${zoom} | roma`) ?? [];
       const none = results.get(`${root} | ${zoom} | none`) ?? [];
-      const frames = median(selected.map((r) => r.frames));
-      const floor = 0.9 * median(none.map((r) => r.frames));
+      // One page a zoom compares frame rates over equal time; separate pages, frame counts.
+      const count = (r: Run) =>
+        values.alternate ? (1000 * r.spannedFrames) / r.spanned : r.frames;
+      const unit = values.alternate ? 'frames a second' : 'frames';
+      const frames = median(selected.map(count));
+      const floor = 0.9 * median(none.map(count));
       const gap = median(selected.map((r) => r.longestGap));
       const ceiling = 1.1 * median(none.map((r) => r.longestGap));
       const perDay = median(selected.map((r) => r.refreshes / r.days));
       if (values.budget && !(frames >= floor))
-        failures.push(`${zoom}: Roma selected drew ${frames} frames, under ${floor.toFixed(1)}`);
+        failures.push(
+          `${zoom}: Roma selected drew ${frames.toFixed(2)} ${unit}, under ${floor.toFixed(2)}`,
+        );
       if (values.budget && !(gap <= ceiling))
         failures.push(
           `${zoom}: Roma selected's longest gap ${gap.toFixed(0)} ms exceeds ${ceiling.toFixed(0)} ms`,
