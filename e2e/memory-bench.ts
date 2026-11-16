@@ -49,7 +49,8 @@ import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
  * figure sheet the screen rests at, `--dpr 2` for a screen of twice the density, in a
  * `--viewport 640x360` window if the machine cannot draw a larger one in software. It
  * prints the sheets painted in the first round and again in the later ones and their bytes
- * over the whole map after each round, and fails when a sheet is painted twice at one zoom.
+ * over the whole map after each round, and fails when a sheet is painted twice at one zoom
+ * or again as the camera goes back and forth between two neighbouring zooms.
  * `--sheet-bound <MB>` fails the run when the sheets over the whole map hold more.
  *
  *   node e2e/memory-bench.ts [--loads 30 | --years 10] [--days 300] [--draw full] [--out file.csv]
@@ -198,6 +199,10 @@ function trackTextures() {
       bytes: [...sizes.values()].reduce((sum, bytes) => sum + bytes, 0),
       buffers: buffers.size,
       bufferBytes: [...buffers.values()].reduce((sum, bytes) => sum + bytes, 0),
+      // Figure sheets are laid out 2048 or 4096 px wide, and no other texture is.
+      sheetBytes: [...sizes]
+        .filter(([texture]) => /^(2048|4096)x/.test(shapes.get(texture) ?? ''))
+        .reduce((sum, [, bytes]) => sum + bytes, 0),
     }),
   });
 }
@@ -228,7 +233,13 @@ async function sample(page: Page, step: string) {
   const textures = await page.evaluate(() =>
     (
       window as unknown as {
-        textureReport(): { count: number; bytes: number; buffers: number; bufferBytes: number };
+        textureReport(): {
+          count: number;
+          bytes: number;
+          buffers: number;
+          bufferBytes: number;
+          sheetBytes: number;
+        };
       }
     ).textureReport(),
   );
@@ -241,6 +252,7 @@ async function sample(page: Page, step: string) {
     listeners: metric('JSEventListeners'),
     textures: textures.count,
     textureMb: Math.round(textures.bytes / 2 ** 20),
+    sheetMb: Math.round(textures.sheetBytes / 2 ** 20),
     buffers: textures.buffers,
     bufferMb: Math.round(textures.bufferBytes / 2 ** 20),
     rendererMb: residentMb('renderer'),
@@ -487,7 +499,7 @@ try {
     console.log(Object.values(row).join(','));
   };
   console.log(
-    'step,heapMb,nodes,listeners,textures,textureMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb',
+    'step,heapMb,nodes,listeners,textures,textureMb,sheetMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb',
   );
   if (values.sites) {
     const session = await page.context().newCDPSession(page);
@@ -502,27 +514,45 @@ try {
     const colours = Number(values.sheets);
     const at = coloursInView(game, colours);
     // A dropped save keeps the clock as it was, so the ring is paused before it lands.
-    if ((await page.getByTestId('time-controls-speed').textContent()) !== 'Paused') {
-      await page.keyboard.press('Space');
-    }
+    const pauseButton = page.getByRole('button', { name: 'Pause', exact: true });
+    if (await pauseButton.isVisible()) await pauseButton.click();
+    await page.getByTestId('time-controls-speed').and(page.getByText('Paused')).waitFor();
     await dropSave(page, game);
     await page.getByTestId('time-controls-day').and(page.locator('[data-day="1"]')).waitFor();
     const zooms = sheetZooms(Number(values.dpr));
     console.error(`  zooms ${zooms.map((z) => z.toFixed(3)).join(', ')}`);
-    const opened = rows[0]?.textureMb ?? 0;
     const sheetMb: number[] = [];
     let firstRound = 0;
+    let inRounds = 0;
     const rests: string[][] = [];
     for (const round of [1, 2, 3]) {
       rests.push(...(await zoomCycle(page, at, zooms)));
       const row = await sample(page, `${colours} colours, every sheet size, round ${round}`);
       print(row);
-      sheetMb.push(row.textureMb - opened);
+      sheetMb.push(row.sheetMb);
       if (values['texture-shapes']) await printTextureShapes(page);
       if (errors.length > 0) throw new Error(errors.join('; '));
-      if (round === 1)
-        firstRound = await page.evaluate(() => performance.getEntriesByName('sheet').length);
+      const painted = await page.evaluate(() => performance.getEntriesByName('sheet').length);
+      if (round === 1) firstRound = painted;
+      if (round === 3) inRounds = painted;
     }
+    // A player goes back and forth between two neighbouring zooms. After the first visit
+    // to each, every sheet they need is painted, and none may be painted again.
+    const figureZooms = zooms.filter((zoom) => zoom >= FIGURE_SCALE);
+    const again: string[] = [];
+    for (let i = 0; i + 1 < figureZooms.length; i++) {
+      const [near, far] = [figureZooms[i] as number, figureZooms[i + 1] as number];
+      const rested = await zoomCycle(page, at, [near, far, near, far, near]);
+      const repainted = rested.slice(2).flat();
+      console.log(
+        `  back and forth between ${near.toFixed(3)} and ${far.toFixed(3)}: ${repainted.length} painted after the first visit to each${repainted.length > 0 ? ` (${repainted.join(' ')})` : ''}`,
+      );
+      again.push(...repainted);
+    }
+    console.log(
+      `${again.length === 0 ? 'held' : 'NOT held'}: no sheet painted again going back and forth between neighbouring zooms`,
+    );
+    if (again.length > 0) process.exitCode = 1;
     const paints = await page.evaluate(() =>
       performance.getEntriesByName('sheet').map((e) => ({
         ms: Math.round(e.duration),
@@ -530,7 +560,7 @@ try {
       })),
     );
     console.log(
-      `sheets: ${firstRound} painted in round 1, ${paints.length - firstRound} painted again in rounds 2 and 3; sheets over the whole map after each round ${sheetMb.join(', ')} MB`,
+      `sheets: ${firstRound} painted in round 1, ${inRounds - firstRound} painted again in rounds 2 and 3, ${paints.length - inRounds} going back and forth; sheets over the whole map after each round ${sheetMb.join(', ')} MB`,
     );
     console.error(`  sheet paints: ${JSON.stringify(paints)}`);
     // A sheet in view that the budget let go of is asked for again by the next frame, so
@@ -675,7 +705,7 @@ try {
   await server.close();
   if (values.out) {
     const header =
-      'step,heapMb,nodes,listeners,textures,textureMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb';
+      'step,heapMb,nodes,listeners,textures,textureMb,sheetMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb';
     writeFileSync(values.out, [header, ...rows.map((r) => Object.values(r).join(','))].join('\n'));
   }
 }

@@ -35,12 +35,12 @@ interface Sheet {
 
 /**
  * The most the figure sheets may hold, in texture bytes, beyond those a frame draws from;
- * each also holds its canvas. Two colours and the shared art at every size a screen of
- * twice the density rests at come to about 100 MB, so a player who zooms in and out over
- * their own armies and one enemy's never waits for a sheet twice. Every colour at every
- * size would be 303 MB.
+ * each also holds its canvas. On a screen of twice the density, a player who goes back and
+ * forth between the two closest zooms with Rome, Carthage, Macedon and a minor in view
+ * needs 151 MB of sheets, the most any two neighbouring sizes need for four colours, so
+ * they never wait for a sheet twice. Every colour at every size would be 303 MB.
  */
-export const SHEET_BUDGET_BYTES = 128 * 2 ** 20;
+export const SHEET_BUDGET_BYTES = 160 * 2 ** 20;
 
 const bytesOf = (sheet: Sheet) => sheet.layout.width * sheet.layout.height * 4;
 
@@ -200,9 +200,14 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
   }
 
   function trim(inUse: ReadonlySet<Sheet>) {
+    const at = SHEET_SIZES.indexOf(wanted.size as (typeof SHEET_SIZES)[number]);
     const held = [...sheets].map(([key, sheet]) => ({
       key,
       bytes: bytesOf(sheet),
+      distance:
+        at < 0
+          ? 0
+          : Math.abs(SHEET_SIZES.indexOf(sheet.layout.size as (typeof SHEET_SIZES)[number]) - at),
       usedAt: sheet.usedAt,
       inUse: inUse.has(sheet),
     }));

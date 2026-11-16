@@ -138,12 +138,13 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: node e2e/memory-bench.ts --cycles 10 --draw full --play 5 --cycle-bound 0.1 --out cycles.csv | tee -a "$GITHUB_STEP_SUMMARY"
-      # Three colours of army at every size of figure sheet a screen of twice the density
-      # rests at would hold about 148 MB of sheets; the budget keeps them to 128 MB.
+      # Rome, Carthage, Macedon and a minor at every size of figure sheet a screen of twice
+      # the density rests at would hold 197 MB of sheets; the budget keeps them to 160 MB,
+      # and going back and forth between two neighbouring zooms paints nothing again.
       - name: Figure sheets in one game
         if: ${{ !cancelled() }}
         shell: bash
-        run: node e2e/memory-bench.ts --sheets 3 --dpr 2 --viewport 640x360 --draw full --sheet-bound 128 --out sheets.csv | tee -a "$GITHUB_STEP_SUMMARY"
+        run: node e2e/memory-bench.ts --sheets 4 --dpr 2 --viewport 640x360 --draw full --sheet-bound 160 --out sheets.csv | tee -a "$GITHUB_STEP_SUMMARY"
       # The curve as an annotation too, which the API serves to readers who cannot fetch logs.
       - name: The curve as an annotation
         if: ${{ !cancelled() }}
