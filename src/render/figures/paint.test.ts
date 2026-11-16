@@ -75,7 +75,10 @@ describe('paintOps', () => {
     vi.stubGlobal(
       'Path2D',
       class {
-        constructor(readonly d: string) {}
+        readonly d: string;
+        constructor(d: string) {
+          this.d = d;
+        }
       },
     );
     const art = sheetArt();
