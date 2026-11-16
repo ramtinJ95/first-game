@@ -6,7 +6,11 @@ import { truceBetween } from '../sim/peace/truce.ts';
 import { areAtWar } from '../sim/wars.ts';
 import type { World } from '../sim/world/world.ts';
 import type { Alert } from './alerts.ts';
-import { dateText, factionName, whole } from './names.ts';
+import { dateText, factionName, TROOP_NAMES, whole } from './names.ts';
+import { trainingDaysAt } from '../sim/buildings/buildings.ts';
+import { TROOPS, type Troop } from '../sim/troops.ts';
+import { beleaguered } from '../sim/systems/sieges.ts';
+import type { Stores } from '../sim/state/faction.ts';
 import { GUARD_DETER_DAYS } from '../sim/guards.ts';
 import { NOTICE_DAYS, NOTICE_SHARE } from '../sim/ai/thresholds.ts';
 
@@ -134,9 +138,9 @@ function weighed(state: State, threat: Threat): string {
  * has kept to the cities it began with, it counts only the rival's armies, so guards
  * do nothing there and more men under arms, wherever they stand, are what help.
  */
-function whatCounts(state: State, threat: Threat): string {
+function whatCounts(state: State, threat: Threat, stores?: DeepReadonly<Stores>): string {
   if (threat.pressed)
-    return ' More men under arms lower it, wherever they stand; guards do not, as it weighs no garrison. It weighs you so only while you hold no more cities than you began with.';
+    return ` ${raiseAdvice(state, stores ?? state.factions[state.player]?.stores)}. It weighs you so only while you hold no more cities than at the start.`;
   const front = state.cities[threat.front];
   const gold = state.factions[state.player]?.stores.gold ?? 0;
   const hoard =
@@ -160,7 +164,11 @@ export interface StandingThreat {
  * it stands to the strength it needs to declare war on the player by the rule the AI
  * declares by, in the news's words. A truce row says when a power bound by one may.
  */
-export function standingThreats(state: State, world: World): StandingThreat[] {
+export function standingThreats(
+  state: State,
+  world: World,
+  stores?: DeepReadonly<Stores>,
+): StandingThreat[] {
   const player = state.player;
   return Object.values(state.factions)
     .filter(
@@ -186,7 +194,7 @@ export function standingThreats(state: State, world: World): StandingThreat[] {
         power: power.id,
         name,
         readiness: Math.min(1, threat.readiness),
-        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${whatCounts(state, threat)}${power.noticeSince === null ? '' : ` It may declare from ${dateText(power.noticeSince + NOTICE_DAYS)} if it holds it.`}`,
+        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${whatCounts(state, threat, stores)}${power.noticeSince === null ? '' : ` It may declare from ${dateText(power.noticeSince + NOTICE_DAYS)} if it holds it.`}`,
       };
     });
 }
@@ -195,4 +203,37 @@ export function standingThreats(state: State, world: World): StandingThreat[] {
 export function powersNearWar(state: State, world: World): number {
   return standingThreats(state, world).filter((threat) => (threat.readiness ?? 0) >= THREAT_WARN)
     .length;
+}
+
+/**
+ * What raising men takes today, as the field-army threat advises it: the cheapest troop the
+ * player can afford with the stores given, which the wars panel reckons after the orders
+ * waiting, and its quickest training among the cities that may recruit now; or, with none
+ * affordable, the cheapest troop's price and days and what the player lacks for it.
+ */
+function raiseAdvice(state: State, stores: DeepReadonly<Stores> | undefined): string {
+  const cities = Object.values(state.cities).filter(
+    (city) => city.owner === state.player && city.unrestDays === 0 && !beleaguered(state, city),
+  );
+  if (cities.length === 0)
+    return 'More men lower it, not guards, but no city of yours may recruit now';
+  const troops = (Object.keys(TROOPS) as Troop[]).sort(
+    (a, b) => TROOPS[a].recruit.gold - TROOPS[b].recruit.gold,
+  );
+  const days = (troop: Troop) =>
+    Math.min(...cities.map((city) => trainingDaysAt(city, TROOPS[troop].recruit.days)));
+  const gold = stores?.gold ?? 0;
+  const manpower = stores?.manpower ?? 0;
+  const affordable = troops.find(
+    (troop) => TROOPS[troop].recruit.gold <= gold && TROOPS[troop].recruit.men <= manpower,
+  );
+  if (affordable)
+    return `More men lower it, not guards: ${TROOP_NAMES[affordable]} cost ${whole(TROOPS[affordable].recruit.gold)} gold and train in ${whole(days(affordable))} days`;
+  const [cheapest] = troops;
+  if (!cheapest) return 'More men lower it, not guards';
+  const { gold: price, men } = TROOPS[cheapest].recruit;
+  const name = TROOP_NAMES[cheapest];
+  return gold < price
+    ? `More men lower it, not guards, but even ${name} cost ${whole(price)} gold, ${whole(days(cheapest))} days; you have ${whole(gold)}`
+    : `More men lower it, not guards, but even ${name} need ${whole(men)} men, ${whole(days(cheapest))} days; you have ${whole(manpower)}`;
 }
