@@ -123,7 +123,7 @@ const percent = (threat: Threat) => `${Math.round(Math.min(1, threat.readiness) 
 
 /** What the power weighs: the forces near one of the player's cities, or every army the player has in the field. */
 function weighed(state: State, threat: Threat): string {
-  if (threat.pressed) return 'against all your armies in the field, wherever they stand';
+  if (threat.pressed) return 'against all your armies in the field';
   return `against your forces near ${state.cities[threat.front]?.name ?? 'your land'}`;
 }
 
@@ -136,7 +136,7 @@ function weighed(state: State, threat: Threat): string {
  */
 function whatCounts(state: State, threat: Threat): string {
   if (threat.pressed)
-    return ' More men under arms lower it, wherever they stand; guards do not, since it weighs no garrison. It weighs you so only while you hold no more cities than you began with.';
+    return ' More men under arms lower it, wherever they stand; guards do not, as it weighs no garrison. It weighs you so only while you hold no more cities than you began with.';
   const front = state.cities[threat.front];
   const gold = state.factions[state.player]?.stores.gold ?? 0;
   const hoard =

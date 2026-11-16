@@ -129,10 +129,10 @@ export function playCautiousRome(
     if (answering) {
       const answers = answerOrders(state, answering.city, answering.raise);
       answering.raise = false;
-      const moved = new Set(answers.flatMap((o) => (o.kind === 'moveArmy' ? [o.army] : [])));
+      // Every army of Rome is held at the warned city, so no order of the AI moves one away.
       for (let i = orders.length - 1; i >= 0; i--) {
         const order = orders[i];
-        if (order && 'army' in order && moved.has(order.army)) orders.splice(i, 1);
+        if (order && order.faction === rome && MOVES.has(order.kind)) orders.splice(i, 1);
       }
       orders.unshift(...answers);
     }
@@ -205,6 +205,14 @@ export function playCautiousRome(
   }
   return state;
 }
+
+/** The powers a warning names: one, or several in a line that folds one day's warnings. */
+export function warnedPowers(text: string): string[] {
+  return (text.split(' could soon')[0] ?? '').split(/, | and /);
+}
+
+/** The orders that move an army, which an answering Rome gives only its own way. */
+const MOVES = new Set<Order['kind']>(['moveArmy', 'halt', 'embark', 'retreat']);
 
 /**
  * A Rome that answers a warning as it advises: on the day it comes, it raises the cheapest

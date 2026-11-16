@@ -4,7 +4,7 @@ import { standingThreats, threatNewsOfDay } from '../../src/app/threat-news.ts';
 import { warReadiness } from '../../src/sim/ai/war.ts';
 import type { FactionId } from '../../src/sim/ids.ts';
 import { areAtWar } from '../../src/sim/wars.ts';
-import { playCautiousRome, rome, world, type GuardPlay } from '../cautious-rome.ts';
+import { playCautiousRome, rome, warnedPowers, world, type GuardPlay } from '../cautious-rome.ts';
 
 const { values } = parseArgs({
   options: {
@@ -51,7 +51,7 @@ function play(seed: number, years: number): Record {
     ({ before, after, events }) => {
       const day = before.day;
       for (const alert of threatNewsOfDay(before, after, world, told))
-        record.warnings.push({ day, power: alert.text.split(' could soon')[0] ?? '' });
+        for (const power of warnedPowers(alert.text)) record.warnings.push({ day, power });
       const threats = new Map(standingThreats(after, world).map((t) => [t.name, t.readiness]));
       for (const power of Object.values(after.factions)) {
         if (power.kind !== 'greatPower' || power.id === rome) continue;
@@ -78,19 +78,19 @@ function play(seed: number, years: number): Record {
             endedOn: null,
           });
         }
-      for (const [power, index] of open) {
-        const entry = record.wars[index];
-        if (entry && entry.endedOn === null && !areAtWar(after, power, rome)) {
-          entry.endedOn = day;
-          open.delete(power);
-        }
-      }
       for (const city of Object.values(before.cities)) {
         const now = after.cities[city.id];
         if (city.owner !== rome || !now || now.owner === rome) continue;
         const war = open.get(now.owner);
         const entry = war === undefined ? undefined : record.wars[war];
         if (entry) entry.citiesLost++;
+      }
+      for (const [power, index] of open) {
+        const entry = record.wars[index];
+        if (entry && entry.endedOn === null && !areAtWar(after, power, rome)) {
+          entry.endedOn = day;
+          open.delete(power);
+        }
       }
       record.days = after.day;
     },

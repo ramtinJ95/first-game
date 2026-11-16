@@ -168,11 +168,11 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     roma.garrison = 80_000;
     const carthaginian = standingThreats(state, world).find((t) => t.power === 'carthage');
     expect(carthaginian?.text).toMatch(
-      /^Carthage has \d+% of the strength it needs to declare war on you, against all your armies in the field, wherever they stand\. More men under arms lower it, wherever they stand; guards do not, since it weighs no garrison\. It weighs you so only while you hold no more cities than you began with\.$/,
+      /^Carthage has \d+% of the strength it needs to declare war on you, against all your armies in the field\. More men under arms lower it, wherever they stand; guards do not, as it weighs no garrison\. It weighs you so only while you hold no more cities than you began with\.$/,
     );
     expect(newsOf(state, new Set()).map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against all your armies in the field, wherever they stand, and may declare from Year \d+, day \d+ if it holds it\. More men under arms lower it.*guards do not.*See At peace in Wars\.$/,
+        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against all your armies in the field, and may declare from Year \d+, day \d+ if it holds it\. More men under arms lower it.*guards do not.*See At peace in Wars\.$/,
       ),
     ]);
   });
