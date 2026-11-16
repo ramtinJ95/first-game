@@ -1,6 +1,12 @@
 import { CanvasSource, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import type { CityRank } from '../../sim/state/city.ts';
-import { layoutSheet, sheetArt, sheetRows, sheetSvg, type SheetLayout } from '../figures/sheet.ts';
+import {
+  layoutSheet,
+  paintSheetBand,
+  sheetArt,
+  sheetRows,
+  type SheetLayout,
+} from '../figures/sheet.ts';
 import { INK, PAPER } from '../palette.ts';
 import { SHEET_COLOURS, type Scene, type Sprite as SceneSprite } from './scene.ts';
 
@@ -78,16 +84,9 @@ async function paint(sheet: Sheet, canvas: HTMLCanvasElement) {
     let j = i + 1;
     while (j < rows.length && (rows[j] as number) - top < BAND_PX) j++;
     const bottom = rows[j] ?? layout.height;
-    const svg = sheetSvg(layout, art(), colour, top, bottom);
-    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
-    try {
-      const image = new Image();
-      image.src = url;
-      await image.decode();
-      context.drawImage(image, 0, top);
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+    // Drawn with the 2D context rather than decoded as an SVG image: Chromium keeps the
+    // source of every SVG image a page decodes, about a megabyte a band, for the page's life.
+    paintSheetBand(context, layout, art(), colour, top, bottom);
     await new Promise((done) => setTimeout(done, 0));
     if (sheet.dropped) return;
     i = j;
