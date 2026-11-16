@@ -59,7 +59,8 @@ export function cacheDrawing(art: Container, renderer: Renderer, margin: number)
     invalidate() {
       drawn = undefined;
     },
-    render(camera: Camera, view: Size) {
+    /** Draws the texture again when the view has left it, and says whether it did. */
+    render(camera: Camera, view: Size): boolean {
       const { scale } = camera;
       const x = view.width / 2 - camera.centre.x * scale;
       const y = view.height / 2 - camera.centre.y * scale;
@@ -81,7 +82,9 @@ export function cacheDrawing(art: Container, renderer: Renderer, margin: number)
         drawn = { x, y, scale };
         sprite.scale.set(1 / scale);
         sprite.position.set((-margin - x) / scale, (-margin - y) / scale);
+        return true;
       }
+      return false;
     },
     destroy() {
       root.destroy({ children: true });

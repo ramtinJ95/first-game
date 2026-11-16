@@ -28,7 +28,14 @@ import { camera, cityPoint, dropSave, openGame, pause, untilDrawn } from './supp
  * and its panels run no more often than `MAX_REFRESHES_PER_DAY` a day played. Separate
  * pages need the full three rounds of a minute for the frame rules: on a 2-core software
  * GL host one build's frames spread by more than a tenth between page loads.
- * `--panel-budget` checks only the panels.
+ * `--panel-budget` checks only the panels. With `--alternate`, both also fail when Roma's
+ * routes drew their texture more often than the sea drew its own, beyond once a selection:
+ * a count, since each such pass took most of a second on a software GPU and timing it is
+ * noisy.
+ *
+ * `--open-day <d>` opens the routes on that day and `--from-day <d>` plays to that day
+ * first, with the AI playing every power, as a played game would be; `--viewport 1600x900`
+ * sizes the page. Each run prints its gaps over a second, with the days they spanned.
  *
  * `--alternate <n>` plays each zoom in one page and one game instead, in `n` segments of
  * `--segment` seconds that select Roma and nothing in the order none, Roma, Roma, none, so
@@ -52,10 +59,14 @@ const { values } = parseArgs({
     profile: { type: 'string' },
     query: { type: 'string', default: '' },
     css: { type: 'string' },
+    'from-day': { type: 'string', default: '2' },
+    'open-day': { type: 'string', default: '1' },
+    viewport: { type: 'string', default: '1280x720' },
   },
 });
 
-const VIEW = { width: 1280, height: 720 };
+const [viewWidth, viewHeight] = values.viewport.split('x').map(Number);
+const VIEW = { width: viewWidth ?? 1280, height: viewHeight ?? 720 };
 const ZOOMS: Record<string, number> = { closest: 4, middle: 1 };
 /** A steady pan: the pointer sweeps this far either side of the middle at this speed. */
 const PAN = { reach: 360, pxPerSecond: 120, stepMs: 50 };
@@ -90,12 +101,22 @@ interface Run {
   merchants: number;
   /** How often the panels ran again, from the page's `panels` measure. */
   refreshes: number;
+  /** Textures of the view's size drawn again, from the canvas's `data-texture-passes`. */
+  passes: number;
+  /** The most of them in one frame. */
+  framePasses: number;
+  /** Of them, the sea's and a selected city's routes'. */
+  seaPasses: number;
+  tradePasses: number;
+  /** How often the city was selected anew. */
+  selections: number;
 }
 
 async function worldOf(root: string): Promise<{ save: string; day: number }> {
   const support = (await import(pathToFileURL(`${root}/e2e/support.ts`).href)) as {
     startGame(): GameState;
     playDays(state: GameState, days: number, orders: unknown[]): GameState;
+    playAi(state: GameState, days: number): GameState;
   };
   const save = (await import(pathToFileURL(`${root}/src/sim/save.ts`).href)) as {
     saveGame(state: GameState): string;
@@ -111,14 +132,22 @@ async function worldOf(root: string): Promise<{ save: string; day: number }> {
     to,
     mode,
   });
-  const played = support.playDays(state, 1, [
+  const openDay = Number(values['open-day']);
+  const opening = openDay > state.day ? support.playAi(state, openDay - state.day) : state;
+  const treasury = opening.factions[state.player];
+  if (treasury) treasury.stores.gold = TREASURY;
+  const played = support.playDays(opening, 1, [
     open('mogontiacum', 'land'),
     open('carthago', 'sea'),
     open('massalia', 'sea'),
   ]);
-  const running = Object.values(played.tradeRoutes).filter((r) => r.status === 'running');
+  const fromDay = Number(values['from-day']);
+  const later = fromDay > played.day ? support.playAi(played, fromDay - played.day) : played;
+  const running = Object.values(later.tradeRoutes).filter(
+    (r) => r.status === 'running' && r.from === 'roma' && r.owner === state.player,
+  );
   if (running.length !== 3) throw new Error(`${root}: expected 3 routes, opened ${running.length}`);
-  return { save: save.saveGame(played), day: played.day };
+  return { save: save.saveGame(later), day: later.day };
 }
 
 async function measure(
@@ -161,12 +190,18 @@ async function measure(
       new PerformanceObserver((list) => {
         if (!record.stop) record.refreshes += list.getEntriesByName('panels').length;
       }).observe({ type: 'measure' });
+      const days: number[] = [];
+      const passes: number[] = [];
+      Object.assign(record, { days, passes });
+      const day = document.querySelector<HTMLElement>('[data-testid="time-controls-day"]');
       let seen = canvas?.dataset['drawnFrames'];
       const watch = () => {
         const now = canvas?.dataset['drawnFrames'];
         if (now !== seen) {
           seen = now;
           record.at.push(performance.now());
+          days.push(Number(day?.dataset['day']));
+          passes.push(Number(canvas?.dataset['texturePasses'] ?? 0));
         }
         if (!record.stop) requestAnimationFrame(watch);
       };
@@ -202,15 +237,41 @@ async function measure(
       await page.mouse.move(middle.x + offset, middle.y);
       await delay(PAN.stepMs);
     }
-    const { at, refreshes } = await page.evaluate(() => {
+    const { at, refreshes, days, passes } = await page.evaluate(() => {
       const record = (
         globalThis as unknown as {
-          benchFrames: { at: number[]; stop: boolean; refreshes: number };
+          benchFrames: {
+            at: number[];
+            stop: boolean;
+            refreshes: number;
+            days: number[];
+            passes: number[];
+          };
         }
       ).benchFrames;
       record.stop = true;
-      return { at: [...record.at, performance.now()], refreshes: record.refreshes };
+      return {
+        at: [...record.at, performance.now()],
+        refreshes: record.refreshes,
+        days: record.days,
+        passes: record.passes,
+      };
     });
+    const gaps = at
+      .slice(1)
+      .map((t, i) => ({
+        from: at[i] ?? t,
+        ms: t - (at[i] ?? t),
+        days: `${days[i - 1]}-${days[i]}`,
+      }))
+      .filter((g) => g.ms > 1000)
+      .map(
+        (g) =>
+          `${((g.from - (at[0] ?? 0)) / 1000).toFixed(1)}s+${(g.ms / 1000).toFixed(1)} d${g.days}`,
+      );
+    console.error(
+      `gaps over 1 s at ${label} (start at ${(at[0] ?? 0).toFixed(0)}): ${gaps.join(', ')}`,
+    );
     await page.mouse.up();
     if (cdp) {
       await browser.stopTracing();
@@ -229,6 +290,11 @@ async function measure(
       paths: await canvas.getAttribute('data-trade-paths'),
       merchants: Number((await canvas.getAttribute('data-trade-figures')) ?? 0),
       refreshes,
+      passes: (passes.at(-1) ?? 0) - (passes[0] ?? 0),
+      framePasses: Math.max(0, ...passes.slice(1).map((p, i) => p - (passes[i] ?? p))),
+      seaPasses: 0,
+      tradePasses: 0,
+      selections: roma ? 1 : 0,
     };
     if (roma && (await page.getByTestId('city-name').textContent()) !== 'Roma')
       throw new Error('Roma lost its selection during the minute');
@@ -244,7 +310,7 @@ async function measure(
 async function record(page: Page) {
   await page.evaluate(() => {
     const canvas = document.querySelector<HTMLCanvasElement>('canvas[data-renderer]');
-    const record = { at: [] as number[], stop: false, refreshes: 0 };
+    const record = { at: [] as number[], passes: [] as number[], stop: false, refreshes: 0 };
     Object.assign(globalThis, { benchFrames: record });
     new PerformanceObserver((list) => {
       record.refreshes += list.getEntriesByName('panels').length;
@@ -255,6 +321,7 @@ async function record(page: Page) {
       if (now !== seen) {
         seen = now;
         record.at.push(performance.now());
+        record.passes.push(Number(canvas?.dataset['texturePasses'] ?? 0));
       }
       if (!record.stop) requestAnimationFrame(watch);
     };
@@ -264,10 +331,21 @@ async function record(page: Page) {
 
 function recorded(page: Page) {
   return page.evaluate(() => {
-    const { at, refreshes } = (
-      globalThis as unknown as { benchFrames: { at: number[]; refreshes: number } }
+    const { at, passes, refreshes } = (
+      globalThis as unknown as {
+        benchFrames: { at: number[]; passes: number[]; refreshes: number };
+      }
     ).benchFrames;
-    return { at: [...at], refreshes, now: performance.now() };
+    const canvas = document.querySelector<HTMLCanvasElement>('canvas[data-renderer]');
+    return {
+      at: [...at],
+      passes: [...passes],
+      passesNow: Number(canvas?.dataset['texturePasses'] ?? 0),
+      seaNow: Number(canvas?.dataset['seaPasses'] ?? 0),
+      tradeNow: Number(canvas?.dataset['tradePasses'] ?? 0),
+      refreshes,
+      now: performance.now(),
+    };
   });
 }
 
@@ -295,6 +373,9 @@ async function alternate(
   const page = await context.newPage();
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (m) => {
+    if (m.text().startsWith('PASSES')) console.error(m.text());
+  });
   try {
     await openGame(page, { base, query: ['draw=full', values.query].filter(Boolean).join('&') });
     await pause(page);
@@ -318,6 +399,11 @@ async function alternate(
         paths: null,
         merchants: 0,
         refreshes: 0,
+        passes: 0,
+        framePasses: 0,
+        seaPasses: 0,
+        tradePasses: 0,
+        selections: 0,
       },
       none: {
         frames: 0,
@@ -329,6 +415,11 @@ async function alternate(
         paths: null,
         merchants: 0,
         refreshes: 0,
+        passes: 0,
+        framePasses: 0,
+        seaPasses: 0,
+        tradePasses: 0,
+        selections: 0,
       },
     };
     const intervals: Record<'roma' | 'none', number[]> = { roma: [], none: [] };
@@ -340,7 +431,10 @@ async function alternate(
       // A click picks what the map last finished drawing, so wait for the camera's return.
       await untilDrawn(page);
       if (selection === 'roma') {
-        if ((await name.count()) === 0) await page.mouse.click(middle.x, middle.y);
+        if ((await name.count()) === 0) {
+          await page.mouse.click(middle.x, middle.y);
+          runs.roma.selections++;
+        }
         await name.and(page.getByText('Roma')).waitFor({ state: 'attached' });
       } else {
         if ((await name.count()) > 0) await page.keyboard.press('Escape');
@@ -365,6 +459,14 @@ async function alternate(
       intervals[selection].push(...at.slice(2, -1).map((t, i) => t - (at[i + 1] ?? t)));
       run.days += (await dayOf(page)) - firstDay;
       run.refreshes += after.refreshes - before.refreshes;
+      run.passes += after.passesNow - before.passesNow;
+      run.seaPasses += after.seaNow - before.seaNow;
+      run.tradePasses += after.tradeNow - before.tradeNow;
+      const counted = after.passes.slice(before.passes.length - 1);
+      run.framePasses = Math.max(
+        run.framePasses,
+        ...counted.slice(1).map((p, i) => p - (counted[i] ?? p)),
+      );
       run.paths = await canvas.getAttribute('data-trade-paths');
       run.merchants = Number((await canvas.getAttribute('data-trade-figures')) ?? 0);
     }
@@ -420,7 +522,7 @@ try {
             const key = `${root} | ${zoom} | ${selection}`;
             results.set(key, [...(results.get(key) ?? []), run]);
             console.error(
-              `round ${round + 1} ${key}: ${run.frames} frames (${((1000 * run.spannedFrames) / run.spanned).toFixed(2)} a second), longest gap ${(run.longestGap / 1000).toFixed(2)} s, median ${run.medianGap.toFixed(0)} ms, ${run.days} days, ${run.refreshes} panel refreshes, paths ${run.paths}, merchants ${run.merchants}`,
+              `round ${round + 1} ${key}: ${run.frames} frames (${((1000 * run.spannedFrames) / run.spanned).toFixed(2)} a second), longest gap ${(run.longestGap / 1000).toFixed(2)} s, median ${run.medianGap.toFixed(0)} ms, ${run.days} days, ${run.refreshes} panel refreshes, ${run.passes} texture passes (at most ${run.framePasses} a frame; sea ${run.seaPasses}, routes ${run.tradePasses}), paths ${run.paths}, merchants ${run.merchants}`,
             );
           }
           continue;
@@ -431,7 +533,7 @@ try {
           const run = await measure(browser, base, world, zoom, selection === 'roma');
           results.set(key, [...(results.get(key) ?? []), run]);
           console.error(
-            `round ${round + 1} ${key}: ${run.frames} frames (${((1000 * run.spannedFrames) / run.spanned).toFixed(2)} a second), longest gap ${(run.longestGap / 1000).toFixed(2)} s, median ${run.medianGap.toFixed(0)} ms, ${run.days} days, ${run.refreshes} panel refreshes, paths ${run.paths}, merchants ${run.merchants}`,
+            `round ${round + 1} ${key}: ${run.frames} frames (${((1000 * run.spannedFrames) / run.spanned).toFixed(2)} a second), longest gap ${(run.longestGap / 1000).toFixed(2)} s, median ${run.medianGap.toFixed(0)} ms, ${run.days} days, ${run.refreshes} panel refreshes, ${run.passes} texture passes (at most ${run.framePasses} a frame; sea ${run.seaPasses}, routes ${run.tradePasses}), paths ${run.paths}, merchants ${run.merchants}`,
           );
         }
       }
@@ -472,6 +574,12 @@ if (values.budget || values['panel-budget']) {
       const gap = median(selected.map((r) => r.longestGap));
       const ceiling = 1.1 * median(none.map((r) => r.longestGap));
       const perDay = median(selected.map((r) => r.refreshes / r.days));
+      // The routes' texture follows the view as the sea's does, and is drawn anew once a selection.
+      const extra = Math.max(...selected.map((r) => r.tradePasses - r.seaPasses - r.selections));
+      if (values.alternate && extra > 0)
+        failures.push(
+          `${zoom}: Roma's routes drew their texture ${extra} more times than the sea's and the selections'`,
+        );
       if (values.budget && !(frames >= floor))
         failures.push(
           `${zoom}: Roma selected drew ${frames.toFixed(2)} ${unit}, under ${floor.toFixed(2)}`,
