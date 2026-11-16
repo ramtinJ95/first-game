@@ -90,6 +90,7 @@ const NO_PAUSES: PauseSettings = {
   weakSiege: false,
   sighted: false,
   ownCity: false,
+  warThreat: false,
 };
 
 const host = document.getElementById('app');

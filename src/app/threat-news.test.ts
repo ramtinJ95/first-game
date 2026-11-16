@@ -10,6 +10,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import { warKey } from '../sim/state/war.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
 import { buildWorld } from '../sim/world/world.ts';
+import { ALL_PAUSES, stopsOfDay } from './pauses.ts';
 import { powersNearWar, standingThreats, threatNewsOfDay } from './threat-news.ts';
 
 const map = parseMap(
@@ -18,6 +19,7 @@ const map = parseMap(
 const world = buildWorld(map);
 const rome = 'rome' as FactionId;
 const carthage = 'carthage' as FactionId;
+const macedon = 'macedon' as FactionId;
 
 const WEST = [
   'caralis',
@@ -142,5 +144,29 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     const truce = game(5300, 'full');
     truce.truces[warKey(carthage, rome)] = { since: truce.day, endsOn: (truce.day + 100) as Day };
     expect(standingThreats(truce, world).map((t) => t.power)).not.toContain('carthage');
+  });
+});
+
+describe('a war warning stops the game', () => {
+  test("each power's first warning in a peace stops it, a second power's too, and nothing told again stops it", () => {
+    const told = new Set<string>();
+    const state = game(5300, 'full');
+    const carthaginian = stopsOfDay(newsOf(state, told), ALL_PAUSES, new Set());
+    expect(carthaginian.stop).toBe(true);
+    expect(carthaginian.news.map((alert) => alert.paused)).toEqual([true]);
+    expect(stopsOfDay(newsOf(state, told), ALL_PAUSES, new Set()).stop).toBe(false);
+
+    const both = game(5300, 'full');
+    spearmenOf(both, macedon).men = 30_000;
+    const macedonian = stopsOfDay(newsOf(both, told), ALL_PAUSES, new Set());
+    expect(macedonian.news.map((alert) => alert.text)).toEqual([
+      expect.stringMatching(/^Macedon could soon declare war on you/),
+    ]);
+    expect(macedonian.stop).toBe(true);
+  });
+
+  test('the Game menu setting turns the stop off', () => {
+    const news = newsOf(game(5300, 'full'), new Set());
+    expect(stopsOfDay(news, { ...ALL_PAUSES, warThreat: false }, new Set()).stop).toBe(false);
   });
 });
