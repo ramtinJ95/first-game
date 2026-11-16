@@ -5,7 +5,8 @@ import { decideAll, decideOrders } from '../ai/decide.ts';
 import { changeCityOwner } from '../cities.ts';
 import { makePeace } from '../peace/make-peace.ts';
 import { recordEvents } from '../events.ts';
-import { buildFixture, fixtureWorld, FIXTURE as f } from '../fixture.ts';
+import { NOTICE_DAYS } from '../ai/thresholds.ts';
+import { buildFixture, fixtureWorld, FIXTURE as f, onNotice } from '../fixture.ts';
 import { newGame } from '../new-game.ts';
 import type { CityId, ProvinceId } from '../ids.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
@@ -375,6 +376,7 @@ describe('trade orders and consent', () => {
     const minor = state.cities[f.syracusae];
     if (!minor) throw new Error('missing minor city');
     minor.owner = f.carthage;
+    onNotice(state, f.carthage);
     state.truces[warKey(f.carthage, f.rome)] = { since: state.day, endsOn: (state.day + 1) as Day };
     payer.stores.gold = 100000;
     const events = recordEvents(state, () =>
@@ -391,12 +393,40 @@ describe('trade orders and consent', () => {
     expectConsistent(state);
   });
 
+  test('consent does not buy a one-day route when the inviter may declare on the player tomorrow', () => {
+    const { state, payer, route, accept } = invited();
+    const formation = state.formations[f.citizenSpears];
+    const minor = state.cities[f.syracusae];
+    const carthaginians = state.factions[f.carthage];
+    if (!formation || !minor || !carthaginians) throw new Error('missing records');
+    formation.men = 10000;
+    minor.owner = f.carthage;
+    payer.stores.gold = 100000;
+    carthaginians.noticeSince = (state.day + 1 - NOTICE_DAYS) as Day;
+    expect(
+      decideOrders(state, world, f.carthage).filter((order) => order.kind === 'declareWar'),
+    ).toEqual([]);
+    const events = recordEvents(state, () =>
+      expect(acceptTrade(state, accept, world)).toBeUndefined(),
+    );
+    expect(state.tradeRoutes[route.id]).toBeUndefined();
+    expect(payer.stores.gold).toBe(100000);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        kind: 'tradeClosed',
+        cause: `the inviter intends war tomorrow, when its ${NOTICE_DAYS} days on notice are out`,
+      }),
+    );
+    expectConsistent(state);
+  });
+
   test('consent does not buy a one-day route when already trained reinforcements enable tomorrow attack', () => {
     const { state, payer, route, accept } = invited();
     const minor = state.cities[f.syracusae];
     const home = state.cities[f.carthago];
     if (!minor || !home) throw new Error('missing cities');
     minor.owner = f.carthage;
+    onNotice(state, f.carthage);
     payer.stores.gold = 100000;
     home.recruits.push(
       { troop: 'swordsmen', readyOn: state.day },

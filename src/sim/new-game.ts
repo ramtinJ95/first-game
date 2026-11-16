@@ -157,6 +157,7 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
       stores: { ...STARTING_STORES.greatPower },
       league: null,
       defeatedOn: null,
+      noticeSince: null,
     };
     const capitals = map.provinces.filter((p) => p.owner === power && p.capital);
     const [capital] = capitals;
@@ -189,6 +190,7 @@ export function newGame(map: GameMap, { seed, player }: NewGameOptions): GameSta
         stores: { ...traits.stores },
         league: null,
         defeatedOn: null,
+        noticeSince: null,
       };
       if (traits.army.length > 0) addArmy(state, owner, traits.army, position);
       if (kind === 'leagued') leagued.push({ faction: owner, position });

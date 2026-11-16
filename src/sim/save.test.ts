@@ -172,6 +172,7 @@ describe('save and load', () => {
       kind: 'minor',
       stores: { gold: 0, food: 0, manpower: 0 },
       defeatedOn: null,
+      noticeSince: null,
     };
     state.wars[warKey(FIXTURE.rome, odd)] = newWar(FIXTURE.rome, odd, state.day);
     expect(loadGame(saveGame(state))).toEqual({ ok: true, state });

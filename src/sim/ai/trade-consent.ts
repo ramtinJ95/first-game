@@ -10,6 +10,7 @@ import { enemiesOf } from './situation.ts';
 import { warDeclaration } from './war.ts';
 import { minorOrders } from './minor.ts';
 import { muster } from '../systems/economy.ts';
+import { NOTICE_DAYS } from './thresholds.ts';
 
 /** An invitation is not a commitment to spend tomorrow's military reserve. */
 export function invitationProblem(
@@ -38,7 +39,10 @@ export function invitationProblem(
     (city) =>
       city.owner === route.owner && city.recruits.some((recruit) => recruit.readyOn <= state.day),
   );
-  if (endingTruce || readyRecruits) {
+  const since = state.factions[route.owner]?.noticeSince ?? null;
+  const noticeEnds =
+    route.partner === state.player && since !== null && state.day + 1 - since === NOTICE_DAYS;
+  if (endingTruce || readyRecruits || noticeEnds) {
     // These facts are already scheduled. Never simulate or foresee battle rolls.
     const tomorrow = JSON.parse(JSON.stringify(state)) as GameState;
     muster(tomorrow);
@@ -46,7 +50,9 @@ export function invitationProblem(
     if (declares(tomorrow))
       return endingTruce
         ? 'the inviter intends war when the truce ends tomorrow'
-        : 'the inviter intends war with known reinforcements tomorrow';
+        : noticeEnds
+          ? `the inviter intends war tomorrow, when its ${NOTICE_DAYS} days on notice are out`
+          : 'the inviter intends war with known reinforcements tomorrow';
   }
   return undefined;
 }

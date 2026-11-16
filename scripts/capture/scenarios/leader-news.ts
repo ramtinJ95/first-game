@@ -25,11 +25,12 @@ async function load(page: Page, state: GameState) {
 }
 
 /**
- * Seed 5 under the AI, days before Persia takes the lead on day 1114. Played as an idle
- * Carthage from here, as the page plays it, no fate, offer, or defeat stops the clock.
+ * Seed 5 under the AI, days before Persia takes the lead on day 1463, loses it to a tie on
+ * day 1548 and takes it back on day 1555. Played as an idle Carthage from here, as the page
+ * plays it, no fate, offer, or defeat stops the clock.
  */
-const BEFORE_PERSIA_LEADS = 1100;
-const AFTER_THE_LEAD = 1250;
+const BEFORE_PERSIA_LEADS = 1450;
+const AFTER_THE_LEAD = 1600;
 
 export default defineScenario({
   name: 'leader-news',
@@ -53,7 +54,7 @@ export default defineScenario({
       .scrollIntoViewIfNeeded();
     await shot(
       'leader-news',
-      'Seed 5, Year 4, 150 days around a change of lead: Persia is told once as it takes the lead',
+      'Seed 5, 150 days around a change of lead: Persia is told once as it takes the lead, and not again after a tie',
     );
   },
 });
