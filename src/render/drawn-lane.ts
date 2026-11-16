@@ -22,7 +22,7 @@ const SAMPLE_KM = 0.1;
 const FIRST_MARGIN_KM = 12;
 const SEARCHES = 3;
 /** Dense points added to each end of a run whose search found no way. */
-const WIDENINGS = [0, 4, 16];
+const WIDENINGS = [0, 4, 16, 64, 256];
 
 const AROUND = Array.from({ length: 8 }, (_, k) => [
   TOLERANCE_KM * Math.cos((k * Math.PI) / 4),

@@ -83,6 +83,23 @@ test('the rules found the Massalia lane over the drawn cape of Corsica, and the 
   expect(lane.km).toBeLessThan(forecast.km * 1.1);
 });
 
+test.each([
+  ['londinium', 'deva', 'sea'],
+  ['hierosolyma', 'thebai', 'land'],
+] as const)(
+  'the drawn way from %s to %s by %s goes round a stretch far from its ends',
+  (a, b, mode) => {
+    const from = state.cities[a as never];
+    const to = state.cities[b as never];
+    if (!from || !to) throw new Error(`${a} and ${b} are on the map`);
+    const forecast = tradeForecast(state, world, from, to, mode);
+    if (!forecast) throw new Error(`${a} trades with ${b} by ${mode}`);
+    const inside = mode === 'land';
+    expect(Math.max(...crossings(forecast.path, inside))).toBeGreaterThan(2);
+    expect(crossings(drawnLane(forecast.path, land, inside).path, inside)).toEqual([]);
+  },
+);
+
 /**
  * The atlas draws water across the rules' land between Persepolis and the gulf, so the
  * road has no way round on drawn land.

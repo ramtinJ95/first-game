@@ -1184,7 +1184,7 @@ export async function createRenderer({
       for (const route of tradeRoutes)
         stroke(
           tradePaths,
-          laneOf(route).path.map((p) => ({ x: p.x * camera.scale, y: p.y * camera.scale })),
+          inkedLane(route).path.map((p) => ({ x: p.x * camera.scale, y: p.y * camera.scale })),
           1.4,
           route.blocked ? 0.35 : 0.75,
           undefined,
@@ -1205,7 +1205,7 @@ export async function createRenderer({
         const origin = tradeInk.sprite.position;
         const crop = routeInkBounds(
           tradeRoutes.map((route) =>
-            laneOf(route).path.map((p) => ({
+            inkedLane(route).path.map((p) => ({
               x: (p.x - origin.x) * camera.scale,
               y: (p.y - origin.y) * camera.scale,
             })),
@@ -1312,6 +1312,14 @@ export async function createRenderer({
    * The rules' own coast is drawn below the atlas zooms, and there the lane is the route's
    * path. A lane far out of view is not worked out until it comes near.
    */
+  /**
+   * A selected city's routes are inked once for a zoom, whole, so they take the drawn lane
+   * wherever the view stands.
+   */
+  const inkedLane = (route: DeepReadonly<TradeRoute>): DrawnLane =>
+    camera.scale < ATLAS_COAST_SCALE
+      ? route
+      : drawnLane(route.path, atlasLand(map), route.mode === 'land');
   const laneOf = (route: DeepReadonly<TradeRoute>): DrawnLane => {
     if (camera.scale < ATLAS_COAST_SCALE) return route;
     const box = pathBox(route.path);
@@ -1324,7 +1332,7 @@ export async function createRenderer({
       box.bottom < view.top - near
     )
       return route;
-    return drawnLane(route.path, atlasLand(map), route.mode === 'land');
+    return inkedLane(route);
   };
   const toMap = (screen: MapPoint) => screenToMap(camera, viewport(), screen);
   const onDrawnLand = coastalSurface(drawingLand, toMap);
