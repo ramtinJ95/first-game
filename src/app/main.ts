@@ -10,7 +10,7 @@ import type { CityId, FactionId, SiegeId } from '../sim/ids.ts';
 import { parseMap, POWERS, type GameMap, type PowerId } from '../sim/map.ts';
 import { newGame, POWER_NAMES } from '../sim/new-game.ts';
 import type { Order } from '../sim/orders/orders.ts';
-import { outcomeOf, standingOf } from '../sim/outcome.ts';
+import { outcomeOf, standingOf, type Standing } from '../sim/outcome.ts';
 import { loadGame, saveGame, type Refusal } from '../sim/save.ts';
 import { sightOf, type Sight } from '../sim/sight.ts';
 import type { Day } from '../sim/state/day.ts';
@@ -33,7 +33,7 @@ import { createClock } from './clock.ts';
 import { desertionNews, type Desertion } from './desertion.ts';
 import { tradeNews, type TradeTrouble } from './trade-news.ts';
 import { commandTarget, planCommand, plannedRoutes, type Plan } from './command.ts';
-import { fateChoices, type FateChoice } from './fates.ts';
+import { fateChoices } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
 import { guardNewsOfDay } from './guard-news.ts';
 import { refusalText } from './names.ts';
@@ -294,16 +294,32 @@ const clock = createClock({
 });
 if (!entry) clock.pause();
 
-let shownFate: { state: DeepReadonly<GameState>; city: CityId; choices: FateChoice[] } | undefined;
+let shownFate:
+  | { state: DeepReadonly<GameState>; front: Extract<Modal, { kind: 'fate' }>; shown: ShownModal }
+  | undefined;
 
 function shownModal(): ShownModal | undefined {
   const [front] = modals;
   if (front?.kind !== 'fate') return front;
   const state = clock.state;
-  if (shownFate?.state !== state || shownFate.city !== front.city) {
-    shownFate = { state, city: front.city, choices: fateChoices(state, world, front.city) };
+  if (shownFate?.state !== state || shownFate.front !== front) {
+    shownFate = {
+      state,
+      front,
+      shown: { ...front, choices: fateChoices(state, world, front.city) },
+    };
   }
-  return { ...front, choices: shownFate.choices };
+  return shownFate.shown;
+}
+
+const standings = new WeakMap<DeepReadonly<GameState>, Standing>();
+function standingFor(state: DeepReadonly<GameState>): Standing {
+  let standing = standings.get(state);
+  if (!standing) {
+    standing = standingOf(state, world, state.player);
+    standings.set(state, standing);
+  }
+  return standing;
 }
 
 const view = createView(
@@ -325,7 +341,7 @@ const view = createView(
       saves,
       pauseOnFate,
       pauses,
-      standing: standingOf(clock.state, world, clock.state.player),
+      standing: standingFor(clock.state),
     },
   }),
   100,

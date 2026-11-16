@@ -81,24 +81,39 @@ export interface View {
   destroy(): void;
 }
 
+function sameFields<T extends object>(a: T, b: T): boolean {
+  return (Object.keys(b) as (keyof T)[]).every((key) => a[key] === b[key]);
+}
+
+/**
+ * Whether a snapshot holds what the published one holds, field by field and in its frame.
+ * Every panel reading the view runs again on a new snapshot, and the city panel's forecasts
+ * took a fifth of the page's main thread when republished ten times a second unchanged.
+ */
+function sameSnapshot(a: Snapshot, b: Snapshot): boolean {
+  return (Object.keys(b) as (keyof Snapshot)[]).every((key) =>
+    key === 'frame' ? sameFields(a.frame, b.frame) : a[key] === b[key],
+  );
+}
+
 /** Measures kept under one name before the oldest are dropped. */
 const MEASURES_KEPT = 200;
 
 /**
- * The one way panels read the live state, republished about ten times a second. With
- * `timing`, each republish also updates the panels at once and records how long that
- * took as a user-timing measure of that name, which a test or a profiler can read.
+ * The one way panels read the live state, read about ten times a second and republished
+ * when it changed. With `timing`, each republish also updates the panels at once and
+ * records how long that took as a user-timing measure of that name, which a test or a
+ * profiler can read.
  */
 export function createView(read: () => Snapshot, intervalMs = 100, timing?: string): View {
   // Raw state is never proxied, so the big plain state tree reaches panels untouched.
   let current = $state.raw(read());
-  const refresh = () => {
-    current = read();
-  };
   const publish = () => {
-    if (!timing) return refresh();
     const start = performance.now();
-    refresh();
+    const next = read();
+    if (sameSnapshot(current, next)) return;
+    current = next;
+    if (!timing) return;
     flushSync();
     performance.measure(timing, { start, end: performance.now() });
     if (performance.getEntriesByName(timing).length > MEASURES_KEPT) {
@@ -110,7 +125,7 @@ export function createView(read: () => Snapshot, intervalMs = 100, timing?: stri
     get current() {
       return current;
     },
-    refresh,
+    refresh: publish,
     destroy() {
       clearInterval(timer);
     },

@@ -21,7 +21,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import type { TradeRoute } from '../sim/state/trade-route.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { routesAt } from '../sim/trade/routes.ts';
-import { anchorOutsideTrade, placeNamesWithGoods, tradeCityLabel, tradePose } from './trade.ts';
+import { anchorOutsideTrade, merchantPoses, placeNamesWithGoods, tradeCityLabel } from './trade.ts';
 import {
   clampCamera,
   fitCamera,
@@ -1714,13 +1714,10 @@ export async function createRenderer({
             .lineTo(at.x - 5, at.y + 5)
             .stroke({ color: 0x9b3e2d, width: 2 });
         }
-        const pose = tradePose(previous.tradeRoutes[route.id], route, progress);
-        if (
-          !pose ||
-          (!own && !sight.sees(pose.point)) ||
-          drawnFigures.some((sprite) => sprite.trade === route.id)
-        )
-          continue;
+        if (drawnFigures.some((sprite) => sprite.trade === route.id)) continue;
+        // Where figures are not drawn, a route is one dot at its crossing.
+        const [pose] = merchantPoses(previous.tradeRoutes[route.id], route, progress, current.day);
+        if (!pose || (!own && !sight.sees(pose.point))) continue;
         const at = mapToScreen(camera, viewport(), pose.point);
         tradeMarks.circle(at.x, at.y, 3).fill(0x8b6a33).stroke({ color: INK, width: 1 });
       }

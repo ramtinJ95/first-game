@@ -2,7 +2,13 @@ import { expect, test } from 'vitest';
 import { buildFixture, fixtureWorld, FIXTURE as f } from '../sim/fixture.ts';
 import { openTrade } from '../sim/trade/orders.ts';
 import { routePoint } from '../sim/trade/routes.ts';
-import { anchorOutsideTrade, placeNamesWithGoods, tradeCityLabel, tradePose } from './trade.ts';
+import {
+  anchorOutsideTrade,
+  MERCHANT_SPACING_KM,
+  merchantPoses,
+  placeNamesWithGoods,
+  tradeCityLabel,
+} from './trade.ts';
 import { LABEL_PRIORITY, placeLabels } from './labels.ts';
 import { buildScene, type Scene, type SceneInput, type Sprite } from './armies/scene.ts';
 import { fitCoastalScene, sceneAnchor } from './coastal-ground.ts';
@@ -52,22 +58,48 @@ function setup(mode: 'land' | 'sea' = 'land') {
 }
 
 test('a caravan moves continuously and reaches its endpoint before reversing', () => {
-  const { route, previous } = setup();
+  const { route, previous, state } = setup();
   const old = previous.tradeRoutes[route.id];
-  expect(tradePose(old, route, 0)?.point).toEqual(old && routePoint(old));
-  expect(tradePose(old, route, 1)?.point).toEqual(routePoint(route));
+  const crossing = (p: number) => merchantPoses(old, route, p, state.day)[0]?.point;
+  expect(crossing(0)).toEqual(old && routePoint(old));
+  expect(crossing(1)).toEqual(routePoint(route));
   if (!old) throw new Error('missing previous route');
   old.progress = 0.9;
   route.progress = 0;
   route.returning = true;
-  expect(tradePose(old, route, 0)?.point).toEqual(routePoint(old));
-  expect(tradePose(old, route, 1)?.point).toEqual(routePoint(route));
+  expect(crossing(0)).toEqual(routePoint(old));
+  expect(crossing(1)).toEqual(routePoint(route));
   route.blocked = 'raid';
-  expect(tradePose(old, route, 0.5)).toBeUndefined();
+  expect(merchantPoses(old, route, 0.5, state.day)).toEqual([]);
+});
+
+test('a route shows a merchant every 200 km of its round trip, as many each way', () => {
+  const { route, previous, state } = setup();
+  const poses = merchantPoses(previous.tradeRoutes[route.id], route, 0.5, state.day);
+  expect(poses).toHaveLength(Math.max(1, Math.round((2 * route.km) / MERCHANT_SPACING_KM)));
+  const out = poses.filter(({ point }, i) => {
+    const next = merchantPoses(previous.tradeRoutes[route.id], route, 0.6, state.day)[i];
+    const from = state.cities[route.from]?.position;
+    if (!next || !from) throw new Error('missing pose');
+    return (
+      Math.hypot(next.point.x - from.x, next.point.y - from.y) >
+      Math.hypot(point.x - from.x, point.y - from.y)
+    );
+  });
+  expect(Math.abs(out.length - poses.length / 2)).toBeLessThanOrEqual(1);
+});
+
+test('a raided route waiting for its replacement shows one merchant at its start', () => {
+  const { route, state } = setup();
+  route.progress = 0;
+  route.departsOn = (state.day + 5) as typeof route.departsOn;
+  const poses = merchantPoses(undefined, route, 0.5, state.day);
+  expect(poses).toHaveLength(1);
+  expect(poses[0]?.point).toEqual(routePoint(route, 0));
 });
 
 test.each([1.2, 4])(
-  'at scale %s the caravan has a drawn cart and two merchants, with dry ground',
+  'at scale %s each caravan in view has a drawn cart and two merchants, with dry ground',
   (scale) => {
     const { route, input } = setup();
     const camera = { ...input.camera, scale };
@@ -78,8 +110,9 @@ test.each([1.2, 4])(
         surfaceAt(world.mesh, screenToMap(camera, input.viewport, p)) === 'land',
     };
     const sprites = buildScene(frame).sprites.filter((s) => s.trade === route.id);
-    expect(sprites).toHaveLength(3);
-    expect(sprites.some((s) => s.key.startsWith('cart.'))).toBe(true);
+    const carts = sprites.filter((s) => s.key.startsWith('cart.'));
+    expect(carts.length).toBeGreaterThan(0);
+    expect(sprites).toHaveLength(3 * carts.length);
     for (const sprite of sprites) expect(frame.land(sprite)).toBe(true);
     const later = buildScene({ ...frame, progress: 0.9 }).sprites.filter(
       (s) => s.trade === route.id,
@@ -92,9 +125,9 @@ test('a trade ship uses the convoy ink sheet and leaves a wake', () => {
   const { route, input } = setup('sea');
   const scene = buildScene(input);
   const sprites = scene.sprites.filter((s) => s.trade === route.id);
-  expect(sprites).toHaveLength(1);
-  expect(sprites[0]?.key).toMatch(/^ship\./);
-  expect(scene.wakes.length).toBeGreaterThan(0);
+  expect(sprites.length).toBeGreaterThan(0);
+  for (const sprite of sprites) expect(sprite.key).toMatch(/^ship\./);
+  expect(scene.wakes).toHaveLength(2 * sprites.length);
 });
 
 test('foreign traders outside sight do not appear, while a player partner knows its own caravan', () => {
@@ -103,7 +136,9 @@ test('foreign traders outside sight do not appear, while a player partner knows 
   state.player = f.syracusaeFaction;
   expect(buildScene({ ...input, sight: hidden }).sprites.filter((s) => s.trade)).toHaveLength(0);
   state.player = f.rome;
-  expect(buildScene({ ...input, sight: hidden }).sprites.filter((s) => s.trade)).toHaveLength(1);
+  expect(
+    buildScene({ ...input, sight: hidden }).sprites.filter((s) => s.trade).length,
+  ).toBeGreaterThan(0);
 });
 
 test('a recent raid leaves a damaged cart at the recorded raid, not the reset origin', () => {

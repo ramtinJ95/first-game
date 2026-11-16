@@ -222,6 +222,14 @@ The trade panel explicitly says that paused orders wait: opening gold is paid on
 the next running tick. The queued-order forecast reserves slots and costs, but the
 actual treasury stays unchanged until then. The browser test checks both states.
 
+A running route draws a merchant every `MERCHANT_SPACING_KM` (200 km) of its round trip,
+half on the way out and half on the way back, the first at the route's crossing
+(`merchantPoses` in `src/render/trade.ts`): Rome's road to Mogontiacum (971 km) shows 10,
+the lanes to Carthago (580 km) and Massalia (602 km) 6 each. One merchant a route was seen
+near Roma at the closest zoom a few days in a crossing. The rules still carry one cargo; the
+string is how a route looks. A raided route waiting for its replacement shows its one
+merchant at the start. Where figures are not drawn, a route stays one dot at its crossing.
+
 The army scene reuses its owned cart, civilian walking cycles and ship sheets for
 merchants, with a wake at sea and dry-ground checks on land. Own trade stays known;
 foreign traders require sight. They do not grant sight or reveal hostile armies.

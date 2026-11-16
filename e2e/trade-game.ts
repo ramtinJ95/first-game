@@ -69,3 +69,27 @@ export function straitRome(): GameState {
   tradeRoute(played, 'sea').progress = 0.335;
   return played;
 }
+
+/**
+ * Rome on day 2 of a new game, having opened its three routes from Roma on day 1: the
+ * road to Mogontiacum over the Alps and the lanes to Carthago and Massalia. A new game's
+ * 1,500 gold pays for one opening, so the treasury holds enough for three.
+ */
+export function romaTradesThreeWays(): GameState {
+  const state = startGame();
+  const rome = state.factions[state.player];
+  if (!rome) throw new Error('Rome is missing');
+  rome.stores.gold = 7000;
+  const open = (to: string, mode: TradeMode) => ({
+    kind: 'openTrade' as const,
+    faction: state.player,
+    from: 'roma' as CityId,
+    to: to as CityId,
+    mode,
+  });
+  return playDays(state, 1, [
+    open('mogontiacum', 'land'),
+    open('carthago', 'sea'),
+    open('massalia', 'sea'),
+  ]);
+}
