@@ -31,8 +31,9 @@ import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
  *
  * `--cycles <n>` plays a stranger's session instead: odd cycles start a new game from the
  * Game menu as each power in turn, even cycles drop a day-1 save of Rome. Each zooms
- * through all three zooms over the power's capital and over the plateau, so every cycle
- * shows the same places, plays `--play` seconds at the fastest speed, and samples.
+ * through all three zooms over the power's capital and over the plateau, and plays
+ * `--play` seconds at the fastest speed. Each cycle is then sampled with the day-1 save
+ * dropped again and drawn over the whole map, the same state every time.
  * `--cycle-bound 0.1` fails the run when the collected heap, the DOM nodes, or the live
  * texture bytes after any later cycle are more than a tenth over cycle 1. `--snapshots 2,6`
  * writes heap snapshots after those cycles, named after `--snapshot`, and `--texture-shapes`
@@ -284,15 +285,7 @@ async function zoomCycle(page: Page, at: MapPoint) {
     peak.phaseMb = 0;
     const start = performance.now();
     await delay(300);
-    await waitTerrain(page);
-    await page.waitForFunction(
-      () =>
-        document.querySelector('canvas[data-renderer]')?.getAttribute('data-figure-sheets') !==
-        'busy',
-      undefined,
-      { timeout: 180_000 },
-    );
-    await untilDrawn(page);
+    await settled(page);
     const figures = await page.locator('canvas[data-renderer]').getAttribute('data-figures');
     console.error(
       `  zoom ${scale}: peak ${peak.phaseMb} MB, renderer ${residentMb('renderer')} gpu ${residentMb('gpu-process')} MB at rest, figures ${figures}, ${Math.round((performance.now() - start) / 1000)} s`,
@@ -312,6 +305,19 @@ function capitalOf(power: PowerId): MapPoint {
 /** The powers a new game from the Game menu takes in turn, between loads of Rome's save. */
 const NEW_GAME_POWERS: PowerId[] = ['rome', 'carthage', 'macedon', 'egypt', 'persia'];
 const seconds = (ms: number) => Math.round(ms / 100) / 10;
+
+/** The terrain built, every figure sheet the view asks for painted, and that frame drawn. */
+async function settled(page: Page) {
+  await waitTerrain(page);
+  await page.waitForFunction(
+    () =>
+      document.querySelector('canvas[data-renderer]')?.getAttribute('data-figure-sheets') !==
+      'busy',
+    undefined,
+    { timeout: 180_000 },
+  );
+  await untilDrawn(page);
+}
 
 /** Drops a day-1 save on the page, as a player loads a file, and waits for its day. */
 async function loadDay1(page: Page, save: string) {
@@ -404,12 +410,14 @@ try {
   if (values.cycles) {
     const save = saveGame(startGame());
     const snapshotAt = new Set((values.snapshots ?? '').split(',').filter(Boolean).map(Number));
+    const kindOf = (cycle: number) => {
+      if (cycle % 2 === 0) return { loads: true, power: 'rome' as PowerId, name: 'load' };
+      const power = NEW_GAME_POWERS[((cycle - 1) / 2) % NEW_GAME_POWERS.length] as PowerId;
+      return { loads: false, power, name: `new ${power}` };
+    };
     for (let cycle = 1; cycle <= Number(values.cycles); cycle++) {
       const started = performance.now();
-      const loads = cycle % 2 === 0;
-      const power: PowerId = loads
-        ? 'rome'
-        : (NEW_GAME_POWERS[((cycle - 1) / 2) % NEW_GAME_POWERS.length] as PowerId);
+      const { loads, power, name } = kindOf(cycle);
       if (loads) await loadDay1(page, save);
       else await newGameFromMenu(page, power);
       const entered = performance.now();
@@ -418,11 +426,23 @@ try {
       await zoomCycle(page, PLATEAU);
       const zoomed = performance.now();
       await play(page, Number(values.play) * 1000);
-      const row = await sample(page, `cycle ${cycle} ${loads ? 'load' : `new ${power}`}`);
-      print(row);
+      const paints = await page.evaluate(() => {
+        const entries = performance.getEntriesByName('sheet') as PerformanceMeasure[];
+        performance.clearMeasures('sheet');
+        return entries.map((e) => e.detail as { size: number; part: number | string });
+      });
       console.error(
-        `  cycle ${cycle}: entered in ${seconds(entered - started)} s, terrain and zooms ${seconds(zoomed - entered)} s`,
+        `  cycle ${cycle} ${name}: entered in ${seconds(entered - started)} s, zooms ${seconds(zoomed - entered)} s, sheets painted ${paints.map((p) => `${p.size}:${p.part}`).join(' ')}`,
       );
+      // Every cycle is read in one state: the day-1 save dropped again and drawn over the
+      // whole map, with no figure sheet in flight and the mouse off what it last clicked.
+      // What the tab holds then beyond cycle 1 is what earlier games left behind, and not
+      // the sheets of the colours a cycle's own seeded game happened to show.
+      await loadDay1(page, save);
+      await page.mouse.move(VIEWPORT.width / 2, VIEWPORT.height / 2);
+      await page.mouse.wheel(0, 5000);
+      await settled(page);
+      print(await sample(page, `cycle ${cycle} ${name}`));
       if (values['texture-shapes']) await printTextureShapes(page);
       if (snapshotAt.has(cycle)) {
         await snapshot(page, `${values.snapshot ?? 'cycle'}-${cycle}.heapsnapshot`);
