@@ -22,6 +22,7 @@ import type { TradeRoute } from '../sim/state/trade-route.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import { routesAt } from '../sim/trade/routes.ts';
 import { anchorOutsideTrade, merchantPoses, placeNamesWithGoods, tradeCityLabel } from './trade.ts';
+import { drawnLane, pathBox, type DrawnLane } from './drawn-lane.ts';
 import {
   clampCamera,
   fitCamera,
@@ -30,6 +31,7 @@ import {
   screenToMap,
   symbolGrowth,
   wheelFactor,
+  visibleRect,
   zoomAt,
   type Camera,
   type Size,
@@ -609,6 +611,13 @@ export async function createRenderer({
   };
   /** Seconds of motion: it runs with the game's days, faster at a higher speed, and stops while paused. */
   let motion = 0;
+  /**
+   * How many times a texture the size of the view and its margin has been drawn: the
+   * terrain, the sea, the coast's ink and a selected city's routes, and of them the sea's
+   * and the routes'. On a software GPU each took up to most of a second at 1600 by 900, so
+   * a test counts them where timing them is noisy.
+   */
+  const passes = { all: 0, sea: 0, trade: 0 };
   let clockAt: { day: number; now: number } | undefined;
 
   /**
@@ -1175,7 +1184,7 @@ export async function createRenderer({
       for (const route of tradeRoutes)
         stroke(
           tradePaths,
-          route.path.map((p) => ({ x: p.x * camera.scale, y: p.y * camera.scale })),
+          inkedLane(route).path.map((p) => ({ x: p.x * camera.scale, y: p.y * camera.scale })),
           1.4,
           route.blocked ? 0.35 : 0.75,
           undefined,
@@ -1184,7 +1193,10 @@ export async function createRenderer({
       tradeInk.invalidate();
     }
     if (tradeRoutes.length > 0) {
-      tradeInk.render(camera, view);
+      if (tradeInk.render(camera, view)) {
+        passes.all++;
+        passes.trade++;
+      }
       // The cache assigns its full texture only on repaint. Keep its coverage,
       // but omit transparent texels outside the ink when compositing the sprite.
       if (tradeInk.sprite.texture !== tradeFrame) {
@@ -1193,7 +1205,7 @@ export async function createRenderer({
         const origin = tradeInk.sprite.position;
         const crop = routeInkBounds(
           tradeRoutes.map((route) =>
-            route.path.map((p) => ({
+            inkedLane(route).path.map((p) => ({
               x: (p.x - origin.x) * camera.scale,
               y: (p.y - origin.y) * camera.scale,
             })),
@@ -1260,9 +1272,11 @@ export async function createRenderer({
       seaArt.position.set(x + SEA_MARGIN, y + SEA_MARGIN);
       app.renderer.render({ container: seaRoot, target: seaTexture, clear: true });
       seaDrawn = { x, y, scale: camera.scale };
+      passes.all++;
+      passes.sea++;
     }
     seaSprite.position.set(x - seaDrawn.x - SEA_MARGIN, y - seaDrawn.y - SEA_MARGIN);
-    ink.render(camera, { width, height });
+    if (ink.render(camera, { width, height })) passes.all++;
   }
 
   function moveSwell(nowMs: number) {
@@ -1294,6 +1308,32 @@ export async function createRenderer({
   }
 
   const drawingLand = () => (camera.scale < ATLAS_COAST_SCALE ? terrain.land.land : atlasLand(map));
+  /**
+   * The rules' own coast is drawn below the atlas zooms, and there the lane is the route's
+   * path. A lane far out of view is not worked out until it comes near.
+   */
+  /**
+   * A selected city's routes are inked once for a zoom, whole, so they take the drawn lane
+   * wherever the view stands.
+   */
+  const inkedLane = (route: DeepReadonly<TradeRoute>): DrawnLane =>
+    camera.scale < ATLAS_COAST_SCALE
+      ? route
+      : drawnLane(route.path, atlasLand(map), route.mode === 'land');
+  const laneOf = (route: DeepReadonly<TradeRoute>): DrawnLane => {
+    if (camera.scale < ATLAS_COAST_SCALE) return route;
+    const box = pathBox(route.path);
+    const view = visibleRect(camera, viewport());
+    const near = (view.right - view.left) / 2;
+    if (
+      box.left > view.right + near ||
+      box.right < view.left - near ||
+      box.top > view.bottom + near ||
+      box.bottom < view.top - near
+    )
+      return route;
+    return inkedLane(route);
+  };
   const toMap = (screen: MapPoint) => screenToMap(camera, viewport(), screen);
   const onDrawnLand = coastalSurface(drawingLand, toMap);
   const onLand = coastalSurface(drawingLand, toMap, terrain.land.land);
@@ -1512,6 +1552,7 @@ export async function createRenderer({
       }
       if (cameraMoved) applyCamera();
       const terrainNow = terrain.update(camera, viewport(), now);
+      if (terrainNow.redrawn) passes.all++;
       if (terrainNow.busy || terrainNow.redrawn) dirty = true;
       const terrainState = terrainNow.busy ? 'busy' : 'ready';
       if (canvas.dataset['terrain'] !== terrainState) canvas.dataset['terrain'] = terrainState;
@@ -1625,6 +1666,7 @@ export async function createRenderer({
           land: onOpenLand,
           names: new Map(drawnCities.flatMap(({ id, label }) => (label ? [[id, label]] : []))),
           keepClear: drawnPlaces,
+          lane: laneOf,
         });
         scene = fitCoastalScene(
           scene,
@@ -1716,7 +1758,13 @@ export async function createRenderer({
         }
         if (drawnFigures.some((sprite) => sprite.trade === route.id)) continue;
         // Where figures are not drawn, a route is one dot at its crossing.
-        const [pose] = merchantPoses(previous.tradeRoutes[route.id], route, progress, current.day);
+        const [pose] = merchantPoses(
+          previous.tradeRoutes[route.id],
+          route,
+          progress,
+          current.day,
+          laneOf(route),
+        );
         if (!pose || (!own && !sight.sees(pose.point))) continue;
         const at = mapToScreen(camera, viewport(), pose.point);
         tradeMarks.circle(at.x, at.y, 3).fill(0x8b6a33).stroke({ color: INK, width: 1 });
@@ -1748,6 +1796,9 @@ export async function createRenderer({
         }
       }
       if (layers.fog.visible) fog.paint();
+      canvas.dataset['texturePasses'] = String(passes.all);
+      canvas.dataset['seaPasses'] = String(passes.sea);
+      canvas.dataset['tradePasses'] = String(passes.trade);
       app.render();
       // The size of the last frame the GPU has finished, which the screen shows, so a test
       // or a capture knows the map has followed a resize. The element's size says it at once.

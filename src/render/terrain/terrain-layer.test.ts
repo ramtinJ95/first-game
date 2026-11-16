@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { Container, type Renderer } from 'pixi.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseMap, type GameMap, type Point } from '../../sim/map.ts';
-import { createTerrain } from './terrain-layer.ts';
+import { BATCH_MS, createTerrain, drawDecision } from './terrain-layer.ts';
 
 /** The Persian plateau, open dry land with few marks to draw at the closest zoom. */
 const PLATEAU = { x: 6080, y: 3330 };
@@ -94,6 +94,58 @@ describe('the terrain layer', () => {
     terrain.destroy();
   });
 
+  /** Frames 16 ms apart until the layer is no longer busy, and the times it redrew. */
+  function play(terrain: ReturnType<typeof createTerrain>, at: typeof closest, from: number) {
+    const redraws: number[] = [];
+    let now = from;
+    for (let n = 0; n < 2000; n++) {
+      const result = terrain.update(at, viewport, now);
+      if (result.redrawn) redraws.push(now);
+      if (!result.busy && n > 0) break;
+      vi.advanceTimersByTime(16);
+      now += 16;
+    }
+    return { redraws, now };
+  }
+
+  const panned = (px: number) => ({
+    ...closest,
+    centre: { x: closest.centre.x + px / closest.scale, y: closest.centre.y },
+  });
+
+  it('finds the chunks of its margin drawn on a pan inside it, and draws nothing again', () => {
+    const gpu = renderer();
+    const terrain = createTerrain(map, new Container(), gpu.fake);
+    terrain.restroke(closest.scale);
+    const { now } = play(terrain, closest, 0);
+    const drawn = gpu.renders();
+    for (let px = 20; px <= 240; px += 20) {
+      expect(terrain.update(panned(px), viewport, now + px)).toEqual({
+        busy: false,
+        redrawn: false,
+      });
+    }
+    expect(gpu.renders()).toBe(drawn);
+    terrain.destroy();
+  });
+
+  it('draws its texture again once the view leaves it, and not while the view stays inside', () => {
+    const gpu = renderer();
+    const terrain = createTerrain(map, new Container(), gpu.fake);
+    terrain.restroke(closest.scale);
+    let { now } = play(terrain, closest, 0);
+    const redraws: number[] = [];
+    for (let px = 16; px <= 400; px += 16) {
+      now += 16;
+      vi.advanceTimersByTime(16);
+      if (terrain.update(panned(px), viewport, now).redrawn) redraws.push(px);
+    }
+    // The texture reaches 256 px past the view, so the first drawing again comes after that.
+    expect(redraws[0]).toBeGreaterThan(256);
+    expect(redraws.filter((px) => px <= 256)).toEqual([]);
+    terrain.destroy();
+  });
+
   it('builds nothing once destroyed', () => {
     const gpu = renderer();
     const parent = new Container();
@@ -102,5 +154,43 @@ describe('the terrain layer', () => {
     terrain.update(closest, viewport, 0);
     terrain.destroy();
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('drawing chunks built while others wait', () => {
+  const chunk = { built: true, other: false, waiting: true };
+
+  it('waits while other chunks the texture shows are still queued', () => {
+    const first = drawDecision(chunk, 1000, undefined);
+    expect(first).toEqual({ draw: false, since: 1000 });
+    expect(drawDecision(chunk, 1000 + BATCH_MS - 1, first.since)).toEqual({
+      draw: false,
+      since: 1000,
+    });
+  });
+
+  it('draws by the deadline though chunks are still queued', () => {
+    expect(drawDecision(chunk, 1000 + BATCH_MS, 1000)).toEqual({ draw: true, since: undefined });
+  });
+
+  it('draws as soon as the queue is done', () => {
+    expect(drawDecision({ ...chunk, waiting: false }, 1100, 1000)).toEqual({
+      draw: true,
+      since: undefined,
+    });
+  });
+
+  it('draws at once for a move, a zoom or a repaint, and keeps no wait', () => {
+    expect(drawDecision({ ...chunk, other: true }, 1100, 1000)).toEqual({
+      draw: true,
+      since: undefined,
+    });
+  });
+
+  it('keeps an earlier wait through a frame with nothing new', () => {
+    expect(drawDecision({ built: false, other: false, waiting: true }, 1200, 1000)).toEqual({
+      draw: false,
+      since: 1000,
+    });
   });
 });

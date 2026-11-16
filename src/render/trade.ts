@@ -5,6 +5,7 @@ import type { MapPoint } from '../sim/state/map-point.ts';
 import type { TradeRoute } from '../sim/state/trade-route.ts';
 import { routePoint } from '../sim/trade/routes.ts';
 import type { Sprite } from './armies/scene.ts';
+import type { DrawnLane } from './drawn-lane.ts';
 import { placeLabels, type Box, type LabelRequest } from './labels.ts';
 
 /**
@@ -22,8 +23,8 @@ export interface MerchantPose {
 /** How far round its trip a route's crossing is: 0 to 1 on the way out, 1 to 2 back. */
 const trip = (route: DeepReadonly<TradeRoute>) => (route.returning ? 1 : 0) + route.progress;
 
-function poseAt(route: DeepReadonly<TradeRoute>, round: number): MerchantPose {
-  const leg = { ...route, returning: round > 1 };
+function poseAt(route: DeepReadonly<TradeRoute>, lane: DrawnLane, round: number): MerchantPose {
+  const leg = { ...route, path: lane.path, km: lane.km, returning: round > 1 };
   const along = leg.returning ? round - 1 : round;
   const point = routePoint(leg, along);
   const behind = routePoint(leg, Math.max(0, along - 0.001));
@@ -38,13 +39,15 @@ function poseAt(route: DeepReadonly<TradeRoute>, round: number): MerchantPose {
  * The merchants of a running route, the first at its crossing. A merchant moves on
  * through the day; an arrival turns it round where it stands, and a raid, which sends
  * the crossing back to its start, moves it there at once. While a raided route waits for
- * its replacement, the one merchant stands at the start.
+ * its replacement, the one merchant stands at the start. They walk the lane as drawn,
+ * the same share of its length as the crossing is of the route's.
  */
 export function merchantPoses(
   before: DeepReadonly<TradeRoute> | undefined,
   route: DeepReadonly<TradeRoute>,
   progress: number,
   day: number,
+  lane: DrawnLane = route,
 ): MerchantPose[] {
   if (route.status !== 'running' || route.blocked) return [];
   const now = trip(route);
@@ -53,7 +56,7 @@ export function merchantPoses(
   const at = step <= 0.5 ? was + step * progress : now;
   const count =
     day < route.departsOn ? 1 : Math.max(1, Math.round((2 * route.km) / MERCHANT_SPACING_KM));
-  return Array.from({ length: count }, (_, k) => poseAt(route, (at + (2 * k) / count) % 2));
+  return Array.from({ length: count }, (_, k) => poseAt(route, lane, (at + (2 * k) / count) % 2));
 }
 
 export const GOOD_LABEL_SCALE = 0.9;
