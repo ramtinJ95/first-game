@@ -115,7 +115,14 @@ async function paint(sheet: Sheet, canvas: HTMLCanvasElement) {
  * sprite from a sheet, in the scene's order. Each size and colour is its own sheet,
  * painted only when a sprite in view needs it.
  */
-export function createArmyLayer(resolution: number, onPainted: () => void) {
+export function createArmyLayer(
+  resolution: number,
+  onPainted: () => void,
+  {
+    budgetBytes = SHEET_BUDGET_BYTES,
+    order = 'nearest',
+  }: { budgetBytes?: number; order?: 'nearest' | 'oldest' } = {},
+) {
   const root = new Container({ label: 'armies', isRenderGroup: true });
   const marks = new Graphics();
   const figures = new Container({ label: 'figures' });
@@ -205,13 +212,13 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
       key,
       bytes: bytesOf(sheet),
       distance:
-        at < 0
+        at < 0 || order === 'oldest'
           ? 0
           : Math.abs(SHEET_SIZES.indexOf(sheet.layout.size as (typeof SHEET_SIZES)[number]) - at),
       usedAt: sheet.usedAt,
       inUse: inUse.has(sheet),
     }));
-    for (const key of sheetsOverBudget(held, SHEET_BUDGET_BYTES)) {
+    for (const key of sheetsOverBudget(held, budgetBytes)) {
       const sheet = sheets.get(key);
       if (sheet) drop(key, sheet);
     }

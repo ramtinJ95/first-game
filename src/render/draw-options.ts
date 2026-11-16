@@ -9,6 +9,10 @@ export interface DrawOptions {
   readonly antialias: boolean;
   /** Canvas pixels per CSS pixel. Undefined follows the screen's device pixel ratio. */
   readonly resolution: number | undefined;
+  /** The figure sheets' budget in MB of textures, to measure another. Undefined keeps the game's. */
+  readonly sheetBudgetMb: number | undefined;
+  /** Which sheets go first over the budget: those furthest in size from the view, or the oldest. */
+  readonly sheetOrder: 'nearest' | 'oldest';
 }
 
 export const FULL_DRAWING: DrawOptions = {
@@ -16,6 +20,8 @@ export const FULL_DRAWING: DrawOptions = {
   swell: true,
   antialias: true,
   resolution: undefined,
+  sheetBudgetMb: undefined,
+  sheetOrder: 'nearest',
 };
 
 /**
@@ -29,6 +35,8 @@ export const TEST_DRAWING: DrawOptions = {
   swell: false,
   antialias: false,
   resolution: 0.5,
+  sheetBudgetMb: undefined,
+  sheetOrder: 'nearest',
 };
 
 function isLayer(name: string): name is LayerName {
@@ -39,7 +47,9 @@ function isLayer(name: string): name is LayerName {
  * Reads the drawing from the page's query: `draw=test` picks the test drawing and
  * `draw=full` the full one,
  * `hide=sea,grain` leaves out layers, and `swell=off`, `antialias=off`,
- * `resolution=<n>`, and `fog=off` each turn off one thing. Unknown names are an error.
+ * `resolution=<n>`, and `fog=off` each turn off one thing. `sheet-budget=<MB>` and
+ * `sheets=oldest` measure the figure sheets under another budget or order. Unknown names
+ * are an error.
  */
 export function parseDrawOptions(search: string): DrawOptions {
   const query = new URLSearchParams(search);
@@ -57,10 +67,21 @@ export function parseDrawOptions(search: string): DrawOptions {
   const resolution = query.get('resolution');
   const scale = resolution === null ? base.resolution : Number(resolution);
   if (scale !== undefined && !(scale > 0)) throw new Error(`resolution=${resolution}: not > 0`);
+  const budget = query.get('sheet-budget');
+  const sheetBudgetMb = budget === null ? undefined : Number(budget);
+  if (sheetBudgetMb !== undefined && !(sheetBudgetMb > 0)) {
+    throw new Error(`sheet-budget=${budget}: not > 0`);
+  }
+  const order = query.get('sheets');
+  if (order !== null && order !== 'oldest' && order !== 'nearest') {
+    throw new Error(`sheets=${order}: expected sheets=oldest or sheets=nearest`);
+  }
   return {
     hidden,
     swell: base.swell && query.get('swell') !== 'off',
     antialias: base.antialias && query.get('antialias') !== 'off',
     resolution: scale,
+    sheetBudgetMb,
+    sheetOrder: order ?? base.sheetOrder,
   };
 }

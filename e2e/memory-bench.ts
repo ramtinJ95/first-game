@@ -1,5 +1,5 @@
 import { chromium, type Page } from '@playwright/test';
-import { appendFileSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import { preview } from 'vite';
@@ -16,7 +16,6 @@ import { figureHeight, FIGURE_SCALE } from '../src/render/armies/scene.ts';
 import { sheetSizeFor } from '../src/render/armies/layer.ts';
 import { MAX_SCALE } from '../src/render/camera.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
-import { POWERS } from '../src/sim/map.ts';
 import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
 
 /**
@@ -64,6 +63,7 @@ const { values } = parseArgs({
     sheets: { type: 'string' },
     dpr: { type: 'string', default: '1' },
     viewport: { type: 'string' },
+    'chromium-args': { type: 'string' },
     'sheet-bound': { type: 'string' },
     snapshots: { type: 'string' },
     'texture-shapes': { type: 'boolean', default: false },
@@ -145,6 +145,7 @@ function trackTextures() {
     return bufferData.apply(this, args);
   } as typeof proto.bufferData;
   const shapes = new Map<WebGLTexture, string>();
+  const fromCanvas = new Set<WebGLTexture>();
   proto.createTexture = function (this: WebGL2RenderingContext) {
     const texture = create.call(this);
     if (texture) sizes.set(texture, 0);
@@ -153,6 +154,7 @@ function trackTextures() {
   proto.deleteTexture = function (this: WebGL2RenderingContext, texture: WebGLTexture | null) {
     if (texture) sizes.delete(texture);
     if (texture) shapes.delete(texture);
+    if (texture) fromCanvas.delete(texture);
     return remove.call(this, texture);
   };
   proto.bindTexture = function (this: WebGL2RenderingContext, target: GLenum, texture) {
@@ -169,6 +171,8 @@ function trackTextures() {
           : [source?.width ?? 0, source?.height ?? 0];
       sizes.set(texture, width * height * 4);
       shapes.set(texture, `${width}x${height}`);
+      if (args.some((arg) => arg instanceof HTMLCanvasElement)) fromCanvas.add(texture);
+      else fromCanvas.delete(texture);
     }
     return image.apply(this, args);
   } as typeof proto.texImage2D;
@@ -176,6 +180,7 @@ function trackTextures() {
     const texture = bound.get(this);
     if (texture) sizes.set(texture, w * h * 4);
     if (texture) shapes.set(texture, `${w}x${h}`);
+    if (texture) fromCanvas.delete(texture);
     return storage.call(this, target, levels, format, w, h);
   };
   // A lost context takes every texture and buffer with it, and none is deleted one by one.
@@ -184,11 +189,29 @@ function trackTextures() {
     () => {
       sizes.clear();
       shapes.clear();
+      fromCanvas.clear();
       buffers.clear();
     },
     true,
   );
+  // The longest wait between two animation frames, and how many passed 100 ms, since last read.
+  let lastFrame = 0;
+  let gaps = { longest: 0, over100: 0 };
+  const onFrame = (at: number) => {
+    if (lastFrame > 0) {
+      const gap = at - lastFrame;
+      gaps = { longest: Math.max(gaps.longest, gap), over100: gaps.over100 + (gap > 100 ? 1 : 0) };
+    }
+    lastFrame = at;
+    requestAnimationFrame(onFrame);
+  };
+  requestAnimationFrame(onFrame);
   Object.assign(window, {
+    frameGaps: () => {
+      const read = { longest: Math.round(gaps.longest), over100: gaps.over100 };
+      gaps = { longest: 0, over100: 0 };
+      return read;
+    },
     textureShapes: () => {
       const counts: Record<string, number> = {};
       for (const shape of shapes.values()) counts[shape] = (counts[shape] ?? 0) + 1;
@@ -199,9 +222,12 @@ function trackTextures() {
       bytes: [...sizes.values()].reduce((sum, bytes) => sum + bytes, 0),
       buffers: buffers.size,
       bufferBytes: [...buffers.values()].reduce((sum, bytes) => sum + bytes, 0),
-      // Figure sheets are laid out 2048 or 4096 px wide, and no other texture is.
+      // A figure sheet is a canvas laid out 2048 or 4096 px wide. Render targets of those
+      // widths have no canvas behind them, and the names drawn from canvases are narrow.
       sheetBytes: [...sizes]
-        .filter(([texture]) => /^(2048|4096)x/.test(shapes.get(texture) ?? ''))
+        .filter(
+          ([texture]) => fromCanvas.has(texture) && /^(2048|4096)x/.test(shapes.get(texture) ?? ''),
+        )
         .reduce((sum, [, bytes]) => sum + bytes, 0),
     }),
   });
@@ -210,6 +236,8 @@ function trackTextures() {
 /** Resident set of every Chromium process of a type, in MB, read from /proc. */
 function residentMb(type: string): number {
   let kb = 0;
+  // Only Linux has /proc; elsewhere the processes' memory reads 0.
+  if (!existsSync('/proc/meminfo')) return 0;
   for (const pid of readdirSync('/proc').filter((name) => /^\d+$/.test(name))) {
     try {
       const cmdline = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
@@ -264,7 +292,9 @@ async function sample(page: Page, step: string) {
 }
 
 const availableMb = () =>
-  Number(/MemAvailable:\s+(\d+)/.exec(readFileSync('/proc/meminfo', 'utf8'))?.[1] ?? 0) >> 10;
+  existsSync('/proc/meminfo')
+    ? Number(/MemAvailable:\s+(\d+)/.exec(readFileSync('/proc/meminfo', 'utf8'))?.[1] ?? 0) >> 10
+    : Infinity;
 
 /** The most the renderer and GPU processes held, and the least the machine had left, since the run began. */
 const peak = { tabMb: 0, freeMb: Infinity, phaseMb: 0 };
@@ -367,18 +397,16 @@ function sheetZooms(resolution: number): number[] {
 }
 
 /**
- * Day 1 with the first army of `colours - 1` other factions (the great powers in turn,
- * then a minor) standing in a ring 12 km round Rome's own, where Rome sees them all, so
- * `colours` colours of figure stand in one view. Returns where Rome's army stands.
+ * Day 1 with the first army of `colours - 1` other factions (Carthage, Macedon, a minor,
+ * Egypt and Persia in turn) standing in a ring 12 km round Rome's own, where Rome sees
+ * them all, so `colours` colours of figure stand in one view. Returns where Rome's army
+ * stands.
  */
 function coloursInView(state: GameState, colours: number): MapPoint {
   const own = Object.values(state.armies).find((a) => a.owner === state.player);
   if (!own || !('position' in own.activity)) throw new Error('Rome has no army in the field');
   const centre = own.activity.position;
-  const owners = [...POWERS.filter((power) => power !== state.player), 'minor'].slice(
-    0,
-    colours - 1,
-  );
+  const owners = ['carthage', 'macedon', 'minor', 'egypt', 'persia'].slice(0, colours - 1);
   owners.forEach((owner, i) => {
     const army = Object.values(state.armies).find((a) =>
       owner === 'minor' ? state.factions[a.owner]?.kind === 'minor' : a.owner === owner,
@@ -479,7 +507,9 @@ const server = await preview({
 });
 const base = server.resolvedUrls?.local[0]?.replace(/\/$/, '');
 if (!base) throw new Error('vite preview gave no URL');
-const browser = await chromium.launch({ args: [...SOFTWARE_GL] });
+const browser = await chromium.launch({
+  args: values['chromium-args'] ? values['chromium-args'].split(' ') : [...SOFTWARE_GL],
+});
 try {
   const context = await browser.newContext({
     viewport: VIEWPORT,
@@ -525,9 +555,15 @@ try {
     let firstRound = 0;
     let inRounds = 0;
     const rests: string[][] = [];
+    const frameGaps = () =>
+      page.evaluate(() =>
+        (window as unknown as { frameGaps(): { longest: number; over100: number } }).frameGaps(),
+      );
+    const roundGaps: string[] = [];
+    await frameGaps();
     for (const round of [1, 2, 3]) {
       rests.push(...(await zoomCycle(page, at, zooms)));
-      const row = await sample(page, `${colours} colours, every sheet size, round ${round}`);
+      const row = await sample(page, `${colours} colours every sheet size round ${round}`);
       print(row);
       sheetMb.push(row.sheetMb);
       if (values['texture-shapes']) await printTextureShapes(page);
@@ -535,6 +571,8 @@ try {
       const painted = await page.evaluate(() => performance.getEntriesByName('sheet').length);
       if (round === 1) firstRound = painted;
       if (round === 3) inRounds = painted;
+      const gap = await frameGaps();
+      roundGaps.push(`${gap.longest} ms (${gap.over100} over 100 ms)`);
     }
     // A player goes back and forth between two neighbouring zooms. After the first visit
     // to each, every sheet they need is painted, and none may be painted again.
@@ -549,6 +587,10 @@ try {
       );
       again.push(...repainted);
     }
+    const backGap = await frameGaps();
+    console.log(
+      `frame gaps: longest per round ${roundGaps.join(', ')}; going back and forth ${backGap.longest} ms (${backGap.over100} over 100 ms)`,
+    );
     console.log(
       `${again.length === 0 ? 'held' : 'NOT held'}: no sheet painted again going back and forth between neighbouring zooms`,
     );
