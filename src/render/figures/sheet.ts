@@ -6,7 +6,7 @@ import {
   type FigureKind,
   type Motion,
 } from './motions.ts';
-import { n, paintSvg, type PaintOp } from './paint.ts';
+import { n, paintOps, type PaintOp } from './paint.ts';
 import {
   CART_FRAMES,
   FIRE_FRAMES,
@@ -299,30 +299,31 @@ export function layoutSheet(
 }
 
 /**
- * The SVG of a band of a sheet from `top` to `bottom` px, its owned art painted in
- * `colour`. The band holds the cells that start in it, drawn from its own top.
+ * Paints the cells of a sheet whose rows start from `top` up to `bottom` into its
+ * canvas, each picture at its place, the owned art in `colour`.
  */
-export function sheetSvg(
+export function paintSheetBand(
+  context: CanvasRenderingContext2D,
   layout: SheetLayout,
   art: readonly CellArt[],
   colour: number,
-  top = 0,
-  bottom = layout.height,
-): string {
+  top: number,
+  bottom: number,
+) {
   const k = layout.size / 100;
-  let body = '';
-  let height = 0;
   for (const cell of art) {
     const at = layout.cells.get(cell.key);
     if (!at || at.y < top || at.y >= bottom) continue;
-    height = Math.max(height, at.y + at.height - top);
-    const ox = at.x + at.anchorX * at.width;
-    const oy = at.y - top + at.anchorY * at.height;
-    const turn = cell.turn ? ` rotate(${n(cell.turn)})` : '';
-    body += `<g transform="translate(${n(ox)} ${n(oy)}) scale(${k})${turn}">${paintSvg(cell.ops, colour)}</g>`;
+    context.save();
+    context.translate(
+      Number(n(at.x + at.anchorX * at.width)),
+      Number(n(at.y + at.anchorY * at.height)),
+    );
+    context.scale(k, k);
+    if (cell.turn) context.rotate((Number(n(cell.turn)) * Math.PI) / 180);
+    paintOps(context, cell.ops, colour);
+    context.restore();
   }
-  const h = Math.max(1, Math.ceil(height));
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${h}" viewBox="0 0 ${layout.width} ${h}">${body}</svg>`;
 }
 
 /** The tops of the rows of a sheet, the places a band may start or end. */

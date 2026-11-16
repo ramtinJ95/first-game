@@ -117,10 +117,13 @@ test('a cold figure sheet keeps a coastal fallback banner visible, dry and picka
     }
   if (!point) throw new Error('no physical-land/drawn-water coastal fixture');
   await page.addInitScript(() => {
-    const decode = HTMLImageElement.prototype.decode;
+    // A figure sheet yields to the page between the bands it paints, so holding the first
+    // yield holds the first sheet unpainted.
+    const scheduler = Reflect.get(window, 'scheduler') as { yield(): Promise<void> };
+    const pass = scheduler.yield.bind(scheduler);
     let first = true;
-    HTMLImageElement.prototype.decode = async function () {
-      await decode.call(this);
+    scheduler.yield = async () => {
+      await pass();
       if (first) {
         first = false;
         await new Promise<void>((done) => Reflect.set(window, 'releaseCoastSheet', done));

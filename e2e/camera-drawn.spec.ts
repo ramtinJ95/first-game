@@ -122,15 +122,16 @@ test('the order-paths close-up waits for its first sheet and keeps a pickable fl
   page,
 }) => {
   await page.addInitScript(() => {
-    const decode = HTMLImageElement.prototype.decode;
+    // A figure sheet yields to the page between the bands it paints, so holding the first
+    // yield holds the first sheet unpainted.
+    const scheduler = Reflect.get(window, 'scheduler') as { yield(): Promise<void> };
+    const pass = scheduler.yield.bind(scheduler);
     let first = true;
-    HTMLImageElement.prototype.decode = async function () {
-      await decode.call(this);
+    scheduler.yield = async () => {
+      await pass();
       if (first) {
         first = false;
-        await new Promise<void>((done) => {
-          Reflect.set(window, 'releaseSheet', done);
-        });
+        await new Promise<void>((done) => Reflect.set(window, 'releaseSheet', done));
       }
     };
   });

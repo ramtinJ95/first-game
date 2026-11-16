@@ -12,7 +12,7 @@ import type { MapPoint } from '../src/sim/state/map-point.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 import { newGame } from '../src/sim/new-game.ts';
 import type { PowerId } from '../src/sim/map.ts';
-import { dropSave, map, openGame, startGame } from './support.ts';
+import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
 
 /**
  * Measures what the tab holds as a long session plays. `--loads <n>` drops one saved
@@ -29,11 +29,26 @@ import { dropSave, map, openGame, startGame } from './support.ts';
  *
  * `--power` and `--seed` choose the new game of `--years` (Persia on seed 2 by default).
  *
+ * `--cycles <n>` plays a stranger's session instead: odd cycles start a new game from the
+ * Game menu as each power in turn, even cycles drop a day-1 save of Rome. Each zooms
+ * through all three zooms over the power's capital and over the plateau, and plays
+ * `--play` seconds at the fastest speed. Each cycle is then sampled with the day-1 save
+ * dropped again and drawn over the whole map, the same state every time.
+ * `--cycle-bound 0.1` fails the run when the collected heap, the DOM nodes, or the live
+ * texture bytes after any later cycle are more than a tenth over cycle 1. `--snapshots 2,6`
+ * writes heap snapshots after those cycles, named after `--snapshot`, and `--texture-shapes`
+ * prints the live textures by size that each cycle added or freed.
+ *
  *   node e2e/memory-bench.ts [--loads 30 | --years 10] [--days 300] [--draw full] [--out file.csv]
  */
 const { values } = parseArgs({
   options: {
     loads: { type: 'string' },
+    cycles: { type: 'string' },
+    play: { type: 'string', default: '5' },
+    'cycle-bound': { type: 'string' },
+    snapshots: { type: 'string' },
+    'texture-shapes': { type: 'boolean', default: false },
     bound: { type: 'string' },
     'process-bound': { type: 'string' },
     years: { type: 'string' },
@@ -109,6 +124,7 @@ function trackTextures() {
       );
     return bufferData.apply(this, args);
   } as typeof proto.bufferData;
+  const shapes = new Map<WebGLTexture, string>();
   proto.createTexture = function (this: WebGL2RenderingContext) {
     const texture = create.call(this);
     if (texture) sizes.set(texture, 0);
@@ -116,6 +132,7 @@ function trackTextures() {
   };
   proto.deleteTexture = function (this: WebGL2RenderingContext, texture: WebGLTexture | null) {
     if (texture) sizes.delete(texture);
+    if (texture) shapes.delete(texture);
     return remove.call(this, texture);
   };
   proto.bindTexture = function (this: WebGL2RenderingContext, target: GLenum, texture) {
@@ -131,15 +148,22 @@ function trackTextures() {
           ? [args[3], args[4]]
           : [source?.width ?? 0, source?.height ?? 0];
       sizes.set(texture, width * height * 4);
+      shapes.set(texture, `${width}x${height}`);
     }
     return image.apply(this, args);
   } as typeof proto.texImage2D;
   proto.texStorage2D = function (this: WebGL2RenderingContext, target, levels, format, w, h) {
     const texture = bound.get(this);
     if (texture) sizes.set(texture, w * h * 4);
+    if (texture) shapes.set(texture, `${w}x${h}`);
     return storage.call(this, target, levels, format, w, h);
   };
   Object.assign(window, {
+    textureShapes: () => {
+      const counts: Record<string, number> = {};
+      for (const shape of shapes.values()) counts[shape] = (counts[shape] ?? 0) + 1;
+      return counts;
+    },
     textureReport: () => ({
       count: sizes.size,
       bytes: [...sizes.values()].reduce((sum, bytes) => sum + bytes, 0),
@@ -246,6 +270,11 @@ async function waitTerrain(page: Page) {
 
 /** Zooms with single wheel events from the whole map to the plateau, closer and closer, then out. */
 async function zoomCycle(page: Page, at: MapPoint) {
+  // A new game opens on its capital; one long wheel out from the middle comes to rest on
+  // the whole map, which is where the camera below begins.
+  await page.mouse.move(VIEWPORT.width / 2, VIEWPORT.height / 2);
+  await page.mouse.wheel(0, 5000);
+  await untilDrawn(page);
   let camera: Camera = fitCamera(VIEWPORT, map);
   const wheelTo = async (scale: number, at: MapPoint) => {
     const screen = mapToScreen(camera, VIEWPORT, at);
@@ -256,7 +285,7 @@ async function zoomCycle(page: Page, at: MapPoint) {
     peak.phaseMb = 0;
     const start = performance.now();
     await delay(300);
-    await waitTerrain(page);
+    await settled(page);
     const figures = await page.locator('canvas[data-renderer]').getAttribute('data-figures');
     console.error(
       `  zoom ${scale}: peak ${peak.phaseMb} MB, renderer ${residentMb('renderer')} gpu ${residentMb('gpu-process')} MB at rest, figures ${figures}, ${Math.round((performance.now() - start) / 1000)} s`,
@@ -265,6 +294,83 @@ async function zoomCycle(page: Page, at: MapPoint) {
   await wheelTo(MIDDLE, at);
   await wheelTo(CLOSEST, at);
   await wheelTo(0.01, at);
+}
+
+function capitalOf(power: PowerId): MapPoint {
+  const capital = map.provinces.find((p) => p.owner === power && p.capital);
+  if (!capital) throw new Error(`no capital of ${power}`);
+  return { x: capital.city[0], y: capital.city[1] };
+}
+
+/** The powers a new game from the Game menu takes in turn, between loads of Rome's save. */
+const NEW_GAME_POWERS: PowerId[] = ['rome', 'carthage', 'macedon', 'egypt', 'persia'];
+const seconds = (ms: number) => Math.round(ms / 100) / 10;
+
+/** The terrain built, every figure sheet the view asks for painted, and that frame drawn. */
+async function settled(page: Page) {
+  await waitTerrain(page);
+  await page.waitForFunction(
+    () =>
+      document.querySelector('canvas[data-renderer]')?.getAttribute('data-figure-sheets') !==
+      'busy',
+    undefined,
+    { timeout: 180_000 },
+  );
+  await untilDrawn(page);
+}
+
+/** Drops a day-1 save on the page, as a player loads a file, and waits for its day. */
+async function loadDay1(page: Page, save: string) {
+  await dropSave(page, save);
+  await page.getByTestId('time-controls-day').and(page.locator('[data-day="1"]')).waitFor();
+  await untilDrawn(page);
+}
+
+/** Game, Start screen, Leave without saving, a power's card, and the guide closed. */
+async function newGameFromMenu(page: Page, power: PowerId) {
+  await page.getByRole('button', { name: 'Game', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Start screen' }).click();
+  await page.getByRole('button', { name: 'Leave without saving' }).click();
+  await page.getByTestId(`power-${power}`).click();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await untilDrawn(page);
+}
+
+/** Runs the clock at the fastest speed for a while of the wall clock, then pauses it. */
+async function play(page: Page, ms: number) {
+  await page
+    .getByRole('button', { name: /^Speed \d+$/ })
+    .last()
+    .click();
+  if ((await page.getByTestId('time-controls-speed').textContent()) === 'Paused') {
+    await page.keyboard.press('Space');
+  }
+  await delay(ms);
+  if ((await page.getByTestId('time-controls-speed').textContent()) !== 'Paused') {
+    await page.keyboard.press('Space');
+  }
+}
+
+let shapesBefore: Record<string, number> = {};
+/** Prints the live textures by width and height that came or went since the last call. */
+async function printTextureShapes(page: Page) {
+  const shapes = await page.evaluate(() =>
+    (window as unknown as { textureShapes(): Record<string, number> }).textureShapes(),
+  );
+  for (const shape of new Set([...Object.keys(shapes), ...Object.keys(shapesBefore)])) {
+    const change = (shapes[shape] ?? 0) - (shapesBefore[shape] ?? 0);
+    if (change !== 0) console.error(`    textures ${change > 0 ? '+' : ''}${change} of ${shape}`);
+  }
+  shapesBefore = shapes;
+}
+
+async function snapshot(page: Page, file: string) {
+  const session = await page.context().newCDPSession(page);
+  await session.send('HeapProfiler.collectGarbage');
+  writeFileSync(file, '');
+  session.on('HeapProfiler.addHeapSnapshotChunk', ({ chunk }) => appendFileSync(file, chunk));
+  await session.send('HeapProfiler.takeHeapSnapshot', { reportProgress: false });
+  await session.detach();
 }
 
 const world = buildWorld(map);
@@ -301,7 +407,49 @@ try {
     sampler.set(page, session);
   }
   print(await sample(page, 'open'));
-  if (values.loads) {
+  if (values.cycles) {
+    const save = saveGame(startGame());
+    const snapshotAt = new Set((values.snapshots ?? '').split(',').filter(Boolean).map(Number));
+    const kindOf = (cycle: number) => {
+      if (cycle % 2 === 0) return { loads: true, power: 'rome' as PowerId, name: 'load' };
+      const power = NEW_GAME_POWERS[((cycle - 1) / 2) % NEW_GAME_POWERS.length] as PowerId;
+      return { loads: false, power, name: `new ${power}` };
+    };
+    for (let cycle = 1; cycle <= Number(values.cycles); cycle++) {
+      const started = performance.now();
+      const { loads, power, name } = kindOf(cycle);
+      if (loads) await loadDay1(page, save);
+      else await newGameFromMenu(page, power);
+      const entered = performance.now();
+      await waitTerrain(page);
+      await zoomCycle(page, capitalOf(power));
+      await zoomCycle(page, PLATEAU);
+      const zoomed = performance.now();
+      await play(page, Number(values.play) * 1000);
+      const paints = await page.evaluate(() => {
+        const entries = performance.getEntriesByName('sheet') as PerformanceMeasure[];
+        performance.clearMeasures('sheet');
+        return entries.map((e) => e.detail as { size: number; part: number | string });
+      });
+      console.error(
+        `  cycle ${cycle} ${name}: entered in ${seconds(entered - started)} s, zooms ${seconds(zoomed - entered)} s, sheets painted ${paints.map((p) => `${p.size}:${p.part}`).join(' ')}`,
+      );
+      // Every cycle is read in one state: the day-1 save dropped again and drawn over the
+      // whole map, with no figure sheet in flight and the mouse off what it last clicked.
+      // What the tab holds then beyond cycle 1 is what earlier games left behind, and not
+      // the sheets of the colours a cycle's own seeded game happened to show.
+      await loadDay1(page, save);
+      await page.mouse.move(VIEWPORT.width / 2, VIEWPORT.height / 2);
+      await page.mouse.wheel(0, 5000);
+      await settled(page);
+      print(await sample(page, `cycle ${cycle} ${name}`));
+      if (values['texture-shapes']) await printTextureShapes(page);
+      if (snapshotAt.has(cycle)) {
+        await snapshot(page, `${values.snapshot ?? 'cycle'}-${cycle}.heapsnapshot`);
+      }
+      if (errors.length > 0) throw new Error(errors.join('; '));
+    }
+  } else if (values.loads) {
     const days = 1 + Number(values.days);
     let game = startGame();
     while (game.day < days) game = tick(game, decideAll(game, world), world).state;
@@ -375,13 +523,7 @@ try {
       if (errors.length > 0) throw new Error(errors.join('; '));
     }
   }
-  if (values.snapshot) {
-    const session = await page.context().newCDPSession(page);
-    writeFileSync(values.snapshot, '');
-    const file = values.snapshot;
-    session.on('HeapProfiler.addHeapSnapshotChunk', ({ chunk }) => appendFileSync(file, chunk));
-    await session.send('HeapProfiler.takeHeapSnapshot', { reportProgress: false });
-  }
+  if (values.snapshot && !values.snapshots) await snapshot(page, values.snapshot);
 } catch (error) {
   if (process.env['GITHUB_ACTIONS']) {
     console.log(`::error title=memory probe::${String(error).replace(/\n/g, '%0A')}`);
@@ -395,6 +537,31 @@ try {
       'step,heapMb,nodes,listeners,textures,textureMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb';
     writeFileSync(values.out, [header, ...rows.map((r) => Object.values(r).join(','))].join('\n'));
   }
+}
+
+if (values['cycle-bound']) {
+  const share = Number(values['cycle-bound']);
+  const cycles = rows.filter((row) => row.step.startsWith('cycle '));
+  const [first] = cycles;
+  if (!first || cycles.length !== Number(values.cycles)) {
+    throw new Error(
+      `--cycle-bound: the run stopped after ${cycles.length} of ${values.cycles} cycles`,
+    );
+  }
+  let held = true;
+  for (const [what, pick] of [
+    ['the collected JS heap (MB)', (row: (typeof rows)[number]) => row.heapMb],
+    ['the DOM nodes', (row: (typeof rows)[number]) => row.nodes],
+    ['the live texture bytes (MB)', (row: (typeof rows)[number]) => row.textureMb],
+  ] as const) {
+    const bound = Math.round(pick(first) * (1 + share));
+    const over = cycles.slice(1).filter((row) => pick(row) > bound);
+    held &&= over.length === 0;
+    console.log(
+      `${over.length === 0 ? 'held' : 'NOT held'}: ${what} after cycles 2 to ${cycles.length} at most ${Math.max(...cycles.slice(1).map(pick))}, against ${pick(first)} after cycle 1 (bound ${bound})${over.length > 0 ? `; over in ${over.map((row) => row.step).join(', ')}` : ''}`,
+    );
+  }
+  if (!held) process.exitCode = 1;
 }
 
 if (values.bound) {

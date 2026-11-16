@@ -158,16 +158,46 @@ function shadeOf(shade: FactionShade, colour: number): string {
   return hex(channel(16) | channel(8) | channel(0));
 }
 
+function fillOf(op: PaintOp, colour: number): string | undefined {
+  if (op.fill === undefined) return undefined;
+  return typeof op.fill === 'string' ? op.fill : shadeOf(op.fill.faction, colour);
+}
+
+/**
+ * Paints the figure into a 2D context, as `paintSvg` would: each op fills, then strokes
+ * its outline over the fill, at the opacity and stroke width `paintSvg` writes, rounded to
+ * a tenth. Only filled ops carry an opacity, so one alpha for the op matches the opacity
+ * SVG gives the whole path.
+ */
+export function paintOps(
+  context: CanvasRenderingContext2D,
+  ops: readonly PaintOp[],
+  colour: number,
+) {
+  context.lineJoin = 'round';
+  for (const op of ops) {
+    const path = new Path2D(op.d);
+    context.globalAlpha = op.opacity === undefined ? 1 : Number(n(op.opacity));
+    const fill = fillOf(op, colour);
+    if (fill !== undefined) {
+      context.fillStyle = fill;
+      context.fill(path);
+    }
+    if (op.stroke) {
+      context.strokeStyle = op.strokeColour ?? INK;
+      context.lineWidth = Math.round(op.stroke * 10) / 10;
+      context.lineCap = op.cap ?? 'round';
+      context.stroke(path);
+    }
+  }
+  context.globalAlpha = 1;
+}
+
 /** The figure's paint as SVG, its faction fills in `colour`. */
 export function paintSvg(ops: readonly PaintOp[], colour: number): string {
   return ops
     .map((op) => {
-      const fill =
-        op.fill === undefined
-          ? 'none'
-          : typeof op.fill === 'string'
-            ? op.fill
-            : shadeOf(op.fill.faction, colour);
+      const fill = fillOf(op, colour) ?? 'none';
       const parts = [`d="${op.d}"`, `fill="${fill}"`];
       if (op.opacity !== undefined) parts.push(`opacity="${n(op.opacity)}"`);
       if (op.stroke) {

@@ -1,6 +1,12 @@
 import { CanvasSource, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import type { CityRank } from '../../sim/state/city.ts';
-import { layoutSheet, sheetArt, sheetRows, sheetSvg, type SheetLayout } from '../figures/sheet.ts';
+import {
+  layoutSheet,
+  paintSheetBand,
+  sheetArt,
+  sheetRows,
+  type SheetLayout,
+} from '../figures/sheet.ts';
 import { INK, PAPER } from '../palette.ts';
 import { SHEET_COLOURS, type Scene, type Sprite as SceneSprite } from './scene.ts';
 
@@ -27,6 +33,7 @@ interface Sheet {
   readonly source: CanvasSource;
   readonly textures: Map<string, Texture>;
   painted: boolean;
+  dropped: boolean;
 }
 
 // The art is posed when a sheet is first needed, so a page that never zooms in to
@@ -58,6 +65,13 @@ const partOf = (key: string): { part: Part; cell: string } => {
 /** A band of a sheet painted in one task: about this many px of rows at a time. */
 const BAND_PX = 160;
 
+/** Lets the page draw and answer input between two bands of a paint. */
+function yieldToPage(): Promise<void> {
+  const scheduler = Reflect.get(globalThis, 'scheduler') as
+    { yield?: () => Promise<void> } | undefined;
+  return scheduler?.yield ? scheduler.yield() : new Promise((done) => setTimeout(done, 0));
+}
+
 /**
  * Paints a sheet band by band, yielding between bands, so that no paint holds the
  * page's main thread long enough to miss frames. Each paint is timed as the
@@ -77,17 +91,11 @@ async function paint(sheet: Sheet, canvas: HTMLCanvasElement) {
     let j = i + 1;
     while (j < rows.length && (rows[j] as number) - top < BAND_PX) j++;
     const bottom = rows[j] ?? layout.height;
-    const svg = sheetSvg(layout, art(), colour, top, bottom);
-    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
-    try {
-      const image = new Image();
-      image.src = url;
-      await image.decode();
-      context.drawImage(image, 0, top);
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-    await new Promise((done) => setTimeout(done, 0));
+    // Drawn with the 2D context rather than decoded as an SVG image: Chromium keeps the
+    // source of every SVG image a page decodes, about a megabyte a band, for the page's life.
+    paintSheetBand(context, layout, art(), colour, top, bottom);
+    await yieldToPage();
+    if (sheet.dropped) return;
     i = j;
   }
   sheet.source.resize(layout.width, layout.height);
@@ -122,11 +130,19 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
     canvas.width = 1;
     canvas.height = 1;
     const source = new CanvasSource({ resource: canvas, resolution: 1, scaleMode: 'linear' });
-    const sheet: Sheet = { layout, part, source, textures: new Map(), painted: false };
+    const sheet: Sheet = {
+      layout,
+      part,
+      source,
+      textures: new Map(),
+      painted: false,
+      dropped: false,
+    };
     sheets.set(key, sheet);
     queue = queue
-      .then(() => paint(sheet, canvas))
+      .then(() => (sheet.dropped ? undefined : paint(sheet, canvas)))
       .then(() => {
+        if (sheet.dropped) return;
         sheet.painted = true;
         onPainted();
       });
@@ -159,6 +175,25 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
       sheet.textures.set(key, found);
     }
     return { texture: found, anchorX: cell.anchorX, anchorY: cell.anchorY };
+  }
+
+  function forget() {
+    marks.clear();
+    ready = true;
+    for (const sprite of pool) {
+      sprite.texture = Texture.EMPTY;
+      sprite.visible = false;
+    }
+    for (const sheet of sheets.values()) {
+      sheet.dropped = true;
+      for (const t of sheet.textures.values()) t.destroy();
+      const canvas = sheet.source.resource;
+      sheet.source.destroy();
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    sheets.clear();
+    wanted = { size: 0, since: 0 };
   }
 
   return {
@@ -243,11 +278,14 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
       for (let i = used; i < pool.length; i++) (pool[i] as Sprite).visible = false;
       return shown;
     },
+    /**
+     * Lets go of every sheet. A sheet is painted for each colour that comes into view, so
+     * a tab that plays one power after another would otherwise keep a sheet for every
+     * power it ever showed. Sheets the next game needs are painted again.
+     */
+    forget,
     destroy() {
-      for (const sheet of sheets.values()) {
-        for (const t of sheet.textures.values()) t.destroy();
-        sheet.source.destroy();
-      }
+      forget();
       root.destroy({ children: true });
     },
   };
