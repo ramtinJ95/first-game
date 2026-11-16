@@ -20,10 +20,16 @@ import { camera, cityPoint, dropSave, openGame, pause, untilDrawn } from './supp
  * Each checkout builds its own world with its own rules and save format, so an older
  * build loads a save it understands. Build each checkout first (`npm run build`).
  *
- *   node e2e/trade-minute-bench.ts [--roots /a,/b] [--zooms closest,middle] [--seconds 60] [--rounds 3] [--budget]
+ *   node e2e/trade-minute-bench.ts [--roots /a,/b] [--zooms closest,middle] [--seconds 60] [--rounds 3] [--budget | --panel-budget]
  *
  * `--budget` exits non-zero unless, on every root and zoom, Roma selected draws at least
- * nine tenths of the frames of nothing selected and its longest gap is no longer.
+ * nine tenths of the frames of nothing selected, its longest gap is at most a tenth longer,
+ * and its panels run no more often than `MAX_REFRESHES_PER_DAY` a day played. The frame
+ * rules need the full three rounds of a minute: on a 2-core software GL host one build's
+ * frames spread by more than a tenth between rounds, and drawing a selection (its panel,
+ * outline and route ink) costs that host about 7 % of a closest frame.
+ * `--panel-budget` checks only the panels, which needs one short round, and still prints
+ * the frames; CI's frame job has the time for that.
  */
 const { values } = parseArgs({
   options: {
@@ -33,6 +39,7 @@ const { values } = parseArgs({
     rounds: { type: 'string', default: '3' },
     selections: { type: 'string', default: 'roma,none' },
     budget: { type: 'boolean', default: false },
+    'panel-budget': { type: 'boolean', default: false },
     args: { type: 'string' },
     profile: { type: 'string' },
     query: { type: 'string', default: '' },
@@ -44,6 +51,11 @@ const VIEW = { width: 1280, height: 720 };
 const ZOOMS: Record<string, number> = { closest: 4, middle: 1 };
 /** A steady pan: the pointer sweeps this far either side of the middle at this speed. */
 const PAN = { reach: 360, pxPerSecond: 120, stepMs: 50 };
+/**
+ * The panels run again when what they show changes: about once a day played, and on a
+ * click. Republished unchanged ten times a second, they took the frames a selected city lost.
+ */
+const MAX_REFRESHES_PER_DAY = 1.5;
 /** Gold for three openings on day 1; a new game's treasury pays for one. */
 const TREASURY = 7000;
 
@@ -62,6 +74,8 @@ interface Run {
   days: number;
   paths: string | null;
   merchants: number;
+  /** How often the panels ran again, from the page's `panels` measure. */
+  refreshes: number;
 }
 
 async function worldOf(root: string): Promise<{ save: string; day: number }> {
@@ -115,7 +129,10 @@ async function measure(
     if (roma) {
       const at = view.city('roma');
       await page.mouse.click(at.x, at.y);
-      await page.getByTestId('city-name').and(page.getByText('Roma')).waitFor();
+      await page
+        .getByTestId('city-name')
+        .and(page.getByText('Roma'))
+        .waitFor({ state: 'attached' });
     }
     await view.jumpTo(cityPoint('roma'), ZOOMS[zoom] ?? 1);
     await page.locator('canvas[data-terrain="ready"]').waitFor({ timeout: 120_000 });
@@ -125,8 +142,11 @@ async function measure(
     const firstDay = await dayOf(page);
     await page.evaluate(() => {
       const canvas = document.querySelector<HTMLCanvasElement>('canvas[data-renderer]');
-      const record = { at: [performance.now()], stop: false };
+      const record = { at: [performance.now()], stop: false, refreshes: 0 };
       Object.assign(globalThis, { benchFrames: record });
+      new PerformanceObserver((list) => {
+        if (!record.stop) record.refreshes += list.getEntriesByName('panels').length;
+      }).observe({ type: 'measure' });
       let seen = canvas?.dataset['drawnFrames'];
       const watch = () => {
         const now = canvas?.dataset['drawnFrames'];
@@ -168,11 +188,14 @@ async function measure(
       await page.mouse.move(middle.x + offset, middle.y);
       await delay(PAN.stepMs);
     }
-    const at = await page.evaluate(() => {
-      const record = (globalThis as unknown as { benchFrames: { at: number[]; stop: boolean } })
-        .benchFrames;
+    const { at, refreshes } = await page.evaluate(() => {
+      const record = (
+        globalThis as unknown as {
+          benchFrames: { at: number[]; stop: boolean; refreshes: number };
+        }
+      ).benchFrames;
       record.stop = true;
-      return [...record.at, performance.now()];
+      return { at: [...record.at, performance.now()], refreshes: record.refreshes };
     });
     await page.mouse.up();
     if (cdp) {
@@ -188,6 +211,7 @@ async function measure(
       days: (await dayOf(page)) - firstDay,
       paths: await canvas.getAttribute('data-trade-paths'),
       merchants: Number((await canvas.getAttribute('data-trade-figures')) ?? 0),
+      refreshes,
     };
     if (roma && (await page.getByTestId('city-name').textContent()) !== 'Roma')
       throw new Error('Roma lost its selection during the minute');
@@ -231,7 +255,7 @@ try {
           const run = await measure(browser, base, world, zoom, selection === 'roma');
           results.set(key, [...(results.get(key) ?? []), run]);
           console.error(
-            `round ${round + 1} ${key}: ${run.frames} frames, longest gap ${(run.longestGap / 1000).toFixed(2)} s, median ${run.medianGap.toFixed(0)} ms, ${run.days} days, paths ${run.paths}, merchants ${run.merchants}`,
+            `round ${round + 1} ${key}: ${run.frames} frames, longest gap ${(run.longestGap / 1000).toFixed(2)} s, median ${run.medianGap.toFixed(0)} ms, ${run.days} days, ${run.refreshes} panel refreshes, paths ${run.paths}, merchants ${run.merchants}`,
           );
         }
       }
@@ -245,17 +269,17 @@ console.log(
   `Rome, three routes from Roma, speed 2, a ${PAN.pxPerSecond} px/s pan, ${seconds} s, ${rounds} rounds`,
 );
 console.log(
-  '| Build | Zoom | Selected | Frames drawn (each round) | Longest gap, s (each round) |',
+  '| Build | Zoom | Selected | Frames drawn (each round) | Longest gap, s (each round) | Panel refreshes per day |',
 );
-console.log('| --- | --- | --- | --- | --- |');
+console.log('| --- | --- | --- | --- | --- | --- |');
 for (const [key, runs] of results) {
   const [root, zoom, selection] = key.split(' | ');
   console.log(
-    `| ${root} | ${zoom} | ${selection} | ${median(runs.map((r) => r.frames))} (${runs.map((r) => r.frames).join(', ')}) | ${(median(runs.map((r) => r.longestGap)) / 1000).toFixed(2)} (${runs.map((r) => (r.longestGap / 1000).toFixed(2)).join(', ')}) |`,
+    `| ${root} | ${zoom} | ${selection} | ${median(runs.map((r) => r.frames))} (${runs.map((r) => r.frames).join(', ')}) | ${(median(runs.map((r) => r.longestGap)) / 1000).toFixed(2)} (${runs.map((r) => (r.longestGap / 1000).toFixed(2)).join(', ')}) | ${median(runs.map((r) => r.refreshes / r.days)).toFixed(1)} |`,
   );
 }
 
-if (values.budget) {
+if (values.budget || values['panel-budget']) {
   const failures: string[] = [];
   for (const root of roots)
     for (const zoom of zooms) {
@@ -264,12 +288,17 @@ if (values.budget) {
       const frames = median(selected.map((r) => r.frames));
       const floor = 0.9 * median(none.map((r) => r.frames));
       const gap = median(selected.map((r) => r.longestGap));
-      const ceiling = median(none.map((r) => r.longestGap));
-      if (!(frames >= floor))
+      const ceiling = 1.1 * median(none.map((r) => r.longestGap));
+      const perDay = median(selected.map((r) => r.refreshes / r.days));
+      if (values.budget && !(frames >= floor))
         failures.push(`${zoom}: Roma selected drew ${frames} frames, under ${floor.toFixed(1)}`);
-      if (!(gap <= ceiling))
+      if (values.budget && !(gap <= ceiling))
         failures.push(
           `${zoom}: Roma selected's longest gap ${gap.toFixed(0)} ms exceeds ${ceiling.toFixed(0)} ms`,
+        );
+      if (!(perDay <= MAX_REFRESHES_PER_DAY))
+        failures.push(
+          `${zoom}: with Roma selected the panels ran ${perDay.toFixed(1)} times a day, over ${MAX_REFRESHES_PER_DAY}`,
         );
     }
   if (failures.length > 0) {

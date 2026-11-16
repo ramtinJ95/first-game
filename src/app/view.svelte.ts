@@ -100,21 +100,20 @@ function sameSnapshot(a: Snapshot, b: Snapshot): boolean {
 const MEASURES_KEPT = 200;
 
 /**
- * The one way panels read the live state, republished about ten times a second. With
- * `timing`, each republish also updates the panels at once and records how long that
- * took as a user-timing measure of that name, which a test or a profiler can read.
+ * The one way panels read the live state, read about ten times a second and republished
+ * when it changed. With `timing`, each republish also updates the panels at once and
+ * records how long that took as a user-timing measure of that name, which a test or a
+ * profiler can read.
  */
 export function createView(read: () => Snapshot, intervalMs = 100, timing?: string): View {
   // Raw state is never proxied, so the big plain state tree reaches panels untouched.
   let current = $state.raw(read());
-  const refresh = () => {
-    const next = read();
-    if (!sameSnapshot(current, next)) current = next;
-  };
   const publish = () => {
-    if (!timing) return refresh();
     const start = performance.now();
-    refresh();
+    const next = read();
+    if (sameSnapshot(current, next)) return;
+    current = next;
+    if (!timing) return;
     flushSync();
     performance.measure(timing, { start, end: performance.now() });
     if (performance.getEntriesByName(timing).length > MEASURES_KEPT) {
@@ -126,7 +125,7 @@ export function createView(read: () => Snapshot, intervalMs = 100, timing?: stri
     get current() {
       return current;
     },
-    refresh,
+    refresh: publish,
     destroy() {
       clearInterval(timer);
     },
