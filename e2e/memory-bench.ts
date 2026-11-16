@@ -16,6 +16,7 @@ import { figureHeight, FIGURE_SCALE } from '../src/render/armies/scene.ts';
 import { sheetSizeFor } from '../src/render/armies/layer.ts';
 import { MAX_SCALE } from '../src/render/camera.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
+import { countObjects } from './count-objects.ts';
 import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
 
 /**
@@ -250,42 +251,6 @@ function residentMb(type: string): number {
     }
   }
   return Math.round(kb / 1024);
-}
-
-/**
- * The live objects of a prototype for which `test`, an expression of `node`, holds. `queryObjects` hands back an array
- * that DevTools keeps until its group is released, and a kept array keeps every node in
- * it, so a count that did not release it would itself hold each old page it counted.
- */
-async function countObjects(
-  session: import('@playwright/test').CDPSession,
-  prototype: string,
-  test: string,
-): Promise<number> {
-  const objectGroup = 'memory-bench-count';
-  try {
-    const { result } = await session.send('Runtime.evaluate', {
-      expression: prototype,
-      objectGroup,
-    });
-    const { objects } = await session.send('Runtime.queryObjects', {
-      prototypeObjectId: result.objectId ?? '',
-      objectGroup,
-    });
-    const counted = await session.send('Runtime.callFunctionOn', {
-      objectId: objects.objectId ?? '',
-      // Prototypes come back with the instances, and reading a node's fields from one throws.
-      functionDeclaration: `function () {
-        return this.filter((node) => {
-          try { return typeof node.isConnected === 'boolean' && (${test}); } catch { return false; }
-        }).length;
-      }`,
-      returnByValue: true,
-    });
-    return Number(counted.result.value);
-  } finally {
-    await session.send('Runtime.releaseObjectGroup', { objectGroup });
-  }
 }
 
 async function sample(page: Page, step: string) {
