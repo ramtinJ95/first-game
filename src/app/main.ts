@@ -29,6 +29,7 @@ import {
   type Alert,
   type WeakSiege,
 } from './alerts.ts';
+import { forgetNamedWaits } from '../ui/named-waits.ts';
 import { createClock } from './clock.ts';
 import { desertionNews, type Desertion } from './desertion.ts';
 import { tradeNews, type TradeTrouble } from './trade-news.ts';
@@ -500,6 +501,7 @@ function enter(
   page?: Page,
 ) {
   renderer.leaveGame();
+  forgetNamedWaits();
   clock.load(state, page?.pendingPeace);
   chronicle = page?.chronicle ?? [];
   toldOnce = new Set(page?.told);

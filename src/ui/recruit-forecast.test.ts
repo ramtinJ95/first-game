@@ -9,7 +9,8 @@ import { dateText } from '../app/names.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { dailyBalances, economy, limitsOf, UPKEEP_PER_MAN } from '../sim/systems/economy.ts';
 import { tick } from '../sim/tick.ts';
-import { recruitForecast } from './recruit-forecast.ts';
+import { MOVED_DAYS, movedText, recruitForecast } from './recruit-forecast.ts';
+import { TROOP_NAMES } from '../app/names.ts';
 import { population } from '../sim/systems/population.ts';
 import { TROOPS } from '../sim/troops.ts';
 import { executeOrder } from '../sim/orders/orders.ts';
@@ -276,3 +277,22 @@ function foodDeficitAfterSpearmen(after: number, full = 1): GameState {
   stores.manpower = 100_000;
   return state;
 }
+
+it('says what moved the named day: the troops raised since, who are fed first', () => {
+  const state = foodDeficitAfterSpearmen(-5, 0.1);
+  const before = recruitForecast(state, [], world, 'spearmen').named;
+  const skirmishers = {
+    kind: 'recruit',
+    faction: f.rome,
+    city: f.roma,
+    troop: 'skirmishers',
+  } as const;
+  expect(recruitForecast(state, [], world, 'skirmishers').warning).toBeUndefined();
+  const now = recruitForecast(state, [skirmishers], world, 'spearmen').named;
+  if (!before || !now) throw new Error('the card names no wait');
+  expect(now.named).toBeGreaterThan(before.named + MOVED_DAYS);
+  expect(movedText(before, now, TROOP_NAMES)).toBe(
+    `Now ${dateText(now.named)}, not ${dateText(before.named)} as this card said on ${dateText(state.day)}: since then you raised 500 Skirmishers, who are fed first.`,
+  );
+  expect(movedText(before, before, TROOP_NAMES)).toBeUndefined();
+});
