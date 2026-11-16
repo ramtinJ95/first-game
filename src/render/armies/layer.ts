@@ -65,6 +65,13 @@ const partOf = (key: string): { part: Part; cell: string } => {
 /** A band of a sheet painted in one task: about this many px of rows at a time. */
 const BAND_PX = 160;
 
+/** Lets the page draw and answer input between two bands of a paint. */
+function yieldToPage(): Promise<void> {
+  const scheduler = Reflect.get(globalThis, 'scheduler') as
+    { yield?: () => Promise<void> } | undefined;
+  return scheduler?.yield ? scheduler.yield() : new Promise((done) => setTimeout(done, 0));
+}
+
 /**
  * Paints a sheet band by band, yielding between bands, so that no paint holds the
  * page's main thread long enough to miss frames. Each paint is timed as the
@@ -87,7 +94,7 @@ async function paint(sheet: Sheet, canvas: HTMLCanvasElement) {
     // Drawn with the 2D context rather than decoded as an SVG image: Chromium keeps the
     // source of every SVG image a page decodes, about a megabyte a band, for the page's life.
     paintSheetBand(context, layout, art(), colour, top, bottom);
-    await new Promise((done) => setTimeout(done, 0));
+    await yieldToPage();
     if (sheet.dropped) return;
     i = j;
   }

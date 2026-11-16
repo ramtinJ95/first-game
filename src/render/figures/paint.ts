@@ -165,8 +165,9 @@ function fillOf(op: PaintOp, colour: number): string | undefined {
 
 /**
  * Paints the figure into a 2D context, as `paintSvg` would: each op fills, then strokes
- * its outline over the fill. Only filled ops carry an opacity, so one alpha for the op
- * matches the opacity SVG gives the whole path.
+ * its outline over the fill, at the opacity and stroke width `paintSvg` writes, rounded to
+ * a tenth. Only filled ops carry an opacity, so one alpha for the op matches the opacity
+ * SVG gives the whole path.
  */
 export function paintOps(
   context: CanvasRenderingContext2D,
@@ -176,7 +177,7 @@ export function paintOps(
   context.lineJoin = 'round';
   for (const op of ops) {
     const path = new Path2D(op.d);
-    context.globalAlpha = op.opacity ?? 1;
+    context.globalAlpha = op.opacity === undefined ? 1 : Number(n(op.opacity));
     const fill = fillOf(op, colour);
     if (fill !== undefined) {
       context.fillStyle = fill;
