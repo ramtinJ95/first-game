@@ -1,5 +1,5 @@
 import { chromium, type Page } from '@playwright/test';
-import { appendFileSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import { preview } from 'vite';
@@ -12,6 +12,10 @@ import type { MapPoint } from '../src/sim/state/map-point.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 import { newGame } from '../src/sim/new-game.ts';
 import type { PowerId } from '../src/sim/map.ts';
+import { figureHeight, FIGURE_SCALE } from '../src/render/armies/scene.ts';
+import { sheetSizeFor } from '../src/render/armies/layer.ts';
+import { MAX_SCALE } from '../src/render/camera.ts';
+import type { GameState } from '../src/sim/state/game-state.ts';
 import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
 
 /**
@@ -39,6 +43,15 @@ import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
  * writes heap snapshots after those cycles, named after `--snapshot`, and `--texture-shapes`
  * prints the live textures by size that each cycle added or freed.
  *
+ * `--sheets <n>` stands the armies of n colours (Rome's and those of other powers, then a
+ * minor) in one view on day 1 and zooms in over them three times through every size of
+ * figure sheet the screen rests at, `--dpr 2` for a screen of twice the density, in a
+ * `--viewport 640x360` window if the machine cannot draw a larger one in software. It
+ * prints the sheets painted in the first round and again in the later ones and their bytes
+ * over the whole map after each round, and fails when a sheet is painted twice at one zoom
+ * or again as the camera goes back and forth between two neighbouring zooms.
+ * `--sheet-bound <MB>` fails the run when the sheets over the whole map hold more.
+ *
  *   node e2e/memory-bench.ts [--loads 30 | --years 10] [--days 300] [--draw full] [--out file.csv]
  */
 const { values } = parseArgs({
@@ -47,6 +60,11 @@ const { values } = parseArgs({
     cycles: { type: 'string' },
     play: { type: 'string', default: '5' },
     'cycle-bound': { type: 'string' },
+    sheets: { type: 'string' },
+    dpr: { type: 'string', default: '1' },
+    viewport: { type: 'string' },
+    'chromium-args': { type: 'string' },
+    'sheet-bound': { type: 'string' },
     snapshots: { type: 'string' },
     'texture-shapes': { type: 'boolean', default: false },
     bound: { type: 'string' },
@@ -67,7 +85,9 @@ const { values } = parseArgs({
 
 /** A run stops once the machine has less than this left, before the tab or the run is killed. */
 const LOW_MB = 300;
-const VIEWPORT = { width: 1280, height: 720 };
+/** `--viewport 640x360` draws a smaller page, as the figure sheets at `--dpr 2` need in software. */
+const [WIDTH, HEIGHT] = (values.viewport ?? '1280x720').split('x').map(Number);
+const VIEWPORT = { width: WIDTH ?? 1280, height: HEIGHT ?? 720 };
 /**
  * A long session looks at many places, so each zoom goes in over the next of these:
  * the Persian plateau where the tester's tab crashed, then every third city of the map
@@ -125,6 +145,7 @@ function trackTextures() {
     return bufferData.apply(this, args);
   } as typeof proto.bufferData;
   const shapes = new Map<WebGLTexture, string>();
+  const fromCanvas = new Set<WebGLTexture>();
   proto.createTexture = function (this: WebGL2RenderingContext) {
     const texture = create.call(this);
     if (texture) sizes.set(texture, 0);
@@ -133,6 +154,7 @@ function trackTextures() {
   proto.deleteTexture = function (this: WebGL2RenderingContext, texture: WebGLTexture | null) {
     if (texture) sizes.delete(texture);
     if (texture) shapes.delete(texture);
+    if (texture) fromCanvas.delete(texture);
     return remove.call(this, texture);
   };
   proto.bindTexture = function (this: WebGL2RenderingContext, target: GLenum, texture) {
@@ -149,6 +171,8 @@ function trackTextures() {
           : [source?.width ?? 0, source?.height ?? 0];
       sizes.set(texture, width * height * 4);
       shapes.set(texture, `${width}x${height}`);
+      if (args.some((arg) => arg instanceof HTMLCanvasElement)) fromCanvas.add(texture);
+      else fromCanvas.delete(texture);
     }
     return image.apply(this, args);
   } as typeof proto.texImage2D;
@@ -156,9 +180,38 @@ function trackTextures() {
     const texture = bound.get(this);
     if (texture) sizes.set(texture, w * h * 4);
     if (texture) shapes.set(texture, `${w}x${h}`);
+    if (texture) fromCanvas.delete(texture);
     return storage.call(this, target, levels, format, w, h);
   };
+  // A lost context takes every texture and buffer with it, and none is deleted one by one.
+  document.addEventListener(
+    'webglcontextlost',
+    () => {
+      sizes.clear();
+      shapes.clear();
+      fromCanvas.clear();
+      buffers.clear();
+    },
+    true,
+  );
+  // The longest wait between two animation frames, and how many passed 100 ms, since last read.
+  let lastFrame = 0;
+  let gaps = { longest: 0, over100: 0 };
+  const onFrame = (at: number) => {
+    if (lastFrame > 0) {
+      const gap = at - lastFrame;
+      gaps = { longest: Math.max(gaps.longest, gap), over100: gaps.over100 + (gap > 100 ? 1 : 0) };
+    }
+    lastFrame = at;
+    requestAnimationFrame(onFrame);
+  };
+  requestAnimationFrame(onFrame);
   Object.assign(window, {
+    frameGaps: () => {
+      const read = { longest: Math.round(gaps.longest), over100: gaps.over100 };
+      gaps = { longest: 0, over100: 0 };
+      return read;
+    },
     textureShapes: () => {
       const counts: Record<string, number> = {};
       for (const shape of shapes.values()) counts[shape] = (counts[shape] ?? 0) + 1;
@@ -169,6 +222,13 @@ function trackTextures() {
       bytes: [...sizes.values()].reduce((sum, bytes) => sum + bytes, 0),
       buffers: buffers.size,
       bufferBytes: [...buffers.values()].reduce((sum, bytes) => sum + bytes, 0),
+      // A figure sheet is a canvas laid out 2048 or 4096 px wide. Render targets of those
+      // widths have no canvas behind them, and the names drawn from canvases are narrow.
+      sheetBytes: [...sizes]
+        .filter(
+          ([texture]) => fromCanvas.has(texture) && /^(2048|4096)x/.test(shapes.get(texture) ?? ''),
+        )
+        .reduce((sum, [, bytes]) => sum + bytes, 0),
     }),
   });
 }
@@ -176,6 +236,8 @@ function trackTextures() {
 /** Resident set of every Chromium process of a type, in MB, read from /proc. */
 function residentMb(type: string): number {
   let kb = 0;
+  // Only Linux has /proc; elsewhere the processes' memory reads 0.
+  if (!existsSync('/proc/meminfo')) return 0;
   for (const pid of readdirSync('/proc').filter((name) => /^\d+$/.test(name))) {
     try {
       const cmdline = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
@@ -199,7 +261,13 @@ async function sample(page: Page, step: string) {
   const textures = await page.evaluate(() =>
     (
       window as unknown as {
-        textureReport(): { count: number; bytes: number; buffers: number; bufferBytes: number };
+        textureReport(): {
+          count: number;
+          bytes: number;
+          buffers: number;
+          bufferBytes: number;
+          sheetBytes: number;
+        };
       }
     ).textureReport(),
   );
@@ -212,6 +280,7 @@ async function sample(page: Page, step: string) {
     listeners: metric('JSEventListeners'),
     textures: textures.count,
     textureMb: Math.round(textures.bytes / 2 ** 20),
+    sheetMb: Math.round(textures.sheetBytes / 2 ** 20),
     buffers: textures.buffers,
     bufferMb: Math.round(textures.bufferBytes / 2 ** 20),
     rendererMb: residentMb('renderer'),
@@ -223,7 +292,9 @@ async function sample(page: Page, step: string) {
 }
 
 const availableMb = () =>
-  Number(/MemAvailable:\s+(\d+)/.exec(readFileSync('/proc/meminfo', 'utf8'))?.[1] ?? 0) >> 10;
+  existsSync('/proc/meminfo')
+    ? Number(/MemAvailable:\s+(\d+)/.exec(readFileSync('/proc/meminfo', 'utf8'))?.[1] ?? 0) >> 10
+    : Infinity;
 
 /** The most the renderer and GPU processes held, and the least the machine had left, since the run began. */
 const peak = { tabMb: 0, freeMb: Infinity, phaseMb: 0 };
@@ -268,8 +339,13 @@ async function waitTerrain(page: Page) {
   await busy.waitFor({ state: 'detached', timeout: 180_000 });
 }
 
-/** Zooms with single wheel events from the whole map to the plateau, closer and closer, then out. */
-async function zoomCycle(page: Page, at: MapPoint) {
+/**
+ * Zooms with single wheel events from the whole map over `at` to each scale in turn, and
+ * returns the figure sheets painted at each, by size and part, until it settled.
+ */
+async function zoomCycle(page: Page, at: MapPoint, scales = [MIDDLE, CLOSEST, 0.01]) {
+  const painted: string[][] = [];
+  let seen = await page.evaluate(() => performance.getEntriesByName('sheet').length);
   // A new game opens on its capital; one long wheel out from the middle comes to rest on
   // the whole map, which is where the camera below begins.
   await page.mouse.move(VIEWPORT.width / 2, VIEWPORT.height / 2);
@@ -280,20 +356,69 @@ async function zoomCycle(page: Page, at: MapPoint) {
     const screen = mapToScreen(camera, VIEWPORT, at);
     const deltaY = -Math.log(scale / camera.scale) / 0.002;
     await page.mouse.move(screen.x, screen.y);
-    await page.mouse.wheel(0, deltaY);
+    // The page receives a wheel's delta divided by the device pixel ratio.
+    await page.mouse.wheel(0, deltaY * Number(values.dpr));
     camera = zoomAt(camera, screen, wheelFactor(deltaY), VIEWPORT, map);
     peak.phaseMb = 0;
     const start = performance.now();
     await delay(300);
     await settled(page);
     const figures = await page.locator('canvas[data-renderer]').getAttribute('data-figures');
+    painted.push(
+      await page.evaluate((from) => {
+        const entries = performance.getEntriesByName('sheet') as PerformanceMeasure[];
+        return entries.slice(from).map((e) => {
+          const { size, part } = e.detail as { size: number; part: number | string };
+          return `${size}:${part}`;
+        });
+      }, seen),
+    );
+    seen += painted.at(-1)?.length ?? 0;
     console.error(
       `  zoom ${scale}: peak ${peak.phaseMb} MB, renderer ${residentMb('renderer')} gpu ${residentMb('gpu-process')} MB at rest, figures ${figures}, ${Math.round((performance.now() - start) / 1000)} s`,
     );
   };
-  await wheelTo(MIDDLE, at);
-  await wheelTo(CLOSEST, at);
-  await wheelTo(0.01, at);
+  for (const scale of scales) await wheelTo(scale, at);
+  return painted;
+}
+
+/**
+ * A zoom for each size of figure sheet the camera can rest at on this screen, from the
+ * smallest up, then the whole map: where a man stands a little under each size high.
+ */
+function sheetZooms(resolution: number): number[] {
+  const zooms = new Map<number, number>();
+  for (let scale = FIGURE_SCALE; scale <= MAX_SCALE; scale *= 1.02) {
+    const size = sheetSizeFor(figureHeight(scale) * resolution);
+    if (!zooms.has(size) || figureHeight(scale) * resolution <= size) zooms.set(size, scale);
+  }
+  zooms.set(sheetSizeFor(figureHeight(MAX_SCALE) * resolution), MAX_SCALE);
+  return [...[...zooms].sort((a, b) => a[0] - b[0]).map(([, scale]) => scale), 0.01];
+}
+
+/**
+ * Day 1 with the first army of `colours - 1` other factions (Carthage, Macedon, a minor,
+ * Egypt and Persia in turn) standing in a ring 12 km round Rome's own, where Rome sees
+ * them all, so `colours` colours of figure stand in one view. Returns where Rome's army
+ * stands.
+ */
+function coloursInView(state: GameState, colours: number): MapPoint {
+  const own = Object.values(state.armies).find((a) => a.owner === state.player);
+  if (!own || !('position' in own.activity)) throw new Error('Rome has no army in the field');
+  const centre = own.activity.position;
+  const owners = ['carthage', 'macedon', 'minor', 'egypt', 'persia'].slice(0, colours - 1);
+  owners.forEach((owner, i) => {
+    const army = Object.values(state.armies).find((a) =>
+      owner === 'minor' ? state.factions[a.owner]?.kind === 'minor' : a.owner === owner,
+    );
+    if (!army) throw new Error(`no army of ${owner}`);
+    const angle = (2 * Math.PI * i) / owners.length;
+    army.activity = {
+      kind: 'idle',
+      position: { x: centre.x + 12 * Math.cos(angle), y: centre.y + 12 * Math.sin(angle) },
+    };
+  });
+  return centre;
 }
 
 function capitalOf(power: PowerId): MapPoint {
@@ -382,9 +507,14 @@ const server = await preview({
 });
 const base = server.resolvedUrls?.local[0]?.replace(/\/$/, '');
 if (!base) throw new Error('vite preview gave no URL');
-const browser = await chromium.launch({ args: [...SOFTWARE_GL] });
+const browser = await chromium.launch({
+  args: values['chromium-args'] ? values['chromium-args'].split(' ') : [...SOFTWARE_GL],
+});
 try {
-  const context = await browser.newContext({ viewport: VIEWPORT });
+  const context = await browser.newContext({
+    viewport: VIEWPORT,
+    deviceScaleFactor: Number(values.dpr),
+  });
   await context.addInitScript(trackTextures);
   const page = await context.newPage();
   const errors: string[] = [];
@@ -399,7 +529,7 @@ try {
     console.log(Object.values(row).join(','));
   };
   console.log(
-    'step,heapMb,nodes,listeners,textures,textureMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb',
+    'step,heapMb,nodes,listeners,textures,textureMb,sheetMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb',
   );
   if (values.sites) {
     const session = await page.context().newCDPSession(page);
@@ -407,7 +537,90 @@ try {
     sampler.set(page, session);
   }
   print(await sample(page, 'open'));
-  if (values.cycles) {
+  if (values.sheets) {
+    // At `--dpr 2` in software one frame of a few hundred figures takes tens of seconds.
+    page.setDefaultTimeout(180_000);
+    const game = startGame();
+    const colours = Number(values.sheets);
+    const at = coloursInView(game, colours);
+    // A dropped save keeps the clock as it was, so the ring is paused before it lands.
+    const pauseButton = page.getByRole('button', { name: 'Pause', exact: true });
+    if (await pauseButton.isVisible()) await pauseButton.click();
+    await page.getByTestId('time-controls-speed').and(page.getByText('Paused')).waitFor();
+    await dropSave(page, game);
+    await page.getByTestId('time-controls-day').and(page.locator('[data-day="1"]')).waitFor();
+    const zooms = sheetZooms(Number(values.dpr));
+    console.error(`  zooms ${zooms.map((z) => z.toFixed(3)).join(', ')}`);
+    const sheetMb: number[] = [];
+    let firstRound = 0;
+    let inRounds = 0;
+    const rests: string[][] = [];
+    const frameGaps = () =>
+      page.evaluate(() =>
+        (window as unknown as { frameGaps(): { longest: number; over100: number } }).frameGaps(),
+      );
+    const roundGaps: string[] = [];
+    await frameGaps();
+    for (const round of [1, 2, 3]) {
+      rests.push(...(await zoomCycle(page, at, zooms)));
+      const row = await sample(page, `${colours} colours every sheet size round ${round}`);
+      print(row);
+      sheetMb.push(row.sheetMb);
+      if (values['texture-shapes']) await printTextureShapes(page);
+      if (errors.length > 0) throw new Error(errors.join('; '));
+      const painted = await page.evaluate(() => performance.getEntriesByName('sheet').length);
+      if (round === 1) firstRound = painted;
+      if (round === 3) inRounds = painted;
+      const gap = await frameGaps();
+      roundGaps.push(`${gap.longest} ms (${gap.over100} over 100 ms)`);
+    }
+    // A player goes back and forth between two neighbouring zooms. After the first visit
+    // to each, every sheet they need is painted, and none may be painted again.
+    const figureZooms = zooms.filter((zoom) => zoom >= FIGURE_SCALE);
+    const again: string[] = [];
+    for (let i = 0; i + 1 < figureZooms.length; i++) {
+      const [near, far] = [figureZooms[i] as number, figureZooms[i + 1] as number];
+      const rested = await zoomCycle(page, at, [near, far, near, far, near]);
+      const repainted = rested.slice(2).flat();
+      console.log(
+        `  back and forth between ${near.toFixed(3)} and ${far.toFixed(3)}: ${repainted.length} painted after the first visit to each${repainted.length > 0 ? ` (${repainted.join(' ')})` : ''}`,
+      );
+      again.push(...repainted);
+    }
+    const backGap = await frameGaps();
+    console.log(
+      `frame gaps: longest per round ${roundGaps.join(', ')}; going back and forth ${backGap.longest} ms (${backGap.over100} over 100 ms)`,
+    );
+    console.log(
+      `${again.length === 0 ? 'held' : 'NOT held'}: no sheet painted again going back and forth between neighbouring zooms`,
+    );
+    if (again.length > 0) process.exitCode = 1;
+    const paints = await page.evaluate(() =>
+      performance.getEntriesByName('sheet').map((e) => ({
+        ms: Math.round(e.duration),
+        ...(e as PerformanceMeasure).detail,
+      })),
+    );
+    console.log(
+      `sheets: ${firstRound} painted in round 1, ${inRounds - firstRound} painted again in rounds 2 and 3, ${paints.length - inRounds} going back and forth; sheets over the whole map after each round ${sheetMb.join(', ')} MB`,
+    );
+    console.error(`  sheet paints: ${JSON.stringify(paints)}`);
+    // A sheet in view that the budget let go of is asked for again by the next frame, so
+    // it would be painted twice while the camera rests at one zoom.
+    const twice = rests.flatMap((keys) => keys.filter((key, i) => keys.indexOf(key) !== i));
+    console.log(
+      `${twice.length === 0 ? 'held' : 'NOT held'}: no sheet painted twice at one zoom${twice.length > 0 ? `; twice: ${twice.join(' ')}` : ''}`,
+    );
+    if (twice.length > 0) process.exitCode = 1;
+    if (values['sheet-bound']) {
+      const bound = Number(values['sheet-bound']);
+      const most = Math.max(...sheetMb);
+      console.log(
+        `${most <= bound ? 'held' : 'NOT held'}: the figure sheets over the whole map at most ${most} MB (bound ${bound} MB)`,
+      );
+      if (most > bound) process.exitCode = 1;
+    }
+  } else if (values.cycles) {
     const save = saveGame(startGame());
     const snapshotAt = new Set((values.snapshots ?? '').split(',').filter(Boolean).map(Number));
     const kindOf = (cycle: number) => {
@@ -534,7 +747,7 @@ try {
   await server.close();
   if (values.out) {
     const header =
-      'step,heapMb,nodes,listeners,textures,textureMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb';
+      'step,heapMb,nodes,listeners,textures,textureMb,sheetMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb';
     writeFileSync(values.out, [header, ...rows.map((r) => Object.values(r).join(','))].join('\n'));
   }
 }

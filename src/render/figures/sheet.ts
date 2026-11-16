@@ -298,22 +298,17 @@ export function layoutSheet(
   return { size, owned, width, height: y + row, cells };
 }
 
-/**
- * Paints the cells of a sheet whose rows start from `top` up to `bottom` into its
- * canvas, each picture at its place, the owned art in `colour`.
- */
-export function paintSheetBand(
+/** Paints these pictures of a sheet into its canvas, each at its place, the owned art in `colour`. */
+export function paintSheetCells(
   context: CanvasRenderingContext2D,
   layout: SheetLayout,
-  art: readonly CellArt[],
+  cells: readonly CellArt[],
   colour: number,
-  top: number,
-  bottom: number,
 ) {
   const k = layout.size / 100;
-  for (const cell of art) {
+  for (const cell of cells) {
     const at = layout.cells.get(cell.key);
-    if (!at || at.y < top || at.y >= bottom) continue;
+    if (!at) continue;
     context.save();
     context.translate(
       Number(n(at.x + at.anchorX * at.width)),
@@ -324,11 +319,6 @@ export function paintSheetBand(
     paintOps(context, cell.ops, colour);
     context.restore();
   }
-}
-
-/** The tops of the rows of a sheet, the places a band may start or end. */
-export function sheetRows(layout: SheetLayout): number[] {
-  return [...new Set([...layout.cells.values()].map((cell) => cell.y))].sort((a, b) => a - b);
 }
 
 /** Any picture that stands on the ground: a figure, or a tent, fire, stake, or stack of arms. */
