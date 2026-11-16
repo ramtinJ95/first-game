@@ -7,11 +7,13 @@ import {
   resume,
   untilDrawn,
 } from '../../../e2e/support.ts';
+import { THREAT_STAND_DAYS } from '../../../src/app/threat-news.ts';
 import { defineScenario } from '../scenario.ts';
 
 export default defineScenario({
   name: 'war-warning-pause',
-  title: "A great power's first warning of a coming war stops the game, as a city in danger does",
+  title:
+    "A great power's first warning of a coming war stops the game once its strength has stood a week, and names the day it may declare",
   async run({ page, shot }) {
     await openGame(page, { pauses: true });
     const state = carthageNearsWar();
@@ -30,7 +32,7 @@ export default defineScenario({
     await expect(warning.getByTestId('alert-paused')).toBeVisible();
     await expect(page.getByTestId('time-controls-day')).toHaveAttribute(
       'data-day',
-      String(state.day + 1),
+      String(state.day + THREAT_STAND_DAYS),
     );
     await expect(page.getByText('Paused', { exact: true }).first()).toBeVisible();
     await untilDrawn(page);

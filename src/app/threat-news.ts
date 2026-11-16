@@ -6,7 +6,7 @@ import { truceBetween } from '../sim/peace/truce.ts';
 import { areAtWar } from '../sim/wars.ts';
 import type { World } from '../sim/world/world.ts';
 import type { Alert } from './alerts.ts';
-import { factionName, whole } from './names.ts';
+import { dateText, factionName, whole } from './names.ts';
 import { GUARD_DETER_DAYS } from '../sim/guards.ts';
 import { NOTICE_DAYS, NOTICE_SHARE } from '../sim/ai/thresholds.ts';
 
@@ -20,6 +20,13 @@ export const THREAT_WARN = NOTICE_SHARE;
  * a warning given between a year and NOTICE_DAYS before it.
  */
 export const THREAT_RECALL_DAYS = 365 - NOTICE_DAYS;
+
+/**
+ * A power is told of once it has stood on notice this many days, so a strength that comes
+ * and goes within days, as most do, stops no game; its war still comes NOTICE_DAYS less
+ * this, or more, after the warning.
+ */
+export const THREAT_STAND_DAYS = 7;
 
 const prefixOf = (faction: string) => `threat:${faction}:`;
 
@@ -38,9 +45,10 @@ function forget(remembered: Set<string>, faction: string) {
 /**
  * The great powers at peace with the player that stand on the rules' notice: at
  * NOTICE_SHARE of the strength they need to declare war on it, which they must hold for
- * NOTICE_DAYS before they may declare (`noticeSince`). A power is told of when it comes on
- * notice, and again while on notice once THREAT_RECALL_DAYS have passed since it last
- * warned, so a war always follows a warning given between a year and NOTICE_DAYS before it;
+ * NOTICE_DAYS before they may declare (`noticeSince`). A power is told of once it has stood on
+ * notice for THREAT_STAND_DAYS, with the first day it may then declare, and again while on
+ * notice once THREAT_RECALL_DAYS have passed since it last warned, so a war always follows
+ * a warning given between a year and NOTICE_DAYS less THREAT_STAND_DAYS before it;
  * a war or a truce with the player forgets its warning. The news names the city it weighs
  * the player's armies at and, when the player's treasury lowers the odds it needs, by how
  * much.
@@ -61,6 +69,7 @@ export function threatNewsOfDay(
     }
     const last = warnedOn(remembered, power.id);
     if (power.noticeSince === null) continue;
+    if (before.day - power.noticeSince + 1 < THREAT_STAND_DAYS) continue;
     if (last !== undefined && before.day - last < THREAT_RECALL_DAYS) continue;
     const threat = readinessOf(after, world, power.id);
     if (!threat) continue;
@@ -72,7 +81,7 @@ export function threatNewsOfDay(
       day: before.day,
       tone: 'bad',
       pause: { kind: 'warThreat' },
-      text: `${factionName(after, power.id)} could soon declare war on you: its armies have ${percent(threat)} of the strength it needs ${weighed(after, threat)}.${whatCounts(after, threat)} ${WATCH}`,
+      text: `${factionName(after, power.id)} could soon declare war on you: its armies have ${percent(threat)} of the strength it needs ${weighed(after, threat)}.${whatCounts(after, threat)} ${declaresFrom(power.noticeSince)}: watch it under At peace in Wars.`,
       ...(front ? { focus: { at: front.position } } : {}),
     });
   }
@@ -80,7 +89,9 @@ export function threatNewsOfDay(
 }
 
 /** Where the warning sends the player to watch the threat between warnings. */
-const WATCH = 'Watch it under At peace in the Wars panel.';
+/** The first day a power on notice since the day may declare, if it holds the strength. */
+const declaresFrom = (since: number) =>
+  `If it holds this strength it may declare from ${dateText(since + NOTICE_DAYS)}`;
 
 type Threat = NonNullable<ReturnType<typeof warReadiness>>;
 
@@ -125,7 +136,7 @@ function whatCounts(state: State, threat: Threat): string {
     threat.hoard > 0
       ? ` Your treasury of ${whole(gold)} gold lowers what it needs by ${Math.round(threat.hoard * 100)}%, since a peace would make you pay it.`
       : '';
-  return `${hoard}${front ? ` Guards hired at ${front.name} count against it for their first ${GUARD_DETER_DAYS} days. Your armies near ${front.name} count against it too.` : ''}`;
+  return `${hoard}${front ? ` Your armies near ${front.name} and guards hired there count against it, the guards for their first ${GUARD_DETER_DAYS} days.` : ''}`;
 }
 
 /** How near one great power at peace with the player stands to declaring war on it today, as the wars panel lists it. */
@@ -168,7 +179,7 @@ export function standingThreats(state: State, world: World): StandingThreat[] {
         power: power.id,
         name,
         readiness: Math.min(1, threat.readiness),
-        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${whatCounts(state, threat)}`,
+        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${whatCounts(state, threat)}${power.noticeSince === null ? '' : ` ${declaresFrom(power.noticeSince)}.`}`,
       };
     });
 }
