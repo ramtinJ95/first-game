@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { trainingDaysAt } from '../sim/buildings/buildings.ts';
 import { buildFixture, FIXTURE as f, fixtureWorld } from '../sim/fixture.ts';
 import { newGame } from '../sim/new-game.ts';
-import { UNREST_DAYS } from '../sim/cities.ts';
+import { changeCityOwner, UNREST_DAYS } from '../sim/cities.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { Day } from '../sim/state/day.ts';
 import { dateText } from '../app/names.ts';
@@ -261,11 +261,11 @@ function goldOnly(): GameState {
   return state;
 }
 
-/** Rome's people as they are and its granary `full`, with one army sized so the food balance after a spearmen raise is `after`. */
-function foodDeficitAfterSpearmen(after: number, full = 1): GameState {
+/** Rome's two cities of 200,000, or Capua of `capua`, its granary `full`, with one army sized so the food balance after a spearmen raise is `after`. */
+function foodDeficitAfterSpearmen(after: number, full = 1, capua = 200_000): GameState {
   const state = buildFixture();
   for (const city of Object.values(state.cities))
-    if (city.owner === f.rome) city.population = 200_000;
+    if (city.owner === f.rome) city.population = city.id === f.capua ? capua : 200_000;
   const formations = required(state.armies[f.romanArmy]).formations;
   const first = required(state.formations[required(formations[0])]);
   const now = required(dailyBalances(state).get(f.rome)).food;
@@ -295,4 +295,30 @@ it('says what moved the named day: the troops raised since, who are fed first', 
     `Now ${dateText(now.named)}, not ${dateText(before.named)} as this card said on ${dateText(state.day)}: since then you raised 500 Skirmishers, who are fed first.`,
   );
   expect(movedText(before, before, TROOP_NAMES)).toBeUndefined();
+});
+
+it('says a lost city moved the named day', () => {
+  const state = foodDeficitAfterSpearmen(-5, 0.1, 10_000);
+  const before = recruitForecast(state, [], world, 'spearmen').named;
+  const lost = structuredClone(state);
+  changeCityOwner(lost, f.capua, f.carthage);
+  const now = recruitForecast(lost, [], world, 'spearmen').named;
+  if (!before || !now) throw new Error('the card names no wait');
+  expect(now.named).toBeGreaterThan(before.named + MOVED_DAYS);
+  expect(movedText(before, now, TROOP_NAMES)).toBe(
+    `Now ${dateText(now.named)}, not ${dateText(before.named)} as this card said on ${dateText(state.day)}: since then you lost Capua.`,
+  );
+});
+
+it('says the stores it counted on changed when no troop was raised and no city lost', () => {
+  const state = foodDeficitAfterSpearmen(-5, 0.1);
+  const before = recruitForecast(state, [], world, 'spearmen').named;
+  const emptier = structuredClone(state);
+  required(emptier.factions[f.rome]).stores.food /= 2;
+  const now = recruitForecast(emptier, [], world, 'spearmen').named;
+  if (!before || !now) throw new Error('the card names no wait');
+  expect(now.named).toBeGreaterThan(before.named + MOVED_DAYS);
+  expect(movedText(before, now, TROOP_NAMES)).toBe(
+    `Now ${dateText(now.named)}, not ${dateText(before.named)} as this card said on ${dateText(state.day)}: the stores or income it counted on changed since then.`,
+  );
 });
