@@ -7,6 +7,7 @@ import { areAtWar } from '../sim/wars.ts';
 import type { World } from '../sim/world/world.ts';
 import type { Alert } from './alerts.ts';
 import { factionName, whole } from './names.ts';
+import { GUARD_DETER_DAYS } from '../sim/guards.ts';
 
 type State = DeepReadonly<GameState>;
 
@@ -95,7 +96,7 @@ function whatCounts(state: State, threat: Threat): string {
     threat.hoard > 0
       ? ` Your treasury of ${whole(gold)} gold lowers what it needs by ${Math.round(threat.hoard * 100)}%, since a peace would make you pay it.`
       : '';
-  return `${hoard}${front ? ` Guards hired at ${front.name} count against it.` : ''}`;
+  return `${hoard}${front ? ` Guards hired at ${front.name} count against it for their first ${GUARD_DETER_DAYS} days.` : ''}`;
 }
 
 /** How near one great power at peace with the player stands to declaring war on it today, as the wars panel lists it. */

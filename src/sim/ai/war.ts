@@ -6,6 +6,7 @@ import { distance } from '../world/find-path.ts';
 import { routeRate, tradeIncome } from '../trade/routes.ts';
 import { ADMIN_CITIES, limitsOf } from '../systems/economy.ts';
 import type { World } from '../world/world.ts';
+import { weighedGarrison } from '../guards.ts';
 import type { Context } from './armies.ts';
 import { createRouter } from './routes.ts';
 import {
@@ -36,7 +37,8 @@ import {
  * Declares at most one war a day. A neighbour is a faction at peace with this one that
  * holds a city within WAR_REACH_KM of one of its cities, reachable by land or sea. Its
  * strength is its armies on land within WAR_FRONT_KM of that nearest city plus the
- * city's garrison. Each war in which the power can still take a city holds back all that
+ * city's garrison, with hired guards counted only in their first GUARD_DETER_DAYS
+ * (`weighedGarrison`). Each war in which the power can still take a city holds back all that
  * enemy's armies, but not its garrisons, which never leave their walls, and what is left
  * is its free strength. It declares on the neighbour with the best odds, free strength over the
  * neighbour's, once they reach WAR_ODDS raised by distance over WAR_DISTANCE_KM. A power
@@ -159,7 +161,8 @@ function reckon(context: Context) {
   const armiesOf = new Map<FactionId, (typeof armies)[number][]>();
   for (const army of armies) armiesOf.set(army.owner, [...(armiesOf.get(army.owner) ?? []), army]);
   const measure = (other: FactionId, city: CityView) =>
-    strengthNear(state, armiesOf.get(other) ?? [], city.position, WAR_FRONT_KM) + city.garrison;
+    strengthNear(state, armiesOf.get(other) ?? [], city.position, WAR_FRONT_KM) +
+    weighedGarrison(city, state.day);
 
   const fighting = new Set(targetsOf(state, faction, enemies).map((city) => city.owner));
   let free = strength.get(faction) ?? 0;
@@ -234,7 +237,7 @@ function reckon(context: Context) {
         for (const ours of ownCities) km = Math.min(km, distance(ours.position, theirs.position));
         if (km > WAR_REACH_KM) continue;
         eligible.add(other.id);
-        bound = Math.max(bound, scoreOf(other.id, theirs.garrison, km));
+        bound = Math.max(bound, scoreOf(other.id, weighedGarrison(theirs, state.day), km));
       }
       return bound > 0 ? [{ id: other.id, bound }] : [];
     })

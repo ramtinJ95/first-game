@@ -1,6 +1,13 @@
-import { dateText, reasonText, whole } from '../app/names.ts';
+import { dateText, factionName, reasonText, whole } from '../app/names.ts';
+import { warReadiness } from '../sim/ai/war.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import { GUARD_BAND, GUARD_GOLD, guardRefusal } from '../sim/guards.ts';
+import {
+  deterrentUntil,
+  GUARD_BAND,
+  GUARD_DETER_DAYS,
+  GUARD_GOLD,
+  guardRefusal,
+} from '../sim/guards.ts';
 import { executeOrder, type Order } from '../sim/orders/orders.ts';
 import type { City, GuardBand } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
@@ -18,11 +25,24 @@ export interface GuardsHire {
   readonly change: string | undefined;
   /** Why the rules would refuse the hire tomorrow, in words, or undefined. */
   readonly why: string | undefined;
+  /**
+   * For each great power that weighs this city before it declares war on the owner, how
+   * near it stands now and with the band, such as "Carthage 85% → 74% of the strength it
+   * needs to declare war, until Year 2, day 100", or that guards do not hold back a power
+   * drawn by rival pressure. Empty when the hire is refused for a
+   * reason other than gold.
+   */
+  readonly threats: readonly string[];
 }
+
+/** How long great powers count guards against a war, in a sentence with the number. */
+export const GUARD_RULE = `A great power counts a band against a war on you for its first ${GUARD_DETER_DAYS} days, then reckons on it leaving. The band holds the walls for the whole year.`;
 
 export interface CityGuards {
   /** The guards the city holds, when each band leaves, and any hire waiting for the next day. */
   readonly line: string;
+  /** How many of its guards great powers still count against a war, and until when; undefined with none. */
+  readonly weighed: string | undefined;
   readonly hire: GuardsHire;
 }
 
@@ -41,14 +61,14 @@ export function cityGuards(
   const next = waiting.cities[city.id] ?? city;
   const why = guardRefusal(waiting, next, state.player);
   const short = why !== undefined && !guardRefusal(withGold(waiting, next), next, state.player);
+  const open = why === undefined || short;
   return {
     line: guardsLine(city.guards, next.guards.length - city.guards.length),
+    weighed: weighedLine(city.guards, state.day),
     hire: {
+      threats: open ? hireThreats(short ? withGold(waiting, next) : waiting, next, world) : [],
       gold: GUARD_GOLD,
-      change:
-        why === undefined || short
-          ? hireChange(short ? withGold(waiting, next) : waiting, next, world)
-          : undefined,
+      change: open ? hireChange(short ? withGold(waiting, next) : waiting, next, world) : undefined,
       why: hireRefusalText(waiting, next, why, short),
     },
   };
@@ -60,6 +80,56 @@ function hireChange(state: State, city: DeepReadonly<City>, world: World): strin
   executeOrder(hired, { kind: 'hireGuards', faction: city.owner, city: city.id }, world);
   const garrison = hired.cities[city.id]?.garrison ?? city.garrison;
   return `Garrison ${whole(city.garrison)} → ${whole(garrison)}`;
+}
+
+/**
+ * Each great power that weighs the city before it declares on the owner, by the AI's own
+ * reckoning, today and with one more band, played through the rules' handler. A power
+ * drawn by rival pressure weighs field armies only, so the line says guards change nothing.
+ */
+function hireThreats(state: State, city: DeepReadonly<City>, world: World): string[] {
+  const hired = structuredClone(state) as GameState;
+  executeOrder(hired, { kind: 'hireGuards', faction: city.owner, city: city.id }, world);
+  const until = dateText(state.day + GUARD_DETER_DAYS);
+  const percent = (n: number) => `${Math.round(Math.min(1, n) * 100)}%`;
+  const lines: string[] = [];
+  for (const power of Object.values(state.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    if (power.id === city.owner || power.kind !== 'greatPower') continue;
+    const now = warReadiness(state, world, power.id, city.owner);
+    if (!now || now.front !== city.id) continue;
+    if (now.pressed) {
+      lines.push(
+        `${factionName(state, power.id)} ${percent(now.readiness)} of the strength it needs to declare war, by its field armies against yours: guards do not hold that back`,
+      );
+      continue;
+    }
+    const then = warReadiness(hired, world, power.id, city.owner);
+    lines.push(
+      `${factionName(state, power.id)} ${percent(now.readiness)} → ${percent(then?.readiness ?? 0)} of the strength it needs to declare war, until ${until}`,
+    );
+  }
+  return lines;
+}
+
+/**
+ * "500 count against a war until Year 1, day 130", the bands great powers still weigh, or
+ * "None count against a war now" once every band is past GUARD_DETER_DAYS.
+ */
+export function weighedLine(
+  bands: readonly DeepReadonly<GuardBand>[],
+  day: number,
+): string | undefined {
+  if (bands.length === 0) return undefined;
+  const until = new Map<number, number>();
+  for (const band of bands) {
+    const last = deterrentUntil(band);
+    if (last > day) until.set(last, (until.get(last) ?? 0) + GUARD_BAND);
+  }
+  if (until.size === 0) return 'None count against a war now';
+  return [...until]
+    .sort((a, b) => a[0] - b[0])
+    .map(([last, men]) => `${whole(men)} count against a war until ${dateText(last)}`)
+    .join(', ');
 }
 
 /**

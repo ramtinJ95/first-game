@@ -4,14 +4,15 @@ import { threatNewsOfDay } from '../../src/app/threat-news.ts';
 import { createRouter } from '../../src/sim/ai/routes.ts';
 import { enemiesOf, sorted, strengthNear, strengthOf } from '../../src/sim/ai/situation.ts';
 import { WAR_FRONT_KM, WAR_REACH_KM } from '../../src/sim/ai/thresholds.ts';
-import { guardMen } from '../../src/sim/guards.ts';
+import { GUARD_GOLD, guardMen, weighedGarrison } from '../../src/sim/guards.ts';
+import { whole } from '../../src/app/names.ts';
 import type { FactionId } from '../../src/sim/ids.ts';
 import { truceBetween } from '../../src/sim/peace/truce.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
 import { limitsOf } from '../../src/sim/systems/economy.ts';
 import { areAtWar } from '../../src/sim/wars.ts';
 import { distance } from '../../src/sim/world/find-path.ts';
-import { playCautiousRome, rome, world } from '../cautious-rome.ts';
+import { type GuardPlay, playCautiousRome, rome, world } from '../cautious-rome.ts';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -20,11 +21,14 @@ const { values, positionals } = parseArgs({
     from: { type: 'string', default: '1' },
     years: { type: 'string', default: '10' },
     peaceful: { type: 'boolean', default: false },
-    guards: { type: 'boolean', default: false },
+    guards: { type: 'string', default: 'never' },
     json: { type: 'boolean', default: false },
     summarize: { type: 'boolean', default: false },
   },
 });
+const PLAYS: readonly GuardPlay[] = ['never', 'monthly', 'every', 'warned', 'war'];
+const guards = PLAYS.find((p) => p === values.guards);
+if (!guards) throw new Error(`--guards takes one of ${PLAYS.join(', ')}`);
 const SPENDING = new Set([
   'openTrade',
   'acceptTrade',
@@ -59,6 +63,7 @@ interface Row {
   goldAtEnd: number;
   capDays: number;
   guardsAtEnd: number;
+  bands: number;
   longestQuiet: number;
   quietFrom: number;
   weighings: Weighing[];
@@ -102,7 +107,8 @@ function weighing(state: GameState, power: FactionId): Weighing | undefined {
   for (const army of sorted(state.armies)) if (army.owner === power) own += strengthOf(state, army);
   const romans = sorted(state.armies).filter((a) => a.owner === rome);
   const theirs =
-    strengthNear(state, romans, front.theirs.position, WAR_FRONT_KM) + front.theirs.garrison;
+    strengthNear(state, romans, front.theirs.position, WAR_FRONT_KM) +
+    weighedGarrison(front.theirs, state.day);
   const limits = limitsOf(state);
   const full = (faction: FactionId) =>
     (state.factions[faction]?.stores.gold ?? 0) / Math.max(1, limits.get(faction)?.gold ?? 0);
@@ -128,6 +134,7 @@ function play(seed: number, years: number): Row {
     goldAtEnd: 0,
     capDays: 0,
     guardsAtEnd: 0,
+    bands: 0,
     longestQuiet: 0,
     quietFrom: 0,
     weighings: [],
@@ -174,6 +181,7 @@ function play(seed: number, years: number): Row {
         if (city.owner === rome && after.cities[city.id]?.owner !== rome) row.citiesLost++;
       const gold = after.factions[rome]?.stores.gold ?? 0;
       if (gold >= (limitsOf(after).get(rome)?.gold ?? Infinity) - 1) row.capDays++;
+      row.bands += accepted.filter((o) => o.kind === 'hireGuards').length;
       if (accepted.some((o) => SPENDING.has(o.kind))) {
         quiet(day);
         lastDecision = day;
@@ -186,7 +194,7 @@ function play(seed: number, years: number): Row {
           if (weighed) row.weighings.push(weighed);
         }
     },
-    { peaceful: values.peaceful, guards: values.guards },
+    { peaceful: values.peaceful, guards },
   );
   quiet(end.day);
   row.fellOn = end.factions[rome]?.defeatedOn ?? null;
@@ -237,9 +245,15 @@ function print(rows: readonly Row[]) {
   console.log(
     `Longest stretch without a decision: median ${median(rows.map((r) => r.longestQuiet))}, most ${Math.max(0, ...rows.map((r) => r.longestQuiet))} days. Days gold at its limit: median ${median(rows.map((r) => r.capDays))}, most ${Math.max(0, ...rows.map((r) => r.capDays))}. Guards held at the end: median ${median(rows.map((r) => r.guardsAtEnd ?? 0))}, most ${Math.max(0, ...rows.map((r) => r.guardsAtEnd ?? 0))}.`,
   );
+  const firstDays = rows.map((r) => r.wars[0]?.day ?? Infinity);
+  const firstMedian = median(firstDays);
+  const sum = (of: (r: Row) => number) => rows.reduce((total, r) => total + of(r), 0);
+  console.log(
+    `\nSummary: | ${guards} | ${count((r) => r.wars.length > 0)} of ${rows.length} | ${Number.isFinite(firstMedian) ? `Y${(firstMedian / 365 + 1).toFixed(1)}` : 'none by Y10'} | ${count((r) => r.wars.some((w) => w.day < 3 * 365))} | ${count((r) => r.fellOn !== null)} fall, ${count((r) => r.fellOn === null && r.citiesAtEnd <= 2)} on 1–2 cities, ${sum((r) => r.citiesLost)} lost | ${median(rows.map((r) => r.citiesAtEnd))} | ${sum((r) => r.bands)} (median ${median(rows.map((r) => r.bands))}) | ${whole(sum((r) => r.bands) * GUARD_GOLD)} (median ${whole(median(rows.map((r) => r.bands)) * GUARD_GOLD)}) | ${median(rows.map((r) => r.capDays))} / ${Math.max(0, ...rows.map((r) => r.capDays))} |`,
+  );
   const weighings = rows.flatMap((r) => r.weighings);
   console.log(
-    "\nMonths a great power at peace with every other had Rome in reach, by its cities: its whole strength over Rome's armies near Rome's nearest city plus that city's garrison, and the share of each treasury that is full.\n",
+    "\nMonths a great power at peace with every other had Rome in reach, by its cities: its whole strength over Rome's armies near Rome's nearest city plus that city's garrison with the guards great powers still count, and the share of each treasury that is full.\n",
   );
   console.log(
     "| cities | months | odds, median | odds, 9 in 10 below | its treasury full | Rome's treasury full |",
@@ -271,7 +285,7 @@ if (values.summarize) {
   const first = Number(values.from);
   const years = Number(values.years);
   console.log(
-    `Cautious Rome of trade-judge --heed --improve${values.peaceful ? ', declaring no war' : ''}${values.guards ? ', hiring guards' : ''}, seeds ${first} to ${first + Number(values.seeds) - 1}, ${years} years.\n`,
+    `Cautious Rome of trade-judge --heed --improve${values.peaceful ? ', declaring no war' : ''}${guards === 'never' ? '' : `, hiring guards (${guards})`}, seeds ${first} to ${first + Number(values.seeds) - 1}, ${years} years.\n`,
   );
   const rows: Row[] = [];
   for (let seed = first; seed < first + Number(values.seeds); seed++) {

@@ -5,6 +5,7 @@ import { parseMap } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
 import type { Order } from '../src/sim/orders/orders.ts';
 import type { DayEvent } from '../src/sim/events.ts';
+import type { Day } from '../src/sim/state/day.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { adminShareOf } from '../src/sim/systems/economy.ts';
 import { tick } from '../src/sim/tick.ts';
@@ -13,7 +14,10 @@ import { areAtWar } from '../src/sim/wars.ts';
 import { distance } from '../src/sim/world/find-path.ts';
 import { buildWorld, type World } from '../src/sim/world/world.ts';
 import { threatNewsOfDay } from '../src/app/threat-news.ts';
-import { GUARD_GOLD, guardRefusal } from '../src/sim/guards.ts';
+import { GUARD_BAND, GUARD_GOLD, guardRefusal } from '../src/sim/guards.ts';
+import { warReadiness } from '../src/sim/ai/war.ts';
+import { THREAT_CLEAR, THREAT_WARN } from '../src/app/threat-news.ts';
+import { WAR_REACH_KM } from '../src/sim/ai/thresholds.ts';
 import { limitsOf } from '../src/sim/systems/economy.ts';
 import { homeCapital } from '../src/sim/ai/situation.ts';
 
@@ -25,6 +29,27 @@ export const rome = 'rome' as FactionId;
 const MODES = ['land', 'sea'] as const;
 const IMPROVE_PAYBACK_DAYS = 3 * 365;
 const TRADE_FLOOR = 600;
+const GUARD_CHECK_DAYS = 45;
+
+/** A city to hire at tomorrow: until no great power stands at THREAT_CLEAR there, or until it is full. */
+interface Threat {
+  city: CityId;
+  until: 'calm' | 'full' | 'three';
+}
+
+/**
+ * How the cautious Rome hires guards. `monthly` is #80's measure: a band a month at the
+ * last warned city or the capital while gold after it stays at half its limit. `every` is
+ * the seventh play-through's way: at each 45-day check, a band at every city a warning has
+ * named that has room, while the gold after it stays at a quarter of its limit; the tester's
+ * gold never ran low. `warned` reads the threat: the day after a warning names a city, and at
+ * each check where a great power stands at THREAT_WARN, it hires at that power's front until no
+ * great power stands at THREAT_CLEAR there, keeping the same quarter of its limit; the day after a great power declares, it fills
+ * each of Rome's cities in that power's reach, nearest first. `war` is the seventh
+ * play-through's Ariminum: three bands at Rome's city nearest a great power the day after
+ * it declares, and none at peace.
+ */
+export type GuardPlay = 'never' | 'monthly' | 'every' | 'warned' | 'war';
 
 export interface CautiousDay {
   before: GameState;
@@ -40,17 +65,19 @@ export interface CautiousDay {
  * opens its best route by return per gold monthly, improves the route that repays soonest
  * with no route to open, skips a partner at war or a besieged end, and declares no war on
  * a partner whose routes have not repaid. With `peaceful`, Rome declares no war at all,
- * as the tester's cautious Rome did. With `guards`, it also hires guards (`guardOrders`). Unlike trade-judge, a war Rome holds back does not
+ * as the tester's cautious Rome did. `guards` picks how it hires guards (`GuardPlay`). Unlike trade-judge, a war Rome holds back does not
  * also hold back its trade that month. Plays until the years are out or Rome falls.
  */
 export function playCautiousRome(
   seed: number,
   years: number,
   onDay: (day: CautiousDay) => void,
-  { peaceful = false, guards = false }: { peaceful?: boolean; guards?: boolean } = {},
+  { peaceful = false, guards = 'never' }: { peaceful?: boolean; guards?: GuardPlay } = {},
 ): GameState {
   const told = new Set<string>();
   let warnedAt: CityId | undefined;
+  const named = new Set<CityId>();
+  let threatened: Threat[] = [];
   let state: GameState = newGame(map, { seed, player: 'rome' });
   const ledger = new Map<TradeRouteId, { paid: number; received: number; deliveries: number }>();
   for (let day = 0; day < years * 365; day++) {
@@ -73,7 +100,21 @@ export function playCautiousRome(
       state,
       ai.filter((o) => o.faction === rome && !held(o)),
     );
-    orders.unshift(...trade, ...(guards && trade.length === 0 ? guardOrders(state, warnedAt) : []));
+    const hires =
+      guards === 'monthly' && trade.length === 0
+        ? guardOrders(state, warnedAt)
+        : guards === 'every' && state.day % GUARD_CHECK_DAYS === 0
+          ? hiresAt(state, [...named].reverse(), guardFloor(state))
+          : guards === 'war'
+            ? readerHires(state, threatened)
+            : guards === 'warned'
+              ? readerHires(state, [
+                  ...threatened,
+                  ...(state.day % GUARD_CHECK_DAYS === 0 ? nearWar(state) : []),
+                ])
+              : [];
+    threatened = [];
+    orders.unshift(...trade, ...hires);
     const before = new Set(Object.keys(state.tradeRoutes));
     const { state: next, rejected, events } = tick(state, orders, world);
     const accepted = orders.filter(
@@ -118,6 +159,18 @@ export function playCautiousRome(
       warnedAt = Object.values(next.cities).find(
         (city) => at && city.owner === rome && city.position.x === at.x && city.position.y === at.y,
       )?.id;
+      if (warnedAt) {
+        named.delete(warnedAt);
+        named.add(warnedAt);
+        if (guards === 'warned') threatened.push({ city: warnedAt, until: 'calm' });
+      }
+    }
+    for (const event of events) {
+      if (event.kind !== 'warDeclared' || event.against !== rome) continue;
+      if (next.factions[event.by]?.kind !== 'greatPower') continue;
+      const reach = inReach(next, event.by);
+      if (guards === 'war' && reach[0]) threatened.push({ city: reach[0], until: 'three' });
+      if (guards === 'warned') for (const city of reach) threatened.push({ city, until: 'full' });
     }
     onDay({ before: state, after: next, events, accepted });
     state = next;
@@ -143,6 +196,90 @@ function guardOrders(state: GameState, warnedAt: CityId | undefined): Order[] {
       return [{ kind: 'hireGuards', faction: rome, city: city.id }];
   }
   return [];
+}
+
+/** One band at each city named, in order, while the rules take it and the gold after it stays at the floor. */
+function hiresAt(state: GameState, cities: readonly CityId[], floor: number): Order[] {
+  if (cities.length === 0) return [];
+  const hired = structuredClone(state);
+  const orders: Order[] = [];
+  for (const id of cities) {
+    const order: Order = { kind: 'hireGuards', faction: rome, city: id };
+    const city = hired.cities[id];
+    const stores = hired.factions[rome]?.stores;
+    if (!city || !stores || guardRefusal(hired, city, rome) || stores.gold - GUARD_GOLD < floor)
+      continue;
+    stores.gold -= GUARD_GOLD;
+    city.guards.push({ until: Infinity as Day });
+    orders.push(order);
+  }
+  return orders;
+}
+
+/** The gold Rome keeps back from guards at peace, so its army is still paid for: a quarter of its limit. */
+function guardFloor(state: GameState): number {
+  return (limitsOf(state).get(rome)?.gold ?? 0) / 4;
+}
+
+/** The reader's hires, each band weighed on a copy of the day as the warning would weigh it. */
+function readerHires(state: GameState, threats: readonly Threat[]): Order[] {
+  if (threats.length === 0) return [];
+  const hired = structuredClone(state);
+  const orders: Order[] = [];
+  const powers = Object.values(hired.factions).filter(
+    (f) => f.kind === 'greatPower' && f.id !== rome && f.defeatedOn === null,
+  );
+  const calm = (id: CityId) =>
+    powers.every((p) => {
+      const threat = warReadiness(hired, world, p.id, rome);
+      return !threat || threat.front !== id || threat.readiness < THREAT_CLEAR;
+    });
+  const floor = guardFloor(state);
+  for (const { city: id, until } of threats) {
+    for (;;) {
+      const city = hired.cities[id];
+      const stores = hired.factions[rome]?.stores;
+      if (!city || !stores || guardRefusal(hired, city, rome)) break;
+      if (until === 'calm' && stores.gold - GUARD_GOLD < floor) break;
+      if (until === 'calm' && calm(id)) break;
+      if (
+        until === 'three' &&
+        orders.filter((o) => o.kind === 'hireGuards' && o.city === id).length >= 3
+      )
+        break;
+      stores.gold -= GUARD_GOLD;
+      city.guards.push({ until: Infinity as Day });
+      city.garrison += GUARD_BAND;
+      orders.push({ kind: 'hireGuards', faction: rome, city: id });
+    }
+  }
+  return orders;
+}
+
+/** Rome's cities within WAR_REACH_KM of a city of the power, nearest first. */
+function inReach(state: GameState, power: FactionId): CityId[] {
+  const theirs = Object.values(state.cities).filter((c) => c.owner === power);
+  return Object.values(state.cities)
+    .filter((c) => c.owner === rome)
+    .map((c) => ({
+      id: c.id,
+      km: Math.min(...theirs.map((t) => distance(c.position, t.position))),
+    }))
+    .filter((c) => c.km <= WAR_REACH_KM)
+    .sort((a, b) => a.km - b.km)
+    .map((c) => c.id);
+}
+
+/** The cities where a great power at peace with Rome stands at THREAT_WARN of what it needs, as the panel's standing line shows. */
+function nearWar(state: GameState): Threat[] {
+  const found: Threat[] = [];
+  for (const power of Object.values(state.factions)) {
+    if (power.kind !== 'greatPower' || power.id === rome || power.defeatedOn !== null) continue;
+    const threat = warReadiness(state, world, power.id, rome);
+    if (threat && threat.readiness >= THREAT_WARN)
+      found.push({ city: threat.front, until: 'calm' });
+  }
+  return found;
 }
 
 function tradeOrders(state: GameState, ai: readonly Order[]): Order[] {

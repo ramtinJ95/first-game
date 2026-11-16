@@ -27,8 +27,8 @@ describe('the news of guards who served their year', () => {
     const after = tick(before, [], world).state;
     const news = guardNewsOfDay(before, after);
     expect(news.map((alert) => alert.text)).toEqual([
-      'The 1,000 guards hired at Roma have served their year and left. Hire more in its city panel.',
-      'The 500 guards hired at Capua have served their year and left. Hire more in its city panel.',
+      'The 1,000 guards hired at Roma have served their year and left. A great power counts fresh guards against a war for 90 days: hire them when the news warns of one.',
+      'The 500 guards hired at Capua have served their year and left. A great power counts fresh guards against a war for 90 days: hire them when the news warns of one.',
     ]);
     expect(news[0]).toMatchObject({
       kind: 'guardsLeft',
@@ -62,7 +62,7 @@ describe('the news of guards who served their year', () => {
       world,
     ).state;
     expect(guardNewsOfDay(before, after).map((alert) => alert.text)).toContain(
-      'The 1,000 guards hired at Roma have served their year and left. Hire more in its city panel.',
+      'The 1,000 guards hired at Roma have served their year and left. A great power counts fresh guards against a war for 90 days: hire them when the news warns of one.',
     );
     expectConsistent(after);
   });
