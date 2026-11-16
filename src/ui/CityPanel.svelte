@@ -35,7 +35,8 @@
     weakSiegeText,
   } from './describe.ts';
   import WarStatus from './WarStatus.svelte';
-  import { recruitForecast } from './recruit-forecast.ts';
+  import { movedText, recruitForecast } from './recruit-forecast.ts';
+  import { namedWaits } from './named-waits.ts';
   import CityTrade from './CityTrade.svelte';
   import type { World } from '../sim/world/world.ts';
 
@@ -75,6 +76,19 @@
     ),
   );
 
+  const waitKey = (troop: Troop) => `${game.player}:${city.id}:${troop}`;
+  const earlier = $derived(confirming && namedWaits.get(waitKey(confirming)));
+  const moved = $derived(
+    earlier && outlook.named ? movedText(earlier, outlook.named, TROOP_NAMES) : undefined,
+  );
+  $effect(() => {
+    if (!confirming) return;
+    const key = waitKey(confirming);
+    if (!outlook.warning) namedWaits.delete(key);
+    else if (outlook.named && (!earlier || game.day < earlier.on))
+      namedWaits.set(key, outlook.named);
+  });
+
   function raise(troop: Troop) {
     if (
       recruitForecast(game, pending, world, troop, trainingDaysAt(city, TROOPS[troop].recruit.days))
@@ -83,6 +97,7 @@
       confirming = troop;
     else {
       actions.issue({ kind: 'recruit', faction: game.player, city: city.id, troop });
+      namedWaits.delete(waitKey(troop));
       confirming = undefined;
     }
   }
@@ -308,12 +323,14 @@
       {@const troop = confirming}
       <div data-testid="recruit-warning">
         {#if outlook.warning}<p class="bad">{TROOP_NAMES[troop]}: {outlook.warning}</p>{/if}
+        {#if outlook.warning && moved}<p class="bad" data-testid="recruit-moved">{moved}</p>{/if}
         <div class="row">
           <button
             type="button"
             disabled={refusal(troop) !== undefined}
             onclick={() => {
               actions.issue({ kind: 'recruit', faction: game.player, city: city.id, troop });
+              namedWaits.delete(waitKey(troop));
               confirming = undefined;
             }}>{outlook.warning ? 'Raise anyway' : 'Raise troops'}</button
           >

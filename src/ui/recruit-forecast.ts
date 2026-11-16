@@ -131,6 +131,8 @@ export function recruitForecast(
       };
     }),
     holdsAfter,
+    named:
+      holdsAfter === undefined ? undefined : realmFor(waiting, game.day, game.day + holdsAfter),
     warning: warnings.length
       ? `${warnings.join(' ')} Formations desert when stores run out. ${
           holdsAfter === undefined
@@ -267,3 +269,62 @@ function fallingStores(
   }
   return high;
 }
+
+/** What a warned card named, and the realm it counted on then, so a later reading can say what moved the day. */
+export interface NamedWait {
+  /** The day the card said it. */
+  readonly on: number;
+  /** The day it named for the raise. */
+  readonly named: number;
+  /** Men under arms and in training, by troop. */
+  readonly men: Readonly<Partial<Record<Troop, number>>>;
+  readonly cities: readonly string[];
+}
+
+function realmFor(state: DeepReadonly<GameState>, on: number, named: number): NamedWait {
+  const men: Partial<Record<Troop, number>> = {};
+  const add = (troop: Troop, count: number) => (men[troop] = (men[troop] ?? 0) + count);
+  for (const army of Object.values(state.armies))
+    if (army.owner === state.player)
+      for (const id of army.formations) {
+        const formation = state.formations[id];
+        if (formation) add(formation.troop, formation.men);
+      }
+  const cities = Object.values(state.cities).filter((city) => city.owner === state.player);
+  for (const city of cities)
+    for (const recruit of city.recruits) add(recruit.troop, TROOPS[recruit.troop].recruit.men);
+  return { on, named, men, cities: cities.map((city) => city.name).sort() };
+}
+
+/** A named day this much later than the one a card named before is told as moved. */
+export const MOVED_DAYS = 30;
+
+/**
+ * Why the day a warned card names now is later than the one it named before: the troops
+ * raised since, which are fed first, and the cities lost since, by the realm each reading
+ * counted on. Undefined while the day holds within MOVED_DAYS.
+ */
+export function movedText(
+  before: NamedWait,
+  now: NamedWait,
+  names: Readonly<Record<Troop, string>>,
+): string | undefined {
+  if (now.named - before.named <= MOVED_DAYS) return undefined;
+  const raised = (Object.keys(TROOPS) as Troop[]).flatMap((troop) => {
+    const more = (now.men[troop] ?? 0) - (before.men[troop] ?? 0);
+    return more > 0 ? [`${whole(more)} ${names[troop]}`] : [];
+  });
+  const lost = before.cities.filter((city) => !now.cities.includes(city));
+  const why = [
+    ...(raised.length ? [`you raised ${listed(raised)}, who are fed first`] : []),
+    ...(lost.length ? [`you lost ${listed(lost)}`] : []),
+  ];
+  return `Now ${dateText(now.named)}, not ${dateText(before.named)} as this card said on ${dateText(before.on)}: ${
+    why.length
+      ? `since then ${why.join(', and ')}`
+      : 'the stores or income it counted on changed since then'
+  }.`;
+}
+
+const listed = (items: readonly string[]) =>
+  items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
