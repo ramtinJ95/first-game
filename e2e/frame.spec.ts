@@ -398,6 +398,45 @@ test.describe('the frame round the game', () => {
     await expect(page.getByTestId('top-bar')).toBeVisible();
   });
 
+  test('a file the browser cannot read, imported or dropped, is refused and the game plays on', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.addInitScript(() => {
+      const read = File.prototype.text;
+      File.prototype.text = function (this: File) {
+        return this.name === 'unreadable.json'
+          ? Promise.reject(new DOMException('The file could not be read.', 'NotReadableError'))
+          : read.call(this);
+      };
+    });
+    await openGame(page);
+    await load(page, playDays(startGame(), 20));
+    const before = await day(page);
+
+    await page.getByTestId('import-file').setInputFiles({
+      name: 'unreadable.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from('{}'),
+    });
+    await expect(page.getByTestId('notice')).toHaveText(REFUSED_SAVE.damaged);
+    expect(await day(page)).toBe(before);
+
+    const dataTransfer = await page.evaluateHandle(() => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(['{}'], 'unreadable.json', { type: 'application/json' }));
+      return transfer;
+    });
+    await page.dispatchEvent('canvas', 'drop', { dataTransfer });
+    await expect(page.getByTestId('notice')).toHaveText(REFUSED_SAVE.damaged);
+    expect(await day(page)).toBe(before);
+
+    await resume(page);
+    await expect.poll(async () => await day(page), { timeout: 30_000 }).toBeGreaterThan(before);
+    expect(errors).toEqual([]);
+  });
+
   for (const fate of ['occupy', 'sack', 'enslave'] as const) {
     test(`a city the player takes pauses the game on its fate, and ${fate} applies`, async ({
       page,
