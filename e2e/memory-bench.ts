@@ -16,6 +16,7 @@ import { figureHeight, FIGURE_SCALE } from '../src/render/armies/scene.ts';
 import { sheetSizeFor } from '../src/render/armies/layer.ts';
 import { MAX_SCALE } from '../src/render/camera.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
+import { collectGarbage, countObjects } from './count-objects.ts';
 import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
 
 /**
@@ -39,7 +40,8 @@ import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
  * `--play` seconds at the fastest speed. Each cycle is then sampled with the day-1 save
  * dropped again and drawn over the whole map, the same state every time.
  * `--cycle-bound 0.1` fails the run when the collected heap, the DOM nodes, or the live
- * texture bytes after any later cycle are more than a tenth over cycle 1. `--snapshots 2,6`
+ * texture bytes after any later cycle are more than a tenth over cycle 1. The DOM nodes
+ * count the detached ones too, which each row also gives apart, with the live canvases. `--snapshots 2,6`
  * writes heap snapshots after those cycles, named after `--snapshot`, and `--texture-shapes`
  * prints the live textures by size that each cycle added or freed.
  *
@@ -253,8 +255,7 @@ function residentMb(type: string): number {
 
 async function sample(page: Page, step: string) {
   const session = await page.context().newCDPSession(page);
-  await session.send('HeapProfiler.collectGarbage');
-  await session.send('HeapProfiler.collectGarbage');
+  await collectGarbage(session);
   await session.send('Performance.enable');
   const { metrics } = await session.send('Performance.getMetrics');
   const metric = (name: string) => metrics.find((m) => m.name === name)?.value ?? 0;
@@ -272,12 +273,16 @@ async function sample(page: Page, step: string) {
     ).textureReport(),
   );
   if (values.sites) await printSites(page);
+  const detached = await countObjects(session, 'Node.prototype', '!node.isConnected');
+  const canvases = await countObjects(session, 'HTMLCanvasElement.prototype', 'true');
   await session.detach();
   return {
     step,
     heapMb: Math.round(metric('JSHeapUsedSize') / 2 ** 20),
     nodes: metric('Nodes'),
     listeners: metric('JSEventListeners'),
+    detached,
+    canvases,
     textures: textures.count,
     textureMb: Math.round(textures.bytes / 2 ** 20),
     sheetMb: Math.round(textures.sheetBytes / 2 ** 20),
@@ -529,7 +534,7 @@ try {
     console.log(Object.values(row).join(','));
   };
   console.log(
-    'step,heapMb,nodes,listeners,textures,textureMb,sheetMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb',
+    'step,heapMb,nodes,listeners,detached,canvases,textures,textureMb,sheetMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb',
   );
   if (values.sites) {
     const session = await page.context().newCDPSession(page);
@@ -747,7 +752,7 @@ try {
   await server.close();
   if (values.out) {
     const header =
-      'step,heapMb,nodes,listeners,textures,textureMb,sheetMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb';
+      'step,heapMb,nodes,listeners,detached,canvases,textures,textureMb,sheetMb,buffers,bufferMb,rendererMb,gpuMb,peakMb,leastFreeMb,freeMb';
     writeFileSync(values.out, [header, ...rows.map((r) => Object.values(r).join(','))].join('\n'));
   }
 }
