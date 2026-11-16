@@ -91,14 +91,21 @@ describe('the news of a power that could soon declare war on the player', () => 
     expect(newsOf(game(5300, 'full', 0), told)).toHaveLength(1);
     expect(newsOf(game(2000, 'empty', 10), told)).toEqual([]);
     expect(newsOf(game(5300, 'full', 310), told)).toEqual([]);
-    expect(newsOf(game(5300, 'full', 364), told)).toEqual([]);
+    expect(newsOf(game(5300, 'full', 334), told)).toEqual([]);
   });
 
-  test('tells again a power still on notice a year after it warned, and after a war between them', () => {
+  test('a power that comes back on notice warns again in time for the war it may then declare', () => {
+    const told = new Set<string>();
+    expect(newsOf(game(5300, 'full', 100), told)).toHaveLength(1);
+    expect(newsOf(game(2000, 'empty', 200), told)).toEqual([]);
+    expect(newsOf(game(5300, 'full', 450), told)).toHaveLength(1);
+  });
+
+  test('tells again a power still on notice 335 days after it warned, and after a war between them', () => {
     const told = new Set<string>();
     expect(newsOf(game(5300, 'full', 0), told)).toHaveLength(1);
-    expect(newsOf(game(2000, 'empty', 200), told)).toEqual([]);
-    expect(newsOf(game(5300, 'full', 365), told)).toHaveLength(1);
+    expect(newsOf(game(5300, 'full', 334), told)).toEqual([]);
+    expect(newsOf(game(5300, 'full', 335), told)).toHaveLength(1);
 
     const atWar = game(5300, 'full', 400);
     expect(

@@ -8,14 +8,18 @@ import type { World } from '../sim/world/world.ts';
 import type { Alert } from './alerts.ts';
 import { factionName, whole } from './names.ts';
 import { GUARD_DETER_DAYS } from '../sim/guards.ts';
-import { NOTICE_SHARE } from '../sim/ai/thresholds.ts';
+import { NOTICE_DAYS, NOTICE_SHARE } from '../sim/ai/thresholds.ts';
 
 type State = DeepReadonly<GameState>;
 
 /** A great power this near the odds it needs to declare war on the player is told of: the rules' notice. */
 export const THREAT_WARN = NOTICE_SHARE;
-/** A power on notice that warned this long ago is told of again, so every war comes after a warning of the last year. */
-export const THREAT_RECALL_DAYS = 365;
+/**
+ * A power on notice that warned this long ago is told of again. A war needs NOTICE_DAYS on
+ * notice in a row, and reminders come this often while it lasts, so every war comes after
+ * a warning given between a year and NOTICE_DAYS before it.
+ */
+export const THREAT_RECALL_DAYS = 365 - NOTICE_DAYS;
 
 const prefixOf = (faction: string) => `threat:${faction}:`;
 
@@ -36,7 +40,7 @@ function forget(remembered: Set<string>, faction: string) {
  * NOTICE_SHARE of the strength they need to declare war on it, which they must hold for
  * NOTICE_DAYS before they may declare (`noticeSince`). A power is told of when it comes on
  * notice, and again while on notice once THREAT_RECALL_DAYS have passed since it last
- * warned, so a war always follows a warning of the last year by at least NOTICE_DAYS;
+ * warned, so a war always follows a warning given between a year and NOTICE_DAYS before it;
  * a war or a truce with the player forgets its warning. The news names the city it weighs
  * the player's armies at and, when the player's treasury lowers the odds it needs, by how
  * much.
