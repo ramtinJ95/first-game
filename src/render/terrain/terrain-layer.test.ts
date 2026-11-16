@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { Container, type Renderer } from 'pixi.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseMap, type GameMap, type Point } from '../../sim/map.ts';
-import { createTerrain } from './terrain-layer.ts';
+import { BATCH_MS, createTerrain, drawDecision } from './terrain-layer.ts';
 
 /** The Persian plateau, open dry land with few marks to draw at the closest zoom. */
 const PLATEAU = { x: 6080, y: 3330 };
@@ -154,5 +154,43 @@ describe('the terrain layer', () => {
     terrain.update(closest, viewport, 0);
     terrain.destroy();
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('drawing chunks built while others wait', () => {
+  const chunk = { built: true, other: false, waiting: true };
+
+  it('waits while other chunks the texture shows are still queued', () => {
+    const first = drawDecision(chunk, 1000, undefined);
+    expect(first).toEqual({ draw: false, since: 1000 });
+    expect(drawDecision(chunk, 1000 + BATCH_MS - 1, first.since)).toEqual({
+      draw: false,
+      since: 1000,
+    });
+  });
+
+  it('draws by the deadline though chunks are still queued', () => {
+    expect(drawDecision(chunk, 1000 + BATCH_MS, 1000)).toEqual({ draw: true, since: undefined });
+  });
+
+  it('draws as soon as the queue is done', () => {
+    expect(drawDecision({ ...chunk, waiting: false }, 1100, 1000)).toEqual({
+      draw: true,
+      since: undefined,
+    });
+  });
+
+  it('draws at once for a move, a zoom or a repaint, and keeps no wait', () => {
+    expect(drawDecision({ ...chunk, other: true }, 1100, 1000)).toEqual({
+      draw: true,
+      since: undefined,
+    });
+  });
+
+  it('keeps an earlier wait through a frame with nothing new', () => {
+    expect(drawDecision({ built: false, other: false, waiting: true }, 1200, 1000)).toEqual({
+      draw: false,
+      since: 1000,
+    });
   });
 });

@@ -62,7 +62,23 @@ const drawnAs = (alpha: number) => (alpha < FAINT ? -1 : alpha);
  * long at most to be drawn with them. On a software GPU each drawing of the texture took
  * 0.8 s of the cores that build the chunks, so drawing each as it came slowed the rest.
  */
-const BATCH_MS = 1500;
+export const BATCH_MS = 1500;
+
+/**
+ * Whether to draw the texture again this frame, and since when built chunks have waited
+ * for it. `built` says chunks in view changed, `other` that something else needs drawing,
+ * and `waiting` that chunks the texture shows still wait to be built.
+ */
+export function drawDecision(
+  { built, other, waiting }: { built: boolean; other: boolean; waiting: boolean },
+  now: number,
+  since: number | undefined,
+): { draw: boolean; since: number | undefined } {
+  if (other || (built && !waiting)) return { draw: true, since: undefined };
+  if (!built) return { draw: false, since };
+  const start = since ?? now;
+  return now - start < BATCH_MS ? { draw: false, since: start } : { draw: true, since: undefined };
+}
 /**
  * Chunks are built in slices of BUILD_SLICE_MS between frames, on a timer and not in
  * the frame, so the building runs at the speed of the main thread however slow the
@@ -413,12 +429,13 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       missing.sort((a, b) => Number(b.needed) - Number(a.needed) || a.distance - b.distance);
       queue.want(missing);
       if (queue.waitingInView) fading = true;
-      if (built && !(repaint || lakesStale || changed || moves) && queue.waitingInView) {
-        batchSince ??= now;
-        if (now - batchSince < BATCH_MS) built = false;
-      }
-      if (repaint || lakesStale || changed || built || moves) {
-        batchSince = undefined;
+      const decision = drawDecision(
+        { built, other: repaint || lakesStale || changed || moves, waiting: queue.waitingInView },
+        now,
+        batchSince,
+      );
+      batchSince = decision.since;
+      if (decision.draw) {
         for (const layer of layers)
           for (const chunk of layer.chunks.values())
             chunk.drawnAlpha =
