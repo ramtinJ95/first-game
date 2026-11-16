@@ -12,7 +12,7 @@ import type { GameState } from '../../src/sim/state/game-state.ts';
 import { limitsOf } from '../../src/sim/systems/economy.ts';
 import { areAtWar } from '../../src/sim/wars.ts';
 import { distance } from '../../src/sim/world/find-path.ts';
-import { type GuardPlay, playCautiousRome, rome, world } from '../cautious-rome.ts';
+import { type GuardPlay, playCautiousRome, rome, warnedPowers, world } from '../cautious-rome.ts';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -157,10 +157,11 @@ function play(seed: number, years: number): Row {
       for (const alert of threatNewsOfDay(before, after, world, told)) {
         row.warnings++;
         if (day < 3 * 365 + 180) row.warningsByY4d180++;
-        const name = alert.text.split(' could soon')[0] ?? '';
-        row.warnedBy[name] = (row.warnedBy[name] ?? 0) + 1;
-        warnedOn.set(name, day);
-        warnedThisPeace.add(name);
+        for (const name of warnedPowers(alert.text)) {
+          row.warnedBy[name] = (row.warnedBy[name] ?? 0) + 1;
+          warnedOn.set(name, day);
+          warnedThisPeace.add(name);
+        }
       }
       for (const event of events) {
         if (event.kind !== 'warDeclared' || event.against !== rome) continue;

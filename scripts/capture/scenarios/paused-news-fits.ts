@@ -16,7 +16,9 @@ import {
   weakSiegeOfMediolanum,
 } from '../../../e2e/support.ts';
 import { ownCityInDangerTomorrow } from '../../../e2e/warnings-game.ts';
-import type { FormationId } from '../../../src/sim/ids.ts';
+import type { FactionId, FormationId } from '../../../src/sim/ids.ts';
+
+const macedon = 'macedon' as FactionId;
 import type { Day } from '../../../src/sim/state/day.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
 import { warKey } from '../../../src/sim/state/war.ts';
@@ -31,6 +33,15 @@ function carthagePresses(): GameState {
   if (!punic || !roman) throw new Error('no armies');
   punic.men = 2000;
   roman.men = 1000;
+  return state;
+}
+
+/** Carthage beside Rome as in `carthageNearsWar`, and Macedon with 30,000 men: both come on notice the same day. */
+function carthageAndMacedonNearWar(): GameState {
+  const state = carthageNearsWar();
+  const macedonians = state.formations[armyOf(state, macedon).formations[0] as FormationId];
+  if (!macedonians) throw new Error('no Macedonian army');
+  macedonians.men = 30_000;
   return state;
 }
 
@@ -75,6 +86,12 @@ const STOPS: readonly { name: string; make: () => GameState; line: RegExp; shot?
     line: /all your armies in the field/,
     shot: 'field-warning',
   },
+  {
+    name: 'two warnings on one day',
+    make: carthageAndMacedonNearWar,
+    line: /^.*Carthage and Macedon could soon declare war on you/,
+    shot: 'two-warnings',
+  },
   { name: 'a city in danger', make: alone(ownCityInDangerTomorrow), line: /is in danger/ },
   { name: 'fleets sighted', make: alone(fiveFleetsOnRoma), line: /sail|march/ },
   { name: 'a weak siege', make: alone(weakSiegeOfMediolanum), line: /Too few|too weak/ },
@@ -89,6 +106,7 @@ async function stopOn(page: Page, state: GameState, line: RegExp) {
     String(state.day),
   );
   await untilDrawn(page);
+  await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
   await resume(page);
   const alerts = page.getByTestId('alerts');
   const item = alerts

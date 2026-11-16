@@ -1,7 +1,10 @@
 import { writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { standingThreats, threatNewsOfDay } from '../../src/app/threat-news.ts';
-import { playCautiousRome, rome, world, type GuardPlay } from '../cautious-rome.ts';
+import { warReadiness } from '../../src/sim/ai/war.ts';
+import type { FactionId } from '../../src/sim/ids.ts';
+import { areAtWar } from '../../src/sim/wars.ts';
+import { playCautiousRome, rome, warnedPowers, world, type GuardPlay } from '../cautious-rome.ts';
 
 const { values } = parseArgs({
   options: {
@@ -10,6 +13,7 @@ const { values } = parseArgs({
     years: { type: 'string', default: '10' },
     out: { type: 'string' },
     guards: { type: 'string', default: 'never' },
+    answer: { type: 'boolean', default: false },
   },
 });
 
@@ -24,20 +28,30 @@ interface Record {
   days: number;
   readiness: { [power: string]: (number | null)[] };
   warnings: { day: number; power: string }[];
-  wars: { day: number; power: string; citiesLost: number }[];
+  wars: {
+    day: number;
+    power: string;
+    citiesLost: number;
+    /** The power's own reckoning the day it declared: its strength over what it needs, uncapped. */
+    readiness: number | null;
+    /** Great powers at war with Rome that day, this one included. */
+    atOnce: number;
+    /** The day the war ended, or null if it outlasted the game. */
+    endedOn: number | null;
+  }[];
 }
 
 function play(seed: number, years: number): Record {
   const record: Record = { seed, days: 0, readiness: {}, warnings: [], wars: [] };
   const told = new Set<string>();
-  const open = new Map<string, number>();
+  const open = new Map<FactionId, number>();
   playCautiousRome(
     seed,
     years,
     ({ before, after, events }) => {
       const day = before.day;
       for (const alert of threatNewsOfDay(before, after, world, told))
-        record.warnings.push({ day, power: alert.text.split(' could soon')[0] ?? '' });
+        for (const power of warnedPowers(alert.text)) record.warnings.push({ day, power });
       const threats = new Map(standingThreats(after, world).map((t) => [t.name, t.readiness]));
       for (const power of Object.values(after.factions)) {
         if (power.kind !== 'greatPower' || power.id === rome) continue;
@@ -52,10 +66,16 @@ function play(seed: number, years: number): Record {
           after.factions[event.by]?.kind === 'greatPower'
         ) {
           open.set(event.by, record.wars.length);
+          const reckoned = warReadiness(before, world, event.by, rome);
           record.wars.push({
             day,
             power: after.factions[event.by]?.name ?? event.by,
             citiesLost: 0,
+            readiness: reckoned ? Math.round(reckoned.readiness * 100) / 100 : null,
+            atOnce: Object.values(after.factions).filter(
+              (f) => f.kind === 'greatPower' && f.id !== rome && areAtWar(after, f.id, rome),
+            ).length,
+            endedOn: null,
           });
         }
       for (const city of Object.values(before.cities)) {
@@ -65,9 +85,16 @@ function play(seed: number, years: number): Record {
         const entry = war === undefined ? undefined : record.wars[war];
         if (entry) entry.citiesLost++;
       }
+      for (const [power, index] of open) {
+        const entry = record.wars[index];
+        if (entry && entry.endedOn === null && !areAtWar(after, power, rome)) {
+          entry.endedOn = day;
+          open.delete(power);
+        }
+      }
       record.days = after.day;
     },
-    { peaceful: true, guards: values.guards as GuardPlay },
+    { peaceful: true, guards: values.guards as GuardPlay, answer: values.answer },
   );
   return record;
 }

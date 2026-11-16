@@ -68,7 +68,7 @@ test.describe('the game stops when the player must decide', () => {
     await openMenu(page);
     await expect(page.getByTestId('pause-battle')).toBeChecked();
     await page.getByTestId('pause-battle').uncheck();
-    // Macedon warns of a coming war on Year 1, day 3 of this save, which stops the game by its own setting.
+    // Macedon warns of a coming war on Year 1, day 9 of this save, which stops the game by its own setting.
     await page.getByTestId('pause-warThreat').uncheck();
     await closeMenu(page);
     const state = battleTomorrow();

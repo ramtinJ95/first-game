@@ -68,13 +68,13 @@ export default defineScenario({
     await resume(page);
     await page
       .getByTestId('alerts')
-      .getByText(/Watch it under At peace in the Wars panel\.$/)
+      .getByText(/See At peace in Wars\.$/)
       .waitFor();
     await pause(page);
     await page.getByRole('button', { name: 'Chronicle' }).click();
     await page
       .getByTestId('chronicle')
-      .getByText(/Watch it under At peace in the Wars panel\.$/)
+      .getByText(/See At peace in Wars\.$/)
       .waitFor();
     await shot('threat-top-bar-news', 'The warning ends by saying where to watch the threat');
   },
