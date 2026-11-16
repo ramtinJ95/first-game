@@ -16,7 +16,7 @@ const { values } = parseArgs({
 
 interface Row {
   seed: number;
-  /** Milliseconds of each day's standingThreats, the wars panel's reckoning. */
+  /** Milliseconds of each day's standingThreats after the day's news has reckoned each power, as the top bar and the wars panel pay it. */
   costs: number[];
   warnings: number;
   /** Peace stretches in which a power reached the full strength it needs: one more line each under a once-in-a-peace rule. */
@@ -87,7 +87,7 @@ console.log(
   `Cautious Rome declaring no war, seeds ${values.from} to ${Number(values.from) + Number(values.seeds) - 1}, ${values.years} years.`,
 );
 console.log(
-  `standingThreats, every great power at peace with Rome, ${costs.length} days: median ${quantile(costs, 0.5).toFixed(2)} ms, p95 ${quantile(costs, 0.95).toFixed(2)} ms, most ${quantile(costs, 1).toFixed(2)} ms.`,
+  `standingThreats after the day's news, every great power at peace with Rome, ${costs.length} days: median ${quantile(costs, 0.5).toFixed(2)} ms, p95 ${quantile(costs, 0.95).toFixed(2)} ms, most ${quantile(costs, 1).toFixed(2)} ms.`,
 );
 console.log(
   `News lines a game: ${rows.reduce((s, r) => s + r.warnings, 0) / rows.length} warnings today; a line at full strength once in a peace would add ${rows.reduce((s, r) => s + r.fullLines, 0) / rows.length}.`,
