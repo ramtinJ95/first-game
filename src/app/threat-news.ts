@@ -83,7 +83,7 @@ export function threatNewsOfDay(
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
   const text =
     others.length === 0
-      ? `${first.name} could soon declare war on you: its armies have ${percent(first.threat)} of the strength it needs ${weighed(after, first.threat)}.${whatCounts(after, first.threat)} ${declaresFrom(first.since)}: watch it under At peace in Wars.`
+      ? `${first.name} could soon declare war on you: it has ${percent(first.threat)} of the strength it needs ${weighed(after, first.threat)}, and may declare from ${dateText(first.since + NOTICE_DAYS)} if it holds it.${whatCounts(after, first.threat)} See At peace in Wars.`
       : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => percent(w.threat)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name} may declare from ${dateText(w.since + NOTICE_DAYS)}`))}. What lowers each is under At peace in Wars.`;
   return [
     {
@@ -99,10 +99,6 @@ export function threatNewsOfDay(
 
 const listed = (items: readonly string[]) =>
   items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
-
-/** The first day a power on notice since the day may declare, if it holds the strength. */
-const declaresFrom = (since: number) =>
-  `If it holds this strength it may declare from ${dateText(since + NOTICE_DAYS)}`;
 
 type Threat = NonNullable<ReturnType<typeof warReadiness>>;
 
@@ -145,9 +141,9 @@ function whatCounts(state: State, threat: Threat): string {
   const gold = state.factions[state.player]?.stores.gold ?? 0;
   const hoard =
     threat.hoard > 0
-      ? ` Your treasury of ${whole(gold)} gold lowers what it needs by ${Math.round(threat.hoard * 100)}%, since a peace would make you pay it.`
+      ? ` Your treasury of ${whole(gold)} gold lowers that by ${Math.round(threat.hoard * 100)}%, as a peace would make you pay it.`
       : '';
-  return `${hoard}${front ? ` Your armies near ${front.name} and guards hired there count against it, the guards for their first ${GUARD_DETER_DAYS} days.` : ''}`;
+  return `${hoard}${front ? ` Your armies near ${front.name} and guards hired there count against it, guards for their first ${GUARD_DETER_DAYS} days.` : ''}`;
 }
 
 /** How near one great power at peace with the player stands to declaring war on it today, as the wars panel lists it. */
@@ -190,7 +186,7 @@ export function standingThreats(state: State, world: World): StandingThreat[] {
         power: power.id,
         name,
         readiness: Math.min(1, threat.readiness),
-        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${whatCounts(state, threat)}${power.noticeSince === null ? '' : ` ${declaresFrom(power.noticeSince)}.`}`,
+        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${whatCounts(state, threat)}${power.noticeSince === null ? '' : ` It may declare from ${dateText(power.noticeSince + NOTICE_DAYS)} if it holds it.`}`,
       };
     });
 }

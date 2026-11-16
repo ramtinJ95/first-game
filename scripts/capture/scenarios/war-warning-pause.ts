@@ -24,6 +24,7 @@ export default defineScenario({
       String(state.day),
     );
     await untilDrawn(page);
+    await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
     await resume(page);
     const warning = page
       .getByTestId('alerts')
@@ -38,7 +39,7 @@ export default defineScenario({
     await untilDrawn(page);
     await shot(
       'war-warning-paused',
-      "Carthage's warning stops the game on the day it comes, marked Paused, with the Wars button counting the threat",
+      "Carthage's warning stops the game once its strength has stood a week, marked Paused and naming the day it may declare, with the Wars button counting the threat",
     );
   },
 });

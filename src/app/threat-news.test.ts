@@ -84,7 +84,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     const news = newsOf(state, told);
     expect(news.map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: its armies have \d+% of the strength it needs against your forces near Roma\. Your treasury of [\d,]+ gold lowers what it needs by 25%, since a peace would make you pay it\. Your armies near Roma and guards hired there count against it, the guards for their first 90 days\. If it holds this strength it may declare from Year \d+, day \d+: watch it under At peace in Wars\.$/,
+        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Your treasury of [\d,]+ gold lowers that by 25%, as a peace would make you pay it\. Your armies near Roma and guards hired there count against it, guards for their first 90 days\. See At peace in Wars\.$/,
       ),
     ]);
     expect(news[0]?.tone).toBe('bad');
@@ -99,7 +99,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     expect(newsOf(game(5300, 'full', 100), new Set(), THREAT_STAND_DAYS - 1)).toEqual([]);
     const [warning] = newsOf(game(5300, 'full', 100), new Set());
     expect(warning?.text).toContain(
-      `If it holds this strength it may declare from ${dateText(100 - THREAT_STAND_DAYS + 1 + NOTICE_DAYS)}: watch it under At peace in Wars.`,
+      `and may declare from ${dateText(100 - THREAT_STAND_DAYS + 1 + NOTICE_DAYS)} if it holds it.`,
     );
   });
 
@@ -138,7 +138,7 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     const state = game(5300, 'full');
     const carthage = standingThreats(state, world).find((t) => t.power === 'carthage');
     expect(carthage?.text).toMatch(
-      /^Carthage has \d+% of the strength it needs to declare war on you, against your forces near Roma\. Your treasury of [\d,]+ gold lowers what it needs by 25%, since a peace would make you pay it\. Your armies near Roma and guards hired there count against it, the guards for their first 90 days\.$/,
+      /^Carthage has \d+% of the strength it needs to declare war on you, against your forces near Roma\. Your treasury of [\d,]+ gold lowers that by 25%, as a peace would make you pay it\. Your armies near Roma and guards hired there count against it, guards for their first 90 days\.$/,
     );
     const weaker = standingThreats(game(2000, 'full'), world).find((t) => t.power === 'carthage');
     expect(weaker?.readiness).toBeLessThan(carthage?.readiness ?? 0);
@@ -172,7 +172,7 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     );
     expect(newsOf(state, new Set()).map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: its armies have \d+% of the strength it needs against all your armies in the field, wherever they stand\. More men under arms lower it.*guards do not.*If it holds this strength it may declare from Year \d+, day \d+: watch it under At peace in Wars\.$/,
+        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against all your armies in the field, wherever they stand, and may declare from Year \d+, day \d+ if it holds it\. More men under arms lower it.*guards do not.*See At peace in Wars\.$/,
       ),
     ]);
   });
