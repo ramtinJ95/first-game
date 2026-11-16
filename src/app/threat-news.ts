@@ -169,7 +169,6 @@ export function standingThreats(state: State, world: World): StandingThreat[] {
           readiness: undefined,
           text: `${name} is not weighing a war on you now: none of its cities is near enough to yours, or none of its armies stands ready to march.`,
         };
-      const front = state.cities[threat.front];
       return {
         power: power.id,
         name,

@@ -130,6 +130,11 @@
     color: var(--bad);
   }
 
+  /* The open panel's button is drawn dark, where the warning colour cannot be read. */
+  [aria-expanded='true'] .threat-note {
+    color: inherit;
+  }
+
   .offer-note {
     display: block;
     font-size: 11px;
