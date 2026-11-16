@@ -5,6 +5,87 @@ The drawn trade look must cost at most 10% more per frame than main, at middle
 p95. This page says what made the look slow, what fixed it, what has been measured
 since, and what is left.
 
+## A selected city and the seventh play-through
+
+The seventh play-through drew 48 frames in a minute with Roma selected and 91 with nothing
+selected, with gaps up to 8.3 s. `e2e/trade-minute-bench.ts` plays that minute: Rome opens
+its three routes from Roma on day 1 (the road to Mogontiacum, the lanes to Carthago and
+Massalia; a new game's 1,500 gold pays for one, so the world holds 7,000), speed 2, a
+120 px/s pan, 60 s at the closest and the middle zoom, Roma selected and not, three
+alternating rounds, without `?frames`, so the frame pacer holds frames as in a game. It
+counts the frames the GPU finished and the longest gap between two.
+
+**Cause, traced.** Selecting a city opens the city panel. `createView` republished a fresh
+snapshot every 100 ms, so `cityBuildings`, `recruitForecast`, `cityGuards` and the panel's
+other derived values ran ten times a second while the state changed twice. In a Chrome trace
+of 30 s at the closest zoom the page's main thread was busy 11.7 s with Roma selected and
+6.2 s without; timer work was 2.0 s against 0.1 s, and the renderer's `draw` 1.0 s in both.
+No frame rebuilt or uploaded trade ink. On two cores that main thread takes its time from
+SwiftShader. The cost predates the trade look: `d1a58a1` loses frames when selected too.
+
+**Fix.** The view publishes a snapshot only when one of its fields, or its frame's, is a new
+value (`sameSnapshot` in `src/app/view.svelte.ts`); `main.ts` keeps the standing and a
+fate's modal by state, as it keeps sight. The panels now run once a day played, not five.
+
+Medians of three rounds on this pylon (2 cores, SwiftShader, 1280×720), each round in
+brackets. `main` is `d528f01`, the branch its change on that `main`.
+
+| Build     | Zoom    | Roma selected: frames, longest gap | Nothing selected: frames, longest gap |
+| --------- | ------- | ---------------------------------- | ------------------------------------- |
+| `d1a58a1` | closest | 81 (81, 87, 78), 1.31 s            | 82 (75, 93, 82), 1.32 s               |
+| `d1a58a1` | middle  | 64 (48, 76, 64), 2.03 s            | 58 (57, 58, 72), 1.90 s               |
+| `main`    | closest | 83 (78, 83, 94), 1.17 s            | 94 (86, 94, 108), 1.02 s              |
+| `main`    | middle  | 66 (62, 66, 79), 1.94 s            | 72 (63, 72, 74), 1.81 s               |
+| branch    | closest | 83 (80, 83, 92), 1.08 s            | 91 (91, 85, 106), 1.07 s              |
+| branch    | middle  | 68 (55, 77, 68), 2.51 s            | 68 (57, 68, 100), 1.84 s              |
+| branch    | middle  | 83 (74, 91, 83), 1.74 s            | 76 (80, 76, 75), 1.78 s               |
+
+The last row is three more rounds at the final head. One build against itself spreads by
+more than a tenth: nothing selected drew 85 to 106 frames at closest and 57 to 100 at middle
+in the same session. So the matrix cannot tell a few percent; the median frame interval of
+alternating 30 s runs can. There, at closest, nothing selected took 616 to 634 ms and Roma
+selected 654 to 669 ms on the branch (`main` 730 against 669, and 766 against 707): drawing a
+selection still costs about 7 %, shared by compositing the panel, the highlight's fill and
+the route ink (each removed alone saved 1.5 to 3 %; all three, all of it). Making the panel
+opaque, dropping its corners and shadow, or leaving out the highlight fill at closest each
+saved nothing measurable, so the look is unchanged.
+
+On a GPU (inference, not measured): fills and a composited panel cost little there, while
+forecasts of tens of milliseconds ten times a second stall a 5 ms frame, so the panel's
+republish is the cost a player would feel and is the one removed.
+
+CI's `frame-benches` job runs `--alternate 4 --segment 4 --panel-budget` (about a minute;
+63 s in CI): at closest and middle, one page each, four 4 s sweeps of the pan select
+nothing, Roma, Roma, nothing, so each selection gets two sweeps, 8 s and about 13 frames. It
+prints each selection's frame rate (the frames between each sweep's first and last, over
+the time they span), frames drawn and longest gap, and fails only when a selected city's
+panels run more than 1.5 times a day played: 5.0 on `main`, 1.0 on the branch, every run.
+
+The owner chose not to assert frames and gaps there. On the unchanged head the short check
+with them asserted passed 3 of 5 runs counting frames and 2 of 4 comparing rates, and CI
+failed it once: the selected-to-unselected ratio swings about 7 % between runs in 8 s a
+side (closest frame-rate ratios 1.006, 1.038, 1.064 and 0.891; middle longest-gap ratios
+1.006, 1.115, 1.086 and 1.128), so a check at a tenth goes red without a regression. The
+full minute spreads by more than a tenth between rounds on this kind of host as well, so a
+longer CI run would not buy a reliable tenth either. The full minute,
+`node e2e/trade-minute-bench.ts --roots <a>,<b> --budget`, is the measure run by hand.
+
+The middle zoom's long frames (1.6 to 1.8 s) are GPU time: no main-thread task over 110 ms
+in a trace of them. Roma selected's longest middle gap was about 8 % longer on average in
+the short runs. Drawing the selected routes each frame instead of from their cached texture
+did not shorten it, so that was not done.
+
+## Merchants a player sees
+
+A route drew one merchant, at its crossing. Rome's road to Mogontiacum is 971 km, 61 days a
+crossing, and the closest view is 320 km wide, so near Roma the caravan was in view a few
+days a crossing; at middle zoom a merchant is about 12 px, and ships at the end of a
+crossing sat under their port. A route now draws a merchant every 200 km of its round trip,
+half each way (`merchantPoses` in `src/render/trade.ts`): 10 on the Mogontiacum road, 6 on
+each lane. In the bench world at middle zoom the map draws 30 merchant figures (12 ships, 6
+caravans, with their walkers); at closest over Roma, 11 to 16. The `merchants` capture plays
+the game on from day 2 and shows them at both zooms, Roma selected and not.
+
 ## What made the look slow
 
 The goods suffix widens a city label, as in `ROMA · grain`. The first legion, resting
@@ -175,6 +256,9 @@ the bench serves each checkout's `dist/`.
 - Interrupted matrices, changed windows, retries or raised timeouts. Keep failures.
 
 ## Left open
+
+- About 7 % of a closest frame in software GL for drawing a selected city's panel,
+  outline and route ink.
 
 - A steadier host for the committed protocol, or the owner's decision on the closest
   p95 above.

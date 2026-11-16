@@ -36,7 +36,7 @@ import {
 import { FADE_FROM, FALL_DAYS, STEP_DAYS, formationDay, type FormationDay } from './losses.ts';
 import { seeded } from './seed.ts';
 import { alongTrail, dayPath, trailLength } from './trail.ts';
-import { tradePose } from '../trade.ts';
+import { merchantPoses } from '../trade.ts';
 
 /** The colours the sheet paints, in its order: the five powers, then every minor city. */
 export const SHEET_COLOURS: readonly number[] = [...Object.values(POWER_COLOURS), MINOR_COLOUR];
@@ -1527,82 +1527,86 @@ class Context {
             });
         }
       }
-      const before = previous.tradeRoutes[route.id];
-      const pose = tradePose(before, route, progress);
-      if (!pose) continue;
-      if (
-        route.owner !== current.player &&
-        route.partner !== current.player &&
-        !sight.sees(pose.point)
-      )
-        continue;
-      const base = this.screen(pose.point);
-      if (!this.inView(base)) continue;
-      const colour = colourIndex(current, route.owner);
-      const walking = current.day >= route.departsOn;
-      const phase = motion * 0.8 + seeded(route.id);
-      const mirror = pose.heading.x < 0;
-      if (route.mode === 'sea') {
-        const bob = Math.sin(now * 1.4 + seeded(route.id) * 6) * 0.04 * this.h;
-        const frame = Math.floor(frac(phase) * OWNED.ship) % OWNED.ship;
-        this.push({
-          key: `${artKey('ship', frame)}@${colour}`,
-          x: base.x,
-          y: base.y + bob,
-          size: this.h * 0.85,
-          mirror,
-          alpha: 1,
-          rotation: 0,
-          depth: base.y,
-          trade: route.id,
-        });
-        const stern = { x: base.x - pose.heading.x * this.h, y: base.y - pose.heading.y * this.h };
-        for (const side of [-1, 1])
-          this.scene.wakes.push({
-            alpha: 0.6,
-            points: [
-              stern,
-              {
-                x: stern.x - pose.heading.x * this.h * 1.6 - pose.heading.y * side * this.h * 0.4,
-                y: stern.y - pose.heading.y * this.h * 1.6 + pose.heading.x * side * this.h * 0.25,
-              },
-            ],
+      const poses = merchantPoses(previous.tradeRoutes[route.id], route, progress, current.day);
+      for (const [k, pose] of poses.entries()) {
+        if (
+          route.owner !== current.player &&
+          route.partner !== current.player &&
+          !sight.sees(pose.point)
+        )
+          continue;
+        const base = this.screen(pose.point);
+        if (!this.inView(base)) continue;
+        const colour = colourIndex(current, route.owner);
+        const walking = current.day >= route.departsOn;
+        const phase = motion * 0.8 + seeded(route.id) + k / poses.length;
+        const mirror = pose.heading.x < 0;
+        if (route.mode === 'sea') {
+          const bob = Math.sin(now * 1.4 + seeded(route.id) * 6) * 0.04 * this.h;
+          const frame = Math.floor(frac(phase) * OWNED.ship) % OWNED.ship;
+          this.push({
+            key: `${artKey('ship', frame)}@${colour}`,
+            x: base.x,
+            y: base.y + bob,
+            size: this.h * 0.85,
+            mirror,
+            alpha: 1,
+            rotation: 0,
+            depth: base.y,
+            trade: route.id,
           });
-        continue;
-      }
-      const cart = this.nudge(base.x, base.y, 'cart');
-      if (cart)
-        this.push({
-          key: `${artKey('cart', Math.floor(frac(walking ? phase : 0) * OWNED.cart))}@${colour}`,
-          x: cart.x,
-          y: cart.y,
-          size: this.h * 0.85,
-          mirror,
-          alpha: 1,
-          rotation: 0,
-          depth: cart.y,
-          trade: route.id,
-        });
-      for (const [i, kind] of (['refugee', 'refugeeWoman'] as const).entries()) {
-        const back = (i === 0 ? -1.15 : 1.2) * this.h;
-        const at = this.nudge(
-          base.x - pose.heading.x * back,
-          base.y - pose.heading.y * back * GROUND_Y,
-          kind,
-        );
-        if (!at) continue;
-        const activity = walking ? 'march' : 'stand';
-        this.push({
-          key: `${figureKey(kind, activity, frameOf(activity, phase + i * 0.4))}@${colour}`,
-          x: at.x,
-          y: at.y,
-          size: this.h * 0.85,
-          mirror,
-          alpha: 1,
-          rotation: 0,
-          depth: at.y,
-          trade: route.id,
-        });
+          const stern = {
+            x: base.x - pose.heading.x * this.h,
+            y: base.y - pose.heading.y * this.h,
+          };
+          for (const side of [-1, 1])
+            this.scene.wakes.push({
+              alpha: 0.6,
+              points: [
+                stern,
+                {
+                  x: stern.x - pose.heading.x * this.h * 1.6 - pose.heading.y * side * this.h * 0.4,
+                  y:
+                    stern.y - pose.heading.y * this.h * 1.6 + pose.heading.x * side * this.h * 0.25,
+                },
+              ],
+            });
+          continue;
+        }
+        const cart = this.nudge(base.x, base.y, 'cart');
+        if (cart)
+          this.push({
+            key: `${artKey('cart', Math.floor(frac(walking ? phase : 0) * OWNED.cart))}@${colour}`,
+            x: cart.x,
+            y: cart.y,
+            size: this.h * 0.85,
+            mirror,
+            alpha: 1,
+            rotation: 0,
+            depth: cart.y,
+            trade: route.id,
+          });
+        for (const [i, kind] of (['refugee', 'refugeeWoman'] as const).entries()) {
+          const back = (i === 0 ? -1.15 : 1.2) * this.h;
+          const at = this.nudge(
+            base.x - pose.heading.x * back,
+            base.y - pose.heading.y * back * GROUND_Y,
+            kind,
+          );
+          if (!at) continue;
+          const activity = walking ? 'march' : 'stand';
+          this.push({
+            key: `${figureKey(kind, activity, frameOf(activity, phase + i * 0.4))}@${colour}`,
+            x: at.x,
+            y: at.y,
+            size: this.h * 0.85,
+            mirror,
+            alpha: 1,
+            rotation: 0,
+            depth: at.y,
+            trade: route.id,
+          });
+        }
       }
     }
   }
