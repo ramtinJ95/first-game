@@ -84,7 +84,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     const news = newsOf(state, told);
     expect(news.map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Your treasury of [\d,]+ gold lowers that by 25%, as a peace would make you pay it\. Your armies near Roma and guards hired there count against it, guards for their first 90 days\. See At peace in Wars\.$/,
+        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Your treasury of [\d,]+ gold lowers the strength it needs by 25%, so more gold brings war nearer\. Your armies near Roma and guards hired there count against it, guards for their first 90 days\. See At peace in Wars\.$/,
       ),
     ]);
     expect(news[0]?.tone).toBe('bad');
@@ -138,7 +138,7 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     const state = game(5300, 'full');
     const carthage = standingThreats(state, world).find((t) => t.power === 'carthage');
     expect(carthage?.text).toMatch(
-      /^Carthage has \d+% of the strength it needs to declare war on you, against your forces near Roma\. Your treasury of [\d,]+ gold lowers that by 25%, as a peace would make you pay it\. Your armies near Roma and guards hired there count against it, guards for their first 90 days\.$/,
+      /^Carthage has \d+% of the strength it needs to declare war on you, against your forces near Roma\. Your treasury of [\d,]+ gold lowers the strength it needs by 25%, so more gold brings war nearer\. Your armies near Roma and guards hired there count against it, guards for their first 90 days\.$/,
     );
     const weaker = standingThreats(game(2000, 'full'), world).find((t) => t.power === 'carthage');
     expect(weaker?.readiness).toBeLessThan(carthage?.readiness ?? 0);

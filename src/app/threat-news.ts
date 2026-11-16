@@ -141,7 +141,7 @@ function whatCounts(state: State, threat: Threat): string {
   const gold = state.factions[state.player]?.stores.gold ?? 0;
   const hoard =
     threat.hoard > 0
-      ? ` Your treasury of ${whole(gold)} gold lowers that by ${Math.round(threat.hoard * 100)}%, as a peace would make you pay it.`
+      ? ` Your treasury of ${whole(gold)} gold lowers the strength it needs by ${Math.round(threat.hoard * 100)}%, so more gold brings war nearer.`
       : '';
   return `${hoard}${front ? ` Your armies near ${front.name} and guards hired there count against it, guards for their first ${GUARD_DETER_DAYS} days.` : ''}`;
 }
