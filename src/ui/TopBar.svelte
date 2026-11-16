@@ -11,16 +11,22 @@
   import FrameControls from './FrameControls.svelte';
   import TimeControls from './TimeControls.svelte';
   import { desertionLine } from '../app/desertion.ts';
+  import { powersNearWar } from '../app/threat-news.ts';
+  import type { World } from '../sim/world/world.ts';
 
   let {
     view,
+    world,
     actions,
     frame,
   }: {
     view: View;
+    world: World;
     actions: Actions;
     frame: FrameActions;
   } = $props();
+
+  const threatText = (count: number) => `${count} ${count === 1 ? 'threat' : 'threats'}`;
 
   const STORES: { key: keyof Stores; name: string }[] = [
     { key: 'gold', name: 'Gold' },
@@ -35,6 +41,7 @@
   const balance = $derived(dailyBalances(game).get(game.player));
   const limits = $derived(limitsOf(game).get(game.player));
   const wars = $derived(warsOf(game, game.player));
+  const threats = $derived(fallen ? 0 : powersNearWar(game, world));
   const offers = $derived(
     wars.filter((war) => {
       const offer = standingOffer(game, game.player, war.against);
@@ -83,9 +90,14 @@
       data-testid="wars-button"
       class:offer={offers > 0}
       aria-expanded={view.current.panel === 'wars'}
-      aria-label={`Wars ${wars.length}${offers > 0 ? `, ${offers} ${offers === 1 ? 'offer' : 'offers'} waiting` : ''}`}
+      aria-label={`Wars ${wars.length}${threats > 0 ? `, ${threatText(threats)}` : ''}${offers > 0 ? `, ${offers} ${offers === 1 ? 'offer' : 'offers'} waiting` : ''}`}
+      title={threats > 0
+        ? 'A great power at peace with you is near the strength it needs to declare war on you. The Wars panel says which and how near.'
+        : undefined}
       onclick={() => actions.togglePanel('wars')}
-      >Wars {wars.length}{#if offers > 0}<span class="offer-note">Offer waiting</span>{/if}</button
+      >Wars {wars.length}{#if threats > 0}<span class="threat-note" data-testid="wars-threat"
+          >· {threatText(threats)}</span
+        >{/if}{#if offers > 0}<span class="offer-note">Offer waiting</span>{/if}</button
     >
     <button
       type="button"
@@ -111,6 +123,11 @@
     gap: 4px 14px;
     align-items: center;
     padding: 5px 12px;
+  }
+
+  .threat-note {
+    margin-left: 0.3em;
+    color: var(--bad);
   }
 
   .offer-note {

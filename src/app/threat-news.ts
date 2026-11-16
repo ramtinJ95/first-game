@@ -59,7 +59,7 @@ export function threatNewsOfDay(
       forgetCalm(remembered, power.id);
       continue;
     }
-    const threat = warReadiness(after, world, power.id, player);
+    const threat = readinessOf(after, world, power.id);
     const readiness = threat?.readiness ?? 0;
     if (remembered.has(key)) {
       const since = calmSince(remembered, power.id);
@@ -76,14 +76,34 @@ export function threatNewsOfDay(
       kind: 'warThreat',
       day: before.day,
       tone: 'bad',
-      text: `${factionName(after, power.id)} could soon declare war on you: its armies have ${percent(threat)} of the strength it needs against your forces near ${front?.name ?? 'your land'}.${whatCounts(after, threat)}`,
+      text: `${factionName(after, power.id)} could soon declare war on you: its armies have ${percent(threat)} of the strength it needs against your forces near ${front?.name ?? 'your land'}.${whatCounts(after, threat)} ${WATCH}`,
       ...(front ? { focus: { at: front.position } } : {}),
     });
   }
   return news;
 }
 
+/** Where the warning sends the player to watch the threat between warnings. */
+const WATCH = 'Watch it under At peace in the Wars panel.';
+
 type Threat = NonNullable<ReturnType<typeof warReadiness>>;
+
+const reckoned = new WeakMap<State, Map<FactionId, Threat | undefined>>();
+
+/**
+ * The power's war readiness against the player in this state, reckoned once: the day's news
+ * reckons it inside the clock's frame, and the top bar and the wars panel read the same
+ * state afterwards, so they add no reckoning of their own. A state is never changed after.
+ */
+function readinessOf(state: State, world: World, power: FactionId): Threat | undefined {
+  let day = reckoned.get(state);
+  if (!day) {
+    day = new Map();
+    reckoned.set(state, day);
+  }
+  if (!day.has(power)) day.set(power, warReadiness(state, world, power, state.player));
+  return day.get(power);
+}
 
 const percent = (threat: Threat) => `${Math.round(Math.min(1, threat.readiness) * 100)}%`;
 
@@ -127,7 +147,7 @@ export function standingThreats(state: State, world: World): StandingThreat[] {
     .sort((a, b) => (a.id < b.id ? -1 : 1))
     .map((power) => {
       const name = factionName(state, power.id);
-      const threat = warReadiness(state, world, power.id, player);
+      const threat = readinessOf(state, world, power.id);
       if (!threat)
         return {
           power: power.id,
@@ -143,4 +163,10 @@ export function standingThreats(state: State, world: World): StandingThreat[] {
         text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${threat.pressed ? 'weighing all your armies in the field' : `against your forces near ${front?.name ?? 'your land'}`}.${whatCounts(state, threat)}`,
       };
     });
+}
+
+/** How many great powers at peace with the player stand at THREAT_WARN or nearer today, as the top bar counts them. */
+export function powersNearWar(state: State, world: World): number {
+  return standingThreats(state, world).filter((threat) => (threat.readiness ?? 0) >= THREAT_WARN)
+    .length;
 }

@@ -1,7 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { GameState } from '../src/sim/state/game-state.ts';
+import type { FormationId } from '../src/sim/ids.ts';
 import {
+  armyOf,
   camera,
+  carthage,
   carthageNearsWar,
   cityPoint,
   dropSave,
@@ -9,6 +12,7 @@ import {
   openGame,
   pause,
   resume,
+  rome,
   romaMustersUnderSiege,
   sackedMediolanum,
   sixSpearmenMusterTomorrow,
@@ -101,6 +105,27 @@ test.describe('what the page tells of stores, cities, and sieges', () => {
     await pause(page);
     await expect(line).toContainText(/Your treasury of [\d,]+ gold lowers what it needs by 25%/);
     await expect(line).toHaveCount(1);
+  });
+
+  test('the Wars button says a power at peace stands near war, and turns plain once it falls back', async ({
+    page,
+  }) => {
+    const near = carthageNearsWar();
+    const weak = carthageNearsWar();
+    const punic = weak.formations[armyOf(weak, carthage).formations[0] as FormationId];
+    const stores = weak.factions[rome]?.stores;
+    if (!punic || !stores) throw new Error('no Carthaginian army or Roman stores');
+    punic.men = 2000;
+    stores.gold = 0;
+    const button = page.getByTestId('wars-button');
+    await load(page, near);
+    await expect(button).toHaveText('Wars 0· 1 threat');
+    await expect(button).toHaveAccessibleName('Wars 0, 1 threat');
+    await load(page, weak);
+    await expect(button).toHaveText('Wars 0');
+    await expect(button).toHaveAccessibleName('Wars 0');
+    await load(page, near);
+    await expect(page.getByTestId('wars-threat')).toHaveText('· 1 threat');
   });
 
   test('the army and city panels of a siege too weak to cut the food say how many men it needs', async ({

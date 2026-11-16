@@ -74,7 +74,7 @@
   <!-- The grid spans the map, so it lets clicks through and only the panels take them. -->
   <div class="hud">
     <div class="slot top">
-      <TopBar {view} {actions} {frame} />
+      <TopBar {view} {world} {actions} {frame} />
     </div>
     <div class="slot main">
       {#if view.current.panel === 'wars'}
