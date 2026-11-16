@@ -11,7 +11,7 @@ import type { GameState } from '../state/game-state.ts';
 import { warKey } from '../state/war.ts';
 import { ADMIN_CITIES, limitsOf } from '../systems/economy.ts';
 import { buildWorld } from '../world/world.ts';
-import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld, onNotice } from '../fixture.ts';
 import { decideOrders } from './decide.ts';
 import { HOARD_ODDS_SHARE } from './thresholds.ts';
 import { warReadiness } from './war.ts';
@@ -61,6 +61,7 @@ function carthageAndRome({ grown, full }: { grown: boolean; full: boolean }): Ga
   const romans = state.factions[rome];
   if (!romans) throw new Error('no Rome');
   romans.stores.gold = full ? (limitsOf(state).get(rome)?.gold ?? 0) : 0;
+  onNotice(state, carthage);
   return state;
 }
 

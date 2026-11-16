@@ -222,6 +222,7 @@ describe('a day of siege', () => {
       stores: { gold: 1000, food: 1000, manpower: 0 },
       league: null,
       defeatedOn: null,
+      noticeSince: null,
     };
     executeOrder(state, { kind: 'declareWar', faction: numidia, against: FIXTURE.rome }, world);
     const numidian = addArmy(state, 'army-numidian', numidia, 3000, { x: 2638.8, y: 2451.3 });
@@ -427,6 +428,7 @@ describe('storming', () => {
       stores: { gold: 1000, food: 1000, manpower: 0 },
       league: null,
       defeatedOn: null,
+      noticeSince: null,
     };
     executeOrder(state, { kind: 'declareWar', faction: numidia, against: FIXTURE.rome }, world);
     const numidian = addArmy(state, 'army-numidian', numidia, 200, { x: 2638.8, y: 2451.3 });

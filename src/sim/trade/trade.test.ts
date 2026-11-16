@@ -5,7 +5,7 @@ import { decideAll, decideOrders } from '../ai/decide.ts';
 import { changeCityOwner } from '../cities.ts';
 import { makePeace } from '../peace/make-peace.ts';
 import { recordEvents } from '../events.ts';
-import { buildFixture, fixtureWorld, FIXTURE as f } from '../fixture.ts';
+import { buildFixture, fixtureWorld, FIXTURE as f, onNotice } from '../fixture.ts';
 import { newGame } from '../new-game.ts';
 import type { CityId, ProvinceId } from '../ids.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
@@ -375,6 +375,7 @@ describe('trade orders and consent', () => {
     const minor = state.cities[f.syracusae];
     if (!minor) throw new Error('missing minor city');
     minor.owner = f.carthage;
+    onNotice(state, f.carthage);
     state.truces[warKey(f.carthage, f.rome)] = { since: state.day, endsOn: (state.day + 1) as Day };
     payer.stores.gold = 100000;
     const events = recordEvents(state, () =>
@@ -397,6 +398,7 @@ describe('trade orders and consent', () => {
     const home = state.cities[f.carthago];
     if (!minor || !home) throw new Error('missing cities');
     minor.owner = f.carthage;
+    onNotice(state, f.carthage);
     payer.stores.gold = 100000;
     home.recruits.push(
       { troop: 'swordsmen', readyOn: state.day },

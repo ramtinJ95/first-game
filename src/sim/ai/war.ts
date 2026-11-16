@@ -25,6 +25,7 @@ import {
   LEADER_SHARE,
   PEACE_WAR_ODDS,
   RIVAL_ODDS,
+  NOTICE_DAYS,
   RIVAL_PRESSURE_ODDS,
   SATED_EXPONENT,
   WAR_DISTANCE_KM,
@@ -56,10 +57,15 @@ import {
 export function warDeclaration(context: Context): Order[] {
   const reckoning = reckon(context);
   if (!reckoning || reckoning.free <= 0) return [];
-  const { faction } = context;
+  const { faction, state } = context;
+  const since = state.factions[faction]?.noticeSince ?? null;
+  // The player is declared on only after the notice its warning gives.
+  const may = (against: FactionId) =>
+    against !== state.player || (since !== null && state.day - since >= NOTICE_DAYS);
   let best: { against: FactionId; score: number } | undefined;
   for (const { id, bound } of reckoning.candidates) {
     if (best && bound <= best.score) break;
+    if (!may(id)) continue;
     const front = reckoning.frontOf(id);
     if (!front) continue;
     const score = reckoning.scoreOf(id, reckoning.measure(id, front.city), front.km);
@@ -71,6 +77,7 @@ export function warDeclaration(context: Context): Order[] {
     const odds = reckoning.pressureOn(rival);
     if (odds === undefined || odds < RIVAL_PRESSURE_ODDS || (pressed && odds <= pressed.odds))
       continue;
+    if (!may(rival)) continue;
     if (reckoning.frontOf(rival)) pressed = { against: rival, odds };
   }
   return pressed ? [{ kind: 'declareWar', faction, against: pressed.against }] : [];

@@ -1,4 +1,5 @@
 import type { GameState } from './state/game-state.ts';
+import { notice } from './systems/notice.ts';
 import { advanceDay } from './systems/advance-day.ts';
 import { battles } from './systems/battles.ts';
 import { construction } from './systems/construction.ts';
@@ -18,7 +19,7 @@ export type System = (state: GameState, world: World) => void;
 /**
  * The systems of one day, in the order they run, after the orders: the homecoming of a
  * peace made today, movement, the crossings that marches end in, battles, sieges,
- * economy, trade, construction, guard terms, population. The day counter stays last, so
+ * economy, trade, construction, guard terms, population, and the notice great powers stand on against the player. The day counter stays last, so
  * every system before it sees the day that is being played.
  */
 export const SYSTEMS: readonly System[] = [
@@ -32,5 +33,6 @@ export const SYSTEMS: readonly System[] = [
   construction,
   guardTerms,
   population,
+  notice,
   advanceDay,
 ];

@@ -10,6 +10,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import { warKey } from '../sim/state/war.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
 import { buildWorld } from '../sim/world/world.ts';
+import { notice } from '../sim/systems/notice.ts';
 import { ALL_PAUSES, stopsOfDay } from './pauses.ts';
 import { powersNearWar, standingThreats, threatNewsOfDay } from './threat-news.ts';
 
@@ -61,8 +62,11 @@ function game(men: number, gold: 'full' | 'empty', day = 0): GameState {
   return state;
 }
 
-/** The news of a day that ends in the state. */
-const newsOf = (state: GameState, told: Set<string>) => threatNewsOfDay(state, state, world, told);
+/** The news of a day that ends in the state, once the day's notice is kept. */
+function newsOf(state: GameState, told: Set<string>) {
+  notice(state, world);
+  return threatNewsOfDay(state, state, world, told);
+}
 
 describe('the news of a power that could soon declare war on the player', () => {
   test('tells once when a power nears the odds it needs, with what the treasury takes off', () => {
@@ -82,30 +86,26 @@ describe('the news of a power that could soon declare war on the player', () => 
     expect(newsOf(game(5300, 'empty'), new Set())).toEqual([]);
   });
 
-  test('tells once in a peace although the power falls back for months and returns', () => {
+  test('tells once while the power stays on notice, though it falls back for months and returns', () => {
     const told = new Set<string>();
     expect(newsOf(game(5300, 'full', 0), told)).toHaveLength(1);
     expect(newsOf(game(2000, 'empty', 10), told)).toEqual([]);
-    expect(newsOf(game(2000, 'empty', 300), told)).toEqual([]);
     expect(newsOf(game(5300, 'full', 310), told)).toEqual([]);
-    expect(newsOf(game(2000, 'empty', 320), told)).toEqual([]);
-    expect(newsOf(game(5300, 'full', 600), told)).toEqual([]);
+    expect(newsOf(game(5300, 'full', 364), told)).toEqual([]);
   });
 
-  test('tells again once the power stayed below the threat for a year, or after a war between them', () => {
+  test('tells again a power still on notice a year after it warned, and after a war between them', () => {
     const told = new Set<string>();
     expect(newsOf(game(5300, 'full', 0), told)).toHaveLength(1);
-    expect(newsOf(game(2000, 'empty', 10), told)).toEqual([]);
-    const aYearLess = new Set(told);
-    expect(newsOf(game(5300, 'full', 374), aYearLess)).toEqual([]);
-    expect(newsOf(game(5300, 'full', 375), told)).toHaveLength(1);
+    expect(newsOf(game(2000, 'empty', 200), told)).toEqual([]);
+    expect(newsOf(game(5300, 'full', 365), told)).toHaveLength(1);
 
-    const atWar = game(5300, 'full');
+    const atWar = game(5300, 'full', 400);
     expect(
       executeOrder(atWar, { kind: 'declareWar', faction: carthage, against: rome }, world),
     ).toBeUndefined();
     expect(newsOf(atWar, told)).toEqual([]);
-    expect(newsOf(game(5300, 'full'), told)).toHaveLength(1);
+    expect(newsOf(game(5300, 'full', 401), told)).toHaveLength(1);
   });
 });
 

@@ -24,6 +24,11 @@ export const FactionSchema = v.object({
   league: v.optional(v.nullable(FactionIdSchema)),
   /** The day the faction lost its last city and left the game, or null while it plays. */
   defeatedOn: v.nullable(DaySchema),
+  /**
+   * The day this great power came to stand at NOTICE_SHARE of the strength it needs to
+   * declare war on the player, and has stood there since; null while it does not.
+   */
+  noticeSince: v.optional(v.nullable(DaySchema), null),
   /** How many armies the faction has raised, which numbers the next one's name. Absent is none. */
   armiesRaised: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
 });

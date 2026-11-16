@@ -31,6 +31,14 @@ export const RIVAL_ODDS = 1.2;
  * to its homeland once its own armies outweigh that neighbour's this many times.
  */
 export const RIVAL_PRESSURE_ODDS = 2;
+/** A great power that stands at this share of the strength it needs to declare war on the player is on notice, */
+export const NOTICE_SHARE = 0.8;
+/**
+ * and declares on the player only after it has stood there this many days in a row, so the
+ * warning the player is given comes at least this long before the war: long enough to
+ * raise men, who train in 10 to 30 days, or to bring an army home.
+ */
+export const NOTICE_DAYS = 30;
 /**
  * A great power that holds at least this share of all cities, and more than any other,
  * leads. Its neighbours declare war on it with no more than COALITION_ODDS, so the

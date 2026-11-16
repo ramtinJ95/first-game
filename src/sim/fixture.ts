@@ -1,3 +1,4 @@
+import { NOTICE_DAYS } from './ai/thresholds.ts';
 import mapData from '../../data/map/map.json' with { type: 'json' };
 import type { ArmyId, CityId, FactionId, FormationId, ProvinceId } from './ids.ts';
 import { parseMap } from './map.ts';
@@ -56,6 +57,7 @@ export function buildFixture(seed = 1): GameState {
         stores: { gold: 5000, food: 1000, manpower: 2000 },
         league: null,
         defeatedOn: null,
+        noticeSince: null,
         armiesRaised: 1,
       },
       [f.carthage]: {
@@ -65,6 +67,7 @@ export function buildFixture(seed = 1): GameState {
         stores: { gold: 3000, food: 1000, manpower: 1000 },
         league: null,
         defeatedOn: null,
+        noticeSince: null,
         armiesRaised: 1,
       },
       [f.syracusaeFaction]: {
@@ -74,6 +77,7 @@ export function buildFixture(seed = 1): GameState {
         stores: { gold: 100, food: 100, manpower: 100 },
         league: null,
         defeatedOn: null,
+        noticeSince: null,
       },
     },
     provinces: {
@@ -196,4 +200,11 @@ export function buildFixture(seed = 1): GameState {
     truces: {},
     tradeRoutes: {},
   };
+}
+
+/** The power has stood on notice against the player for NOTICE_DAYS, so it may declare war on it today. */
+export function onNotice(state: GameState, power: FactionId): void {
+  const faction = state.factions[power];
+  if (!faction) throw new Error(`no faction ${power}`);
+  faction.noticeSince = (state.day - NOTICE_DAYS) as Day;
 }

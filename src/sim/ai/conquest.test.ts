@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { fixtureWorld } from '../fixture.ts';
+import { fixtureWorld, onNotice } from '../fixture.ts';
 import { allocateId, type ArmyId, type CityId, type FactionId } from '../ids.ts';
 import { changeCityOwner } from '../cities.ts';
 import { landPath } from '../march.ts';
@@ -386,6 +386,8 @@ describe('the leader', () => {
   /** Carthage at peace, with an army as strong as Rome's city nearest to it, and Rome holding `extra` more cities far from Carthage. */
   function carthageFacing(extra: number) {
     const state = newGame(world.map, { seed: 1, player: 'rome' });
+    for (const power of Object.values(state.factions))
+      if (power.kind === 'greatPower' && power.id !== rome) onNotice(state, power.id);
     for (const army of Object.values(state.armies)) {
       if (army.owner === carthage || army.owner === rome) {
         for (const id of army.formations) removeRecord(state.formations, id);

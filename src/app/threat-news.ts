@@ -8,40 +8,38 @@ import type { World } from '../sim/world/world.ts';
 import type { Alert } from './alerts.ts';
 import { factionName, whole } from './names.ts';
 import { GUARD_DETER_DAYS } from '../sim/guards.ts';
+import { NOTICE_SHARE } from '../sim/ai/thresholds.ts';
 
 type State = DeepReadonly<GameState>;
 
-/** A great power this near the odds it needs to declare war on the player is told of. */
-export const THREAT_WARN = 0.8;
-/** and told of again only after a war or a truce came between, or it stayed below this */
-export const THREAT_CLEAR = 0.6;
-/** for this many days in a row. */
-export const THREAT_CALM_DAYS = 365;
+/** A great power this near the odds it needs to declare war on the player is told of: the rules' notice. */
+export const THREAT_WARN = NOTICE_SHARE;
+/** A power on notice that warned this long ago is told of again, so every war comes after a warning of the last year. */
+export const THREAT_RECALL_DAYS = 365;
 
-const keyOf = (faction: string) => `threat:${faction}`;
-const calmPrefix = (faction: string) => `threat-calm:${faction}:`;
+const prefixOf = (faction: string) => `threat:${faction}:`;
 
-/** The day a warned power fell below THREAT_CLEAR and has stayed there since, kept in the told keys. */
-function calmSince(remembered: ReadonlySet<string>, faction: string): number | undefined {
-  const prefix = calmPrefix(faction);
+/** The day the power last warned in this peace, kept in the told keys. */
+function warnedOn(remembered: ReadonlySet<string>, faction: string): number | undefined {
+  const prefix = prefixOf(faction);
   for (const key of remembered) if (key.startsWith(prefix)) return Number(key.slice(prefix.length));
   return undefined;
 }
 
-function forgetCalm(remembered: Set<string>, faction: string) {
-  const since = calmSince(remembered, faction);
-  if (since !== undefined) remembered.delete(`${calmPrefix(faction)}${since}`);
+function forget(remembered: Set<string>, faction: string) {
+  const day = warnedOn(remembered, faction);
+  if (day !== undefined) remembered.delete(`${prefixOf(faction)}${day}`);
 }
 
 /**
- * The great powers at peace with the player that have come within THREAT_WARN of the
- * odds they need to declare war on it, by the rule the AI declares by. A power is told
- * of once in a peace: again only after a war or a truce with the player, or after it
- * stayed below THREAT_CLEAR for THREAT_CALM_DAYS, because its armies march off and come
- * back within months and a warning each time teaches the player to ignore it. The news
- * names the city it weighs the player's armies at and, when the player's treasury
- * lowers the odds it needs, by how much. A day the power cannot reach the player counts
- * as calm.
+ * The great powers at peace with the player that stand on the rules' notice: at
+ * NOTICE_SHARE of the strength they need to declare war on it, which they must hold for
+ * NOTICE_DAYS before they may declare (`noticeSince`). A power is told of when it comes on
+ * notice, and again while on notice once THREAT_RECALL_DAYS have passed since it last
+ * warned, so a war always follows a warning of the last year by at least NOTICE_DAYS;
+ * a war or a truce with the player forgets its warning. The news names the city it weighs
+ * the player's armies at and, when the player's treasury lowers the odds it needs, by how
+ * much.
  */
 export function threatNewsOfDay(
   before: State,
@@ -53,24 +51,17 @@ export function threatNewsOfDay(
   const news: Alert[] = [];
   for (const power of Object.values(after.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (power.id === player || power.kind !== 'greatPower' || power.defeatedOn !== null) continue;
-    const key = keyOf(power.id);
     if (areAtWar(after, power.id, player) || truceBetween(after, power.id, player)) {
-      remembered.delete(key);
-      forgetCalm(remembered, power.id);
+      forget(remembered, power.id);
       continue;
     }
+    const last = warnedOn(remembered, power.id);
+    if (power.noticeSince === null) continue;
+    if (last !== undefined && before.day - last < THREAT_RECALL_DAYS) continue;
     const threat = readinessOf(after, world, power.id);
-    const readiness = threat?.readiness ?? 0;
-    if (remembered.has(key)) {
-      const since = calmSince(remembered, power.id);
-      if (since !== undefined && before.day - since >= THREAT_CALM_DAYS) {
-        remembered.delete(key);
-        forgetCalm(remembered, power.id);
-      } else if (readiness >= THREAT_CLEAR) forgetCalm(remembered, power.id);
-      else if (since === undefined) remembered.add(`${calmPrefix(power.id)}${before.day}`);
-    }
-    if (!threat || readiness < THREAT_WARN || remembered.has(key)) continue;
-    remembered.add(key);
+    if (!threat) continue;
+    forget(remembered, power.id);
+    remembered.add(`${prefixOf(power.id)}${before.day}`);
     const front = after.cities[threat.front];
     news.push({
       kind: 'warThreat',

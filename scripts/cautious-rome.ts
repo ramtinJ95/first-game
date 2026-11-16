@@ -16,7 +16,10 @@ import { buildWorld, type World } from '../src/sim/world/world.ts';
 import { threatNewsOfDay } from '../src/app/threat-news.ts';
 import { GUARD_BAND, GUARD_GOLD, guardRefusal } from '../src/sim/guards.ts';
 import { warReadiness } from '../src/sim/ai/war.ts';
-import { THREAT_CLEAR, THREAT_WARN } from '../src/app/threat-news.ts';
+import { THREAT_WARN } from '../src/app/threat-news.ts';
+
+/** The `warned` guards play hires until no great power stands at this share of what it needs. */
+const THREAT_CLEAR = 0.6;
 import { WAR_REACH_KM } from '../src/sim/ai/thresholds.ts';
 import { limitsOf } from '../src/sim/systems/economy.ts';
 import { homeCapital } from '../src/sim/ai/situation.ts';
