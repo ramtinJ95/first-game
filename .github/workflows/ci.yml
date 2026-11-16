@@ -94,12 +94,14 @@ jobs:
       - run: npm run build
       - name: Frame times in software
         run: node e2e/frame-bench.ts --rounds 1 --only full,draw=test >> "$GITHUB_STEP_SUMMARY"
-      # The seventh play-through's minute, shortened to fit this job: Rome's three routes
-      # from Roma at speed 2 with a pan, Roma selected and not. It prints the frames and
-      # fails when a selected city's panels run more than once and a half a day played.
+      # The seventh play-through's minute, sized for this job: Rome's three routes from Roma
+      # at speed 2, in one page a zoom at closest and middle, four 4 s sweeps of the pan that
+      # select Roma and nothing in turn. It fails when Roma selected draws under nine tenths
+      # of the frames, its longest gap is over a tenth longer, or its panels run more than
+      # once and a half a day played.
       - name: A selected city in software
         run: >-
-          node e2e/trade-minute-bench.ts --zooms closest --seconds 20 --rounds 1 --panel-budget
+          node e2e/trade-minute-bench.ts --alternate 4 --segment 4 --rounds 1 --budget
           >> "$GITHUB_STEP_SUMMARY"
       - name: Frame times with the GPU flags of headless Chromium
         continue-on-error: true

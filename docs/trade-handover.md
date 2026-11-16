@@ -54,10 +54,14 @@ On a GPU (inference, not measured): fills and a composited panel cost little the
 forecasts of tens of milliseconds ten times a second stall a 5 ms frame, so the panel's
 republish is the cost a player would feel and is the one removed.
 
-CI's `frame-benches` job runs one 20 s round at closest with `--panel-budget`, which fails
-when a selected city's panels run more than 1.5 times a day played: on `main` 5.0, on the
-branch 1.0. The frame rules need the full minute (`--budget`), which that job's 3 minutes
-cannot hold.
+CI's `frame-benches` job runs `--alternate 4 --segment 4 --budget`: at closest and middle,
+one page each, four 4 s sweeps of the pan select nothing, Roma, Roma, nothing, and the
+frame, gap and panel rules all apply. One page and that order put the host's drift on both
+selections alike, and the run takes about a minute. Here the branch passed with 13 frames
+each way at both zooms and 1.0 refreshes a day; `main` failed on its panels, 5.1 and 4.9 a
+day, while its frames were 14 and 13 against 13, so in 16 s a side one frame is about 8 % and
+the short check catches a halving, not a few percent. The full minute (`--budget` without
+`--alternate`) is the measure of a tenth.
 
 ## Merchants a player sees
 

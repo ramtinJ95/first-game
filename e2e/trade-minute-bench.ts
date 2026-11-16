@@ -21,15 +21,20 @@ import { camera, cityPoint, dropSave, openGame, pause, untilDrawn } from './supp
  * build loads a save it understands. Build each checkout first (`npm run build`).
  *
  *   node e2e/trade-minute-bench.ts [--roots /a,/b] [--zooms closest,middle] [--seconds 60] [--rounds 3] [--budget | --panel-budget]
+ *   node e2e/trade-minute-bench.ts --alternate 4 [--segment 6] [--budget]
  *
  * `--budget` exits non-zero unless, on every root and zoom, Roma selected draws at least
  * nine tenths of the frames of nothing selected, its longest gap is at most a tenth longer,
- * and its panels run no more often than `MAX_REFRESHES_PER_DAY` a day played. The frame
- * rules need the full three rounds of a minute: on a 2-core software GL host one build's
- * frames spread by more than a tenth between rounds, and drawing a selection (its panel,
- * outline and route ink) costs that host about 7 % of a closest frame.
- * `--panel-budget` checks only the panels, which needs one short round, and still prints
- * the frames; CI's frame job has the time for that.
+ * and its panels run no more often than `MAX_REFRESHES_PER_DAY` a day played. Separate
+ * pages need the full three rounds of a minute for the frame rules: on a 2-core software
+ * GL host one build's frames spread by more than a tenth between page loads.
+ * `--panel-budget` checks only the panels.
+ *
+ * `--alternate <n>` plays each zoom in one page and one game instead, in `n` segments of
+ * `--segment` seconds that select Roma and nothing in the order none, Roma, Roma, none, so
+ * a drift of the host or of the game falls on both alike. Each segment is one sweep of the
+ * pan out and back, so the camera stands over Roma again when the next one picks. That is
+ * short enough for CI's frame job.
  */
 const { values } = parseArgs({
   options: {
@@ -40,6 +45,8 @@ const { values } = parseArgs({
     selections: { type: 'string', default: 'roma,none' },
     budget: { type: 'boolean', default: false },
     'panel-budget': { type: 'boolean', default: false },
+    alternate: { type: 'string' },
+    segment: { type: 'string', default: '6' },
     args: { type: 'string' },
     profile: { type: 'string' },
     query: { type: 'string', default: '' },
@@ -223,6 +230,138 @@ async function measure(
   }
 }
 
+/** The bench's recorder in the page: when each frame finished, and the panels' refreshes. */
+async function record(page: Page) {
+  await page.evaluate(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>('canvas[data-renderer]');
+    const record = { at: [] as number[], stop: false, refreshes: 0 };
+    Object.assign(globalThis, { benchFrames: record });
+    new PerformanceObserver((list) => {
+      record.refreshes += list.getEntriesByName('panels').length;
+    }).observe({ type: 'measure' });
+    let seen = canvas?.dataset['drawnFrames'];
+    const watch = () => {
+      const now = canvas?.dataset['drawnFrames'];
+      if (now !== seen) {
+        seen = now;
+        record.at.push(performance.now());
+      }
+      if (!record.stop) requestAnimationFrame(watch);
+    };
+    requestAnimationFrame(watch);
+  });
+}
+
+function recorded(page: Page) {
+  return page.evaluate(() => {
+    const { at, refreshes } = (
+      globalThis as unknown as { benchFrames: { at: number[]; refreshes: number } }
+    ).benchFrames;
+    return { at: [...at], refreshes, now: performance.now() };
+  });
+}
+
+/** Sweeps the held pointer out and back once on one side, in `ms`. */
+async function sweep(page: Page, side: 1 | -1, ms: number) {
+  const middle = { x: VIEW.width / 2, y: VIEW.height / 2 };
+  const start = Date.now();
+  for (let t = 0; t < ms; t = Date.now() - start) {
+    const out = (2 * t) / ms;
+    await page.mouse.move(middle.x + side * PAN.reach * (out < 1 ? out : 2 - out), middle.y);
+    await delay(PAN.stepMs);
+  }
+  await page.mouse.move(middle.x, middle.y);
+}
+
+async function alternate(
+  browser: Browser,
+  base: string,
+  world: { save: string; day: number },
+  zoom: string,
+  segments: number,
+  segmentMs: number,
+): Promise<Record<'roma' | 'none', Run>> {
+  const context = await browser.newContext({ viewport: VIEW });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  try {
+    await openGame(page, { base, query: ['draw=full', values.query].filter(Boolean).join('&') });
+    await pause(page);
+    await dropSave(page, world.save);
+    await page.locator(`[data-testid="time-controls-day"][data-day="${world.day}"]`).waitFor();
+    await untilDrawn(page);
+    const view = camera(page);
+    await view.jumpTo(cityPoint('roma'), ZOOMS[zoom] ?? 1);
+    await page.locator('canvas[data-terrain="ready"]').waitFor({ timeout: 120_000 });
+    await page.getByRole('button', { name: 'Speed 2', exact: true }).click();
+    await record(page);
+    await page.getByRole('button', { name: 'Resume', exact: true }).click();
+    const runs: Record<'roma' | 'none', Run> = {
+      roma: {
+        frames: 0,
+        longestGap: 0,
+        medianGap: 0,
+        days: 0,
+        paths: null,
+        merchants: 0,
+        refreshes: 0,
+      },
+      none: {
+        frames: 0,
+        longestGap: 0,
+        medianGap: 0,
+        days: 0,
+        paths: null,
+        merchants: 0,
+        refreshes: 0,
+      },
+    };
+    const intervals: Record<'roma' | 'none', number[]> = { roma: [], none: [] };
+    const middle = { x: VIEW.width / 2, y: VIEW.height / 2 };
+    const canvas = page.locator('canvas[data-renderer]');
+    const name = page.getByTestId('city-name');
+    for (let k = 0; k < segments; k++) {
+      const selection = [0, 1, 1, 0][k % 4] ? 'roma' : 'none';
+      // A click picks what the map last finished drawing, so wait for the camera's return.
+      await untilDrawn(page);
+      if (selection === 'roma') {
+        if ((await name.count()) === 0) await page.mouse.click(middle.x, middle.y);
+        await name.and(page.getByText('Roma')).waitFor({ state: 'attached' });
+      } else {
+        if ((await name.count()) > 0) await page.keyboard.press('Escape');
+        await name.waitFor({ state: 'detached' });
+      }
+      const firstDay = await dayOf(page);
+      const before = await recorded(page);
+      await page.mouse.move(middle.x, middle.y);
+      await page.mouse.down();
+      await sweep(page, k % 2 ? -1 : 1, segmentMs);
+      const after = await recorded(page);
+      await page.mouse.up();
+      const at = [before.now, ...after.at.filter((t) => t > before.now), after.now];
+      const run = runs[selection];
+      run.frames += at.length - 2;
+      run.longestGap = Math.max(run.longestGap, ...at.slice(1).map((t, i) => t - (at[i] ?? t)));
+      intervals[selection].push(...at.slice(2, -1).map((t, i) => t - (at[i + 1] ?? t)));
+      run.days += (await dayOf(page)) - firstDay;
+      run.refreshes += after.refreshes - before.refreshes;
+      run.paths = await canvas.getAttribute('data-trade-paths');
+      run.merchants = Number((await canvas.getAttribute('data-trade-figures')) ?? 0);
+    }
+    for (const selection of ['roma', 'none'] as const) {
+      runs[selection].medianGap = median(intervals[selection]);
+      if (runs[selection].days <= 0) throw new Error('the game did not advance');
+    }
+    if (runs.roma.paths !== '3' && runs.roma.paths !== null)
+      throw new Error(`Roma selected drew ${runs.roma.paths} routes, not 3`);
+    if (errors.length > 0) throw new Error(errors.join('; '));
+    return runs;
+  } finally {
+    await context.close();
+  }
+}
+
 async function dayOf(page: Page): Promise<number> {
   return Number(await page.getByTestId('time-controls-day').getAttribute('data-day'));
 }
@@ -249,6 +388,24 @@ try {
     const order = round % 2 ? [...servers].reverse() : servers;
     for (const { root, base, world } of order)
       for (const zoom of zooms) {
+        if (values.alternate) {
+          const runs = await alternate(
+            browser,
+            base,
+            world,
+            zoom,
+            Number(values.alternate),
+            1000 * Number(values.segment),
+          );
+          for (const [selection, run] of Object.entries(runs)) {
+            const key = `${root} | ${zoom} | ${selection}`;
+            results.set(key, [...(results.get(key) ?? []), run]);
+            console.error(
+              `round ${round + 1} ${key}: ${run.frames} frames, longest gap ${(run.longestGap / 1000).toFixed(2)} s, median ${run.medianGap.toFixed(0)} ms, ${run.days} days, ${run.refreshes} panel refreshes, paths ${run.paths}, merchants ${run.merchants}`,
+            );
+          }
+          continue;
+        }
         const sides = round % 2 ? [...selections].reverse() : selections;
         for (const selection of sides) {
           const key = `${root} | ${zoom} | ${selection}`;
@@ -266,7 +423,9 @@ try {
 }
 
 console.log(
-  `Rome, three routes from Roma, speed 2, a ${PAN.pxPerSecond} px/s pan, ${seconds} s, ${rounds} rounds`,
+  values.alternate
+    ? `Rome, three routes from Roma, speed 2, ${values.alternate} alternating ${values.segment} s sweeps of ${PAN.reach} px in one page a zoom, ${rounds} rounds`
+    : `Rome, three routes from Roma, speed 2, a ${PAN.pxPerSecond} px/s pan, ${seconds} s, ${rounds} rounds`,
 );
 console.log(
   '| Build | Zoom | Selected | Frames drawn (each round) | Longest gap, s (each round) | Panel refreshes per day |',
