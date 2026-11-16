@@ -52,6 +52,18 @@ const CACHE_MARGIN = 256;
 /** A chunk fades in over this long once it is built, so a late chunk does not pop. */
 const CHUNK_FADE_MS = 260;
 /**
+ * A chunk fainter than this counts as not drawn, so a fade's first frame, which shows
+ * almost nothing, does not draw the whole texture again on its own.
+ */
+const FAINT = 0.1;
+const drawnAs = (alpha: number) => (alpha < FAINT ? -1 : alpha);
+/**
+ * While chunks the texture shows still wait to be built, those already built wait this
+ * long at most to be drawn with them. On a software GPU each drawing of the texture took
+ * 0.8 s of the cores that build the chunks, so drawing each as it came slowed the rest.
+ */
+const BATCH_MS = 1500;
+/**
  * Chunks are built in slices of BUILD_SLICE_MS between frames, on a timer and not in
  * the frame, so the building runs at the speed of the main thread however slow the
  * frames are, and a frame only draws what has been built. Once the camera has rested
@@ -73,6 +85,8 @@ interface Chunk {
   readonly graphics: Container;
   bornAt: number;
   usedAt: number;
+  /** Its alpha in the cached texture as last drawn, or -1 when the texture lacks it. */
+  drawnAlpha: number;
 }
 
 interface Layer {
@@ -236,7 +250,12 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       for (let i = 0; i * wide.size < map.width; i++) {
         const key = chunkKey(i, j);
         const chunk = wide.build(chunkRect(wide.size, key));
-        wide.chunks.set(key, { graphics: chunk, bornAt: -Infinity, usedAt: Infinity });
+        wide.chunks.set(key, {
+          graphics: chunk,
+          bornAt: -Infinity,
+          usedAt: Infinity,
+          drawnAlpha: -1,
+        });
         wide.container.addChild(chunk);
       }
     }
@@ -248,7 +267,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       graphics.alpha = 0;
       graphics.visible = needed;
       const now = performance.now();
-      layer.chunks.set(key, { graphics, bornAt: now, usedAt: now });
+      layer.chunks.set(key, { graphics, bornAt: now, usedAt: now, drawnAlpha: -1 });
       const row = chunkRow(key);
       let before = 0;
       for (const other of layer.chunks.keys())
@@ -260,6 +279,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
   );
 
   let lastCamera: Camera = { centre: { x: NaN, y: NaN }, scale: NaN };
+  let batchSince: number | undefined;
   let stillSince = 0;
 
   return {
@@ -301,7 +321,30 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
       const still = now - stillSince > PREFETCH_AFTER_MS;
       let fading = false;
       let changed = false;
+      let built = false;
       let redrawn = false;
+      const x = viewport.width / 2 - camera.centre.x * camera.scale;
+      const y = viewport.height / 2 - camera.centre.y * camera.scale;
+      const width = Math.ceil(viewport.width) + 2 * CACHE_MARGIN;
+      const height = Math.ceil(viewport.height) + 2 * CACHE_MARGIN;
+      const moves =
+        !drawn ||
+        drawn.scale !== camera.scale ||
+        !coversView(texture, x - drawn.x - CACHE_MARGIN, y - drawn.y - CACHE_MARGIN, viewport);
+      // The chunks of the whole texture are shown, margin and all, so a pan inside the
+      // margin finds them drawn. A chunk that changes outside the view waits for the
+      // next drawing: each drawing of the texture took 0.8 s on a software GPU, and a
+      // pan drew it again whenever a chunk crossed the edge of the view.
+      const at =
+        moves || !drawn
+          ? { x, y, width, height }
+          : { x: drawn.x, y: drawn.y, width: texture.width, height: texture.height };
+      const cached = {
+        left: (-CACHE_MARGIN - at.x) / camera.scale,
+        top: (-CACHE_MARGIN - at.y) / camera.scale,
+        right: (-CACHE_MARGIN - at.x + at.width) / camera.scale,
+        bottom: (-CACHE_MARGIN - at.y + at.height) / camera.scale,
+      };
       const missing: { layer: Layer; key: number; distance: number; needed: boolean }[] = [];
       for (const layer of layers) {
         const alpha = detailAlpha(layer.band, camera.scale);
@@ -314,10 +357,10 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
         const { size } = layer;
         const wanted = new Set<number>();
         const shown = layer.container.visible
-          ? new Set(chunksNear(view, size, layer.overhang, 0, map.width, map.height))
+          ? new Set(chunksNear(cached, size, layer.overhang, 0, map.width, map.height))
           : new Set<number>();
         for (const key of chunksNear(
-          view,
+          cached,
           size,
           layer.overhang,
           still ? size : 0,
@@ -335,7 +378,7 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
           missing.push({ layer, key, distance, needed });
         }
         if (layer !== wide) {
-          const near = chunksNear(view, size, layer.overhang, size, map.width, map.height);
+          const near = chunksNear(cached, size, layer.overhang, size, map.width, map.height);
           const keep = KEPT_VIEWS * near.length;
           const usedAt = new Map(
             layer.chunks.size > keep
@@ -351,33 +394,37 @@ export function createTerrain(map: GameMap, parent: Container, renderer: Rendere
           // largest size, so freed chunks still held their memory in the pool.
           if (freed.length > 0) BigPool.getPool(GraphicsContextRenderData).clear();
         }
+        const seen = chunksNear(view, size, layer.overhang, 0, map.width, map.height);
+        const inView = new Set(layer.container.visible ? seen : []);
         for (const [key, chunk] of layer.chunks) {
           const shown = wanted.has(key);
-          if (chunk.graphics.visible !== shown) changed = true;
           chunk.graphics.visible = shown;
           if (!shown) continue;
           chunk.usedAt = now;
+          // Built out of sight, a chunk has no fade to show.
+          if (!inView.has(key) && chunk.drawnAlpha < 0) chunk.bornAt = -Infinity;
           const age = Math.min(1, (now - chunk.bornAt) / CHUNK_FADE_MS);
-          if (chunk.graphics.alpha !== age) changed = true;
           chunk.graphics.alpha = age;
+          if (!inView.has(key)) continue;
+          if (chunk.drawnAlpha !== drawnAs(age)) built = true;
           if (age < 1) fading = true;
         }
       }
       missing.sort((a, b) => Number(b.needed) - Number(a.needed) || a.distance - b.distance);
       queue.want(missing);
       if (queue.waitingInView) fading = true;
-      const x = viewport.width / 2 - camera.centre.x * camera.scale;
-      const y = viewport.height / 2 - camera.centre.y * camera.scale;
-      const width = Math.ceil(viewport.width) + 2 * CACHE_MARGIN;
-      const height = Math.ceil(viewport.height) + 2 * CACHE_MARGIN;
-      if (
-        repaint ||
-        lakesStale ||
-        changed ||
-        !drawn ||
-        drawn.scale !== camera.scale ||
-        !coversView(texture, x - drawn.x - CACHE_MARGIN, y - drawn.y - CACHE_MARGIN, viewport)
-      ) {
+      if (built && !(repaint || lakesStale || changed || moves) && queue.waitingInView) {
+        batchSince ??= now;
+        if (now - batchSince < BATCH_MS) built = false;
+      }
+      if (repaint || lakesStale || changed || built || moves) {
+        batchSince = undefined;
+        for (const layer of layers)
+          for (const chunk of layer.chunks.values())
+            chunk.drawnAlpha =
+              layer.container.visible && chunk.graphics.visible
+                ? drawnAs(chunk.graphics.alpha)
+                : -1;
         texture = fitTexture(texture, width, height, renderer.resolution);
         sprite.texture = texture;
         art.scale.set(camera.scale);
