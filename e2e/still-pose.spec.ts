@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { stillScreenshot } from '../scripts/capture/still.ts';
-import { openGame, pause, untilDrawn } from './support.ts';
+import { camera, openGame, pause, untilDrawn } from './support.ts';
 
-test('two capture screenshots of a paused view match pixel for pixel while the swell moves', async ({
+test('two capture screenshots of a paused view match pixel for pixel with frames drawn between them', async ({
   page,
 }, testInfo) => {
   await openGame(page, { query: 'draw=full' });
@@ -16,16 +16,21 @@ test('two capture screenshots of a paused view match pixel for pixel while the s
       ),
     );
 
+  const roma = camera(page).city('roma');
+  await page.mouse.move(roma.x, roma.y);
   const first = testInfo.outputPath('first.png');
   await stillScreenshot(page, first);
-  const after = (await drawnFrames()) + 5;
-  await page.waitForFunction(
-    (frames) =>
-      Number(
-        document.querySelector<HTMLCanvasElement>('canvas[data-renderer]')?.dataset['drawnFrames'],
-      ) >= frames,
-    after,
-  );
+  // A paused game draws only on a change, so a selection and its clearing draw frames
+  // that end on the view shot first.
+  await untilDrawn(page);
+  let drawn = await drawnFrames();
+  await page.mouse.click(roma.x, roma.y);
+  await expect(page.getByTestId('city-name')).toHaveText('Roma');
+  await expect.poll(drawnFrames).toBeGreaterThan(drawn);
+  drawn = await drawnFrames();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('city-panel')).toHaveCount(0);
+  await expect.poll(drawnFrames).toBeGreaterThan(drawn);
   const second = testInfo.outputPath('second.png');
   await stillScreenshot(page, second);
 

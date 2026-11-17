@@ -447,6 +447,7 @@ function loop() {
     previous: clock.previous,
     current: clock.state,
     progress: clock.progress,
+    paused: clock.paused,
     selection,
     planned: plannedNow().paths,
     replaced: plannedNow().replaced,

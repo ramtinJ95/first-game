@@ -797,7 +797,8 @@ export async function clearCentre(page: Page) {
 /**
  * How many screen frames the page takes for each frame its map draws, over a few drawn
  * frames, so a test can count a wait in the page's own frames on a slow or a fast GPU.
- * The full drawing draws every frame. The test drawing draws only on a change.
+ * A running game in the full drawing draws every frame. The test drawing, and a paused
+ * game in either, draws only on a change.
  */
 export function framePace(page: Page): Promise<number> {
   return page.evaluate(
