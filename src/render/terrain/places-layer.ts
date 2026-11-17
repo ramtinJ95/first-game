@@ -114,7 +114,7 @@ export interface PlacesLayer {
   ): { requests: LabelRequest[]; boxes: Box[] };
   /** Shows the names that won a place, at `box`, and hides the others. */
   placeLabels(placed: ReadonlyMap<string, Box>): void;
-  /** Steps the fades. Returns true while one still runs. */
+  /** Steps the fades. Returns true when a step changed what is drawn. */
   step(now: number): boolean;
 }
 
@@ -319,14 +319,19 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
       const dt = Math.min(100, now - last);
       last = now;
       const delta = dt / FADE_MS;
-      let fading = false;
+      let changed = false;
+      const show = (drawn: Container, alpha: number) => {
+        const visible = alpha > 0.01;
+        if (drawn.alpha === alpha && drawn.visible === visible) return;
+        drawn.alpha = alpha;
+        drawn.visible = visible;
+        changed = true;
+      };
       for (const d of all) {
         if (d.symbol) {
           d.symbolAlpha = d.symbolWanted ? approach(d.symbolAlpha, 1, delta) : 0;
           const band = d.kind === 'town' ? bands.towns : bands.villages;
-          d.symbol.alpha = d.symbolAlpha * band;
-          d.symbol.visible = d.symbol.alpha > 0.01;
-          if (d.symbolAlpha !== (d.symbolWanted ? 1 : 0)) fading = true;
+          show(d.symbol, d.symbolAlpha * band);
         }
         if (d.label) {
           d.labelAlpha = d.labelWanted ? approach(d.labelAlpha, 1, delta) : 0;
@@ -336,12 +341,10 @@ export function createPlaces(map: GameMap, towns: Container, labels: Container):
               : d.kind === 'town'
                 ? bands.townNames
                 : bands.villageNames;
-          d.label.alpha = d.labelAlpha * band;
-          d.label.visible = d.label.alpha > 0.01;
-          if (d.labelAlpha !== (d.labelWanted ? 1 : 0)) fading = true;
+          show(d.label, d.labelAlpha * band);
         }
       }
-      return fading;
+      return changed;
     },
   };
 }

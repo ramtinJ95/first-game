@@ -82,6 +82,7 @@ import { createPlaces } from './terrain/places-layer.ts';
 import { createTerrain } from './terrain/terrain-layer.ts';
 import { createArmyLayer } from './armies/layer.ts';
 import { createWash } from './washes.ts';
+import { changedFields, sceneChanged, type RedrawCause } from './redraw.ts';
 import { startupStep } from './startup.ts';
 import './batch-limits.ts';
 import {
@@ -97,6 +98,8 @@ export interface Frame {
   readonly current: DeepReadonly<GameState>;
   /** How far the clock is from `current` towards the next day, from 0 to 1. */
   readonly progress: number;
+  /** A paused game holds still: the swell, men at ease, fires, smoke and boats stop. */
+  readonly paused: boolean;
   readonly selection: Pick | undefined;
   /** Paths of orders given but not yet applied, drawn fainter than a march under way. */
   readonly planned?: readonly (readonly MapPoint[])[];
@@ -208,7 +211,8 @@ const SEA_MARGIN = 256;
 /**
  * The sea's drift: how far it bends in pixels, the size of its swell, its speed, and
  * how often it steps. The map draws only when something changed, and the swell is
- * the one thing that changes on its own, so its step sets the idle frame rate.
+ * the one thing that changes on its own while the game runs, so its step sets the frame
+ * rate of a running game with nothing else moving.
  */
 const SWELL = { bend: 2.2, scale: 2.5, pixelsPerSecond: { x: 7, y: 4 }, stepMs: 80 } as const;
 /** The zoom that an alert's click brings the view to at least, so the place is legible. */
@@ -547,6 +551,8 @@ export async function createRenderer({
   let displayed: DrawnView | undefined;
   let viewRevision = 0;
   canvas.dataset['latestView'] = String(viewRevision);
+  canvas.dataset['submittedFrames'] = '0';
+  canvas.dataset['unnamedFrames'] = '0';
   const moveCamera = () => {
     cameraMoved = true;
     canvas.dataset['latestView'] = String(++viewRevision);
@@ -559,6 +565,12 @@ export async function createRenderer({
   let seenBy: Sight | undefined;
   let seenBattles: DeepReadonly<Battle>[] = [];
   let swellAt = -Infinity;
+  /** The time the game has run, which the swell and the figures' idle motion follow. */
+  let ambient = 0;
+  let ambientAt: number | undefined;
+  let given: Frame | undefined;
+  let unnamedFrames = 0;
+  let submittedFrames = 0;
   let stillShown: string | undefined;
   let sheetPainted = false;
   let scene: Scene | undefined;
@@ -576,6 +588,7 @@ export async function createRenderer({
         width: number;
         height: number;
         at: number;
+        ambient: number;
         cost: number;
         nameSides: string;
         still: boolean;
@@ -1518,21 +1531,30 @@ export async function createRenderer({
   );
 
   return {
-    draw({ previous, current, progress, selection, planned, replaced, previousSight, sight }) {
-      const given = String(stateId(current));
-      if (canvas.dataset['latestState'] !== given) canvas.dataset['latestState'] = given;
+    draw(frame) {
+      const { previous, current, progress, paused, selection, planned, replaced } = frame;
+      const { previousSight, sight } = frame;
+      const stateNumber = String(stateId(current));
+      if (canvas.dataset['latestState'] !== stateNumber)
+        canvas.dataset['latestState'] = stateNumber;
       // Held frames keep both the picture and its hit geometry unchanged.
       if (!settleFrame()) return false;
       const now = performance.now();
-      let dirty = cameraMoved;
+      if (ambientAt !== undefined && !paused) ambient += now - ambientAt;
+      ambientAt = now;
+      const causes = new Set<RedrawCause>();
+      const because = (cause: RedrawCause) => causes.add(cause);
+      if (paused) for (const cause of changedFields(given, frame)) because(cause);
+      given = frame;
+      if (cameraMoved) because('camera');
       // A capture sets `data-still` so men at ease, fires, smoke and the swell hold one
       // pose while it shoots, and two captures of one view match pixel for pixel.
       const stillRequest = canvas.dataset['still'];
       const still = stillRequest !== undefined;
-      const clock = still ? 0 : now;
+      const clock = still ? 0 : ambient;
       if (stillRequest !== stillShown) {
         stillShown = stillRequest;
-        dirty = true;
+        because('still');
       }
       if (washStrength(camera.scale).greatPower !== washedAt) recolour(current);
       ownershipLines(current);
@@ -1543,20 +1565,20 @@ export async function createRenderer({
         // rather than shade the whole map, so the owners' colours stay plain.
         layers.fog.visible = fogShown && current.factions[current.player]?.defeatedOn == null;
         shown = current;
-        dirty = true;
+        because('state');
       }
       if (sight !== seenBy) {
         seenBy = sight;
         seenBattles = Object.values(current.battles).filter((b) => sight.battles.has(b.id));
-        dirty = true;
+        because('sight');
       }
       if (cameraMoved) applyCamera();
       const terrainNow = terrain.update(camera, viewport(), now);
       if (terrainNow.redrawn) passes.all++;
-      if (terrainNow.busy || terrainNow.redrawn) dirty = true;
+      if (terrainNow.busy || terrainNow.redrawn) because('terrain');
       const terrainState = terrainNow.busy ? 'busy' : 'ready';
       if (canvas.dataset['terrain'] !== terrainState) canvas.dataset['terrain'] = terrainState;
-      if (dirty) layoutCities(current);
+      if (causes.size > 0) layoutCities(current);
       if (
         !highlighted ||
         highlighted.scale !== camera.scale ||
@@ -1564,14 +1586,14 @@ export async function createRenderer({
       ) {
         drawHighlight(selection);
         highlighted = { selection, scale: camera.scale };
-        dirty = true;
+        because('selection');
       }
       cameraMoved = false;
       if (
         layers.fog.visible &&
         fog.update(sight.provinces, fogCircles(previousSight, sight, progress))
       ) {
-        dirty = true;
+        because('fog');
       }
       const next = drawnArmies(previous, current, progress)
         .filter((army) => sight.armies.has(army.id))
@@ -1594,22 +1616,22 @@ export async function createRenderer({
         });
       if (!sameArmies(armies, next)) {
         armies = next;
-        dirty = true;
+        because('armies');
       }
       const nextColumns = drawnColumns(previous, current, progress, sight);
       if (!sameArmies(columns, nextColumns)) {
         columns = nextColumns;
-        dirty = true;
+        because('columns');
       }
       if (planned !== plannedShown) {
         plannedShown = planned;
-        dirty = true;
+        because('planned');
       }
-      if (swellOn && now - swellAt >= SWELL.stepMs) {
-        swellAt = now;
-        dirty = true;
+      if (swellOn && ambient - swellAt >= SWELL.stepMs) {
+        swellAt = ambient;
+        because('swell');
       }
-      if (places.step(now)) dirty = true;
+      if (places.step(now)) because('fades');
       const day = current.day + progress;
       if (clockAt) {
         const seconds = (now - clockAt.now) / 1000;
@@ -1638,7 +1660,7 @@ export async function createRenderer({
       // Without the swell the page draws only when something changes, so men at ease,
       // fires, and smoke then move only with the clock.
       const moving =
-        built && (built.progress !== progress || (swellOn && now - built.at >= ALIVE_MS));
+        built && (built.progress !== progress || (swellOn && ambient - built.ambient >= ALIVE_MS));
       // A scene of many armies costs milliseconds to build, so between builds a pan
       // moves the built scene, and a rebuild for motion alone waits for twice what the
       // last one cost. A new day or new sight is drawn at once.
@@ -1697,18 +1719,19 @@ export async function createRenderer({
           width: view.width,
           height: view.height,
           at: now,
+          ambient,
           cost: performance.now() - start,
           nameSides,
           still,
         };
         sheetPainted = false;
-        dirty = true;
+        because('figures');
       }
       if (built) {
         const shift = sceneShift();
         if (armyLayer.root.x !== shift.x || armyLayer.root.y !== shift.y) {
           armyLayer.root.position.set(shift.x, shift.y);
-          dirty = true;
+          because('camera');
         }
       }
       if (
@@ -1717,9 +1740,13 @@ export async function createRenderer({
           (route) => route.status === 'running' && !route.blocked,
         )
       )
-        dirty = true;
+        because('merchants');
       tradeShown = { state: current, progress };
-      if (!dirty) return false;
+      if (causes.size === 0 && sceneChanged(app.stage)) {
+        because('unnamed');
+        canvas.dataset['unnamedFrames'] = String(++unnamedFrames);
+      }
+      if (causes.size === 0) return false;
       life.update(camera, viewport(), clock, sight, onDrawnLand, (id) => {
         const city = current.cities[id as CityId];
         return city ? placedCity(city) : undefined;
@@ -1800,12 +1827,14 @@ export async function createRenderer({
       canvas.dataset['seaPasses'] = String(passes.sea);
       canvas.dataset['tradePasses'] = String(passes.trade);
       app.render();
+      canvas.dataset['submittedFrames'] = String(++submittedFrames);
+      canvas.dataset['submittedBecause'] = [...causes].join(' ');
       // The size of the last frame the GPU has finished, which the screen shows, so a test
       // or a capture knows the map has followed a resize. The element's size says it at once.
       const completed: DrawnView = {
         camera,
         size: view,
-        state: given,
+        state: stateNumber,
         revision: viewRevision,
         ready: sceneReady,
         still: stillRequest,
