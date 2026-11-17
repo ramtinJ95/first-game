@@ -148,10 +148,11 @@ export function threatFadedNewsOfDay(
   const player = after.player;
   const alerts: Alert[] = [];
   for (const power of Object.values(after.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
-    if (power.id === player || power.kind !== 'greatPower' || power.defeatedOn !== null) continue;
+    if (power.id === player || power.kind !== 'greatPower') continue;
     const ended = endedOn(remembered, power.id);
     const off = `${OFF}${power.id}:${ended}`;
     if (
+      power.defeatedOn !== null ||
       power.noticeSince !== null ||
       areAtWar(after, power.id, player) ||
       truceBetween(after, power.id, player)

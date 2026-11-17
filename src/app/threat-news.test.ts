@@ -591,6 +591,24 @@ describe('the news of a warned threat that fades', () => {
     expect([...told].some((key) => key.startsWith('threat-off:'))).toBe(false);
   });
 
+  test('keeps no waiting line for a power defeated within the week', () => {
+    const told = new Set(['threat:carthage:100']);
+    const before = game(5300, 'full', 120);
+    notice(before, world);
+    const punic = before.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 94 as Day;
+    const off = game(2000, 'empty', 121);
+    notice(off, world);
+    threatFadedNewsOfDay(before, off, world, told);
+    const defeated = game(2000, 'empty', 122);
+    const fallen = defeated.factions[carthage];
+    if (!fallen) throw new Error('no Carthage');
+    fallen.defeatedOn = 122 as Day;
+    expect(threatFadedNewsOfDay(off, defeated, world, told)).toEqual([]);
+    expect([...told].some((key) => key.startsWith('threat-off:'))).toBe(false);
+  });
+
   test('says nothing of a notice the player was never warned of', () => {
     expect(fading(new Set()).news).toEqual([]);
     expect(fading(new Set(['threat:carthage:60'])).news).toEqual([]);
