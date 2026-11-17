@@ -19,10 +19,10 @@ type State = DeepReadonly<GameState>;
 /** A great power this near the odds it needs to declare war on the player is told of: the rules' notice. */
 export const THREAT_WARN = NOTICE_SHARE;
 /**
- * A power still on the notice it warned of is told of again once it warned this long ago,
- * so a notice held for years is recalled about once a year.
+ * A power still on the notice it warned of is told of again once the day its last warning
+ * named is this many days past, so no war comes longer than this after the day it was told of.
  */
-export const THREAT_RECALL_DAYS = 365 - NOTICE_DAYS;
+export const THREAT_REMIND_DAYS = 60;
 
 /**
  * A power is told of once it has stood on notice this many days, so a strength that comes
@@ -50,9 +50,10 @@ function forget(remembered: Set<string>, faction: string) {
  * NOTICE_SHARE of the strength they need to declare war on it, which they must hold for
  * NOTICE_DAYS before they may declare (`noticeSince`). A power is told of each notice once it
  * has stood THREAT_STAND_DAYS, with the first day it may then declare, whatever it warned of
- * before, and again while on that notice once THREAT_RECALL_DAYS have passed since it last
- * warned, so a war always follows a warning of its own notice NOTICE_DAYS less
- * THREAT_STAND_DAYS or more before it; a war or a truce with the player forgets its warning. The news names the city it weighs
+ * before, and again while on that notice once THREAT_REMIND_DAYS have passed since the day
+ * its last warning named, so a war always follows a warning of its own notice NOTICE_DAYS less
+ * THREAT_STAND_DAYS or more before it, and comes no more than THREAT_REMIND_DAYS after the day
+ * it was last told of; a war or a truce with the player forgets its warning. The news names the city it weighs
  * the player's armies at and, when the player's treasury lowers the odds it needs, by how
  * much.
  */
@@ -73,7 +74,11 @@ export function threatNewsOfDay(
     const last = warnedOn(remembered, power.id);
     if (power.noticeSince === null) continue;
     if (before.day - power.noticeSince + 1 < THREAT_STAND_DAYS) continue;
-    if (last !== undefined && last >= power.noticeSince && before.day - last < THREAT_RECALL_DAYS)
+    if (
+      last !== undefined &&
+      last >= power.noticeSince &&
+      before.day - Math.max(last, power.noticeSince + NOTICE_DAYS) < THREAT_REMIND_DAYS
+    )
       continue;
     const threat = readinessOf(after, world, power.id);
     if (!threat) continue;
