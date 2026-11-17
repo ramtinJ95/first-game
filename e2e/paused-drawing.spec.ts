@@ -127,6 +127,15 @@ async function expectDrawnAtOnce(frame: FirstFrame, cause: RedrawCause) {
   );
 }
 
+/** A paused game at the whole map, still. */
+async function pausedGame(page: Page) {
+  await openGame(page);
+  await pause(page);
+  await page.mouse.move(0, 0);
+  await untilStill(page);
+  return camera(page);
+}
+
 /** A paused game at the middle zoom over Roma, still. */
 async function pausedOverRoma(page: Page, query = '') {
   await openGame(page, { query });
@@ -162,12 +171,17 @@ test.describe('a paused game', () => {
   }
 
   test('draws a pan and a zoom in the next frame', async ({ page }) => {
-    const view = await pausedOverRoma(page);
+    const view = await pausedGame(page);
     const centre = { x: 640, y: 360 };
+    await page.mouse.move(centre.x, centre.y);
+    await page.mouse.down();
+    await untilStill(page);
     const pan = await firstFrameAfter(page, 'pointermove', () =>
-      view.drag(centre, { x: 540, y: 300 }, 4),
+      page.mouse.move(centre.x - 100, centre.y - 60, { steps: 4 }),
     );
+    await page.mouse.up();
     await expectDrawnAtOnce(pan, 'camera');
+    await untilDrawn(page);
     await untilStill(page);
     const zoom = await firstFrameAfter(page, 'wheel', () => view.zoom(centre, 1));
     await expectDrawnAtOnce(zoom, 'camera');
@@ -175,7 +189,7 @@ test.describe('a paused game', () => {
   });
 
   test('draws nothing for a hover, which changes nothing on the map', async ({ page }) => {
-    await pausedOverRoma(page);
+    await pausedGame(page);
     const before = await counts(page);
     const hovered = framesOver(page, 60);
     for (const [x, y] of [
@@ -191,7 +205,7 @@ test.describe('a paused game', () => {
   });
 
   test('draws a selection and its clearing in the next frame', async ({ page }) => {
-    const view = await pausedOverRoma(page);
+    const view = await pausedGame(page);
     const roma = view.city('roma');
     const select = await firstFrameAfter(page, 'pointerup', () => page.mouse.click(roma.x, roma.y));
     await expectDrawnAtOnce(select, 'selection');
@@ -204,7 +218,7 @@ test.describe('a paused game', () => {
   });
 
   test('opens and closes a panel over a map that stays drawn', async ({ page }) => {
-    await pausedOverRoma(page);
+    await pausedGame(page);
     const overview = page.getByRole('button', { name: 'Overview', exact: true });
     const open = framesOver(page, 30);
     await overview.click();
@@ -217,7 +231,7 @@ test.describe('a paused game', () => {
   });
 
   test('draws a resize of the window in the next frame', async ({ page }) => {
-    await pausedOverRoma(page);
+    await pausedGame(page);
     const resized = await firstFrameAfter(page, 'resize', () =>
       resizeTo(page, { width: 1024, height: 640 }),
     );
@@ -243,7 +257,7 @@ test.describe('a paused game', () => {
   });
 
   test('draws a loaded save in the next frame after the page reads it', async ({ page }) => {
-    await pausedOverRoma(page);
+    await pausedGame(page);
     const state = playDays(startGame(), 3);
     const loaded = await firstFrameAfter(page, 'drop', () => dropSave(page, state));
     expect(loaded.because).toContain('state');

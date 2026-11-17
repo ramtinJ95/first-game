@@ -1,36 +1,35 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { stillScreenshot } from '../scripts/capture/still.ts';
-import { camera, openGame, pause, untilDrawn } from './support.ts';
+import { openGame, pause, resume, startGame, untilDrawn } from './support.ts';
+import { loadSave } from './watch.ts';
 
-test('two capture screenshots of a paused view match pixel for pixel with frames drawn between them', async ({
+test('two capture screenshots of one paused view match pixel for pixel when the swell has moved between them', async ({
   page,
 }, testInfo) => {
+  const state = startGame();
   await openGame(page, { query: 'draw=full' });
+  await page.mouse.move(0, 0);
   await pause(page);
-  await untilDrawn(page);
-  const drawnFrames = () =>
-    page.evaluate(() =>
-      Number(
-        document.querySelector<HTMLCanvasElement>('canvas[data-renderer]')?.dataset['drawnFrames'],
-      ),
-    );
-
-  const roma = camera(page).city('roma');
-  await page.mouse.move(roma.x, roma.y);
+  await loadSave(page, state);
   const first = testInfo.outputPath('first.png');
   await stillScreenshot(page, first);
-  // A paused game draws only on a change, so a selection and its clearing draw frames
-  // that end on the view shot first.
-  await untilDrawn(page);
-  let drawn = await drawnFrames();
-  await page.mouse.click(roma.x, roma.y);
-  await expect(page.getByTestId('city-name')).toHaveText('Roma');
-  await expect.poll(drawnFrames).toBeGreaterThan(drawn);
-  drawn = await drawnFrames();
-  await page.keyboard.press('Escape');
-  await expect(page.getByTestId('city-panel')).toHaveCount(0);
-  await expect.poll(drawnFrames).toBeGreaterThan(drawn);
+
+  // A paused game holds its swell, so the game runs until the swell has stepped, and the
+  // same save, loaded again while paused, puts back the state and the view.
+  await page.evaluate(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>('canvas[data-renderer]');
+    const seen = window as unknown as { swelled: boolean };
+    seen.swelled = false;
+    if (!canvas) return;
+    new MutationObserver(() => {
+      if (canvas.dataset['submittedBecause']?.split(' ').includes('swell')) seen.swelled = true;
+    }).observe(canvas, { attributeFilter: ['data-submitted-frames'] });
+  });
+  await resume(page);
+  await page.waitForFunction(() => (window as unknown as { swelled: boolean }).swelled);
+  await pause(page);
+  await loadSave(page, state);
   const second = testInfo.outputPath('second.png');
   await stillScreenshot(page, second);
 
