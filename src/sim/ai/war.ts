@@ -93,6 +93,8 @@ export interface WarReadiness {
   readonly front: CityId;
   /** Whether rival pressure, which weighs field armies only, stands nearer than the odds. */
   readonly pressed: boolean;
+  /** The enemies whose wars hold back their whole field strength from the power's own, by id. */
+  readonly heldBy: readonly FactionId[];
 }
 
 /**
@@ -128,6 +130,7 @@ export function warReadiness(
     hoard: reckoning.hoardShare(against),
     front: front.city.id,
     pressed: pressure > odds,
+    heldBy: reckoning.heldBy,
   };
 }
 
@@ -174,9 +177,11 @@ function reckon(context: Context) {
   const fighting = new Set(targetsOf(state, faction, enemies).map((city) => city.owner));
   let free = strength.get(faction) ?? 0;
   let pressureFree = free;
+  const heldBy: FactionId[] = [];
   for (const enemy of [...fighting].sort()) {
     const front = frontOf(enemy);
     if (front) {
+      heldBy.push(enemy);
       const field = strength.get(enemy) ?? 0;
       free -= field;
       // A broken field army does not release the troops needed to finish its city.
@@ -270,6 +275,7 @@ function reckon(context: Context) {
 
   return {
     free,
+    heldBy,
     rivals,
     frontOf,
     measure,

@@ -208,7 +208,7 @@ export function playCautiousRome(
 
 /** The powers a warning names: one, or several in a line that folds one day's warnings. */
 export function warnedPowers(text: string): string[] {
-  return (text.split(' could soon')[0] ?? '').split(/, | and /);
+  return (text.split(/ could soon| still stands near war/)[0] ?? '').split(/, | and /);
 }
 
 /** The orders that move an army, which an answering Rome gives only its own way. */
