@@ -28,7 +28,8 @@ interface Record {
   seed: number;
   days: number;
   readiness: { [power: string]: (number | null)[] };
-  warnings: { day: number; power: string; named: number }[];
+  /** `named` is the first day of war the warning names, or null for a reminder that says any day now. */
+  warnings: { day: number; power: string; named: number | null }[];
   /** The game's stops for a warning: one a day, whatever the powers it names. */
   stops: number;
   wars: {
@@ -59,7 +60,8 @@ function play(seed: number, years: number): Record {
         record.stops++;
         for (const power of warnedPowers(alert.text)) {
           const since = Object.values(after.factions).find((f) => f.name === power)?.noticeSince;
-          record.warnings.push({ day, power, named: (since ?? day) + NOTICE_DAYS });
+          const named = (since ?? day) + NOTICE_DAYS;
+          record.warnings.push({ day, power, named: named > day ? named : null });
         }
       }
       const threats = new Map(standingThreats(after, world).map((t) => [t.name, t.readiness]));
@@ -129,7 +131,7 @@ const ownNotice = wars.filter((w) =>
 ).length;
 const stale = wars.filter((w) => {
   const last = lastWarning(w);
-  return last !== undefined && w.day - last.named > 60;
+  return last !== undefined && w.day - (last.named ?? last.day) > 60;
 });
 const staleSameNotice = stale.filter((w) => {
   const last = lastWarning(w);
@@ -137,7 +139,10 @@ const staleSameNotice = stale.filter((w) => {
 }).length;
 const warnings = rows.reduce((s, r) => s + r.warnings.length, 0);
 const stops = rows.map((r) => r.stops);
-const gaps = rows.flatMap((r) => r.warnings.map((w) => w.named - w.day));
+const gaps = rows.flatMap((r) =>
+  r.warnings.flatMap((w) => (w.named === null ? [] : [w.named - w.day])),
+);
+const anyDay = rows.reduce((s, r) => s + r.warnings.filter((w) => w.named === null).length, 0);
 console.log(
-  `Summary: ${rows.length} games; warnings a game ${(warnings / rows.length).toFixed(1)}; stops a game ${(stops.reduce((s, n) => s + n, 0) / rows.length).toFixed(1)} (min ${Math.min(...stops)}, max ${Math.max(...stops)}); smallest gap from a warning to the day it names ${Math.min(...gaps)} days (warnings under 24: ${gaps.filter((g) => g < 24).length}); wars on Rome ${wars.length}, warned of their own notice 24 days or more before ${ownNotice}; wars more than 60 days after their last warning's day ${stale.length} (${staleSameNotice} on the warned notice, ${stale.length - staleSameNotice} on a later one)`,
+  `Summary: ${rows.length} games; warnings a game ${(warnings / rows.length).toFixed(1)}; stops a game ${(stops.reduce((s, n) => s + n, 0) / rows.length).toFixed(1)} (min ${Math.min(...stops)}, max ${Math.max(...stops)}); smallest gap from a warning to the day it names ${Math.min(...gaps)} days (warnings under 24: ${gaps.filter((g) => g < 24).length}, reminders that say any day now: ${anyDay}); wars on Rome ${wars.length}, warned of their own notice 24 days or more before ${ownNotice}; wars more than 60 days after their last warning's day ${stale.length} (${staleSameNotice} on the warned notice, ${stale.length - staleSameNotice} on a later one)`,
 );
