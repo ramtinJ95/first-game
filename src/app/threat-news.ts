@@ -4,6 +4,7 @@ import type { FactionId } from '../sim/ids.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { truceBetween } from '../sim/peace/truce.ts';
 import { areAtWar } from '../sim/wars.ts';
+import { canFight } from '../sim/ai/situation.ts';
 import type { World } from '../sim/world/world.ts';
 import type { Alert } from './alerts.ts';
 import { dateText, factionName, TROOP_NAMES, whole } from './names.ts';
@@ -64,7 +65,14 @@ export function threatNewsOfDay(
   remembered: Set<string>,
 ): Alert[] {
   const player = after.player;
-  const warned: { name: string; threat: Threat; from: string; by: number | undefined }[] = [];
+  const warned: {
+    name: string;
+    threat: Threat;
+    from: string;
+    by: number | undefined;
+    /** For a reminder, the day the player was last warned of this notice. */
+    told: number | undefined;
+  }[] = [];
   for (const power of Object.values(after.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (power.id === player || power.kind !== 'greatPower' || power.defeatedOn !== null) continue;
     if (areAtWar(after, power.id, player) || truceBetween(after, power.id, player)) {
@@ -89,6 +97,7 @@ export function threatNewsOfDay(
       threat,
       from: mayDeclare(before, power.noticeSince),
       by: dayToCome(before, power.noticeSince),
+      told: last !== undefined && last >= power.noticeSince ? last : undefined,
     });
   }
   const [first, ...others] = warned;
@@ -97,8 +106,8 @@ export function threatNewsOfDay(
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
   const text =
     others.length === 0
-      ? `${first.name} could soon declare war on you: it has ${percent(first.threat)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.threat, undefined, first.by, 'corner')} See At peace in Wars.`
-      : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => percent(w.threat)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`;
+      ? `${first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${percent(first.threat)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.threat, undefined, first.by, 'corner')} See At peace in Wars.`
+      : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => percent(w.threat)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`;
   return [
     {
       kind: 'warThreat',
@@ -149,10 +158,35 @@ export function threatFadedNewsOfDay(
       kind: 'warThreatFaded',
       day: before.day,
       tone: 'good',
-      text: `${name}'s threat has passed for now: ${threat ? `it has fallen to ${percent(threat)} of the strength it needs to declare war on you` : 'it is not weighing a war on you'}, and must stand at ${Math.round(NOTICE_SHARE * 100)}% for ${NOTICE_DAYS} days before it may.`,
+      text: `${name}'s threat has passed for now: ${whyFaded(after, power.id, threat)}, and must stand at ${Math.round(NOTICE_SHARE * 100)}% for ${NOTICE_DAYS} days before it may.`,
     });
   }
   return alerts;
+}
+
+/**
+ * Why a power no longer stands near war with the player, as a stranger can check it. A power
+ * holds back the whole field strength of each enemy it fights, so one whose wars hold back all
+ * its armies stands at 0, and one whose armies are all in battle, in sieges or at sea, or whose
+ * cities are out of reach of the player's, weighs no war at all.
+ */
+function whyFaded(state: State, power: FactionId, threat: Threat | undefined): string {
+  if (threat && percent(threat) !== '0%')
+    return `it has fallen to ${percent(threat)} of the strength it needs to declare war on you`;
+  const enemies = Object.values(state.factions)
+    .filter((other) => other.id !== power && areAtWar(state, power, other.id))
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .map((other) => factionName(state, other.id));
+  const atWar = `it is at war with ${listed(enemies)}, which ties down all its armies`;
+  if (threat) return enemies.length > 0 ? atWar : 'it has fallen far below the strength it needs';
+  const ready = Object.values(state.armies).some(
+    (army) =>
+      army.owner === power &&
+      (army.activity.kind === 'idle' || army.activity.kind === 'marching') &&
+      canFight(state, army),
+  );
+  if (ready) return 'none of its cities is near enough to yours to weigh a war on you';
+  return enemies.length > 0 ? atWar : 'none of its armies stands ready to march';
 }
 
 const listed = (items: readonly string[]) =>
@@ -313,7 +347,7 @@ function raiseAdvice(
     const when =
       musters === by
         ? 'the first day war may come'
-        : `${whole(musters - by)} days after war may first come`;
+        : `${whole(musters - by)} ${musters - by === 1 ? 'day' : 'days'} after war may first come`;
     return `More men lower it, not guards: order ${TROOP_NAMES[late]} now for ${whole(TROOPS[late].recruit.gold)} gold; they muster and lower it from ${dateText(musters)}, ${when}`;
   }
   const [cheapest] = troops;

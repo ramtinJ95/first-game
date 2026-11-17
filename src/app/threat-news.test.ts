@@ -31,6 +31,7 @@ const world = buildWorld(map);
 const rome = 'rome' as FactionId;
 const carthage = 'carthage' as FactionId;
 const macedon = 'macedon' as FactionId;
+const egypt = 'egypt' as FactionId;
 
 const WEST = [
   'caralis',
@@ -156,10 +157,13 @@ describe('the news of a power that could soon declare war on the player', () => 
     if (!power) throw new Error('no Carthage');
     notice(state, world);
     power.noticeSince = 94 as Day;
-    expect(threatNewsOfDay(state, state, world, told)).toHaveLength(1);
+    const [warning] = threatNewsOfDay(state, state, world, told);
+    expect(warning?.text).toMatch(/^Carthage could soon declare war on you: it has \d+% /);
     state.day = 184 as Day;
     const [reminder] = threatNewsOfDay(state, state, world, told);
-    expect(reminder?.text).toContain('and may declare any day now if it holds it.');
+    expect(reminder?.text).toMatch(
+      /^Carthage still stands near war with you, as warned on Year 1, day 100: it has \d+% of the strength it needs against your forces near \w+, and may declare any day now if it holds it\./,
+    );
     expect(reminder?.text).not.toContain('may declare from');
     expect(standingThreats(state, world).find((t) => t.power === carthage)?.text).toContain(
       'It may declare any day now if it holds it.',
@@ -339,6 +343,9 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     expect(lineOf(pressedFor(11, { gold: 2229, manpower: 450 }))).toContain(
       'More men lower it, not guards: order Light cavalry now for 1,800 gold; they muster and lower it from Year 1, day 120, 9 days after war may first come.',
     );
+    expect(lineOf(pressedFor(9, { gold: 5000, manpower: 5000 }))).toContain(
+      'they muster and lower it from Year 1, day 110, 1 day after war may first come.',
+    );
     expect(lineOf(pressedFor(11, { gold: 2229, manpower: 300 }))).toContain(
       'More men lower it, not guards, but even Skirmishers need 500 men, 10 days; you have 300 manpower.',
     );
@@ -511,6 +518,30 @@ describe('the news of a warned threat that fades', () => {
     // As on a day guards stop counting after the notice was reckoned lower.
     const after = game(5300, 'full', 121);
     expect(fading(new Set(['threat:carthage:100']), after, false).news).toEqual([]);
+  });
+
+  test('gives the reason, not 0%, when a war with another power ties down all its armies', () => {
+    const atWar = game(5300, 'full', 121);
+    // Egypt holds a city in Carthage's reach, so the war holds back Egypt's whole field army.
+    changeCityOwner(atWar, 'lepcis-magna' as CityId, egypt);
+    spearmenOf(atWar, egypt).men = 30_000;
+    executeOrder(atWar, { kind: 'declareWar', faction: carthage, against: egypt }, world);
+    const { news } = fading(new Set(['threat:carthage:100']), atWar);
+    expect(news.map((alert) => alert.text)).toEqual([
+      "Carthage's threat has passed for now: it is at war with Egypt, which ties down all its armies, and must stand at 80% for 30 days before it may.",
+    ]);
+  });
+
+  test('gives the reason when no army of its stands ready to march', () => {
+    const away = game(5300, 'full', 121);
+    for (const army of Object.values(away.armies))
+      if (army.owner === carthage)
+        for (const id of army.formations) {
+          const formation = away.formations[id];
+          if (formation) formation.morale = 0;
+        }
+    const { news } = fading(new Set(['threat:carthage:100']), away);
+    expect(news[0]?.text).toContain('none of its armies stands ready to march');
   });
 
   test('says nothing when the notice ends in a war', () => {

@@ -85,6 +85,17 @@ function carthagePressesSoon(): GameState {
   return state;
 }
 
+/** Carthage by a city as in `carthageNearsWar`, held on the notice it warned of on day 306 to day 400: its reminder. */
+function carthageStillNearCity(): GameState {
+  const state = carthageNearsWar();
+  state.day = 400 as Day;
+  for (const truce of Object.values(state.truces)) truce.endsOn = (400 + 365) as Day;
+  const punic = state.factions[carthage];
+  if (!punic) throw new Error('no Carthage');
+  punic.noticeSince = 300 as Day;
+  return state;
+}
+
 function battleTomorrow(): GameState {
   const state = startGame();
   outnumberedAt(state, 'roma', 1500);
@@ -140,11 +151,18 @@ const STOPS: readonly {
   {
     name: 'a reminder whose first day of war has passed',
     make: carthageStillNearWar,
-    line: /could soon declare war on you.*may declare any day now.*Skirmishers need 500 men/,
+    line: /still stands near war with you, as warned on .*may declare any day now.*Skirmishers need 500 men/,
     shot: 'reminder',
     told: ['threat:carthage:306'],
     atPeaceAt: 1280,
     atPeace: 'It may declare any day now if it holds it.',
+  },
+  {
+    name: 'a reminder by a city',
+    make: carthageStillNearCity,
+    line: /still stands near war with you, as warned on .*may declare any day now.*guards at/,
+    shot: 'city-reminder',
+    told: ['threat:carthage:306'],
   },
   {
     name: 'a first warning too late for any troop to train',
