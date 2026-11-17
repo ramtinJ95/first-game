@@ -4,6 +4,7 @@ import { standingThreats, threatNewsOfDay } from '../../src/app/threat-news.ts';
 import { warReadiness } from '../../src/sim/ai/war.ts';
 import type { FactionId } from '../../src/sim/ids.ts';
 import { areAtWar } from '../../src/sim/wars.ts';
+import { NOTICE_DAYS } from '../../src/sim/ai/thresholds.ts';
 import { playCautiousRome, rome, warnedPowers, world, type GuardPlay } from '../cautious-rome.ts';
 
 const { values } = parseArgs({
@@ -27,7 +28,10 @@ interface Record {
   seed: number;
   days: number;
   readiness: { [power: string]: (number | null)[] };
-  warnings: { day: number; power: string }[];
+  /** `named` is the first day of war the warning names, or null for a reminder that says any day now. */
+  warnings: { day: number; power: string; named: number | null }[];
+  /** The game's stops for a warning: one a day, whatever the powers it names. */
+  stops: number;
   wars: {
     day: number;
     power: string;
@@ -36,13 +40,15 @@ interface Record {
     readiness: number | null;
     /** Great powers at war with Rome that day, this one included. */
     atOnce: number;
+    /** The first day of the notice the power declared on. */
+    since: number | null;
     /** The day the war ended, or null if it outlasted the game. */
     endedOn: number | null;
   }[];
 }
 
 function play(seed: number, years: number): Record {
-  const record: Record = { seed, days: 0, readiness: {}, warnings: [], wars: [] };
+  const record: Record = { seed, days: 0, readiness: {}, warnings: [], stops: 0, wars: [] };
   const told = new Set<string>();
   const open = new Map<FactionId, number>();
   playCautiousRome(
@@ -50,8 +56,14 @@ function play(seed: number, years: number): Record {
     years,
     ({ before, after, events }) => {
       const day = before.day;
-      for (const alert of threatNewsOfDay(before, after, world, told))
-        for (const power of warnedPowers(alert.text)) record.warnings.push({ day, power });
+      for (const alert of threatNewsOfDay(before, after, world, told)) {
+        record.stops++;
+        for (const power of warnedPowers(alert.text)) {
+          const since = Object.values(after.factions).find((f) => f.name === power)?.noticeSince;
+          const named = (since ?? day) + NOTICE_DAYS;
+          record.warnings.push({ day, power, named: named > day ? named : null });
+        }
+      }
       const threats = new Map(standingThreats(after, world).map((t) => [t.name, t.readiness]));
       for (const power of Object.values(after.factions)) {
         if (power.kind !== 'greatPower' || power.id === rome) continue;
@@ -72,6 +84,7 @@ function play(seed: number, years: number): Record {
             power: after.factions[event.by]?.name ?? event.by,
             citiesLost: 0,
             readiness: reckoned ? Math.round(reckoned.readiness * 100) / 100 : null,
+            since: before.factions[event.by]?.noticeSince ?? null,
             atOnce: Object.values(after.factions).filter(
               (f) => f.kind === 'greatPower' && f.id !== rome && areAtWar(after, f.id, rome),
             ).length,
@@ -107,3 +120,29 @@ for (const r of rows)
   console.log(
     `seed ${r.seed}: ${r.warnings.length} warnings, ${r.wars.length} wars, ${r.wars.reduce((s, w) => s + w.citiesLost, 0)} cities lost`,
   );
+
+const wars = rows.flatMap((r) => r.wars.map((w) => ({ ...w, warnings: r.warnings })));
+const lastWarning = (w: (typeof wars)[number]) =>
+  w.warnings.filter((x) => x.power === w.power && x.day <= w.day).at(-1);
+const ownNotice = wars.filter((w) =>
+  w.warnings.some(
+    (x) => x.power === w.power && w.since !== null && x.day >= w.since && w.day - x.day >= 24,
+  ),
+).length;
+const stale = wars.filter((w) => {
+  const last = lastWarning(w);
+  return last !== undefined && w.day - (last.named ?? last.day) > 60;
+});
+const staleSameNotice = stale.filter((w) => {
+  const last = lastWarning(w);
+  return last !== undefined && w.since !== null && last.day >= w.since;
+}).length;
+const warnings = rows.reduce((s, r) => s + r.warnings.length, 0);
+const stops = rows.map((r) => r.stops);
+const gaps = rows.flatMap((r) =>
+  r.warnings.flatMap((w) => (w.named === null ? [] : [w.named - w.day])),
+);
+const anyDay = rows.reduce((s, r) => s + r.warnings.filter((w) => w.named === null).length, 0);
+console.log(
+  `Summary: ${rows.length} games; warnings a game ${(warnings / rows.length).toFixed(1)}; stops a game ${(stops.reduce((s, n) => s + n, 0) / rows.length).toFixed(1)} (min ${Math.min(...stops)}, max ${Math.max(...stops)}); smallest gap from a warning to the day it names ${Math.min(...gaps)} days (warnings under 24: ${gaps.filter((g) => g < 24).length}, reminders that say any day now: ${anyDay}); wars on Rome ${wars.length}, warned of their own notice 24 days or more before ${ownNotice}; wars more than 60 days after their last warning's day ${stale.length} (${staleSameNotice} on the warned notice, ${stale.length - staleSameNotice} on a later one)`,
+);
