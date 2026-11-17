@@ -27,7 +27,10 @@ import { defineScenario } from '../scenario.ts';
 import { pageData } from '../../../src/app/page.ts';
 import { saveGame } from '../../../src/sim/save.ts';
 
-/** Rome with 1,000 men in the field beside a Carthage of 2,000: Carthage presses it by its field armies. */
+/**
+ * Rome with 1,000 men in the field beside a Carthage of 2,000: Carthage presses it by its field
+ * armies, and Rome has the gold for Skirmishers but too little manpower, the advice's longest text.
+ */
 function carthagePresses(): GameState {
   const state = carthageNearsWar();
   const punic = state.formations[armyOf(state, carthage).formations[0] as FormationId];
@@ -38,6 +41,7 @@ function carthagePresses(): GameState {
   const stores = state.factions[rome]?.stores;
   if (!stores) throw new Error('no Roman stores');
   stores.gold = 2229;
+  stores.manpower = 300;
   return state;
 }
 
@@ -51,12 +55,12 @@ function carthageAndMacedonNearWar(): GameState {
 }
 
 /**
- * Carthage near war as in `carthageNearsWar` on day 400, on one notice since day 300 that it
- * warned of on day 306, naming day 330, so the day's warning is its reminder and its first day
- * of war has passed.
+ * Carthage pressing Rome as in `carthagePresses` on day 400, on one notice since day 300 that it
+ * warned of on day 306, naming day 330, so the day's warning is its reminder, its first day of
+ * war has passed, and no troop could train before it.
  */
 function carthageStillNearWar(): GameState {
-  const state = carthageNearsWar();
+  const state = carthagePresses();
   state.day = 400 as Day;
   for (const truce of Object.values(state.truces)) truce.endsOn = (400 + 365) as Day;
   const punic = state.factions[carthage];
@@ -112,13 +116,13 @@ const STOPS: readonly {
   {
     name: 'a warning by field armies',
     make: carthagePresses,
-    line: /all your armies in the field.*Skirmishers cost 900 gold/,
+    line: /all your armies in the field.*Skirmishers need 500 men, 10 days; you have \d+ manpower/,
     shot: 'field-warning',
   },
   {
     name: 'a reminder whose first day of war has passed',
     make: carthageStillNearWar,
-    line: /could soon declare war on you.*may declare any day now/,
+    line: /could soon declare war on you.*may declare any day now.*none raised now is ready/,
     shot: 'reminder',
     told: ['threat:carthage:306'],
     atPeaceAt: 1280,

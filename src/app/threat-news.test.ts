@@ -258,10 +258,43 @@ describe('how near each power at peace stands to declaring war, as the wars pane
       'More men lower it, not guards: Light cavalry cost 1,800 gold and train in 20 days.',
     );
     expect(lineOf(pressedWith({ gold: 729, manpower: 5000 }))).toContain(
-      'More men lower it, not guards, but even Skirmishers cost 900 gold, 10 days; you have 729.',
+      'More men lower it, not guards, but even Skirmishers cost 900 gold, 10 days; you have 729 gold.',
     );
     expect(lineOf(pressedWith({ gold: 5000, manpower: 350 }))).toContain(
-      'More men lower it, not guards, but even Skirmishers need 500 men, 10 days; you have 350.',
+      'More men lower it, not guards, but even Skirmishers need 500 men, 10 days; you have 350 manpower.',
+    );
+  });
+
+  /** `pressedWith` on day 100, on notice so that war may first come `left` days on. */
+  function pressedFor(left: number, stores: { gold: number; manpower: number }): GameState {
+    const state = pressedWith(stores);
+    state.day = 100 as Day;
+    notice(state, world);
+    const power = state.factions[carthage];
+    if (!power) throw new Error('no Carthage');
+    power.noticeSince = (100 + left - NOTICE_DAYS) as Day;
+    return state;
+  }
+
+  test('names only a troop that finishes training by the day war may come, or says none is ready', () => {
+    // The tenth play-through's warning, 11 days before war: Light cavalry train in 20.
+    expect(lineOf(pressedFor(11, { gold: 2229, manpower: 450 }))).toContain(
+      'More men lower it, not guards, but even Skirmishers need 500 men, 10 days; you have 450 manpower.',
+    );
+    expect(lineOf(pressedFor(24, { gold: 2229, manpower: 450 }))).toContain(
+      'More men lower it, not guards: Light cavalry cost 1,800 gold and train in 20 days.',
+    );
+    expect(lineOf(pressedFor(9, { gold: 5000, manpower: 5000 }))).toContain(
+      'More men lower it, not guards, but none raised now is ready before war may come.',
+    );
+    const [reminder] = threatNewsOfDay(
+      pressedFor(-60, { gold: 5000, manpower: 5000 }),
+      pressedFor(-60, { gold: 5000, manpower: 5000 }),
+      world,
+      new Set([`threat:carthage:${100 - 60 - 1}`]),
+    );
+    expect(reminder?.text).toContain(
+      'may declare any day now if it holds it. More men lower it, not guards, but none raised now is ready before war may come.',
     );
   });
 
@@ -276,7 +309,7 @@ describe('how near each power at peace stands to declaring war, as the wars pane
   test('reckons what you can afford after the orders waiting, as the wars panel gives them', () => {
     const state = pressedWith({ gold: 2229, manpower: 5000 });
     expect(lineOf(state, { gold: 429, food: 0, manpower: 4000 })).toContain(
-      'but even Skirmishers cost 900 gold, 10 days; you have 429.',
+      'but even Skirmishers cost 900 gold, 10 days; you have 429 gold.',
     );
   });
 
@@ -286,6 +319,7 @@ describe('how near each power at peace stands to declaring war, as the wars pane
       { gold: 2229, manpower: 450 },
       { gold: 899, manpower: 5000 },
       { gold: 5000, manpower: 499 },
+      { gold: 99_999, manpower: 99_999 },
     ]) {
       const [warning] = newsOf(pressedWith(stores), new Set());
       expect(warning?.text.length ?? 0).toBeLessThanOrEqual(355);
