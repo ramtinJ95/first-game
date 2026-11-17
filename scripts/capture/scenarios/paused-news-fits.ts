@@ -26,7 +26,6 @@ import { areAtWar } from '../../../src/sim/wars.ts';
 import { defineScenario } from '../scenario.ts';
 import { pageData } from '../../../src/app/page.ts';
 import { saveGame } from '../../../src/sim/save.ts';
-import { THREAT_RECALL_DAYS } from '../../../src/app/threat-news.ts';
 
 /** Rome with 1,000 men in the field beside a Carthage of 2,000: Carthage presses it by its field armies. */
 function carthagePresses(): GameState {
@@ -52,8 +51,9 @@ function carthageAndMacedonNearWar(): GameState {
 }
 
 /**
- * Carthage near war as in `carthageNearsWar` on day 400, on one notice since day 59 that it
- * warned of on day 65, so the day's warning is its reminder and its first day of war has passed.
+ * Carthage near war as in `carthageNearsWar` on day 400, on one notice since day 300 that it
+ * warned of on day 306, naming day 330, so the day's warning is its reminder and its first day
+ * of war has passed.
  */
 function carthageStillNearWar(): GameState {
   const state = carthageNearsWar();
@@ -61,7 +61,7 @@ function carthageStillNearWar(): GameState {
   for (const truce of Object.values(state.truces)) truce.endsOn = (400 + 365) as Day;
   const punic = state.factions[carthage];
   if (!punic) throw new Error('no Carthage');
-  punic.noticeSince = (400 - THREAT_RECALL_DAYS - 6) as Day;
+  punic.noticeSince = 300 as Day;
   return state;
 }
 
@@ -120,7 +120,7 @@ const STOPS: readonly {
     make: carthageStillNearWar,
     line: /could soon declare war on you.*may declare any day now/,
     shot: 'reminder',
-    told: [`threat:carthage:${400 - THREAT_RECALL_DAYS}`],
+    told: ['threat:carthage:306'],
     atPeaceAt: 1280,
   },
   {

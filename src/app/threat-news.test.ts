@@ -116,7 +116,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     const told = new Set<string>();
     expect(onNotice(game(5300, 'full', 6), 0, told)).toHaveLength(1);
     expect(onNotice(game(5300, 'full', 7), 0, told)).toEqual([]);
-    expect(onNotice(game(5300, 'full', 334), 0, told)).toEqual([]);
+    expect(onNotice(game(5300, 'full', 89), 0, told)).toEqual([]);
   });
 
   test('a power that comes back on notice warns again in time for the war it may then declare', () => {
@@ -155,7 +155,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     notice(state, world);
     power.noticeSince = 94 as Day;
     expect(threatNewsOfDay(state, state, world, told)).toHaveLength(1);
-    state.day = 435 as Day;
+    state.day = 184 as Day;
     const [reminder] = threatNewsOfDay(state, state, world, told);
     expect(reminder?.text).toContain('and may declare any day now if it holds it.');
     expect(reminder?.text).not.toContain('may declare from');
@@ -164,11 +164,25 @@ describe('the news of a power that could soon declare war on the player', () => 
     );
   });
 
-  test('tells again a power still on notice 335 days after it warned, and after a war between them', () => {
+  test('a power held on one notice is told of again 60 days after each day it was told of', () => {
+    const told = new Set<string>();
+    const state = game(5300, 'full');
+    const power = state.factions[carthage];
+    if (!power) throw new Error('no Carthage');
+    const warnedOn: number[] = [];
+    for (let day = 0; day <= 400; day++) {
+      state.day = day as Day;
+      power.noticeSince = 0 as Day;
+      if (threatNewsOfDay(state, state, world, told).length > 0) warnedOn.push(day);
+    }
+    expect(warnedOn).toEqual([6, 90, 150, 210, 270, 330, 390]);
+  });
+
+  test('tells again a power still on notice 60 days after the day it named, and after a war between them', () => {
     const told = new Set<string>();
     expect(onNotice(game(5300, 'full', 6), 0, told)).toHaveLength(1);
-    expect(onNotice(game(5300, 'full', 340), 0, told)).toEqual([]);
-    expect(onNotice(game(5300, 'full', 341), 0, told)).toHaveLength(1);
+    expect(onNotice(game(5300, 'full', 89), 0, told)).toEqual([]);
+    expect(onNotice(game(5300, 'full', 90), 0, told)).toHaveLength(1);
 
     const atWar = game(5300, 'full', 400);
     expect(
