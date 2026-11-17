@@ -29,13 +29,16 @@ import { camera, cityPoint, dropSave, openGame, pause, untilDrawn } from './supp
  * pages need the full three rounds of a minute for the frame rules: on a 2-core software
  * GL host one build's frames spread by more than a tenth between page loads.
  * `--panel-budget` checks only the panels. With `--alternate`, both also fail when Roma's
- * routes drew their texture more often than the sea drew its own, beyond once a selection:
+ * routes drew their texture more often than the sea drew its own, beyond once a selection
+ * and once a segment:
  * a count, since each such pass took most of a second on a software GPU and timing it is
  * noisy.
  *
  * `--open-day <d>` opens the routes on that day and `--from-day <d>` plays to that day
  * first, with the AI playing every power, as a played game would be; `--viewport 1600x900`
  * sizes the page. Each run prints its gaps over a second, with the days they spanned.
+ * `--args="<flags>"` replaces Chromium's software-GL flags; write it with `=`, since
+ * `--args "<flags>"` is refused as ambiguous when the flags start with a dash.
  *
  * `--alternate <n>` plays each zoom in one page and one game instead, in `n` segments of
  * `--segment` seconds that select Roma and nothing in the order none, Roma, Roma, none, so
@@ -110,6 +113,8 @@ interface Run {
   tradePasses: number;
   /** How often the city was selected anew. */
   selections: number;
+  /** The segments played with this selection. */
+  segments: number;
 }
 
 async function worldOf(root: string): Promise<{ save: string; day: number }> {
@@ -295,6 +300,7 @@ async function measure(
       seaPasses: 0,
       tradePasses: 0,
       selections: roma ? 1 : 0,
+      segments: 1,
     };
     if (roma && (await page.getByTestId('city-name').textContent()) !== 'Roma')
       throw new Error('Roma lost its selection during the minute');
@@ -404,6 +410,7 @@ async function alternate(
         seaPasses: 0,
         tradePasses: 0,
         selections: 0,
+        segments: 0,
       },
       none: {
         frames: 0,
@@ -420,6 +427,7 @@ async function alternate(
         seaPasses: 0,
         tradePasses: 0,
         selections: 0,
+        segments: 0,
       },
     };
     const intervals: Record<'roma' | 'none', number[]> = { roma: [], none: [] };
@@ -459,6 +467,7 @@ async function alternate(
       intervals[selection].push(...at.slice(2, -1).map((t, i) => t - (at[i + 1] ?? t)));
       run.days += (await dayOf(page)) - firstDay;
       run.refreshes += after.refreshes - before.refreshes;
+      run.segments++;
       run.passes += after.passesNow - before.passesNow;
       run.seaPasses += after.seaNow - before.seaNow;
       run.tradePasses += after.tradeNow - before.tradeNow;
@@ -574,8 +583,13 @@ if (values.budget || values['panel-budget']) {
       const gap = median(selected.map((r) => r.longestGap));
       const ceiling = 1.1 * median(none.map((r) => r.longestGap));
       const perDay = median(selected.map((r) => r.refreshes / r.days));
-      // The routes' texture follows the view as the sea's does, and is drawn anew once a selection.
-      const extra = Math.max(...selected.map((r) => r.tradePasses - r.seaPasses - r.selections));
+      // The routes' texture follows the view as the sea's does, but from where the city was
+      // selected, so in a segment one of its crossings can fall just inside or outside the
+      // sea's: allow one each, and once a selection. A texture drawn every day or every
+      // frame would be over by tens.
+      const extra = Math.max(
+        ...selected.map((r) => r.tradePasses - r.seaPasses - r.selections - r.segments),
+      );
       if (values.alternate && extra > 0)
         failures.push(
           `${zoom}: Roma's routes drew their texture ${extra} more times than the sea's and the selections'`,

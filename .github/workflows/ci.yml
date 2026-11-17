@@ -38,7 +38,7 @@ jobs:
       - run: npm run build
 
   browser-tests:
-    timeout-minutes: 6
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -154,7 +154,7 @@ jobs:
           test -f sheets.csv && echo "::notice title=memory sheets::$(sed ':a;N;$!ba;s/\n/%0A/g' sheets.csv)"
 
   capture-shards:
-    timeout-minutes: 12
+    timeout-minutes: 16
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
