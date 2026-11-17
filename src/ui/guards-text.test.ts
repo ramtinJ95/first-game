@@ -97,12 +97,117 @@ describe('the threat a hire answers', () => {
     expect(shown.hire.threats).toEqual([
       expect.stringMatching(
         new RegExp(
-          `^Carthage ${now}% → (\\d+)% of the strength it needs to declare war, until ${dateText(state.day + 90)}$`,
+          `^Carthage ${now}% of the strength it needs to declare war\\. One more band, counted until ${dateText(state.day + 90)}, takes it to (\\d+)%, still at 80% or more, so it may still declare once it has stood at 80% for 30 days\\.$`,
         ),
       ),
     ]);
-    const after = Number(/→ (\d+)%/.exec(shown.hire.threats[0] ?? '')?.[1]);
+    const after = Number(/takes it to (\d+)%/.exec(shown.hire.threats[0] ?? '')?.[1]);
     expect(after).toBeLessThan(now);
+  });
+});
+
+describe('a band that does not take a power off notice', () => {
+  const map = parseMap(
+    JSON.parse(readFileSync(new URL('../../data/map/map.json', import.meta.url), 'utf8')),
+  );
+  const atlas = buildWorld(map);
+
+  /** Carthage of twelve cities with `men` beside Rome's 4,000 and full treasury on day 100, on notice since day 80. */
+  function carthageAt(men: number): GameState {
+    const state = newGame(map, { seed: 1, player: 'rome' });
+    state.day = 100 as Day;
+    for (const id of WEST) changeCityOwner(state, id, carthage);
+    for (const faction of Object.values(state.factions))
+      if (faction.kind === 'minor')
+        state.truces[warKey(carthage, faction.id)] = {
+          since: state.day,
+          endsOn: (state.day + 365) as Day,
+        };
+    for (const army of Object.values(state.armies)) {
+      const spearmen = state.formations[army.formations[0] as never];
+      if (spearmen && army.owner === carthage) spearmen.men = men;
+      if (spearmen && army.owner === f.rome) spearmen.men = 4000;
+    }
+    const rome = state.factions[f.rome];
+    const punic = state.factions[carthage];
+    if (!rome || !punic) throw new Error('no Rome or Carthage');
+    rome.stores.gold = limitsOf(state).get(f.rome)?.gold ?? 0;
+    punic.noticeSince = 80 as Day;
+    return state;
+  }
+  const roma = (state: GameState) => {
+    const city = state.cities['roma' as CityId];
+    if (!city) throw new Error('no Roma');
+    return city;
+  };
+  const hireAtRoma: Order = { kind: 'hireGuards', faction: f.rome, city: 'roma' as CityId };
+  const afterHire = (state: GameState) => {
+    const hired = structuredClone(state);
+    executeOrder(hired, hireAtRoma, atlas);
+    return hired;
+  };
+
+  it('says, before and after the hire, that the power may still declare from its named day', () => {
+    const state = carthageAt(6000);
+    expect(warReadiness(state, atlas, carthage, f.rome)?.readiness).toBeGreaterThanOrEqual(1);
+    expect(cityGuards(state, [], roma(state), atlas).hire.threats).toEqual([
+      'Carthage 100% of the strength it needs to declare war. One more band, counted until Year 1, day 190, takes it to 88%, still at 80% or more, so it may still declare from Year 1, day 110.',
+    ]);
+    expect(cityGuards(state, [hireAtRoma], roma(state), atlas).hire.threats).toEqual([
+      'Carthage, with the band you hired: 88% of the strength it needs to declare war, still at 80% or more, so it may still declare from Year 1, day 110. One more band, counted until Year 1, day 190, takes it to 78%, below 80%, so it may not declare until it has stood at 80% for 30 days.',
+    ]);
+  });
+
+  it('reckons the band you hired on the gold you hold, not the gold one more band would need', () => {
+    const state = carthageAt(6360);
+    const rome = state.factions[f.rome];
+    if (!rome) throw new Error('no Rome');
+    rome.stores.gold = 3000;
+    const hired = afterHire(state);
+    const real = warReadiness(hired, atlas, carthage, f.rome)?.readiness ?? 1;
+    expect(real).toBeLessThan(0.8);
+    const [line] = cityGuards(state, [hireAtRoma], roma(state), atlas).hire.threats;
+    expect(line).toMatch(new RegExp(`^Carthage ${Math.round(real * 100)}% `));
+    expect(line).not.toContain('the band you hired');
+  });
+
+  it('still says the band you hired is not enough when no more can be hired', () => {
+    const state = carthageAt(8000);
+    const city = roma(state);
+    city.guards = Array.from({ length: 5 }, () => band(374));
+    const shown = cityGuards(state, [hireAtRoma], city, atlas);
+    expect(shown.hire.why).toBe('Roma holds 3,000 guards, and 3,000 is the most it can');
+    expect(shown.hire.threats).toEqual([
+      'Carthage, with the band you hired: 100% of the strength it needs to declare war, still at 80% or more, so it may still declare from Year 1, day 110.',
+    ]);
+  });
+
+  it('calls a share that rounds up to 80% but is below it just under 80%', () => {
+    const state = carthageAt(5400);
+    const [line] = cityGuards(state, [], roma(state), atlas).hire.threats;
+    expect(line).toContain(
+      'takes it to just under 80%, so it may not declare until it has stood at 80% for 30 days.',
+    );
+    expect(line).not.toContain('takes it to 80%');
+  });
+
+  it('says even one more band after the one hired leaves it at 80% or more', () => {
+    const state = carthageAt(8000);
+    expect(cityGuards(state, [hireAtRoma], roma(state), atlas).hire.threats).toEqual([
+      expect.stringMatching(
+        /^Carthage, with the band you hired: \d+% of the strength it needs to declare war, still at 80% or more, so it may still declare from Year 1, day 110\. One more band, counted until Year 1, day 190, takes it to \d+%, still at 80% or more, so it may still declare from Year 1, day 110\.$/,
+      ),
+    ]);
+  });
+
+  it('says one band that is enough takes it below 80%, and keeps the arrow once it stands below', () => {
+    const state = carthageAt(5300);
+    expect(cityGuards(state, [], roma(state), atlas).hire.threats).toEqual([
+      'Carthage 90% of the strength it needs to declare war. One more band, counted until Year 1, day 190, takes it to 78%, below 80%, so it may not declare until it has stood at 80% for 30 days.',
+    ]);
+    expect(cityGuards(state, [hireAtRoma], roma(state), atlas).hire.threats).toEqual([
+      'Carthage 78% → 69% of the strength it needs to declare war, until Year 1, day 190',
+    ]);
   });
 });
 

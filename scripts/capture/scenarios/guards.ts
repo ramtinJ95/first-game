@@ -1,6 +1,8 @@
 import { expect, type Page } from '@playwright/test';
 import {
+  armyOf,
   camera,
+  carthage,
   carthageNearsWar,
   cityPoint,
   day,
@@ -14,10 +16,24 @@ import {
   untilDay,
   untilDrawn,
 } from '../../../e2e/support.ts';
+import type { FormationId } from '../../../src/sim/ids.ts';
+import type { Day } from '../../../src/sim/state/day.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
 import { defineScenario } from '../scenario.ts';
 
 const WIDE = { width: 1280, height: 720 };
+
+/** Carthage as in `carthageNearsWar` with 6,000 men, at full strength against Roma, on notice for 20 days. */
+function carthageTooStrongForOneBand(): GameState {
+  const state = carthageNearsWar();
+  state.day = 100 as Day;
+  const punic = state.formations[armyOf(state, carthage).formations[0] as FormationId];
+  const power = state.factions[carthage];
+  if (!punic || !power) throw new Error('no Carthaginian army');
+  punic.men = 6000;
+  power.noticeSince = 80 as Day;
+  return state;
+}
 const PHONE = { width: 390, height: 844 };
 
 async function load(page: Page, state: GameState) {
@@ -101,12 +117,36 @@ export default defineScenario({
       .waitFor();
     await pause(page);
     await openRoma(page);
-    await expect(page.getByTestId('guards-threat')).toContainText(/^Carthage \d+% → \d+%/);
+    await expect(page.getByTestId('guards-threat')).toContainText(
+      /^Carthage \d+% of the strength it needs to declare war\. One more band, counted until .*, below 80%/,
+    );
     await bothSizes(
       page,
       shot,
       'threat-hire',
-      "Carthage nears the strength it needs against Roma: Roma's Guards section says how near it stands now and with one more band, and until when the band counts",
+      "Carthage nears the strength it needs against Roma: Roma's Guards section says how near it stands now, and that one more band, counted until its day, takes it below 80%",
+    );
+
+    await load(page, carthageTooStrongForOneBand());
+    await openRoma(page);
+    await expect(page.getByTestId('guards-threat')).toContainText(
+      'takes it to 88%, still at 80% or more, so it may still declare from',
+    );
+    await bothSizes(
+      page,
+      shot,
+      'band-not-enough',
+      "Carthage at full strength against Roma, on notice: Roma's Guards section says one more band takes it to 88%, still at 80% or more, so it may still declare from its named day",
+    );
+    await page.getByTestId('guards-hire').click();
+    await expect(page.getByTestId('guards-threat')).toContainText(
+      'with the band you hired: 88% of the strength it needs to declare war, still at 80% or more',
+    );
+    await bothSizes(
+      page,
+      shot,
+      'band-hired-not-enough',
+      'With that band hired for the next day, the section says Carthage stands at 88%, still at 80% or more, and that one more band takes it to 78%, below 80%',
     );
 
     await load(page, romaBandLeavesTomorrow());
