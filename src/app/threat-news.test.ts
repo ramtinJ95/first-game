@@ -78,6 +78,14 @@ function newsOf(state: GameState, told: Set<string>, stood = THREAT_STAND_DAYS) 
   return threatNewsOfDay(state, state, world, told);
 }
 
+/** The news of a day that ends in the state, with the power on notice since `since`. */
+function onNotice(state: GameState, since: number, told: Set<string>) {
+  notice(state, world);
+  for (const power of Object.values(state.factions))
+    if (power.noticeSince !== null) power.noticeSince = since as Day;
+  return threatNewsOfDay(state, state, world, told);
+}
+
 describe('the news of a power that could soon declare war on the player', () => {
   test('tells once when a power nears the odds it needs, with what the treasury takes off', () => {
     const told = new Set<string>();
@@ -104,12 +112,11 @@ describe('the news of a power that could soon declare war on the player', () => 
     );
   });
 
-  test('tells once while the power stays on notice, though it falls back for months and returns', () => {
+  test('tells once while the power stays on one notice', () => {
     const told = new Set<string>();
-    expect(newsOf(game(5300, 'full', 0), told)).toHaveLength(1);
-    expect(newsOf(game(2000, 'empty', 10), told)).toEqual([]);
-    expect(newsOf(game(5300, 'full', 310), told)).toEqual([]);
-    expect(newsOf(game(5300, 'full', 334), told)).toEqual([]);
+    expect(onNotice(game(5300, 'full', 6), 0, told)).toHaveLength(1);
+    expect(onNotice(game(5300, 'full', 7), 0, told)).toEqual([]);
+    expect(onNotice(game(5300, 'full', 334), 0, told)).toEqual([]);
   });
 
   test('a power that comes back on notice warns again in time for the war it may then declare', () => {
@@ -119,11 +126,49 @@ describe('the news of a power that could soon declare war on the player', () => 
     expect(newsOf(game(5300, 'full', 450), told)).toHaveLength(1);
   });
 
+  test("the tenth play-through's run: a notice that comes back warns once it stands its week, 24 days before the day it names", () => {
+    const told = new Set<string>();
+    const state = game(5300, 'full');
+    const power = state.factions[carthage];
+    if (!power) throw new Error('no Carthage');
+    const warnings: { on: string; names: string }[] = [];
+    // Warned on Year 6, day 273; back on notice on Year 7, day 224, 316 days after.
+    for (let day = 2092; day <= 2444; day++) {
+      state.day = day as Day;
+      power.noticeSince = (day < 2110 ? 2092 : day < 2414 ? null : 2414) as Day | null;
+      for (const alert of threatNewsOfDay(state, state, world, told)) {
+        const named = /may declare from (Year \d+, day \d+)/.exec(alert.text)?.[1] ?? '';
+        warnings.push({ on: dateText(day), names: named });
+      }
+    }
+    expect(warnings).toEqual([
+      { on: 'Year 6, day 273', names: 'Year 6, day 297' },
+      { on: 'Year 7, day 230', names: 'Year 7, day 254' },
+    ]);
+  });
+
+  test('a reminder on a notice whose first day of war has passed says war may come any day', () => {
+    const told = new Set<string>();
+    const state = game(5300, 'full', 100);
+    const power = state.factions[carthage];
+    if (!power) throw new Error('no Carthage');
+    notice(state, world);
+    power.noticeSince = 94 as Day;
+    expect(threatNewsOfDay(state, state, world, told)).toHaveLength(1);
+    state.day = 435 as Day;
+    const [reminder] = threatNewsOfDay(state, state, world, told);
+    expect(reminder?.text).toContain('and may declare any day now if it holds it.');
+    expect(reminder?.text).not.toContain('may declare from');
+    expect(standingThreats(state, world).find((t) => t.power === carthage)?.text).toContain(
+      'It may declare any day now if it holds it.',
+    );
+  });
+
   test('tells again a power still on notice 335 days after it warned, and after a war between them', () => {
     const told = new Set<string>();
-    expect(newsOf(game(5300, 'full', 0), told)).toHaveLength(1);
-    expect(newsOf(game(5300, 'full', 334), told)).toEqual([]);
-    expect(newsOf(game(5300, 'full', 335), told)).toHaveLength(1);
+    expect(onNotice(game(5300, 'full', 6), 0, told)).toHaveLength(1);
+    expect(onNotice(game(5300, 'full', 340), 0, told)).toEqual([]);
+    expect(onNotice(game(5300, 'full', 341), 0, told)).toHaveLength(1);
 
     const atWar = game(5300, 'full', 400);
     expect(

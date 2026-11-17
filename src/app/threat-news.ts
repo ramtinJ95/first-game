@@ -19,9 +19,8 @@ type State = DeepReadonly<GameState>;
 /** A great power this near the odds it needs to declare war on the player is told of: the rules' notice. */
 export const THREAT_WARN = NOTICE_SHARE;
 /**
- * A power on notice that warned this long ago is told of again. A war needs NOTICE_DAYS on
- * notice in a row, and reminders come this often while it lasts, so every war comes after
- * a warning given between a year and NOTICE_DAYS before it.
+ * A power still on the notice it warned of is told of again once it warned this long ago,
+ * so a notice held for years is recalled about once a year.
  */
 export const THREAT_RECALL_DAYS = 365 - NOTICE_DAYS;
 
@@ -49,11 +48,11 @@ function forget(remembered: Set<string>, faction: string) {
 /**
  * The great powers at peace with the player that stand on the rules' notice: at
  * NOTICE_SHARE of the strength they need to declare war on it, which they must hold for
- * NOTICE_DAYS before they may declare (`noticeSince`). A power is told of once it has stood on
- * notice for THREAT_STAND_DAYS, with the first day it may then declare, and again while on
- * notice once THREAT_RECALL_DAYS have passed since it last warned, so a war always follows
- * a warning given between a year and NOTICE_DAYS less THREAT_STAND_DAYS before it;
- * a war or a truce with the player forgets its warning. The news names the city it weighs
+ * NOTICE_DAYS before they may declare (`noticeSince`). A power is told of each notice once it
+ * has stood THREAT_STAND_DAYS, with the first day it may then declare, whatever it warned of
+ * before, and again while on that notice once THREAT_RECALL_DAYS have passed since it last
+ * warned, so a war always follows a warning of its own notice NOTICE_DAYS less
+ * THREAT_STAND_DAYS or more before it; a war or a truce with the player forgets its warning. The news names the city it weighs
  * the player's armies at and, when the player's treasury lowers the odds it needs, by how
  * much.
  */
@@ -64,7 +63,7 @@ export function threatNewsOfDay(
   remembered: Set<string>,
 ): Alert[] {
   const player = after.player;
-  const warned: { name: string; threat: Threat; since: number }[] = [];
+  const warned: { name: string; threat: Threat; from: string }[] = [];
   for (const power of Object.values(after.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (power.id === player || power.kind !== 'greatPower' || power.defeatedOn !== null) continue;
     if (areAtWar(after, power.id, player) || truceBetween(after, power.id, player)) {
@@ -74,12 +73,17 @@ export function threatNewsOfDay(
     const last = warnedOn(remembered, power.id);
     if (power.noticeSince === null) continue;
     if (before.day - power.noticeSince + 1 < THREAT_STAND_DAYS) continue;
-    if (last !== undefined && before.day - last < THREAT_RECALL_DAYS) continue;
+    if (last !== undefined && last >= power.noticeSince && before.day - last < THREAT_RECALL_DAYS)
+      continue;
     const threat = readinessOf(after, world, power.id);
     if (!threat) continue;
     forget(remembered, power.id);
     remembered.add(`${prefixOf(power.id)}${before.day}`);
-    warned.push({ name: factionName(after, power.id), threat, since: power.noticeSince });
+    warned.push({
+      name: factionName(after, power.id),
+      threat,
+      from: mayDeclare(before, power.noticeSince),
+    });
   }
   const [first, ...others] = warned;
   if (!first) return [];
@@ -87,8 +91,8 @@ export function threatNewsOfDay(
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
   const text =
     others.length === 0
-      ? `${first.name} could soon declare war on you: it has ${percent(first.threat)} of the strength it needs ${weighed(after, first.threat)}, and may declare from ${dateText(first.since + NOTICE_DAYS)} if it holds it.${whatCounts(after, first.threat)} See At peace in Wars.`
-      : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => percent(w.threat)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name} may declare from ${dateText(w.since + NOTICE_DAYS)}`))}. What lowers each is under At peace in Wars.`;
+      ? `${first.name} could soon declare war on you: it has ${percent(first.threat)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.threat)} See At peace in Wars.`
+      : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => percent(w.threat)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`;
   return [
     {
       kind: 'warThreat',
@@ -100,6 +104,10 @@ export function threatNewsOfDay(
     },
   ];
 }
+
+/** When a power on the notice that began on `since` may first declare war: a day to come, or any day once that has passed. */
+const mayDeclare = (state: State, since: number) =>
+  since + NOTICE_DAYS > state.day ? `from ${dateText(since + NOTICE_DAYS)}` : 'any day now';
 
 const listed = (items: readonly string[]) =>
   items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
@@ -194,7 +202,7 @@ export function standingThreats(
         power: power.id,
         name,
         readiness: Math.min(1, threat.readiness),
-        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${whatCounts(state, threat, stores)}${power.noticeSince === null ? '' : ` It may declare from ${dateText(power.noticeSince + NOTICE_DAYS)} if it holds it.`}`,
+        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${whatCounts(state, threat, stores)}${power.noticeSince === null ? '' : ` It may declare ${mayDeclare(state, power.noticeSince)} if it holds it.`}`,
       };
     });
 }

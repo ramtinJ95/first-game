@@ -24,6 +24,9 @@ import type { GameState } from '../../../src/sim/state/game-state.ts';
 import { warKey } from '../../../src/sim/state/war.ts';
 import { areAtWar } from '../../../src/sim/wars.ts';
 import { defineScenario } from '../scenario.ts';
+import { pageData } from '../../../src/app/page.ts';
+import { saveGame } from '../../../src/sim/save.ts';
+import { THREAT_RECALL_DAYS } from '../../../src/app/threat-news.ts';
 
 /** Rome with 1,000 men in the field beside a Carthage of 2,000: Carthage presses it by its field armies. */
 function carthagePresses(): GameState {
@@ -45,6 +48,20 @@ function carthageAndMacedonNearWar(): GameState {
   const macedonians = state.formations[armyOf(state, macedon).formations[0] as FormationId];
   if (!macedonians) throw new Error('no Macedonian army');
   macedonians.men = 30_000;
+  return state;
+}
+
+/**
+ * Carthage near war as in `carthageNearsWar` on day 400, on one notice since day 59 that it
+ * warned of on day 65, so the day's warning is its reminder and its first day of war has passed.
+ */
+function carthageStillNearWar(): GameState {
+  const state = carthageNearsWar();
+  state.day = 400 as Day;
+  for (const truce of Object.values(state.truces)) truce.endsOn = (400 + 365) as Day;
+  const punic = state.factions[carthage];
+  if (!punic) throw new Error('no Carthage');
+  punic.noticeSince = (400 - THREAT_RECALL_DAYS - 6) as Day;
   return state;
 }
 
@@ -76,7 +93,16 @@ function alone(make: () => GameState): () => GameState {
 }
 
 /** The news of each kind that stops the game, with its longest text the saves give. */
-const STOPS: readonly { name: string; make: () => GameState; line: RegExp; shot?: string }[] = [
+const STOPS: readonly {
+  name: string;
+  make: () => GameState;
+  line: RegExp;
+  shot?: string;
+  /** What the page was told before the save, when not nothing. */
+  told?: readonly string[];
+  /** Stop on it at this width only, and shoot the At peace list in the wars panel as well. */
+  atPeaceAt?: number;
+}[] = [
   {
     name: 'a warning by a city',
     make: carthageNearsWar,
@@ -90,6 +116,14 @@ const STOPS: readonly { name: string; make: () => GameState; line: RegExp; shot?
     shot: 'field-warning',
   },
   {
+    name: 'a reminder whose first day of war has passed',
+    make: carthageStillNearWar,
+    line: /could soon declare war on you.*may declare any day now/,
+    shot: 'reminder',
+    told: [`threat:carthage:${400 - THREAT_RECALL_DAYS}`],
+    atPeaceAt: 1280,
+  },
+  {
     name: 'two warnings on one day',
     make: carthageAndMacedonNearWar,
     line: /^.*Carthage and Macedon could soon declare war on you/,
@@ -101,9 +135,25 @@ const STOPS: readonly { name: string; make: () => GameState; line: RegExp; shot?
   { name: 'a battle', make: alone(battleTomorrow), line: /Battle at Roma/ },
 ];
 
-async function stopOn(page: Page, state: GameState, line: RegExp) {
+async function stopOn(page: Page, state: GameState, line: RegExp, told?: readonly string[]) {
   await pause(page);
-  await dropSave(page, state);
+  await dropSave(
+    page,
+    told
+      ? saveGame(
+          state,
+          pageData({
+            chronicle: [],
+            camera: undefined,
+            selection: undefined,
+            panel: undefined,
+            occupied: new Map(),
+            told: new Set(told),
+            weakSieges: new Map(),
+          }),
+        )
+      : state,
+  );
   await expect(page.getByTestId('time-controls-day')).toHaveAttribute(
     'data-day',
     String(state.day),
@@ -135,18 +185,33 @@ async function stopOn(page: Page, state: GameState, line: RegExp) {
 export default defineScenario({
   name: 'paused-news-fits',
   title:
-    'News that stops the game is read whole in the corner at 1280 × 720 and 1024 × 720: the war warnings, a city in danger, fleets sighted, a weak siege, and a battle',
+    'News that stops the game is read whole in the corner at 1280 × 720 and 1024 × 720: the war warnings and a reminder, a city in danger, fleets sighted, a weak siege, and a battle',
   async run({ page, shot }) {
     await openGame(page, { pauses: true });
     for (const width of [1280, 1024]) {
       await resizeTo(page, { width, height: 720 });
       for (const stop of STOPS) {
-        await stopOn(page, stop.make(), stop.line);
+        if (stop.atPeaceAt !== undefined && stop.atPeaceAt !== width) continue;
+        await stopOn(page, stop.make(), stop.line, stop.told);
         if (stop.shot)
           await shot(
             `${stop.shot}-${width}`,
             `${width} × 720: ${stop.name} stops the game and is read to its last word`,
           );
+        if (stop.atPeaceAt === width) {
+          await page.getByTestId('wars-button').click();
+          await expect(
+            page
+              .getByTestId('wars-panel')
+              .getByTestId('threat-row')
+              .filter({ hasText: 'It may declare any day now if it holds it.' }),
+          ).toHaveCount(1);
+          await shot(
+            `${stop.shot}-at-peace-${width}`,
+            `${width} × 720: the At peace list after ${stop.name}`,
+          );
+          await page.getByTestId('wars-button').click();
+        }
       }
     }
   },
