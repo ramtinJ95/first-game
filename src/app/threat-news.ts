@@ -97,7 +97,7 @@ export function threatNewsOfDay(
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
   const text =
     others.length === 0
-      ? `${first.name} could soon declare war on you: it has ${percent(first.threat)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.threat, undefined, first.by)} See At peace in Wars.`
+      ? `${first.name} could soon declare war on you: it has ${percent(first.threat)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.threat, undefined, first.by, 'corner')} See At peace in Wars.`
       : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => percent(w.threat)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`;
   return [
     {
@@ -198,9 +198,10 @@ function whatCounts(
   threat: Threat,
   stores: DeepReadonly<Stores> | undefined,
   by: number | undefined,
+  where: Where = 'panel',
 ): string {
   if (threat.pressed)
-    return ` ${raiseAdvice(state, stores ?? state.factions[state.player]?.stores, by)}. It weighs you so only while you hold no more cities than at the start.`;
+    return ` ${raiseAdvice(state, stores ?? state.factions[state.player]?.stores, by, where)}. It weighs you so only while you hold no more cities than at the start.`;
   const front = state.cities[threat.front];
   const gold = state.factions[state.player]?.stores.gold ?? 0;
   const hoard =
@@ -209,6 +210,9 @@ function whatCounts(
       : '';
   return `${hoard}${front ? ` Your armies on land within ${whole(WAR_FRONT_KM)} km count; more men, or guards at ${front.name} for ${GUARD_DETER_DAYS} days, lower it.` : ''}`;
 }
+
+/** Where the advice is read: the corner, with room for the warning's 12 lines, or the wars panel. */
+type Where = 'corner' | 'panel';
 
 /** How near one great power at peace with the player stands to declaring war on it today, as the wars panel lists it. */
 export interface StandingThreat {
@@ -266,19 +270,21 @@ export function powersNearWar(state: State, world: World): number {
 }
 
 /**
- * What raising men takes today, as the field-army threat advises it, among the troops that
- * finish training before the day `by` the power may first declare, since it decides before that
- * day's recruits muster: the cheapest the player can afford with the stores given, which the
- * wars panel reckons after the orders waiting, and its quickest training among the cities that
- * may recruit now; or, with none affordable, the cheapest one's price and days and what the
- * player lacks for it; or that none is ready in time. Once that day has passed, `by` is
- * undefined and every troop counts, since men raised then still weigh for as long as the
- * power holds its notice.
+ * What raising men takes today, as the field-army threat advises it: the cheapest troop the
+ * player can afford with the stores given, which the wars panel reckons after the orders
+ * waiting, among those that finish training before the day `by` the power may first declare,
+ * since it decides before that day's recruits muster, with its quickest training among the
+ * cities that may recruit now. With none affordable in time, the cheapest it can afford and the
+ * day it would muster, since men who muster on or after that day still lower a notice the power
+ * holds. With none affordable, the cheapest troop's price and days and what the player lacks
+ * for it. Once that day has passed, `by` is undefined and every troop is in time. The corner
+ * names the muster day only, as its warning names the day war may come.
  */
 function raiseAdvice(
   state: State,
   stores: DeepReadonly<Stores> | undefined,
   by: number | undefined,
+  where: Where,
 ): string {
   const cities = Object.values(state.cities).filter(
     (city) => city.owner === state.player && city.unrestDays === 0 && !beleaguered(state, city),
@@ -287,20 +293,31 @@ function raiseAdvice(
     return 'More men lower it, not guards, but no city of yours may recruit now';
   const days = (troop: Troop) =>
     Math.min(...cities.map((city) => trainingDaysAt(city, TROOPS[troop].recruit.days)));
-  const left = by === undefined ? Infinity : by - state.day;
-  const troops = (Object.keys(TROOPS) as Troop[])
-    .filter((troop) => days(troop) < left)
-    .sort((a, b) => TROOPS[a].recruit.gold - TROOPS[b].recruit.gold);
   const gold = stores?.gold ?? 0;
   const manpower = stores?.manpower ?? 0;
-  const affordable = troops.find(
+  const troops = (Object.keys(TROOPS) as Troop[]).sort(
+    (a, b) => TROOPS[a].recruit.gold - TROOPS[b].recruit.gold,
+  );
+  const affordable = troops.filter(
     (troop) => TROOPS[troop].recruit.gold <= gold && TROOPS[troop].recruit.men <= manpower,
   );
-  if (affordable)
-    return `More men lower it, not guards: ${TROOP_NAMES[affordable]} cost ${whole(TROOPS[affordable].recruit.gold)} gold and train in ${whole(days(affordable))} days`;
+  const inTime = affordable.find((troop) => by === undefined || state.day + days(troop) < by);
+  if (inTime)
+    return `More men lower it, not guards: ${TROOP_NAMES[inTime]} cost ${whole(TROOPS[inTime].recruit.gold)} gold and train in ${whole(days(inTime))} days`;
+  const [late] = affordable;
+  if (late && by !== undefined) {
+    const musters = state.day + days(late);
+    // The corner names the day war may come just before, and has no room to say it twice.
+    if (where === 'corner')
+      return `More men lower it, not guards: ${TROOP_NAMES[late]} ordered now muster on ${dateText(musters)}`;
+    const when =
+      musters === by
+        ? 'the first day war may come'
+        : `${whole(musters - by)} days after war may first come`;
+    return `More men lower it, not guards: order ${TROOP_NAMES[late]} now for ${whole(TROOPS[late].recruit.gold)} gold; they muster and lower it from ${dateText(musters)}, ${when}`;
+  }
   const [cheapest] = troops;
-  if (!cheapest)
-    return 'More men lower it, not guards, but none raised now is ready before war may come';
+  if (!cheapest) return 'More men lower it, not guards';
   const { gold: price, men } = TROOPS[cheapest].recruit;
   const name = TROOP_NAMES[cheapest];
   return gold < price

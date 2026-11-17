@@ -69,6 +69,22 @@ function carthageStillNearWar(): GameState {
   return state;
 }
 
+/**
+ * Carthage pressing Rome as in `carthagePresses` on day 100, on notice since day 78 that the page
+ * was never told of, as after a save is imported, so its first warning names day 108, before any
+ * troop Rome can afford finishes training, and the advice names the day Skirmishers ordered now muster.
+ */
+function carthagePressesSoon(): GameState {
+  const state = carthagePresses();
+  state.day = 100 as Day;
+  const punic = state.factions[carthage];
+  const stores = state.factions[rome]?.stores;
+  if (!punic || !stores) throw new Error('no Carthage or Roman stores');
+  stores.manpower = 5000;
+  punic.noticeSince = 78 as Day;
+  return state;
+}
+
 function battleTomorrow(): GameState {
   const state = startGame();
   outnumberedAt(state, 'roma', 1500);
@@ -106,6 +122,8 @@ const STOPS: readonly {
   told?: readonly string[];
   /** Stop on it at this width only, and shoot the At peace list in the wars panel as well. */
   atPeaceAt?: number;
+  /** What Carthage's At peace line then says. */
+  atPeace?: string;
 }[] = [
   {
     name: 'a warning by a city',
@@ -126,6 +144,15 @@ const STOPS: readonly {
     shot: 'reminder',
     told: ['threat:carthage:306'],
     atPeaceAt: 1280,
+    atPeace: 'It may declare any day now if it holds it.',
+  },
+  {
+    name: 'a first warning too late for any troop to train',
+    make: carthagePressesSoon,
+    line: /could soon declare war on you.*Skirmishers ordered now muster on Year 1, day 111/,
+    shot: 'late-warning',
+    atPeaceAt: 1280,
+    atPeace: 'order Skirmishers now for 900 gold; they muster and lower it from Year 1, day 111',
   },
   {
     name: 'two warnings on one day',
@@ -208,7 +235,7 @@ export default defineScenario({
             page
               .getByTestId('wars-panel')
               .getByTestId('threat-row')
-              .filter({ hasText: 'It may declare any day now if it holds it.' }),
+              .filter({ hasText: stop.atPeace ?? '' }),
           ).toHaveCount(1);
           await shot(
             `${stop.shot}-at-peace-${width}`,

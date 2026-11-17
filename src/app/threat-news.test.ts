@@ -321,21 +321,34 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     return state;
   }
 
-  test('names only a troop that finishes training by the day war may come, or says none is ready', () => {
-    // The tenth play-through's warning, 11 days before war: Light cavalry train in 20.
-    expect(lineOf(pressedFor(11, { gold: 2229, manpower: 450 }))).toContain(
-      'More men lower it, not guards, but even Skirmishers need 500 men, 10 days; you have 450 manpower.',
-    );
+  test('names a troop that finishes training before the day war may come, while one is affordable', () => {
     expect(lineOf(pressedFor(24, { gold: 2229, manpower: 450 }))).toContain(
       'More men lower it, not guards: Light cavalry cost 1,800 gold and train in 20 days.',
     );
     expect(lineOf(pressedFor(11, { gold: 5000, manpower: 5000 }))).toContain(
       'More men lower it, not guards: Skirmishers cost 900 gold and train in 10 days.',
     );
-    // The power decides on its day before that day's recruits muster.
+  });
+
+  test('with none affordable ready in time, names the one that is and the day it musters, from which it lowers the threat', () => {
+    // The power decides on its day before that day's recruits muster, so these come on the day, not before it.
     expect(lineOf(pressedFor(10, { gold: 5000, manpower: 5000 }))).toContain(
-      'More men lower it, not guards, but none raised now is ready before war may come.',
+      'More men lower it, not guards: order Skirmishers now for 900 gold; they muster and lower it from Year 1, day 110, the first day war may come.',
     );
+    // The tenth play-through's warning, 11 days before war: Light cavalry, the one troop affordable, train in 20.
+    expect(lineOf(pressedFor(11, { gold: 2229, manpower: 450 }))).toContain(
+      'More men lower it, not guards: order Light cavalry now for 1,800 gold; they muster and lower it from Year 1, day 120, 9 days after war may first come.',
+    );
+    expect(lineOf(pressedFor(11, { gold: 2229, manpower: 300 }))).toContain(
+      'More men lower it, not guards, but even Skirmishers need 500 men, 10 days; you have 300 manpower.',
+    );
+    for (const left of [1, 5, 10, 23])
+      expect(lineOf(pressedFor(left, { gold: 5000, manpower: 5000 }))).toMatch(
+        /More men lower it, not guards: (order )?Skirmishers/,
+      );
+  });
+
+  test('a reminder names what may be raised, with no day to finish before', () => {
     const [reminder] = threatNewsOfDay(
       pressedFor(-60, { gold: 5000, manpower: 5000 }),
       pressedFor(-60, { gold: 5000, manpower: 5000 }),
@@ -355,7 +368,7 @@ describe('how near each power at peace stands to declaring war, as the wars pane
       return threatNewsOfDay(before, after, world, new Set())[0]?.text ?? '';
     };
     expect(newsOn(1)).toContain(
-      'may declare from Year 1, day 101 if it holds it. More men lower it, not guards, but none raised now is ready before war may come.',
+      'may declare from Year 1, day 101 if it holds it. More men lower it, not guards: Skirmishers ordered now muster on Year 1, day 111.',
     );
     expect(newsOn(0)).toContain(
       'may declare any day now if it holds it. More men lower it, not guards: Skirmishers cost 900 gold and train in 10 days.',
@@ -395,6 +408,20 @@ describe('how near each power at peace stands to declaring war, as the wars pane
       { gold: 99_999, manpower: 99_999 },
     ]) {
       const [warning] = newsOf(pressedWith(stores), new Set());
+      expect(warning?.text.length ?? 0).toBeLessThanOrEqual(355);
+    }
+  });
+
+  test('a first warning that comes late, as after a save is imported, is no longer either', () => {
+    for (const stores of [
+      { gold: 2229, manpower: 450 },
+      { gold: 5000, manpower: 5000 },
+      { gold: 99_999, manpower: 99_999 },
+    ]) {
+      const state = pressedWith(stores);
+      state.day = 100 as Day;
+      const [warning] = onNotice(state, 78, new Set());
+      expect(warning?.text).toMatch(/ordered now muster on Year 1, day 1[12]0\./);
       expect(warning?.text.length ?? 0).toBeLessThanOrEqual(355);
     }
   });

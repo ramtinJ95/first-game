@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { decideOrders } from '../ai/decide.ts';
-import { NOTICE_DAYS } from '../ai/thresholds.ts';
+import { NOTICE_DAYS, NOTICE_SHARE } from '../ai/thresholds.ts';
 import { warReadiness } from '../ai/war.ts';
 import { changeCityOwner } from '../cities.ts';
 import { fixtureWorld } from '../fixture.ts';
@@ -11,6 +11,8 @@ import { expectConsistent } from '../references.ts';
 import type { Day } from '../state/day.ts';
 import type { GameState } from '../state/game-state.ts';
 import { warKey } from '../state/war.ts';
+import { tick } from '../tick.ts';
+import { TROOPS } from '../troops.ts';
 import { limitsOf } from './economy.ts';
 import { notice } from './notice.ts';
 
@@ -107,6 +109,29 @@ describe('a great power declares on the player only after it has stood on notice
     standFor(again, 1);
     expect(again.factions[carthage]?.noticeSince).toBeNull();
     expectConsistent(again);
+  });
+
+  test('men who muster after the first day war may come still lower a notice the power holds', () => {
+    let state = ready('pressure');
+    men(state, rome, 2550);
+    for (let day = 0; day < NOTICE_DAYS; day++) state = tick(state, [], world).state;
+    // Past its first day of war, the power holds its notice below the full strength it needs, so it may not declare.
+    expect(state.factions[carthage]?.noticeSince).toBe(100);
+    expect(declares(state)).toBe(false);
+    const ordered = state.day;
+    state = tick(
+      state,
+      [{ kind: 'recruit', faction: rome, city: 'roma' as CityId, troop: 'skirmishers' }],
+      world,
+    ).state;
+    while (state.day < ordered + TROOPS.skirmishers.recruit.days) {
+      expect(state.factions[carthage]?.noticeSince).toBe(100);
+      state = tick(state, [], world).state;
+    }
+    state = tick(state, [], world).state;
+    expect(state.factions[carthage]?.noticeSince).toBeNull();
+    expect(warReadiness(state, world, carthage, rome)?.readiness).toBeLessThan(NOTICE_SHARE);
+    expectConsistent(state);
   });
 
   test('holds back no war on a faction that is not the player', () => {
