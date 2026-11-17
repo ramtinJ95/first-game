@@ -182,6 +182,15 @@ describe('a band that does not take a power off notice', () => {
     ]);
   });
 
+  it('calls a share that rounds up to 80% but is below it just under 80%', () => {
+    const state = carthageAt(5400);
+    const [line] = cityGuards(state, [], roma(state), atlas).hire.threats;
+    expect(line).toContain(
+      'takes it to just under 80%, so it may not declare until it has stood at 80% for 30 days.',
+    );
+    expect(line).not.toContain('takes it to 80%');
+  });
+
   it('says even one more band after the one hired leaves it at 80% or more', () => {
     const state = carthageAt(8000);
     expect(cityGuards(state, [hireAtRoma], roma(state), atlas).hire.threats).toEqual([

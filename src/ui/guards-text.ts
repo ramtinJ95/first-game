@@ -116,6 +116,11 @@ function hireThreats(
   }
   const until = dateText(state.day + GUARD_DETER_DAYS);
   const percent = (n: number) => `${Math.round(Math.min(1, n) * 100)}%`;
+  // A share that rounds up to the notice must not read as it beside "below 80%".
+  const share = (n: number) =>
+    n < NOTICE_SHARE && percent(n) === percent(NOTICE_SHARE)
+      ? `just under ${percent(NOTICE_SHARE)}`
+      : percent(n);
   const lines: string[] = [];
   for (const power of Object.values(state.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (power.id === city.owner || power.kind !== 'greatPower') continue;
@@ -126,7 +131,7 @@ function hireThreats(
     const verdict = (readiness: number) =>
       readiness >= NOTICE_SHARE
         ? `still at ${percent(NOTICE_SHARE)} or more, so it may still declare ${when}`
-        : `below ${percent(NOTICE_SHARE)}, so it may not declare until it has stood at ${percent(NOTICE_SHARE)} for ${NOTICE_DAYS} days`;
+        : `${share(readiness).startsWith('just under') ? '' : `below ${percent(NOTICE_SHARE)}, `}so it may not declare until it has stood at ${percent(NOTICE_SHARE)} for ${NOTICE_DAYS} days`;
     if (now.pressed) {
       if (next)
         lines.push(
@@ -135,15 +140,15 @@ function hireThreats(
       continue;
     }
     const then = next && warReadiness(next, world, power.id, city.owner);
-    const oneMore = `One more band, counted until ${until}, takes it to ${percent(then?.readiness ?? 0)}, ${verdict(then?.readiness ?? 0)}`;
+    const oneMore = `One more band, counted until ${until}, takes it to ${share(then?.readiness ?? 0)}, ${verdict(then?.readiness ?? 0)}`;
     if (hired && now.readiness >= NOTICE_SHARE)
       lines.push(
-        `${name}, with the band you hired: ${percent(now.readiness)} of the strength it needs to declare war, ${verdict(now.readiness)}.${next ? ` ${oneMore}.` : ''}`,
+        `${name}, with the band you hired: ${share(now.readiness)} of the strength it needs to declare war, ${verdict(now.readiness)}.${next ? ` ${oneMore}.` : ''}`,
       );
     else if (!next) continue;
     else if (now.readiness >= NOTICE_SHARE)
       lines.push(
-        `${name} ${percent(now.readiness)} of the strength it needs to declare war. ${oneMore}.`,
+        `${name} ${share(now.readiness)} of the strength it needs to declare war. ${oneMore}.`,
       );
     else
       lines.push(
