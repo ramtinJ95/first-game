@@ -1,6 +1,10 @@
 import { writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { standingThreats, threatNewsOfDay } from '../../src/app/threat-news.ts';
+import {
+  standingThreats,
+  threatFadedNewsOfDay,
+  threatNewsOfDay,
+} from '../../src/app/threat-news.ts';
 import { warReadiness } from '../../src/sim/ai/war.ts';
 import type { FactionId } from '../../src/sim/ids.ts';
 import { areAtWar } from '../../src/sim/wars.ts';
@@ -32,6 +36,8 @@ interface Record {
   warnings: { day: number; power: string; named: number | null }[];
   /** The game's stops for a warning: one a day, whatever the powers it names. */
   stops: number;
+  /** The lines that tell a warned threat has passed, which stop nothing. */
+  faded: { day: number; text: string }[];
   wars: {
     day: number;
     power: string;
@@ -48,7 +54,15 @@ interface Record {
 }
 
 function play(seed: number, years: number): Record {
-  const record: Record = { seed, days: 0, readiness: {}, warnings: [], stops: 0, wars: [] };
+  const record: Record = {
+    seed,
+    days: 0,
+    readiness: {},
+    warnings: [],
+    stops: 0,
+    faded: [],
+    wars: [],
+  };
   const told = new Set<string>();
   const open = new Map<FactionId, number>();
   playCautiousRome(
@@ -56,6 +70,8 @@ function play(seed: number, years: number): Record {
     years,
     ({ before, after, events }) => {
       const day = before.day;
+      for (const alert of threatFadedNewsOfDay(before, after, world, told))
+        record.faded.push({ day, text: alert.text });
       for (const alert of threatNewsOfDay(before, after, world, told)) {
         record.stops++;
         for (const power of warnedPowers(alert.text)) {
@@ -139,10 +155,11 @@ const staleSameNotice = stale.filter((w) => {
 }).length;
 const warnings = rows.reduce((s, r) => s + r.warnings.length, 0);
 const stops = rows.map((r) => r.stops);
+const faded = rows.map((r) => r.faded.length);
 const gaps = rows.flatMap((r) =>
   r.warnings.flatMap((w) => (w.named === null ? [] : [w.named - w.day])),
 );
 const anyDay = rows.reduce((s, r) => s + r.warnings.filter((w) => w.named === null).length, 0);
 console.log(
-  `Summary: ${rows.length} games; warnings a game ${(warnings / rows.length).toFixed(1)}; stops a game ${(stops.reduce((s, n) => s + n, 0) / rows.length).toFixed(1)} (min ${Math.min(...stops)}, max ${Math.max(...stops)}); smallest gap from a warning to the day it names ${Math.min(...gaps)} days (warnings under 24: ${gaps.filter((g) => g < 24).length}, reminders that say any day now: ${anyDay}); wars on Rome ${wars.length}, warned of their own notice 24 days or more before ${ownNotice}; wars more than 60 days after their last warning's day ${stale.length} (${staleSameNotice} on the warned notice, ${stale.length - staleSameNotice} on a later one)`,
+  `Summary: ${rows.length} games; warnings a game ${(warnings / rows.length).toFixed(1)}; stops a game ${(stops.reduce((s, n) => s + n, 0) / rows.length).toFixed(1)} (min ${Math.min(...stops)}, max ${Math.max(...stops)}); smallest gap from a warning to the day it names ${Math.min(...gaps)} days (warnings under 24: ${gaps.filter((g) => g < 24).length}, reminders that say any day now: ${anyDay}); wars on Rome ${wars.length}, warned of their own notice 24 days or more before ${ownNotice}; wars more than 60 days after their last warning's day ${stale.length} (${staleSameNotice} on the warned notice, ${stale.length - staleSameNotice} on a later one); lines that a warned threat has passed a game ${(faded.reduce((s, n) => s + n, 0) / rows.length).toFixed(1)} (min ${Math.min(...faded)}, max ${Math.max(...faded)})`,
 );

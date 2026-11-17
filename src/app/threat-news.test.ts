@@ -20,6 +20,7 @@ import {
   THREAT_STAND_DAYS,
   powersNearWar,
   standingThreats,
+  threatFadedNewsOfDay,
   threatNewsOfDay,
 } from './threat-news.ts';
 
@@ -441,5 +442,44 @@ describe('a war warning stops the game', () => {
   test('the Game menu setting turns the stop off', () => {
     const news = newsOf(game(5300, 'full'), new Set());
     expect(stopsOfDay(news, { ...ALL_PAUSES, warThreat: false }, new Set()).stop).toBe(false);
+  });
+});
+
+describe('the news of a warned threat that fades', () => {
+  /** Carthage on notice since day 94 on day 120, and the day after, when it stands lower. */
+  function fading(told: Set<string>, after = game(2000, 'empty', 121)) {
+    const before = game(5300, 'full', 120);
+    notice(before, world);
+    const power = before.factions[carthage];
+    if (!power) throw new Error('no Carthage');
+    power.noticeSince = 94 as Day;
+    notice(after, world);
+    return { before, after, news: threatFadedNewsOfDay(before, after, world, told) };
+  }
+
+  test('tells once, without stopping the game, that a power the player was warned of no longer stands near war', () => {
+    const told = new Set(['threat:carthage:100']);
+    const { after, news } = fading(told);
+    expect(news.map((alert) => alert.text)).toEqual([
+      expect.stringMatching(
+        /^Carthage's threat has passed for now: it has fallen to \d+% of the strength it needs to declare war on you, and must stand at 80% for 30 days before it may\.$/,
+      ),
+    ]);
+    expect(news[0]?.tone).toBe('good');
+    expect(stopsOfDay(news, ALL_PAUSES, new Set()).stop).toBe(false);
+    const next = game(2000, 'empty', 122);
+    notice(next, world);
+    expect(threatFadedNewsOfDay(after, next, world, told)).toEqual([]);
+  });
+
+  test('says nothing of a notice the player was never warned of', () => {
+    expect(fading(new Set()).news).toEqual([]);
+    expect(fading(new Set(['threat:carthage:60'])).news).toEqual([]);
+  });
+
+  test('says nothing when the notice ends in a war', () => {
+    const atWar = game(5300, 'full', 121);
+    executeOrder(atWar, { kind: 'declareWar', faction: carthage, against: rome }, world);
+    expect(fading(new Set(['threat:carthage:100']), atWar).news).toEqual([]);
   });
 });
