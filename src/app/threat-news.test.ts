@@ -5,6 +5,7 @@ import type { CityId, FactionId } from '../sim/ids.ts';
 import { parseMap } from '../sim/map.ts';
 import { newGame } from '../sim/new-game.ts';
 import { executeOrder } from '../sim/orders/orders.ts';
+import { tick } from '../sim/tick.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { Stores } from '../sim/state/faction.ts';
@@ -93,7 +94,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     const news = newsOf(state, told);
     expect(news.map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Your treasury of [\d,]+ gold lowers the strength it needs by 25%, so more gold brings war nearer\. Your armies near Roma and guards hired there count against it, guards for their first 90 days\. See At peace in Wars\.$/,
+        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Your treasury of [\d,]+ gold lowers the strength it needs by 25%, so more gold brings war nearer\. Your armies on land within 1,500 km count; more men, or guards at Roma for 90 days, lower it\. See At peace in Wars\.$/,
       ),
     ]);
     expect(news[0]?.tone).toBe('bad');
@@ -198,11 +199,54 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     const state = game(5300, 'full');
     const carthage = standingThreats(state, world).find((t) => t.power === 'carthage');
     expect(carthage?.text).toMatch(
-      /^Carthage has \d+% of the strength it needs to declare war on you, against your forces near Roma\. Your treasury of [\d,]+ gold lowers the strength it needs by 25%, so more gold brings war nearer\. Your armies near Roma and guards hired there count against it, guards for their first 90 days\.$/,
+      /^Carthage has \d+% of the strength it needs to declare war on you, against your forces near Roma\. Your treasury of [\d,]+ gold lowers the strength it needs by 25%, so more gold brings war nearer\. Your armies on land within 1,500 km count; more men, or guards at Roma for 90 days, lower it\.$/,
     );
     const weaker = standingThreats(game(2000, 'full'), world).find((t) => t.power === 'carthage');
     expect(weaker?.readiness).toBeLessThan(carthage?.readiness ?? 0);
     expect(standingThreats(state, world).map((t) => t.power)).not.toContain('rome');
+  });
+
+  test('counts every army on land within 1,500 km of the city it weighs, so marching there lowers nothing and more men do', () => {
+    /** Carthage's share against Rome with Rome's army idle at the city, as `game` gives it otherwise. */
+    const shareWith = (city: string, men = 4000) => {
+      const state = game(5300, 'full');
+      spearmenOf(state, rome).men = men;
+      const army = Object.values(state.armies).find((a) => a.owner === rome);
+      const at = state.cities[city as CityId];
+      if (!army || !at) throw new Error(`no Roman army or ${city}`);
+      army.activity = { kind: 'idle', position: at.position };
+      return standingThreats(state, world).find((t) => t.power === carthage)?.readiness ?? 0;
+    };
+    const atRoma = shareWith('roma');
+    expect(shareWith('mediolanum')).toBe(atRoma);
+    expect(shareWith('persepolis')).toBeGreaterThan(atRoma);
+    expect(shareWith('roma', 6000)).toBeLessThan(atRoma);
+  });
+
+  test('leaves out an army at sea, however near', () => {
+    const shareOf = (state: GameState) =>
+      standingThreats(state, world).find((t) => t.power === carthage)?.readiness ?? 0;
+    let ashore = game(5300, 'full');
+    let afloat = game(5300, 'full');
+    const army = Object.values(afloat.armies).find((a) => a.owner === rome);
+    const roma = afloat.cities['roma' as CityId];
+    if (!army || army.activity.kind !== 'idle' || !roma) throw new Error('no idle Roman army');
+    let orders = [
+      {
+        kind: 'embark',
+        faction: rome,
+        army: army.id,
+        to: 'syracusae' as CityId,
+        from: roma.position,
+      } as const,
+    ];
+    for (let day = 0; day < 30 && afloat.armies[army.id]?.activity.kind !== 'embarked'; day++) {
+      afloat = tick(afloat, orders, world).state;
+      ashore = tick(ashore, [], world).state;
+      orders = [];
+    }
+    expect(afloat.armies[army.id]?.activity.kind).toBe('embarked');
+    expect(shareOf(afloat)).toBeGreaterThan(shareOf(ashore));
   });
 
   test('says a power far from your cities is not weighing a war on you', () => {

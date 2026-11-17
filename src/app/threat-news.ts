@@ -12,7 +12,7 @@ import { TROOPS, type Troop } from '../sim/troops.ts';
 import { beleaguered } from '../sim/systems/sieges.ts';
 import type { Stores } from '../sim/state/faction.ts';
 import { GUARD_DETER_DAYS } from '../sim/guards.ts';
-import { NOTICE_DAYS, NOTICE_SHARE } from '../sim/ai/thresholds.ts';
+import { NOTICE_DAYS, NOTICE_SHARE, WAR_FRONT_KM } from '../sim/ai/thresholds.ts';
 
 type State = DeepReadonly<GameState>;
 
@@ -153,7 +153,8 @@ function weighed(state: State, threat: Threat): string {
 
 /**
  * What lowers the threat, as the news and the wars panel both say. Weighing a city, the
- * power counts the armies near it, its garrison and its guards for their first
+ * power counts every army of the player's on land within WAR_FRONT_KM of it, so an army
+ * marched nearer lowers nothing, the city's garrison, and its guards for their first
  * GUARD_DETER_DAYS, less what the player's treasury takes off. Pressing a rival that
  * has kept to the cities it began with, it counts only the rival's armies, so guards
  * do nothing there and more men under arms, wherever they stand, are what help.
@@ -172,7 +173,7 @@ function whatCounts(
     threat.hoard > 0
       ? ` Your treasury of ${whole(gold)} gold lowers the strength it needs by ${Math.round(threat.hoard * 100)}%, so more gold brings war nearer.`
       : '';
-  return `${hoard}${front ? ` Your armies near ${front.name} and guards hired there count against it, guards for their first ${GUARD_DETER_DAYS} days.` : ''}`;
+  return `${hoard}${front ? ` Your armies on land within ${whole(WAR_FRONT_KM)} km count; more men, or guards at ${front.name} for ${GUARD_DETER_DAYS} days, lower it.` : ''}`;
 }
 
 /** How near one great power at peace with the player stands to declaring war on it today, as the wars panel lists it. */
