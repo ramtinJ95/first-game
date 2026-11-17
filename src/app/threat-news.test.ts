@@ -368,7 +368,7 @@ describe('how near each power at peace stands to declaring war, as the wars pane
       return threatNewsOfDay(before, after, world, new Set())[0]?.text ?? '';
     };
     expect(newsOn(1)).toContain(
-      'may declare from Year 1, day 101 if it holds it. More men lower it, not guards: order Skirmishers now for 900 gold; they muster and lower it from Year 1, day 111, 10 days after war may first come.',
+      'may declare from Year 1, day 101 if it holds it. More men lower it, not guards: Skirmishers ordered now muster on Year 1, day 111.',
     );
     expect(newsOn(0)).toContain(
       'may declare any day now if it holds it. More men lower it, not guards: Skirmishers cost 900 gold and train in 10 days.',
@@ -408,6 +408,20 @@ describe('how near each power at peace stands to declaring war, as the wars pane
       { gold: 99_999, manpower: 99_999 },
     ]) {
       const [warning] = newsOf(pressedWith(stores), new Set());
+      expect(warning?.text.length ?? 0).toBeLessThanOrEqual(355);
+    }
+  });
+
+  test('a first warning that comes late, as after a save is imported, is no longer either', () => {
+    for (const stores of [
+      { gold: 2229, manpower: 450 },
+      { gold: 5000, manpower: 5000 },
+      { gold: 99_999, manpower: 99_999 },
+    ]) {
+      const state = pressedWith(stores);
+      state.day = 100 as Day;
+      const [warning] = onNotice(state, 78, new Set());
+      expect(warning?.text).toMatch(/ordered now muster on Year 1, day 1[12]0\./);
       expect(warning?.text.length ?? 0).toBeLessThanOrEqual(355);
     }
   });

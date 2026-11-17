@@ -97,7 +97,7 @@ export function threatNewsOfDay(
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
   const text =
     others.length === 0
-      ? `${first.name} could soon declare war on you: it has ${percent(first.threat)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.threat, undefined, first.by)} See At peace in Wars.`
+      ? `${first.name} could soon declare war on you: it has ${percent(first.threat)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.threat, undefined, first.by, 'corner')} See At peace in Wars.`
       : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => percent(w.threat)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`;
   return [
     {
@@ -198,9 +198,10 @@ function whatCounts(
   threat: Threat,
   stores: DeepReadonly<Stores> | undefined,
   by: number | undefined,
+  where: Where = 'panel',
 ): string {
   if (threat.pressed)
-    return ` ${raiseAdvice(state, stores ?? state.factions[state.player]?.stores, by)}. It weighs you so only while you hold no more cities than at the start.`;
+    return ` ${raiseAdvice(state, stores ?? state.factions[state.player]?.stores, by, where)}. It weighs you so only while you hold no more cities than at the start.`;
   const front = state.cities[threat.front];
   const gold = state.factions[state.player]?.stores.gold ?? 0;
   const hoard =
@@ -209,6 +210,9 @@ function whatCounts(
       : '';
   return `${hoard}${front ? ` Your armies on land within ${whole(WAR_FRONT_KM)} km count; more men, or guards at ${front.name} for ${GUARD_DETER_DAYS} days, lower it.` : ''}`;
 }
+
+/** Where the advice is read: the corner, with room for the warning's 12 lines, or the wars panel. */
+type Where = 'corner' | 'panel';
 
 /** How near one great power at peace with the player stands to declaring war on it today, as the wars panel lists it. */
 export interface StandingThreat {
@@ -273,12 +277,14 @@ export function powersNearWar(state: State, world: World): number {
  * cities that may recruit now. With none affordable in time, the cheapest it can afford and the
  * day it would muster, since men who muster on or after that day still lower a notice the power
  * holds. With none affordable, the cheapest troop's price and days and what the player lacks
- * for it. Once that day has passed, `by` is undefined and every troop is in time.
+ * for it. Once that day has passed, `by` is undefined and every troop is in time. The corner
+ * names the muster day only, as its warning names the day war may come.
  */
 function raiseAdvice(
   state: State,
   stores: DeepReadonly<Stores> | undefined,
   by: number | undefined,
+  where: Where,
 ): string {
   const cities = Object.values(state.cities).filter(
     (city) => city.owner === state.player && city.unrestDays === 0 && !beleaguered(state, city),
@@ -301,6 +307,9 @@ function raiseAdvice(
   const [late] = affordable;
   if (late && by !== undefined) {
     const musters = state.day + days(late);
+    // The corner names the day war may come just before, and has no room to say it twice.
+    if (where === 'corner')
+      return `More men lower it, not guards: ${TROOP_NAMES[late]} ordered now muster on ${dateText(musters)}`;
     const when =
       musters === by
         ? 'the first day war may come'
