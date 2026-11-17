@@ -124,7 +124,8 @@ const mayDeclare = (state: State, since: number) => {
 /**
  * The great powers at peace with the player whose notice the day ended, of which the player
  * was warned: one line each, which does not stop the game, so a player who answered a
- * warning learns that it passed. A notice that ends in a war or a truce is told of by them.
+ * warning learns that it passed. A notice that ends in a war or a truce is told of by them, and
+ * one that ends while the power stands at NOTICE_SHARE again by the day's end is not told.
  */
 export function threatFadedNewsOfDay(
   before: State,
@@ -140,8 +141,10 @@ export function threatFadedNewsOfDay(
     const was = before.factions[power.id]?.noticeSince ?? null;
     const last = warnedOn(remembered, power.id);
     if (power.noticeSince !== null || was === null || last === undefined || last < was) continue;
-    const name = factionName(after, power.id);
     const threat = readinessOf(after, world, power.id);
+    // The notice is reckoned before the day ends, so guards that stop counting at its end can lift the power back.
+    if (threat && threat.readiness >= NOTICE_SHARE) continue;
+    const name = factionName(after, power.id);
     alerts.push({
       kind: 'warThreatFaded',
       day: before.day,

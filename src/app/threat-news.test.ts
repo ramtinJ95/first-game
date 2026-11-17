@@ -446,14 +446,17 @@ describe('a war warning stops the game', () => {
 });
 
 describe('the news of a warned threat that fades', () => {
-  /** Carthage on notice since day 94 on day 120, and the day after, when it stands lower. */
-  function fading(told: Set<string>, after = game(2000, 'empty', 121)) {
+  /**
+   * Carthage on notice since day 94 on day 120, and the day after, when it stands lower; with
+   * `reckon` false the day after keeps no notice whatever it stands at.
+   */
+  function fading(told: Set<string>, after = game(2000, 'empty', 121), reckon = true) {
     const before = game(5300, 'full', 120);
     notice(before, world);
     const power = before.factions[carthage];
     if (!power) throw new Error('no Carthage');
     power.noticeSince = 94 as Day;
-    notice(after, world);
+    if (reckon) notice(after, world);
     return { before, after, news: threatFadedNewsOfDay(before, after, world, told) };
   }
 
@@ -475,6 +478,12 @@ describe('the news of a warned threat that fades', () => {
   test('says nothing of a notice the player was never warned of', () => {
     expect(fading(new Set()).news).toEqual([]);
     expect(fading(new Set(['threat:carthage:60'])).news).toEqual([]);
+  });
+
+  test("says nothing of a notice that ends while the power stands at the notice again by the day's end", () => {
+    // As on a day guards stop counting after the notice was reckoned lower.
+    const after = game(5300, 'full', 121);
+    expect(fading(new Set(['threat:carthage:100']), after, false).news).toEqual([]);
   });
 
   test('says nothing when the notice ends in a war', () => {
