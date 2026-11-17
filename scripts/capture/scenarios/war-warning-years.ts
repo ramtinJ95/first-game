@@ -67,7 +67,7 @@ const egypt = 'egypt' as FactionId;
 /**
  * Carthage on day 200 on the notice Rome was warned of on day 186, the day after it went to war
  * with an Egypt of 30,000 men that holds Lepcis Magna, in its reach, so the war holds back all
- * its armies and the next day's line says why its threat passed.
+ * its armies, and a week on the line says why its threat passed.
  */
 function carthageAtWarElsewhere(): string {
   const state = carthageNearsWar();

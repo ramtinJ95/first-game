@@ -16,6 +16,7 @@ import { dateText } from './names.ts';
 import { NOTICE_DAYS } from '../sim/ai/thresholds.ts';
 import { notice } from '../sim/systems/notice.ts';
 import { ALL_PAUSES, stopsOfDay } from './pauses.ts';
+import type { Alert } from './alerts.ts';
 import {
   THREAT_STAND_DAYS,
   powersNearWar,
@@ -498,7 +499,9 @@ describe('a war warning stops the game', () => {
 describe('the news of a warned threat that fades', () => {
   /**
    * Carthage on notice since day 94 on day 120, and the day after, when it stands lower; with
-   * `reckon` false the day after keeps no notice whatever it stands at.
+   * `reckon` false the day after keeps no notice whatever it stands at. `news` is the news of
+   * the day the notice ends, and `week` that of each day after it that the power stands as on
+   * the day after, through the day it has stood off notice THREAT_STAND_DAYS.
    */
   function fading(told: Set<string>, after = game(2000, 'empty', 121), reckon = true) {
     const before = game(5300, 'full', 120);
@@ -507,7 +510,16 @@ describe('the news of a warned threat that fades', () => {
     if (!power) throw new Error('no Carthage');
     power.noticeSince = 94 as Day;
     if (reckon) notice(after, world);
-    return { before, after, news: threatFadedNewsOfDay(before, after, world, told) };
+    const news = threatFadedNewsOfDay(before, after, world, told);
+    const week: Alert[][] = [];
+    let day = after;
+    for (let n = 1; n < THREAT_STAND_DAYS; n++) {
+      const next = structuredClone(day);
+      next.day = (day.day + 1) as Day;
+      week.push(threatFadedNewsOfDay(day, next, world, told));
+      day = next;
+    }
+    return { before, after: day, news: [...news, ...week.flat()], first: news, week };
   }
 
   test('tells once, without stopping the game, that a power the player was warned of no longer stands near war', () => {
@@ -523,6 +535,78 @@ describe('the news of a warned threat that fades', () => {
     const next = game(2000, 'empty', 122);
     notice(next, world);
     expect(threatFadedNewsOfDay(after, next, world, told)).toEqual([]);
+  });
+
+  test('waits until the power has stood off notice a week, as the warning waits', () => {
+    const { first, week } = fading(new Set(['threat:carthage:100']));
+    expect(first).toEqual([]);
+    expect(week.slice(0, -1).flat()).toEqual([]);
+    expect(week.at(-1)?.map((alert) => alert.kind)).toEqual(['warThreatFaded']);
+    expect(THREAT_STAND_DAYS).toBe(7);
+    expect(week).toHaveLength(6);
+  });
+
+  test('says nothing of a strength that comes back on notice within the week, nor when that notice ends unwarned', () => {
+    const told = new Set(['threat:carthage:100']);
+    const before = game(5300, 'full', 120);
+    notice(before, world);
+    const punic = before.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 94 as Day;
+    const off = game(2000, 'empty', 121);
+    notice(off, world);
+    const back = game(5300, 'full', 124);
+    notice(back, world);
+    expect(back.factions[carthage]?.noticeSince).toBe(124);
+    const news = [
+      ...threatFadedNewsOfDay(before, off, world, told),
+      ...threatFadedNewsOfDay(off, back, world, told),
+    ];
+    let day = game(2000, 'empty', 125);
+    notice(day, world);
+    news.push(...threatFadedNewsOfDay(back, day, world, told));
+    for (let n = 0; n < 2 * THREAT_STAND_DAYS; n++) {
+      const next = structuredClone(day);
+      next.day = (day.day + 1) as Day;
+      news.push(...threatFadedNewsOfDay(day, next, world, told));
+      day = next;
+    }
+    expect(news).toEqual([]);
+  });
+
+  test('says nothing when a war comes within the week', () => {
+    const told = new Set(['threat:carthage:100']);
+    const before = game(5300, 'full', 120);
+    notice(before, world);
+    const punic = before.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 94 as Day;
+    const off = game(2000, 'empty', 121);
+    notice(off, world);
+    expect(threatFadedNewsOfDay(before, off, world, told)).toEqual([]);
+    expect([...told].some((key) => key.startsWith('threat-off:'))).toBe(true);
+    const atWar = game(2000, 'empty', 122);
+    executeOrder(atWar, { kind: 'declareWar', faction: carthage, against: rome }, world);
+    expect(threatFadedNewsOfDay(atWar, atWar, world, told)).toEqual([]);
+    expect([...told].some((key) => key.startsWith('threat-off:'))).toBe(false);
+  });
+
+  test('keeps no waiting line for a power defeated within the week', () => {
+    const told = new Set(['threat:carthage:100']);
+    const before = game(5300, 'full', 120);
+    notice(before, world);
+    const punic = before.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 94 as Day;
+    const off = game(2000, 'empty', 121);
+    notice(off, world);
+    threatFadedNewsOfDay(before, off, world, told);
+    const defeated = game(2000, 'empty', 122);
+    const fallen = defeated.factions[carthage];
+    if (!fallen) throw new Error('no Carthage');
+    fallen.defeatedOn = 122 as Day;
+    expect(threatFadedNewsOfDay(off, defeated, world, told)).toEqual([]);
+    expect([...told].some((key) => key.startsWith('threat-off:'))).toBe(false);
   });
 
   test('says nothing of a notice the player was never warned of', () => {

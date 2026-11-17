@@ -131,28 +131,46 @@ const mayDeclare = (state: State, since: number) => {
 };
 
 /**
- * The great powers at peace with the player whose notice the day ended, of which the player
- * was warned: one line each, which does not stop the game, so a player who answered a
- * warning learns that it passed. A notice that ends in a war or a truce is told of by them, and
- * one that ends while the power stands at NOTICE_SHARE again by the day's end is not told.
+ * The great powers at peace with the player whose warned notice has ended THREAT_STAND_DAYS
+ * ago, and that have stood off notice every day since: one line each, which does not stop the
+ * game, so a player who answered a warning learns that it passed. The line waits as the warning
+ * does, so a strength that dips for days says nothing, and a new notice that soon follows is told
+ * by its own warning alone. The day the notice ended is kept in the told keys as
+ * `threat-off:<power>:<day>`. A notice that ends in a war or a truce is told of by them, and the
+ * line waits while the power stands at NOTICE_SHARE again by the day's end.
  */
 export function threatFadedNewsOfDay(
   before: State,
   after: State,
   world: World,
-  remembered: ReadonlySet<string>,
+  remembered: Set<string>,
 ): Alert[] {
   const player = after.player;
   const alerts: Alert[] = [];
   for (const power of Object.values(after.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
-    if (power.id === player || power.kind !== 'greatPower' || power.defeatedOn !== null) continue;
-    if (areAtWar(after, power.id, player) || truceBetween(after, power.id, player)) continue;
+    if (power.id === player || power.kind !== 'greatPower') continue;
+    const ended = endedOn(remembered, power.id);
+    const off = `${OFF}${power.id}:${ended}`;
+    if (
+      power.defeatedOn !== null ||
+      power.noticeSince !== null ||
+      areAtWar(after, power.id, player) ||
+      truceBetween(after, power.id, player)
+    ) {
+      remembered.delete(off);
+      continue;
+    }
     const was = before.factions[power.id]?.noticeSince ?? null;
     const last = warnedOn(remembered, power.id);
-    if (power.noticeSince !== null || was === null || last === undefined || last < was) continue;
+    if (ended === undefined) {
+      if (was === null || last === undefined || last < was) continue;
+      remembered.add(`${OFF}${power.id}:${before.day}`);
+    }
+    if (before.day - (ended ?? before.day) + 1 < THREAT_STAND_DAYS) continue;
     const threat = readinessOf(after, world, power.id);
     // The notice is reckoned before the day ends, so guards that stop counting at its end can lift the power back.
     if (threat && threat.readiness >= NOTICE_SHARE) continue;
+    remembered.delete(`${OFF}${power.id}:${ended ?? before.day}`);
     const name = factionName(after, power.id);
     alerts.push({
       kind: 'warThreatFaded',
@@ -162,6 +180,15 @@ export function threatFadedNewsOfDay(
     });
   }
   return alerts;
+}
+
+const OFF = 'threat-off:';
+
+/** The day a warned notice of the power ended, kept in the told keys until its line is told. */
+function endedOn(remembered: ReadonlySet<string>, faction: string): number | undefined {
+  const prefix = `${OFF}${faction}:`;
+  for (const key of remembered) if (key.startsWith(prefix)) return Number(key.slice(prefix.length));
+  return undefined;
 }
 
 /**
