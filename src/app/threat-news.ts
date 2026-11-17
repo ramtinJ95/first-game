@@ -166,27 +166,26 @@ export function threatFadedNewsOfDay(
 
 /**
  * Why a power no longer stands near war with the player, as a stranger can check it. A power
- * holds back the whole field strength of each enemy it fights, so one whose wars hold back all
- * its armies stands at 0, and one whose armies are all in battle, in sieges or at sea, or whose
- * cities are out of reach of the player's, weighs no war at all.
+ * holds back the whole field strength of each enemy it fights within reach, so one whose wars
+ * outweigh all its armies stands at 0, and one with no army idle or marching that can fight, or
+ * with no city of the player's in reach, weighs no war at all.
  */
 function whyFaded(state: State, power: FactionId, threat: Threat | undefined): string {
-  if (threat && percent(threat) !== '0%')
-    return `it has fallen to ${percent(threat)} of the strength it needs to declare war on you`;
-  const enemies = Object.values(state.factions)
-    .filter((other) => other.id !== power && areAtWar(state, power, other.id))
-    .sort((a, b) => (a.id < b.id ? -1 : 1))
-    .map((other) => factionName(state, other.id));
-  const atWar = `it is at war with ${listed(enemies)}, which ties down all its armies`;
-  if (threat) return enemies.length > 0 ? atWar : 'it has fallen far below the strength it needs';
+  if (threat && threat.readiness > 0)
+    return `it has fallen to ${percent(threat) === '0%' ? 'under 1%' : percent(threat)} of the strength it needs to declare war on you`;
+  if (threat)
+    return threat.heldBy.length > 0
+      ? `it is at war with ${listed(threat.heldBy.map((enemy) => factionName(state, enemy)))}, which ties down all its armies`
+      : 'it has no strength to spare against you';
   const ready = Object.values(state.armies).some(
     (army) =>
       army.owner === power &&
       (army.activity.kind === 'idle' || army.activity.kind === 'marching') &&
       canFight(state, army),
   );
-  if (ready) return 'none of its cities is near enough to yours to weigh a war on you';
-  return enemies.length > 0 ? atWar : 'none of its armies stands ready to march';
+  return ready
+    ? 'none of its cities is near enough to yours to weigh a war on you'
+    : 'none of its armies stands ready to march';
 }
 
 const listed = (items: readonly string[]) =>

@@ -32,6 +32,7 @@ const rome = 'rome' as FactionId;
 const carthage = 'carthage' as FactionId;
 const macedon = 'macedon' as FactionId;
 const egypt = 'egypt' as FactionId;
+const persia = 'persia' as FactionId;
 
 const WEST = [
   'caralis',
@@ -530,6 +531,31 @@ describe('the news of a warned threat that fades', () => {
     expect(news.map((alert) => alert.text)).toEqual([
       "Carthage's threat has passed for now: it is at war with Egypt, which ties down all its armies, and must stand at 80% for 30 days before it may.",
     ]);
+  });
+
+  test('names a share under 1% as under 1%, not as a war that ties down all its armies', () => {
+    const atWar = game(5300, 'full', 121);
+    changeCityOwner(atWar, 'lepcis-magna' as CityId, egypt);
+    spearmenOf(atWar, egypt).men = 5299;
+    executeOrder(atWar, { kind: 'declareWar', faction: carthage, against: egypt }, world);
+    const { news } = fading(new Set(['threat:carthage:100']), atWar);
+    expect(news[0]?.text).toContain(
+      'it has fallen to under 1% of the strength it needs to declare war on you',
+    );
+  });
+
+  test('names no war for armies that are not ready to march, when the war holds nothing back', () => {
+    const away = game(5300, 'full', 121);
+    executeOrder(away, { kind: 'declareWar', faction: carthage, against: persia }, world);
+    for (const id of Object.values(away.armies).flatMap((army) =>
+      army.owner === carthage ? army.formations : [],
+    )) {
+      const formation = away.formations[id];
+      if (formation) formation.morale = 0;
+    }
+    const { news } = fading(new Set(['threat:carthage:100']), away);
+    expect(news[0]?.text).toContain('none of its armies stands ready to march');
+    expect(news[0]?.text).not.toContain('Persia');
   });
 
   test('gives the reason when no army of its stands ready to march', () => {
