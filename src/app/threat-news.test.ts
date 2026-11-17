@@ -164,7 +164,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     );
   });
 
-  test('a power held on one notice is told of again 60 days after each day it was told of, so no war comes later than that', () => {
+  test('a power held on one notice is told of again 60 days after each day it was told of', () => {
     const told = new Set<string>();
     const state = game(5300, 'full');
     const power = state.factions[carthage];
