@@ -44,6 +44,16 @@
   const threats = $derived(
     standingThreats(game, world, afterWaiting(game, pending, world).factions[game.player]?.stores),
   );
+  const nearWar = $derived(threats.some((threat) => (threat.readiness ?? 0) >= THREAT_WARN));
+  // A warning points the player here, so the powers near war come first, and above everything else.
+  const listed = $derived(
+    nearWar
+      ? [
+          ...threats.filter((threat) => (threat.readiness ?? 0) >= THREAT_WARN),
+          ...threats.filter((threat) => (threat.readiness ?? 0) < THREAT_WARN),
+        ]
+      : threats,
+  );
   let open = $state<FactionId | undefined>(undefined);
   let payer = $state<Payer>('nobody');
   let gold = $state(0);
@@ -135,6 +145,20 @@
         ? 'The game is paused for your answer. It runs again only when you resume it.'
         : `The game runs while ${shown.name}'s offer waits for your answer.`}
     </p>
+  {/if}
+
+  {#snippet atPeace()}
+    <h3>At peace</h3>
+    <ul class="facts" data-testid="threats">
+      {#each listed as threat (threat.power)}
+        <li data-testid="threat-row" class:bad={(threat.readiness ?? 0) >= THREAT_WARN}>
+          {threat.text}
+        </li>
+      {/each}
+    </ul>
+  {/snippet}
+  {#if nearWar}
+    {@render atPeace()}
   {/if}
 
   {#if room.wars.length === 0}
@@ -305,15 +329,8 @@
     </div>
   {/if}
 
-  {#if threats.length > 0}
-    <h3>At peace</h3>
-    <ul class="facts" data-testid="threats">
-      {#each threats as threat (threat.power)}
-        <li data-testid="threat-row" class:bad={(threat.readiness ?? 0) >= THREAT_WARN}>
-          {threat.text}
-        </li>
-      {/each}
-    </ul>
+  {#if threats.length > 0 && !nearWar}
+    {@render atPeace()}
   {/if}
   {#if room.truces.length > 0}
     <h3>Truces</h3>
