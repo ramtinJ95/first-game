@@ -266,14 +266,14 @@ export function powersNearWar(state: State, world: World): number {
 }
 
 /**
- * What raising men takes today, as the field-army threat advises it, among the troops that
- * finish training before the day `by` the power may first declare, since it decides before that
- * day's recruits muster: the cheapest the player can afford with the stores given, which the
- * wars panel reckons after the orders waiting, and its quickest training among the cities that
- * may recruit now; or, with none affordable, the cheapest one's price and days and what the
- * player lacks for it; or that none is ready in time. Once that day has passed, `by` is
- * undefined and every troop counts, since men raised then still weigh for as long as the
- * power holds its notice.
+ * What raising men takes today, as the field-army threat advises it: the cheapest troop the
+ * player can afford with the stores given, which the wars panel reckons after the orders
+ * waiting, among those that finish training before the day `by` the power may first declare,
+ * since it decides before that day's recruits muster, with its quickest training among the
+ * cities that may recruit now. With none affordable in time, the cheapest it can afford and the
+ * day it would muster, since men who muster on or after that day still lower a notice the power
+ * holds. With none affordable, the cheapest troop's price and days and what the player lacks
+ * for it. Once that day has passed, `by` is undefined and every troop is in time.
  */
 function raiseAdvice(
   state: State,
@@ -287,20 +287,28 @@ function raiseAdvice(
     return 'More men lower it, not guards, but no city of yours may recruit now';
   const days = (troop: Troop) =>
     Math.min(...cities.map((city) => trainingDaysAt(city, TROOPS[troop].recruit.days)));
-  const left = by === undefined ? Infinity : by - state.day;
-  const troops = (Object.keys(TROOPS) as Troop[])
-    .filter((troop) => days(troop) < left)
-    .sort((a, b) => TROOPS[a].recruit.gold - TROOPS[b].recruit.gold);
   const gold = stores?.gold ?? 0;
   const manpower = stores?.manpower ?? 0;
-  const affordable = troops.find(
+  const troops = (Object.keys(TROOPS) as Troop[]).sort(
+    (a, b) => TROOPS[a].recruit.gold - TROOPS[b].recruit.gold,
+  );
+  const affordable = troops.filter(
     (troop) => TROOPS[troop].recruit.gold <= gold && TROOPS[troop].recruit.men <= manpower,
   );
-  if (affordable)
-    return `More men lower it, not guards: ${TROOP_NAMES[affordable]} cost ${whole(TROOPS[affordable].recruit.gold)} gold and train in ${whole(days(affordable))} days`;
+  const inTime = affordable.find((troop) => by === undefined || state.day + days(troop) < by);
+  if (inTime)
+    return `More men lower it, not guards: ${TROOP_NAMES[inTime]} cost ${whole(TROOPS[inTime].recruit.gold)} gold and train in ${whole(days(inTime))} days`;
+  const [late] = affordable;
+  if (late && by !== undefined) {
+    const musters = state.day + days(late);
+    const when =
+      musters === by
+        ? 'the first day war may come'
+        : `${whole(musters - by)} days after war may first come`;
+    return `More men lower it, not guards: order ${TROOP_NAMES[late]} now for ${whole(TROOPS[late].recruit.gold)} gold; they muster and lower it from ${dateText(musters)}, ${when}`;
+  }
   const [cheapest] = troops;
-  if (!cheapest)
-    return 'More men lower it, not guards, but none raised now is ready before war may come';
+  if (!cheapest) return 'More men lower it, not guards';
   const { gold: price, men } = TROOPS[cheapest].recruit;
   const name = TROOP_NAMES[cheapest];
   return gold < price
