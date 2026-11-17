@@ -462,6 +462,21 @@ describe('a war warning stops the game', () => {
     expect(macedonian.stop).toBe(true);
   });
 
+  test('a reminder told on one day with a first warning marks only the reminded power, with the day it was warned', () => {
+    const both = game(5300, 'full', 184);
+    spearmenOf(both, macedon).men = 30_000;
+    notice(both, world);
+    const punic = both.factions[carthage];
+    const macedonians = both.factions[macedon];
+    if (!punic || !macedonians) throw new Error('no Carthage or Macedon');
+    punic.noticeSince = 94 as Day;
+    macedonians.noticeSince = (184 - THREAT_STAND_DAYS + 1) as Day;
+    const [news] = threatNewsOfDay(both, both, world, new Set(['threat:carthage:100']));
+    expect(news?.text).toMatch(
+      /^Carthage and Macedon could soon declare war on you, with \d+% and \d+% of the strength each needs\. If they hold it, Carthage, as warned on Year 1, day 100, may declare any day now and Macedon may declare from Year 1, day 208\./,
+    );
+  });
+
   test('two powers warning on one day are one stopped line that names both', () => {
     const both = game(5300, 'full', 100);
     spearmenOf(both, macedon).men = 30_000;
@@ -556,6 +571,17 @@ describe('the news of a warned threat that fades', () => {
     const { news } = fading(new Set(['threat:carthage:100']), away);
     expect(news[0]?.text).toContain('none of its armies stands ready to march');
     expect(news[0]?.text).not.toContain('Persia');
+  });
+
+  test('gives the reason when its armies are ready but no city of yours is in its reach', () => {
+    const far = game(5300, 'full', 121);
+    for (const city of Object.values(far.cities))
+      if (city.owner === rome) changeCityOwner(far, city.id, macedon);
+    changeCityOwner(far, 'ekbatana' as CityId, rome);
+    const { news } = fading(new Set(['threat:carthage:100']), far);
+    expect(news[0]?.text).toContain(
+      'none of its cities is near enough to yours to weigh a war on you',
+    );
   });
 
   test('gives the reason when no army of its stands ready to march', () => {
