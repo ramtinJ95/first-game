@@ -121,6 +121,40 @@ const mayDeclare = (state: State, since: number) => {
   return day === undefined ? 'any day now' : `from ${dateText(day)}`;
 };
 
+/**
+ * The great powers at peace with the player whose notice the day ended, of which the player
+ * was warned: one line each, which does not stop the game, so a player who answered a
+ * warning learns that it passed. A notice that ends in a war or a truce is told of by them, and
+ * one that ends while the power stands at NOTICE_SHARE again by the day's end is not told.
+ */
+export function threatFadedNewsOfDay(
+  before: State,
+  after: State,
+  world: World,
+  remembered: ReadonlySet<string>,
+): Alert[] {
+  const player = after.player;
+  const alerts: Alert[] = [];
+  for (const power of Object.values(after.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
+    if (power.id === player || power.kind !== 'greatPower' || power.defeatedOn !== null) continue;
+    if (areAtWar(after, power.id, player) || truceBetween(after, power.id, player)) continue;
+    const was = before.factions[power.id]?.noticeSince ?? null;
+    const last = warnedOn(remembered, power.id);
+    if (power.noticeSince !== null || was === null || last === undefined || last < was) continue;
+    const threat = readinessOf(after, world, power.id);
+    // The notice is reckoned before the day ends, so guards that stop counting at its end can lift the power back.
+    if (threat && threat.readiness >= NOTICE_SHARE) continue;
+    const name = factionName(after, power.id);
+    alerts.push({
+      kind: 'warThreatFaded',
+      day: before.day,
+      tone: 'good',
+      text: `${name}'s threat has passed for now: ${threat ? `it has fallen to ${percent(threat)} of the strength it needs to declare war on you` : 'it is not weighing a war on you'}, and must stand at ${Math.round(NOTICE_SHARE * 100)}% for ${NOTICE_DAYS} days before it may.`,
+    });
+  }
+  return alerts;
+}
+
 const listed = (items: readonly string[]) =>
   items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 
