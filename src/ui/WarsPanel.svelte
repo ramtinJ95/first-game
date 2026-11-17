@@ -10,7 +10,7 @@
   import type { PeaceTerms } from '../sim/state/peace.ts';
   import type { Actions } from './actions.ts';
   import { unansweredOffer } from '../app/modals.ts';
-  import { standingThreats, THREAT_WARN } from '../app/threat-news.ts';
+  import { standingThreats, THREAT_WARN, weighedNotes } from '../app/threat-news.ts';
   import { afterWaiting } from './buildings-text.ts';
   import type { World } from '../sim/world/world.ts';
   import {
@@ -44,15 +44,13 @@
   const threats = $derived(
     standingThreats(game, world, afterWaiting(game, pending, world).factions[game.player]?.stores),
   );
-  const nearWar = $derived(threats.some((threat) => (threat.readiness ?? 0) >= THREAT_WARN));
-  // A warning points the player here, so the powers near war come first, and above everything else.
-  const listed = $derived(
-    nearWar
-      ? [
-          ...threats.filter((threat) => (threat.readiness ?? 0) >= THREAT_WARN),
-          ...threats.filter((threat) => (threat.readiness ?? 0) < THREAT_WARN),
-        ]
-      : threats,
+  const near = $derived(threats.filter((threat) => (threat.readiness ?? 0) >= THREAT_WARN));
+  const others = $derived(threats.filter((threat) => (threat.readiness ?? 0) < THREAT_WARN));
+  // A warning points the player here, so the powers near war and what counts against them open
+  // the panel, and the other powers wait below the wars, so a war and its offers stay in view.
+  const nearNotes = $derived(weighedNotes(game, near));
+  const otherNotes = $derived(
+    weighedNotes(game, others).filter((note) => !nearNotes.includes(note)),
   );
   let open = $state<FactionId | undefined>(undefined);
   let payer = $state<Payer>('nobody');
@@ -147,18 +145,21 @@
     </p>
   {/if}
 
-  {#snippet atPeace()}
-    <h3>At peace</h3>
+  {#snippet atPeace(heading: string, rows: typeof threats, notes: readonly string[])}
+    <h3>{heading}</h3>
     <ul class="facts" data-testid="threats">
-      {#each listed as threat (threat.power)}
+      {#each rows as threat (threat.power)}
         <li data-testid="threat-row" class:bad={(threat.readiness ?? 0) >= THREAT_WARN}>
           {threat.text}
         </li>
       {/each}
     </ul>
+    {#each notes as note (note)}
+      <p class="note" data-testid="threat-note">{note}</p>
+    {/each}
   {/snippet}
-  {#if nearWar}
-    {@render atPeace()}
+  {#if near.length > 0}
+    {@render atPeace('At peace', near, nearNotes)}
   {/if}
 
   {#if room.wars.length === 0}
@@ -329,8 +330,8 @@
     </div>
   {/if}
 
-  {#if threats.length > 0 && !nearWar}
-    {@render atPeace()}
+  {#if others.length > 0}
+    {@render atPeace(near.length > 0 ? 'Also at peace' : 'At peace', others, otherNotes)}
   {/if}
   {#if room.truces.length > 0}
     <h3>Truces</h3>
@@ -443,5 +444,9 @@
 
   .small {
     font-size: 12px;
+  }
+
+  .note {
+    margin: 2px 0;
   }
 </style>

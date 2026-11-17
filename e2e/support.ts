@@ -972,3 +972,63 @@ export function romeOnTwoFronts(): GameState {
   state.day = 500 as Day;
   return playDays(state, 1);
 }
+
+/** A Roman army of spearmen idle at the city. */
+function raiseAt(state: GameState, city: string, men: number) {
+  const at = state.cities[city as CityId];
+  if (!at) throw new Error(`no ${city}`);
+  const id = allocateId(state, 'army');
+  const formation = allocateId(state, 'formation');
+  state.armies[id] = {
+    id,
+    owner: rome,
+    name: nameNewArmy(state, rome),
+    formations: [formation],
+    stance: 'holdTheLine',
+    generalSkill: 3,
+    activity: { kind: 'idle', position: { ...at.position } },
+  };
+  state.formations[formation] = { id: formation, army: id, troop: 'spearmen', men, morale: 1 };
+}
+
+/**
+ * The twelfth play-through's panel: Rome at war with Persia, while Egypt from Salona and
+ * Macedon from Mediolanum, each of ten cities and 30,000 men, stand at 100% near Ariminum
+ * on notice since day 90, on day 100, with a treasury that lowers the strength each needs
+ * and seven Roman armies, two of them far from Ariminum.
+ */
+export function twoNearWarAtWar(): GameState {
+  const state = startGame();
+  state.day = 100 as Day;
+  declareWar(state, rome, 'persia' as FactionId);
+  for (const [power, cities] of [
+    [
+      'egypt' as FactionId,
+      ['salona', 'cyrene', 'lepcis-magna', 'ammon', 'hierosolyma', 'damaskos'],
+    ],
+    [
+      'macedon' as FactionId,
+      ['mediolanum', 'athenai', 'ambrakia', 'byzantion', 'knosos', 'ephesos'],
+    ],
+  ] as const) {
+    for (const city of cities) changeCityOwner(state, city as CityId, power);
+    const army = state.formations[armyOf(state, power).formations[0] as FormationId];
+    const record = state.factions[power];
+    if (!army || !record) throw new Error(`no ${power}`);
+    army.men = 30_000;
+    record.noticeSince = 90 as Day;
+  }
+  for (const [city, men] of [
+    ['ariminum', 3000],
+    ['ariminum', 1500],
+    ['arretium', 1200],
+    ['capua', 800],
+    ['carthago', 600],
+    ['alexandria', 500],
+  ] as const)
+    raiseAt(state, city, men);
+  const stores = state.factions[rome]?.stores;
+  if (!stores) throw new Error('no Roman stores');
+  stores.gold = 15_817;
+  return state;
+}

@@ -163,11 +163,14 @@ export function strengthNear(
   km: number,
 ): number {
   let total = 0;
-  for (const army of armies) {
-    const at = positionOf(army);
-    if (at && distance(at, point) <= km) total += strengthOf(state, army);
-  }
+  for (const army of armies) if (standsWithin(army, point, km)) total += strengthOf(state, army);
   return total;
+}
+
+/** Whether the army stands on land within `km` of the point, as `strengthNear` counts it; an army at sea never does. */
+export function standsWithin(army: ArmyView, point: MapPoint, km: number): boolean {
+  const at = positionOf(army);
+  return at !== undefined && distance(at, point) <= km;
 }
 
 /** The chance that a storm takes the city and the men it is expected to cost, by the storm rules. */

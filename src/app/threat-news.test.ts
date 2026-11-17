@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { changeCityOwner } from '../sim/cities.ts';
-import type { CityId, FactionId } from '../sim/ids.ts';
+import { allocateId, type ArmyId, type CityId, type FactionId } from '../sim/ids.ts';
+import { nameNewArmy } from '../sim/army-names.ts';
+import { expectConsistent } from '../sim/references.ts';
+import { removeRecord } from '../sim/records.ts';
+import type { MapPoint } from '../sim/state/map-point.ts';
+import { distance } from '../sim/world/find-path.ts';
 import { parseMap } from '../sim/map.ts';
 import { newGame } from '../sim/new-game.ts';
 import { executeOrder } from '../sim/orders/orders.ts';
@@ -23,6 +28,7 @@ import {
   standingThreats,
   threatFadedNewsOfDay,
   threatNewsOfDay,
+  weighedNotes,
 } from './threat-news.ts';
 
 const map = parseMap(
@@ -206,8 +212,15 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     const state = game(5300, 'full');
     const carthage = standingThreats(state, world).find((t) => t.power === 'carthage');
     expect(carthage?.text).toMatch(
-      /^Carthage has \d+% of the strength it needs to declare war on you, against your forces near Roma\. Your treasury of [\d,]+ gold lowers the strength it needs by 25%, so more gold brings war nearer\. Your armies on land within 1,500 km count; more men, or guards at Roma for 90 days, lower it\.$/,
+      /^Carthage has \d+% of the strength it needs to declare war on you, against your forces near Roma\.$/,
     );
+    expect(weighedNotes(state, standingThreats(state, world))).toEqual([
+      'Near Roma, your armies on land within 1,500 km count: First Legion (4,300 men). More men, or guards at Roma for 90 days, lower it.',
+      'Near Capua, your armies on land within 1,500 km count: First Legion (4,300 men). More men, or guards at Capua for 90 days, lower it.',
+      expect.stringMatching(
+        /^Your treasury of [\d,]+ gold lowers the strength Carthage needs by 25%, so more gold brings war nearer\.$/,
+      ),
+    ]);
     const weaker = standingThreats(game(2000, 'full'), world).find((t) => t.power === 'carthage');
     expect(weaker?.readiness).toBeLessThan(carthage?.readiness ?? 0);
     expect(standingThreats(state, world).map((t) => t.power)).not.toContain('rome');
@@ -684,5 +697,133 @@ describe('the news of a warned threat that fades', () => {
     const atWar = game(5300, 'full', 121);
     executeOrder(atWar, { kind: 'declareWar', faction: carthage, against: rome }, world);
     expect(fading(new Set(['threat:carthage:100']), atWar).news).toEqual([]);
+  });
+});
+
+describe('the armies the At peace list names as counting against each power', () => {
+  /** A new Roman army of spearmen idle at the point. */
+  function raise(state: GameState, at: MapPoint, men: number): ArmyId {
+    const id = allocateId(state, 'army');
+    const formation = allocateId(state, 'formation');
+    state.armies[id] = {
+      id,
+      owner: rome,
+      name: nameNewArmy(state, rome),
+      formations: [formation],
+      stance: 'holdTheLine',
+      generalSkill: 3,
+      activity: { kind: 'idle', position: { ...at } },
+    };
+    state.formations[formation] = { id: formation, army: id, troop: 'spearmen', men, morale: 1 };
+    return id;
+  }
+
+  /** The state with the army embarked for Syracusae from Roma, played until it is at sea. */
+  function atSea(state: GameState, army: ArmyId): GameState {
+    const roma = state.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    let orders = [
+      {
+        kind: 'embark',
+        faction: rome,
+        army,
+        to: 'syracusae' as CityId,
+        from: roma.position,
+      } as const,
+    ];
+    let current = state;
+    for (let day = 0; day < 30 && current.armies[army]?.activity.kind !== 'embarked'; day++) {
+      current = tick(current, orders, world).state;
+      orders = [];
+    }
+    expect(current.armies[army]?.activity.kind).toBe('embarked');
+    return current;
+  }
+
+  /** The power's share with the army gone, so whether the army counts is the rule's answer. */
+  function shareWithout(state: GameState, army: ArmyId | undefined): number {
+    const copy = structuredClone(state);
+    if (army) {
+      for (const formation of copy.armies[army]?.formations ?? [])
+        removeRecord(copy.formations, formation);
+      removeRecord(copy.armies, army);
+    }
+    return standingThreats(copy, world).find((t) => t.power === carthage)?.readiness ?? 0;
+  }
+
+  const placeOf = (state: GameState, city: string) => {
+    const at = state.cities[city as CityId];
+    if (!at) throw new Error(`no ${city}`);
+    return at.position;
+  };
+
+  test('a city threat counts the armies on land within 1,500 km of it, not one at sea or farther, and the note names each', () => {
+    const start = game(5300, 'full');
+    const first = Object.values(start.armies).find((a) => a.owner === rome)?.id;
+    const sailing = raise(start, placeOf(start, 'roma'), 1500);
+    const far = raise(start, placeOf(start, 'persepolis'), 2000);
+    const state = atSea(start, sailing);
+    expectConsistent(state);
+    const share = shareWithout(state, undefined);
+    expect(shareWithout(state, first), 'the army at Roma counts').toBeGreaterThan(share);
+    expect(shareWithout(state, sailing), 'the army at sea does not').toBe(share);
+    expect(shareWithout(state, far), 'the army at Persepolis does not').toBe(share);
+    const km = Math.ceil(distance(placeOf(state, 'persepolis'), placeOf(state, 'roma')));
+    expect(weighedNotes(state, standingThreats(state, world))[0]).toBe(
+      `Near Roma, your armies on land within 1,500 km count: First Legion (4,300 men). Third Legion (${km.toLocaleString('en-GB')} km away) and Second Legion (at sea) do not. More men, or guards at Roma for 90 days, lower it.`,
+    );
+  });
+
+  test('a field-army threat counts every army that can fight, at sea and far away too, and the note names each', () => {
+    const start = game(8000, 'empty');
+    const sailing = raise(start, placeOf(start, 'roma'), 500);
+    const far = raise(start, placeOf(start, 'persepolis'), 400);
+    const state = atSea(start, sailing);
+    const roma = state.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    roma.garrison = 80_000;
+    expectConsistent(state);
+    const threats = standingThreats(state, world);
+    expect(threats.find((t) => t.power === carthage)?.weighs).toBe('field');
+    const share = shareWithout(state, undefined);
+    expect(shareWithout(state, sailing), 'the army at sea counts').toBeGreaterThan(share);
+    expect(shareWithout(state, far), 'the army at Persepolis counts').toBeGreaterThan(share);
+    expect(weighedNotes(state, threats)[0]).toMatch(
+      /^In the field, every army of yours counts, wherever it stands, at sea too: First Legion \([\d,]+ men\), Second Legion \([\d,]+ men\) and Third Legion \([\d,]+ men\)\.$/,
+    );
+  });
+
+  test('names the three largest armies and counts the rest together, so a large realm still fits the panel', () => {
+    const state = game(5300, 'full');
+    for (const men of [3000, 2000, 1000, 500]) raise(state, placeOf(state, 'capua'), men);
+    raise(state, placeOf(state, 'persepolis'), 700);
+    raise(state, placeOf(state, 'babylon'), 600);
+    raise(state, placeOf(state, 'alexandria'), 500);
+    raise(state, placeOf(state, 'hekatompylos'), 400);
+    expect(weighedNotes(state, standingThreats(state, world))[0]).toMatch(
+      /^Near Roma, your armies on land within 1,500 km count: First Legion \(4,300 men\), Second Legion \(3,000 men\), Third Legion \(2,000 men\) and 2 more with 1,500 men\. .+ \([\d,]+ km away\), .+ \([\d,]+ km away\), .+ \([\d,]+ km away\) and 1 more do not\. More men, or guards at Roma for 90 days, lower it\.$/,
+    );
+  });
+
+  test('names three broken armies in the field and counts the rest, as they count nothing', () => {
+    const state = game(8000, 'empty');
+    const roma = state.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    roma.garrison = 80_000;
+    for (let i = 0; i < 5; i++) {
+      const army = state.armies[raise(state, placeOf(state, 'capua'), 100)];
+      const formation = army && state.formations[army.formations[0] as never];
+      if (!formation) throw new Error('no formation');
+      formation.morale = 0;
+    }
+    expect(weighedNotes(state, standingThreats(state, world))[0]).toBe(
+      'In the field, every army of yours counts, wherever it stands, at sea too: First Legion (4,300 men); Second Legion (broken), Third Legion (broken), Fourth Legion (broken) and 2 more do not.',
+    );
+  });
+
+  test('says the treasury once for every power it lowers', () => {
+    const state = game(5300, 'full');
+    const notes = weighedNotes(state, standingThreats(state, world));
+    expect(notes.filter((note) => note.startsWith('Your treasury'))).toHaveLength(1);
   });
 });

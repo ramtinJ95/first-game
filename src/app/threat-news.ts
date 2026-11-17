@@ -1,10 +1,14 @@
 import { warReadiness } from '../sim/ai/war.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { FactionId } from '../sim/ids.ts';
+import type { CityId, FactionId } from '../sim/ids.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { truceBetween } from '../sim/peace/truce.ts';
 import { areAtWar } from '../sim/wars.ts';
-import { canFight } from '../sim/ai/situation.ts';
+import { canFight, positionOf, standsWithin, strengthOf } from '../sim/ai/situation.ts';
+import { distance } from '../sim/world/find-path.ts';
+import { menOf } from '../sim/systems/economy.ts';
+import type { Army } from '../sim/state/army.ts';
+import type { MapPoint } from '../sim/state/map-point.ts';
 import type { World } from '../sim/world/world.ts';
 import type { Alert } from './alerts.ts';
 import { dateText, factionName, TROOP_NAMES, whole } from './names.ts';
@@ -292,6 +296,10 @@ export interface StandingThreat {
   readonly name: string;
   /** Its share of the strength it needs, 0 to 1, or undefined when it weighs no war on the player. */
   readonly readiness: number | undefined;
+  /** The player's city whose forces it weighs, or every army in the field; undefined when it weighs no war. */
+  readonly weighs: CityId | 'field' | undefined;
+  /** The share by which the player's treasury lowers the strength it needs, 0 when it does not. */
+  readonly hoard: number;
   readonly text: string;
 }
 
@@ -324,13 +332,21 @@ export function standingThreats(
           power: power.id,
           name,
           readiness: undefined,
+          weighs: undefined,
+          hoard: 0,
           text: `${name} is not weighing a war on you now: none of its cities is near enough to yours, or none of its armies stands ready to march.`,
         };
+      // What counts at a city and what the treasury takes off are the same for every power, so the notes say them once.
+      const advice = threat.pressed
+        ? whatCounts(state, threat, stores, dayToCome(state, power.noticeSince))
+        : '';
       return {
         power: power.id,
         name,
         readiness: Math.min(1, threat.readiness),
-        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${whatCounts(state, threat, stores, dayToCome(state, power.noticeSince))}${power.noticeSince === null ? '' : ` It may declare ${mayDeclare(state, power.noticeSince)} if it holds it.`}`,
+        weighs: threat.pressed ? 'field' : threat.front,
+        hoard: threat.hoard,
+        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${advice}${power.noticeSince === null ? '' : ` It may declare ${mayDeclare(state, power.noticeSince)} if it holds it.`}`,
       };
     });
 }
@@ -339,6 +355,90 @@ export function standingThreats(
 export function powersNearWar(state: State, world: World): number {
   return standingThreats(state, world).filter((threat) => (threat.readiness ?? 0) >= THREAT_WARN)
     .length;
+}
+
+/** Armies named one by one in a note; the rest are counted together, so a large realm's note still fits the panel. */
+export const NAMED_ARMIES = 3;
+
+/**
+ * What the powers of the At peace list weigh, said once for all of them, in the order of
+ * `threats`: for each of the player's cities a power weighs, the player's armies that count
+ * there by the rule, every army on land within WAR_FRONT_KM of it, each by its name and its
+ * men, and those that do not, at sea or so far away; for powers that weigh the field armies,
+ * every army that can fight, wherever it stands; and once, what the treasury takes off each
+ * power that weighs a city.
+ */
+export function weighedNotes(state: State, threats: readonly StandingThreat[]): string[] {
+  const player = state.player;
+  const armies = Object.values(state.armies)
+    .filter((army) => army.owner === player)
+    .sort((a, b) => menOf(state, b) - menOf(state, a) || (a.id < b.id ? -1 : 1));
+  const notes: string[] = [];
+  for (const weighs of new Set(threats.flatMap((threat) => threat.weighs ?? []))) {
+    if (weighs === 'field') {
+      const fighting = armies.filter((army) => strengthOf(state, army) > 0);
+      const broken = armies.filter((army) => strengthOf(state, army) === 0);
+      notes.push(
+        `In the field, every army of yours counts, wherever it stands, at sea too: ${
+          fighting.length === 0 ? 'you have none now' : counted(fighting, state)
+        }${broken.length === 0 ? '' : `; ${uncounted(broken.map((army) => `${army.name} (broken)`))}`}.`,
+      );
+      continue;
+    }
+    const city = state.cities[weighs];
+    if (!city) continue;
+    const near = armies.filter(
+      (army) => standsWithin(army, city.position, WAR_FRONT_KM) && strengthOf(state, army) > 0,
+    );
+    const away = armies
+      .filter((army) => !near.includes(army))
+      .map((army) => ({ army, why: notCounted(army, city.position) }))
+      .sort((a, b) => a.why.km - b.why.km || (a.army.id < b.army.id ? -1 : 1));
+    const absent =
+      away.length === 0
+        ? ''
+        : ` ${uncounted(away.map(({ army, why }) => `${army.name} (${why.text})`))}.`;
+    notes.push(
+      `Near ${city.name}, your armies on land within ${whole(WAR_FRONT_KM)} km count: ${
+        near.length === 0 ? 'none stands there now' : counted(near, state)
+      }.${absent} More men, or guards at ${city.name} for ${GUARD_DETER_DAYS} days, lower it.`,
+    );
+  }
+  const lowered = threats.filter((threat) => threat.weighs !== 'field' && threat.hoard > 0);
+  if (lowered.length > 0) {
+    const gold = state.factions[player]?.stores.gold ?? 0;
+    notes.push(
+      `Your treasury of ${whole(gold)} gold lowers the strength ${listed(lowered.map((threat) => `${threat.name} needs by ${Math.round(threat.hoard * 100)}%`))}, so more gold brings war nearer.`,
+    );
+  }
+  return notes;
+}
+
+/** The armies that count, the largest by name and the rest together with their men. */
+function counted(armies: readonly DeepReadonly<Army>[], state: State): string {
+  const shown = armies
+    .slice(0, NAMED_ARMIES)
+    .map((army) => `${army.name} (${whole(menOf(state, army))} men)`);
+  const rest = armies.slice(NAMED_ARMIES);
+  if (rest.length === 0) return listed(shown);
+  const men = rest.reduce((sum, army) => sum + menOf(state, army), 0);
+  return listed([...shown, `${whole(rest.length)} more with ${whole(men)} men`]);
+}
+
+/** The armies that do not count, the first NAMED_ARMIES by name and the rest by their number. */
+function uncounted(armies: readonly string[]): string {
+  const shown = armies.slice(0, NAMED_ARMIES);
+  const more = armies.length - shown.length;
+  return `${listed(more > 0 ? [...shown, `${whole(more)} more`] : shown)} ${armies.length === 1 ? 'does' : 'do'} not`;
+}
+
+/** Why an army does not count at a city: at sea, broken, or so far from it, in whole km past the reach. */
+function notCounted(army: DeepReadonly<Army>, point: MapPoint): { text: string; km: number } {
+  const at = positionOf(army);
+  if (!at) return { text: 'at sea', km: Number.POSITIVE_INFINITY };
+  const km = distance(at, point);
+  if (km <= WAR_FRONT_KM) return { text: 'broken', km };
+  return { text: `${whole(Math.ceil(km))} km away`, km };
 }
 
 /**
