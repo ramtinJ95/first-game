@@ -12,6 +12,8 @@ import { executeOrder, type Order } from '../sim/orders/orders.ts';
 import type { City, GuardBand } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { World } from '../sim/world/world.ts';
+import { NOTICE_DAYS, NOTICE_SHARE } from '../sim/ai/thresholds.ts';
+import { mayDeclareWhen } from '../app/threat-news.ts';
 import { afterWaiting } from './buildings-text.ts';
 
 type State = DeepReadonly<GameState>;
@@ -66,7 +68,13 @@ export function cityGuards(
     line: guardsLine(city.guards, next.guards.length - city.guards.length),
     weighed: weighedLine(city.guards, state.day),
     hire: {
-      threats: open ? hireThreats(short ? withGold(waiting, next) : waiting, next, world) : [],
+      threats: hireThreats(
+        waiting,
+        open ? (short ? withGold(waiting, next) : waiting) : undefined,
+        next,
+        world,
+        next.guards.length > city.guards.length,
+      ),
       gold: GUARD_GOLD,
       change: open ? hireChange(short ? withGold(waiting, next) : waiting, next, world) : undefined,
       why: hireRefusalText(waiting, next, why, short),
@@ -86,11 +94,26 @@ function hireChange(state: State, city: DeepReadonly<City>, world: World): strin
  * Each great power that weighs the city before it declares on the owner, by the AI's own
  * reckoning, today and with one more band, played through the rules' handler. A power
  * drawn by rival pressure weighs field armies only, wherever they stand, so every city's
- * section names it and says guards change nothing.
+ * section names it and says guards change nothing. `state` is the day as the waiting orders
+ * leave it, and `hiring` the state one more band is hired on, undefined when no
+ * more band can be. A power at NOTICE_SHARE or more, now or with the band hired for the next
+ * day, is told in words beside each number: where it stands now, and where one more band takes
+ * it, still at NOTICE_SHARE or more and so free to declare from its day, or below, since a share
+ * that falls reads as an answer and is not one while it stays on notice. One below NOTICE_SHARE
+ * keeps the share now and with one more band.
  */
-function hireThreats(state: State, city: DeepReadonly<City>, world: World): string[] {
-  const hired = structuredClone(state) as GameState;
-  executeOrder(hired, { kind: 'hireGuards', faction: city.owner, city: city.id }, world);
+function hireThreats(
+  state: State,
+  hiring: State | undefined,
+  city: DeepReadonly<City>,
+  world: World,
+  hired: boolean,
+): string[] {
+  let next: GameState | undefined;
+  if (hiring) {
+    next = structuredClone(hiring) as GameState;
+    executeOrder(next, { kind: 'hireGuards', faction: city.owner, city: city.id }, world);
+  }
   const until = dateText(state.day + GUARD_DETER_DAYS);
   const percent = (n: number) => `${Math.round(Math.min(1, n) * 100)}%`;
   const lines: string[] = [];
@@ -98,16 +121,34 @@ function hireThreats(state: State, city: DeepReadonly<City>, world: World): stri
     if (power.id === city.owner || power.kind !== 'greatPower') continue;
     const now = warReadiness(state, world, power.id, city.owner);
     if (!now || (now.front !== city.id && !now.pressed)) continue;
+    const name = factionName(state, power.id);
+    const when = mayDeclareWhen(state, power.id);
+    const verdict = (readiness: number) =>
+      readiness >= NOTICE_SHARE
+        ? `still at ${percent(NOTICE_SHARE)} or more, so it may still declare ${when}`
+        : `below ${percent(NOTICE_SHARE)}, so it may not declare until it has stood at ${percent(NOTICE_SHARE)} for ${NOTICE_DAYS} days`;
     if (now.pressed) {
-      lines.push(
-        `${factionName(state, power.id)} ${percent(now.readiness)} of the strength it needs to declare war, by its field armies against yours: guards do not hold that back`,
-      );
+      if (next)
+        lines.push(
+          `${name} ${percent(now.readiness)} of the strength it needs to declare war, by its field armies against yours: guards do not hold that back`,
+        );
       continue;
     }
-    const then = warReadiness(hired, world, power.id, city.owner);
-    lines.push(
-      `${factionName(state, power.id)} ${percent(now.readiness)} → ${percent(then?.readiness ?? 0)} of the strength it needs to declare war, until ${until}`,
-    );
+    const then = next && warReadiness(next, world, power.id, city.owner);
+    const oneMore = `One more band, counted until ${until}, takes it to ${percent(then?.readiness ?? 0)}, ${verdict(then?.readiness ?? 0)}`;
+    if (hired && now.readiness >= NOTICE_SHARE)
+      lines.push(
+        `${name}, with the band you hired: ${percent(now.readiness)} of the strength it needs to declare war, ${verdict(now.readiness)}.${next ? ` ${oneMore}.` : ''}`,
+      );
+    else if (!next) continue;
+    else if (now.readiness >= NOTICE_SHARE)
+      lines.push(
+        `${name} ${percent(now.readiness)} of the strength it needs to declare war. ${oneMore}.`,
+      );
+    else
+      lines.push(
+        `${name} ${percent(now.readiness)} → ${percent(then?.readiness ?? 0)} of the strength it needs to declare war, until ${until}`,
+      );
   }
   return lines;
 }

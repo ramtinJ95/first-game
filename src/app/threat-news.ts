@@ -124,6 +124,18 @@ export function threatNewsOfDay(
 const dayToCome = (state: State, since: number | null) =>
   since !== null && since + NOTICE_DAYS > state.day ? since + NOTICE_DAYS : undefined;
 
+/**
+ * When a power that stands at NOTICE_SHARE may declare war on the player: from the day its
+ * notice runs out, any day once that has passed, or, not yet on notice, once it has stood
+ * there NOTICE_DAYS.
+ */
+export function mayDeclareWhen(state: State, power: FactionId): string {
+  const since = state.factions[power]?.noticeSince ?? null;
+  return since === null
+    ? `once it has stood at ${Math.round(NOTICE_SHARE * 100)}% for ${NOTICE_DAYS} days`
+    : mayDeclare(state, since);
+}
+
 /** When a power on the notice that began on `since` may first declare war: a day to come, or any day once that has passed. */
 const mayDeclare = (state: State, since: number) => {
   const day = dayToCome(state, since);
