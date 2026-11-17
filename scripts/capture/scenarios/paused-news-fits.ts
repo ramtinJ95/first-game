@@ -57,7 +57,7 @@ function carthageAndMacedonNearWar(): GameState {
 /**
  * Carthage pressing Rome as in `carthagePresses` on day 400, on one notice since day 300 that it
  * warned of on day 306, naming day 330, so the day's warning is its reminder, its first day of
- * war has passed, and no troop could train before it.
+ * war has passed, so the advice is what Rome may raise, here what it lacks for Skirmishers.
  */
 function carthageStillNearWar(): GameState {
   const state = carthagePresses();
@@ -122,7 +122,7 @@ const STOPS: readonly {
   {
     name: 'a reminder whose first day of war has passed',
     make: carthageStillNearWar,
-    line: /could soon declare war on you.*may declare any day now.*none raised now is ready/,
+    line: /could soon declare war on you.*may declare any day now.*Skirmishers need 500 men/,
     shot: 'reminder',
     told: ['threat:carthage:306'],
     atPeaceAt: 1280,

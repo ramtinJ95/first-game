@@ -298,7 +298,16 @@ describe('how near each power at peace stands to declaring war, as the wars pane
       new Set([`threat:carthage:${100 - 60 - 1}`]),
     );
     expect(reminder?.text).toContain(
-      'may declare any day now if it holds it. More men lower it, not guards, but none raised now is ready before war may come.',
+      'may declare any day now if it holds it. More men lower it, not guards: Skirmishers cost 900 gold and train in 10 days.',
+    );
+  });
+
+  test('once the named day has passed, names what may be raised for as long as the notice holds', () => {
+    expect(lineOf(pressedFor(-5, { gold: 2229, manpower: 450 }))).toContain(
+      'More men lower it, not guards: Light cavalry cost 1,800 gold and train in 20 days. It weighs you so only while you hold no more cities than at the start. It may declare any day now if it holds it.',
+    );
+    expect(lineOf(pressedFor(-5, { gold: 5000, manpower: 300 }))).toContain(
+      'More men lower it, not guards, but even Skirmishers need 500 men, 10 days; you have 300 manpower.',
     );
   });
 

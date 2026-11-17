@@ -64,7 +64,7 @@ export function threatNewsOfDay(
   remembered: Set<string>,
 ): Alert[] {
   const player = after.player;
-  const warned: { name: string; threat: Threat; from: string; by: number }[] = [];
+  const warned: { name: string; threat: Threat; from: string; by: number | undefined }[] = [];
   for (const power of Object.values(after.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (power.id === player || power.kind !== 'greatPower' || power.defeatedOn !== null) continue;
     if (areAtWar(after, power.id, player) || truceBetween(after, power.id, player)) {
@@ -88,7 +88,7 @@ export function threatNewsOfDay(
       name: factionName(after, power.id),
       threat,
       from: mayDeclare(before, power.noticeSince),
-      by: power.noticeSince + NOTICE_DAYS,
+      by: dayToCome(before, power.noticeSince),
     });
   }
   const [first, ...others] = warned;
@@ -111,9 +111,15 @@ export function threatNewsOfDay(
   ];
 }
 
+/** The first day a power on the notice that began on `since` may declare war, while it is still to come. */
+const dayToCome = (state: State, since: number | null) =>
+  since !== null && since + NOTICE_DAYS > state.day ? since + NOTICE_DAYS : undefined;
+
 /** When a power on the notice that began on `since` may first declare war: a day to come, or any day once that has passed. */
-const mayDeclare = (state: State, since: number) =>
-  since + NOTICE_DAYS > state.day ? `from ${dateText(since + NOTICE_DAYS)}` : 'any day now';
+const mayDeclare = (state: State, since: number) => {
+  const day = dayToCome(state, since);
+  return day === undefined ? 'any day now' : `from ${dateText(day)}`;
+};
 
 const listed = (items: readonly string[]) =>
   items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
@@ -213,7 +219,7 @@ export function standingThreats(
         power: power.id,
         name,
         readiness: Math.min(1, threat.readiness),
-        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${whatCounts(state, threat, stores, power.noticeSince === null ? undefined : power.noticeSince + NOTICE_DAYS)}${power.noticeSince === null ? '' : ` It may declare ${mayDeclare(state, power.noticeSince)} if it holds it.`}`,
+        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${whatCounts(state, threat, stores, dayToCome(state, power.noticeSince))}${power.noticeSince === null ? '' : ` It may declare ${mayDeclare(state, power.noticeSince)} if it holds it.`}`,
       };
     });
 }
@@ -230,7 +236,9 @@ export function powersNearWar(state: State, world: World): number {
  * day's recruits muster: the cheapest the player can afford with the stores given, which the
  * wars panel reckons after the orders waiting, and its quickest training among the cities that
  * may recruit now; or, with none affordable, the cheapest one's price and days and what the
- * player lacks for it; or that none is ready in time.
+ * player lacks for it; or that none is ready in time. Once that day has passed, `by` is
+ * undefined and every troop counts, since men raised then still weigh for as long as the
+ * power holds its notice.
  */
 function raiseAdvice(
   state: State,
