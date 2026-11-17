@@ -226,11 +226,11 @@ export function powersNearWar(state: State, world: World): number {
 
 /**
  * What raising men takes today, as the field-army threat advises it, among the troops that
- * finish training by the day `by` the power may first declare: the cheapest the player can
- * afford with the stores given, which the wars panel reckons after the orders waiting, and
- * its quickest training among the cities that may recruit now; or, with none affordable,
- * the cheapest one's price and days and what the player lacks for it; or that none is ready
- * in time.
+ * finish training before the day `by` the power may first declare, since it decides before that
+ * day's recruits muster: the cheapest the player can afford with the stores given, which the
+ * wars panel reckons after the orders waiting, and its quickest training among the cities that
+ * may recruit now; or, with none affordable, the cheapest one's price and days and what the
+ * player lacks for it; or that none is ready in time.
  */
 function raiseAdvice(
   state: State,
@@ -246,7 +246,7 @@ function raiseAdvice(
     Math.min(...cities.map((city) => trainingDaysAt(city, TROOPS[troop].recruit.days)));
   const left = by === undefined ? Infinity : by - state.day;
   const troops = (Object.keys(TROOPS) as Troop[])
-    .filter((troop) => days(troop) <= left)
+    .filter((troop) => days(troop) < left)
     .sort((a, b) => TROOPS[a].recruit.gold - TROOPS[b].recruit.gold);
   const gold = stores?.gold ?? 0;
   const manpower = stores?.manpower ?? 0;

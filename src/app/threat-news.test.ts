@@ -284,7 +284,11 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     expect(lineOf(pressedFor(24, { gold: 2229, manpower: 450 }))).toContain(
       'More men lower it, not guards: Light cavalry cost 1,800 gold and train in 20 days.',
     );
-    expect(lineOf(pressedFor(9, { gold: 5000, manpower: 5000 }))).toContain(
+    expect(lineOf(pressedFor(11, { gold: 5000, manpower: 5000 }))).toContain(
+      'More men lower it, not guards: Skirmishers cost 900 gold and train in 10 days.',
+    );
+    // The power decides on its day before that day's recruits muster.
+    expect(lineOf(pressedFor(10, { gold: 5000, manpower: 5000 }))).toContain(
       'More men lower it, not guards, but none raised now is ready before war may come.',
     );
     const [reminder] = threatNewsOfDay(
