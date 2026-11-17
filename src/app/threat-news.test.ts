@@ -302,6 +302,21 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     );
   });
 
+  test("the warning's day and its advice agree across the day the news reckons after", () => {
+    const newsOn = (left: number) => {
+      const before = pressedFor(left, { gold: 5000, manpower: 5000 });
+      const after = structuredClone(before);
+      after.day = (before.day + 1) as Day;
+      return threatNewsOfDay(before, after, world, new Set())[0]?.text ?? '';
+    };
+    expect(newsOn(1)).toContain(
+      'may declare from Year 1, day 101 if it holds it. More men lower it, not guards, but none raised now is ready before war may come.',
+    );
+    expect(newsOn(0)).toContain(
+      'may declare any day now if it holds it. More men lower it, not guards: Skirmishers cost 900 gold and train in 10 days.',
+    );
+  });
+
   test('once the named day has passed, names what may be raised for as long as the notice holds', () => {
     expect(lineOf(pressedFor(-5, { gold: 2229, manpower: 450 }))).toContain(
       'More men lower it, not guards: Light cavalry cost 1,800 gold and train in 20 days. It weighs you so only while you hold no more cities than at the start. It may declare any day now if it holds it.',
