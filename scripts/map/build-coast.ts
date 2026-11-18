@@ -8,7 +8,10 @@ import { coastKey } from '../../src/render/coast-key.ts';
 import { buildWorld } from '../../src/sim/world/world.ts';
 import {
   area,
+  boxesOverlap,
+  boxOf,
   contains,
+  cropToBox,
   difference,
   intersection,
   nearBoundary,
@@ -124,6 +127,7 @@ export async function buildDrawingCoast() {
     coastalBand(physicalFrame),
   );
   const physicalIndex = new AreaIndex([physical], 0, { seams: false });
+  const physicalParts = physical.map((polygon) => ({ polygon, box: boxOf([polygon]) }));
   const physicalEdges = physical.flatMap((polygon) =>
     polygon.flatMap((ring) =>
       ring.map((a, i) => {
@@ -155,8 +159,19 @@ export async function buildDrawingCoast() {
     if (
       points.some(([x, y]) => physicalIndex.inside(x, y)) ||
       physicalEdges.some(([l, r, t, b]) => l <= right && r >= left && t <= bottom && b >= top)
-    )
-      return intersection([polygon], physical).length === 0;
+    ) {
+      const box = { minX: left, maxX: right, minY: top, maxY: bottom };
+      const near = physicalParts.filter((part) => boxesOverlap(part.box, box));
+      return (
+        intersection(
+          [polygon],
+          cropToBox(
+            near.map((part) => part.polygon),
+            box,
+          ),
+        ).length === 0
+      );
+    }
     return true;
   };
   // Uninhabited offshore islands are atlas scenery, not new provinces. Omit specks

@@ -7,6 +7,7 @@ import {
   boundaryDistance,
   boxDistance,
   boxOf,
+  cropToBox,
   distanceToBoundary,
   intersection,
   polygonContains,
@@ -136,7 +137,8 @@ function cutAlongLand(
   const cities = new Map(members.map((seed) => [seed, seeds[seed] as Point]));
   const { land, regions } = recut(component, territories, cities, terrain);
   const pieces = members.flatMap((seed) => {
-    const parts = intersection([land], regions.get(seed) ?? []);
+    const region = regions.get(seed) ?? [];
+    const parts = intersection(cropToBox([land], boxOf(region)), region);
     const core = parts.findIndex((part) => polygonContains(part, seeds[seed] as Point));
     if (core < 0) throw new Error(`seed ${seed} lies outside its own re-cut province`);
     return parts.map((part, i) => ({

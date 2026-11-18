@@ -79,8 +79,9 @@ it('pays a delayed raise on the day it is given, after the treasury has refilled
   expect(forecast.warning).toContain(
     `on ${dateText(state.day + wait)}, these men are fed as the people grow, if you raise no other troops, spend no gold, and your income holds until then, though trade gold comes as each caravan arrives and can move the day by some weeks.`,
   );
-  expect(() => firstShortfall(state, 'gold', true, 1 + wait)).toThrow('Stores never ran short');
-  expect(() => firstShortfall(state, 'food', true, 1 + wait)).toThrow('Stores never ran short');
+  expect(() => firstShortfall(state, ['gold', 'food'], true, 1 + wait)).toThrow(
+    'Stores never ran short',
+  );
   expect(firstShortfall(state, 'gold', true, wait)).toBeGreaterThan(wait);
   expectConsistent(state);
 });
@@ -221,7 +222,16 @@ it('projects a queued trade with its world before quoting recruitment, without c
   expectConsistent(projected);
 });
 
-function firstShortfall(initial: GameState, store: 'food' | 'gold', growing = false, raiseOn = 1) {
+type Store = 'food' | 'gold';
+
+/** The first day any of `stores` runs short, playing one game for all of them. */
+function firstShortfall(
+  initial: GameState,
+  stores: Store | readonly Store[],
+  growing = false,
+  raiseOn = 1,
+) {
+  const watched = typeof stores === 'string' ? [stores] : stores;
   let state = initial;
   for (let day = 1; day <= 6000; day++) {
     const result = tick(
@@ -238,10 +248,11 @@ function firstShortfall(initial: GameState, store: 'food' | 'gold', growing = fa
         },
       ],
     );
-    expect(result.rejected).toEqual([]);
+    if (result.rejected.length > 0) expect(result.rejected).toEqual([]);
     state = result.state;
     expectConsistent(state);
-    if (required(state.factions[f.rome]).stores[store] < 0) return day;
+    const held = required(state.factions[f.rome]).stores;
+    if (watched.some((store) => held[store] < 0)) return day;
   }
   throw new Error('Stores never ran short');
 }
@@ -345,7 +356,7 @@ function shortWithCanals(initial: GameState, raiseOn: number) {
         state.day = (state.day + 1) as Day;
       },
     ]);
-    expect(result.rejected).toEqual([]);
+    if (result.rejected.length > 0) expect(result.rejected).toEqual([]);
     state = result.state;
     if (required(state.factions[f.rome]).stores.food < 0) return day;
   }

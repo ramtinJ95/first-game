@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../../sim/fixture.ts';
 import { enslave } from '../../sim/orders/enslave.ts';
 import { executeOrder } from '../../sim/orders/orders.ts';
@@ -76,6 +76,11 @@ function marching(to: MapPoint): [GameState, GameState] {
 }
 
 describe('buildScene', () => {
+  let shore: Land;
+  beforeAll(() => {
+    shore = new Land(fixtureWorld().map);
+  });
+
   test('the same two days and clocks always give the same picture', () => {
     const state = buildFixture();
     expect(buildScene(input(state, state))).toEqual(
@@ -270,7 +275,6 @@ describe('buildScene', () => {
   });
 
   test('an army at rest on the Dalmatian shore keeps every figure on the land of the map', () => {
-    const land = new Land(fixtureWorld().map);
     const state = buildFixture();
     const army = state.armies[FIXTURE.romanArmy];
     if (!army) throw new Error('fixture');
@@ -292,7 +296,7 @@ describe('buildScene', () => {
     const camera = { centre: at, scale: 4 };
     const onLand = (p: MapPoint) => {
       const point = screenToMap(camera, viewport, p);
-      return land.open(point.x, point.y);
+      return shore.open(point.x, point.y);
     };
     const scene = buildScene(input(state, state, { camera, land: onLand }));
     const figures = scene.sprites.filter((s) => s.army === FIXTURE.romanArmy);
@@ -303,7 +307,6 @@ describe('buildScene', () => {
   });
 
   test('a battle on the Dalmatian shore keeps every figure of both lines, commanders too, on the land of the map', () => {
-    const land = new Land(fixtureWorld().map);
     const previous = buildFixture();
     const battle = 'battle-1' as keyof GameState['battles'];
     const at = { x: 2808, y: 2106 };
@@ -329,7 +332,7 @@ describe('buildScene', () => {
       const camera = { centre: at, scale };
       const onLand = (p: MapPoint) => {
         const point = screenToMap(camera, viewport, p);
-        return land.open(point.x, point.y);
+        return shore.open(point.x, point.y);
       };
       const scene = buildScene(input(previous, current, { camera, land: onLand }));
       const fighters = scene.sprites.filter((s) => s.army !== undefined && s.alpha > 0);
@@ -341,7 +344,6 @@ describe('buildScene', () => {
   test.each(['holdTheLine', 'skirmishAndWithdraw'] as const)(
     'in a battle on the shore, holding %s, every fighter stays on land at every moment and the battle stays put',
     (stance) => {
-      const land = new Land(fixtureWorld().map);
       const previous = buildFixture();
       const battle = 'battle-1' as keyof GameState['battles'];
       const at = { x: 2792, y: 2070 };
@@ -368,7 +370,7 @@ describe('buildScene', () => {
       const camera = { centre: at, scale: 1 };
       const onLand = (p: MapPoint) => {
         const point = screenToMap(camera, viewport, p);
-        return land.open(point.x, point.y);
+        return shore.open(point.x, point.y);
       };
       const anchors = new Set<string>();
       let horsemen = 0;

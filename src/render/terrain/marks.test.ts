@@ -21,8 +21,10 @@ const map = parseMap(
   JSON.parse(readFileSync(resolve(import.meta.dirname, '../../../data/map/map.json'), 'utf8')),
 );
 let land: Land;
+let again: Land;
 beforeAll(() => {
   land = new Land(map);
+  again = new Land(map);
 });
 
 const ALPS = { left: 2048, top: 1536, right: 2560, bottom: 2048 };
@@ -67,7 +69,7 @@ describe('placing the terrain', () => {
   it('places the same drawings every time for the same place', () => {
     expect(placeRelief(land, ALPS, 'middle')).toEqual(placeRelief(land, ALPS, 'middle'));
     expect(placeFields(land, ROMA)).toEqual(placeFields(land, ROMA));
-    expect(new Land(map).woods).toEqual(land.woods);
+    expect(again.woods).toEqual(land.woods);
   });
 
   it('places mountains in the Alps, woods in Gaul, and dunes in the Sahara', () => {
@@ -93,6 +95,7 @@ describe('placing the terrain', () => {
       hamlet: (x, y) => land.cover(x, y) !== 'green' && !land.desert.inside(x, y),
       qanat: (x, y) => land.cover(x, y) === 'arid' && !land.mountains.inside(x, y),
     };
+    const wrong: string[] = [];
     for (const tier of ['wide', 'middle', 'close'] as const) {
       const rects =
         tier === 'close'
@@ -103,16 +106,14 @@ describe('placing the terrain', () => {
           ...placeRelief(land, rect, tier),
           ...(tier === 'close' ? placeFields(land, rect) : []),
         ])) {
-          expect(
-            land.land.inside(x, y) && !land.lakes.inside(x, y),
-            `${kind} at ${x},${y} is at sea`,
-          ).toBe(true);
-          expect(inside[kind]?.(x, y) ?? true, `${kind} at ${x},${y} is outside its area`).toBe(
-            true,
-          );
+          if (!land.land.inside(x, y) || land.lakes.inside(x, y))
+            wrong.push(`${kind} at ${x},${y} is at sea`);
+          if (!(inside[kind]?.(x, y) ?? true))
+            wrong.push(`${kind} at ${x},${y} is outside its area`);
         }
       }
     }
+    expect(wrong).toEqual([]);
   });
 
   it('keeps every wood, rim included, on land', () => {
@@ -324,16 +325,32 @@ function ruledStretches(lines: Point[][], window: number, bend: number): [Point,
   return ruled;
 }
 
-function insideOutline(outline: MultiPolygon, x: number, y: number): boolean {
-  let inside = false;
+/**
+ * Whether a point lies inside `outline` by the even-odd rule. Each edge is filed under the
+ * 8 km bands of y it spans, so a point counts crossings only with the edges of its band.
+ */
+function insideOf(outline: MultiPolygon): (x: number, y: number) => boolean {
+  const band = 8;
+  const bands = new Map<number, [Point, Point][]>();
   for (const ring of outline.flat()) {
     for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [ax, ay] = ring[i] as Point;
-      const [bx, by] = ring[j] as Point;
-      if (ay > y !== by > y && x < ((bx - ax) * (y - ay)) / (by - ay) + ax) inside = !inside;
+      const a = ring[i] as Point;
+      const b = ring[j] as Point;
+      const last = Math.floor(Math.max(a[1], b[1]) / band);
+      for (let k = Math.floor(Math.min(a[1], b[1]) / band); k <= last; k++) {
+        const edges = bands.get(k);
+        if (edges) edges.push([a, b]);
+        else bands.set(k, [[a, b]]);
+      }
     }
   }
-  return inside;
+  return (x, y) => {
+    let inside = false;
+    for (const [[ax, ay], [bx, by]] of bands.get(Math.floor(y / band)) ?? []) {
+      if (ay > y !== by > y && x < ((bx - ax) * (y - ay)) / (by - ay) + ax) inside = !inside;
+    }
+    return inside;
+  };
 }
 
 /** The pairs of edges of a ring that cross each other, found through a grid of 16 km cells. */
@@ -438,18 +455,27 @@ describe("the desert's edge", () => {
   });
 
   it('bends an edge two deserts share alike in both, so no ground lies in two deserts', () => {
-    const each = drawn().map((outline) => new AreaIndex([outline], 0, { seams: false }));
+    const each = drawn().map((outline) => ({
+      index: new AreaIndex([outline], 0, { seams: false }),
+      box: boundsOf(outline),
+    }));
     const twice: string[] = [];
     const corners = original.flatMap((outline) => outline.flat(2));
     for (const [cx, cy] of [...corners, [3525, 3840] as Point]) {
+      // A desert holds no point outside its bounds, so only those that reach the corner can overlap.
+      const near = each
+        .filter(({ box }) => box.left <= cx + 7 && box.right >= cx - 7)
+        .filter(({ box }) => box.top <= cy + 7 && box.bottom >= cy - 7)
+        .map(({ index }) => index);
+      if (near.length < 2) continue;
       for (let x = cx - 6; x <= cx + 6; x += 0.5) {
         for (let y = cy - 6; y <= cy + 6; y += 0.5) {
-          if (each.filter((index) => index.inside(x, y)).length > 1) twice.push(`${x},${y}`);
+          if (near.filter((index) => index.inside(x, y)).length > 1) twice.push(`${x},${y}`);
         }
       }
     }
     expect(twice.slice(0, 5)).toEqual([]);
-    expect(land.desert.inside(3525, 3840)).toBe(each.some((index) => index.inside(3525, 3840)));
+    expect(land.desert.inside(3525, 3840)).toBe(each.some(({ index }) => index.inside(3525, 3840)));
   });
 
   it('keeps the dunes and stipple on the drawn desert', () => {
@@ -463,16 +489,19 @@ describe("the desert's edge", () => {
       ...chunks(edge, 'close').flatMap((rect) => placeRelief(land, rect, 'close')),
     ].filter((m) => m.kind === 'dune' || m.kind === 'stipple');
     expect(marks.length).toBeGreaterThan(1000);
-    const deserts = drawn().map((outline) => ({ outline, box: boundsOf(outline) }));
+    const deserts = drawn().map((outline) => ({
+      inside: insideOf(outline),
+      box: boundsOf(outline),
+    }));
     const off = marks.filter(
       (m) =>
         !deserts.some(
-          ({ outline, box }) =>
+          ({ inside, box }) =>
             m.x >= box.left &&
             m.x <= box.right &&
             m.y >= box.top &&
             m.y <= box.bottom &&
-            insideOutline(outline, m.x, m.y),
+            inside(m.x, m.y),
         ),
     );
     expect(off.map((m) => `${m.kind} at ${m.x},${m.y}`)).toEqual([]);

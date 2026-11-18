@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SHEET_COLOURS } from '../armies/scene.ts';
 import { paintOps, paintSvg, type PaintOp } from './paint.ts';
@@ -87,7 +88,10 @@ describe('paintOps', () => {
       for (const cell of art) {
         const { context, painted } = recorder();
         paintOps(context, cell.ops, colour);
-        expect(painted, `${cell.key} in ${colour.toString(16)}`).toEqual(fromSvg(cell.ops, colour));
+        const svg = fromSvg(cell.ops, colour);
+        // Strictly equal lists are equal to toEqual too; it is asked only of the rest, as it is slow.
+        if (!isDeepStrictEqual(painted, svg))
+          expect(painted, `${cell.key} in ${colour.toString(16)}`).toEqual(svg);
       }
     }
   });

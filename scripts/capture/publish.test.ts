@@ -9,7 +9,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchCaptures } from './fetch.ts';
 import { git, parseGitHubRemote } from './git.ts';
 import type { ManifestEntry } from './manifest.ts';
@@ -285,8 +285,14 @@ describe('publishCaptures', () => {
     pushToAssets({ 'playtest/stage-five/notes.md': 'five' });
     raceOnReceive('tester', 'always');
     writeCaptures(join(root, 'captures'), { map: { 'start.png': 'start' } });
+    // The random pause between attempts only spaces out rivals, and the rival here is a hook.
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0);
 
-    expect(() => publish('feat/map')).toThrow('pr-assets moved under each of 5 publishes');
+    try {
+      expect(() => publish('feat/map')).toThrow('pr-assets moved under each of 5 publishes');
+    } finally {
+      random.mockRestore();
+    }
   });
 });
 

@@ -726,6 +726,21 @@ class Edges {
     return left !== right;
   }
 
+  /** How many boundary edges leave a corner: `boundariesAt(c, r).length`, without building it. */
+  boundaryCount(c: number, r: number): number {
+    const { columns, rows } = this.grid;
+    const upLeft = this.label(c - 1, r - 1);
+    const upRight = this.label(c, r - 1);
+    const downLeft = this.label(c - 1, r);
+    const downRight = this.label(c, r);
+    return (
+      Number(c < columns && downRight !== upRight) +
+      Number(r < rows && downLeft !== downRight) +
+      Number(c > 0 && upLeft !== downLeft) +
+      Number(r > 0 && upRight !== upLeft)
+    );
+  }
+
   /** The boundary edges leaving a corner. */
   boundariesAt(c: number, r: number): number[] {
     const out: number[] = [];
@@ -768,7 +783,7 @@ function traceChains(grid: Grid, labels: Int16Array): { edges: Edges; chains: Ch
   const isNode = new Uint8Array(stride * (grid.rows + 1));
   for (let r = 0; r <= grid.rows; r++) {
     for (let c = 0; c <= grid.columns; c++) {
-      if (edges.boundariesAt(c, r).length > 2) isNode[r * stride + c] = 1;
+      if (edges.boundaryCount(c, r) > 2) isNode[r * stride + c] = 1;
     }
   }
   const chains: Chain[] = [];

@@ -12,6 +12,7 @@ import {
 import {
   area,
   boxesOverlap,
+  cropToBox,
   boxOf,
   compare,
   contains,
@@ -122,7 +123,10 @@ export function terrainAreas(
   const relief = reliefShapes(sources.elevation, plane);
   const ranges = carve(regions(RANGE_CLASS));
   const inRanges = (shape: MultiPolygon): Claim[] => [
-    ...ranges.map((range) => ({ name: range.name, outline: intersection(range.outline, shape) })),
+    ...ranges.map((range) => ({
+      name: range.name,
+      outline: intersection(range.outline, cropToBox(shape, boxOf(range.outline))),
+    })),
     { name: '', outline: subtract(shape, ranges) },
   ];
   const forests = sources.ecoregions
@@ -153,7 +157,10 @@ export function terrainAreas(
       const near = landParts.filter((part) => boxesOverlap(part.box, box));
       const kept = intersection(
         outline,
-        near.map((part) => part.polygon),
+        cropToBox(
+          near.map((part) => part.polygon),
+          box,
+        ),
       ).filter((polygon) => area([polygon]) >= MIN_AREA_KM2);
       const rounded = roundOutline(kept);
       return rounded.length > 0 ? [{ kind, name, outline: rounded }] : [];

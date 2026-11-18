@@ -26,6 +26,44 @@ export function boxesOverlap(a: Box, b: Box): boolean {
   return a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY;
 }
 
+/** How far round the box `cropToBox` keeps, so its cut stays clear of what lies in the box. */
+const CROP_MARGIN_KM = 1;
+
+/**
+ * The part of `polygons` near `box`, cut ring by ring along the sides of the box grown by
+ * CROP_MARGIN_KM. Clipping a shape inside `box` against the crop gives what clipping it
+ * against `polygons` gives, at the cost of the crop's vertices only: the cut adds edges
+ * only along the grown box's sides, which the shape never reaches.
+ */
+export function cropToBox(polygons: MultiPolygon, box: Box): MultiPolygon {
+  const { minX, minY, maxX, maxY } = grow(box, CROP_MARGIN_KM);
+  const sides: ((p: Point) => number)[] = [
+    ([x]) => x - minX,
+    ([x]) => maxX - x,
+    ([, y]) => y - minY,
+    ([, y]) => maxY - y,
+  ];
+  const cut = (ring: Ring): Ring =>
+    sides.reduce((points, inside) => {
+      const kept: Point[] = [];
+      points.forEach((b, i) => {
+        const a = points[(i + points.length - 1) % points.length] as Point;
+        const [da, db] = [inside(a), inside(b)];
+        if (da >= 0 !== db >= 0) {
+          const t = da / (da - db);
+          kept.push([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]);
+        }
+        if (db >= 0) kept.push(b);
+      });
+      return kept;
+    }, ring);
+  return polygons.flatMap((polygon) => {
+    const [outer, ...holes] = polygon.map(cut);
+    if (!outer || outer.length < 3) return [];
+    return [[outer, ...holes.filter((hole) => hole.length >= 3)]];
+  });
+}
+
 export function boxDistance(a: Box, b: Box): number {
   const dx = Math.max(0, a.minX - b.maxX, b.minX - a.maxX);
   const dy = Math.max(0, a.minY - b.maxY, b.minY - a.maxY);

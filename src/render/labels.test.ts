@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { fixtureWorld } from '../sim/fixture.ts';
 import { newGame } from '../sim/new-game.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
@@ -26,6 +26,11 @@ const overlap = (a: Box, b: Box) =>
   a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 
 describe('placeLabels', () => {
+  let ground: Land;
+  beforeAll(() => {
+    ground = new Land(fixtureWorld().map);
+  });
+
   it('shows every name when the cities are far apart', () => {
     const placed = placeLabels(
       [label('a', 100, 100), label('b', 500, 300), label('c', 800, 500)],
@@ -162,14 +167,14 @@ describe('placeLabels', () => {
   });
 
   it("names every great power's capital at the widest zoom of the new game", () => {
-    const { requests, symbols, view, capitals } = widestZoom();
+    const { requests, symbols, view, capitals } = widestZoom(ground);
     const placed = placeLabels(requests, symbols, view);
     expect(capitals.sort()).toEqual(['alexandria', 'carthago', 'pella', 'persepolis', 'roma']);
     expect(capitals.filter((id) => !placed.has(id))).toEqual([]);
   });
 
   it('writes every name at the widest zoom on its own shore, and every capital on land', () => {
-    const { requests, symbols, view, capitals, onLand } = widestZoom();
+    const { requests, symbols, view, capitals, onLand } = widestZoom(ground);
     const placed = placeLabels(requests, symbols, view, onLand);
     expect(capitals.filter((id) => !placed.has(id))).toEqual([]);
     const crossing = [...placed].filter(([id, box]) => {
@@ -204,9 +209,8 @@ describe('placeLabels', () => {
   });
 });
 
-function widestZoom() {
+function widestZoom(land: Land) {
   const { map } = fixtureWorld();
-  const land = new Land(map);
   const state = newGame(map, { seed: 1, player: 'rome' });
   const view = { width: 1280, height: 720 };
   const camera = fitCamera(view, map);
