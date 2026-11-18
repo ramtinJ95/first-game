@@ -14,7 +14,7 @@ import { limitsOf } from '../sim/systems/economy.ts';
 import { tick } from '../sim/tick.ts';
 import { TROOPS, type Troop } from '../sim/troops.ts';
 import { buildWorld } from '../sim/world/world.ts';
-import { share } from './guards-text.ts';
+import { share } from '../app/threat-news.ts';
 import { recruitThreats } from './recruit-threats.ts';
 
 const map = parseMap(

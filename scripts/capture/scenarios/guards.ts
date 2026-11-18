@@ -130,13 +130,13 @@ export default defineScenario({
     await load(page, carthageTooStrongForOneBand());
     await openRoma(page);
     await expect(page.getByTestId('guards-threat')).toContainText(
-      'takes it to 88%, still at 80% or more, so it may still declare from',
+      'takes it to 88%; 2 bands, 4,000 gold, take it to 78%, below 80%',
     );
     await bothSizes(
       page,
       shot,
       'band-not-enough',
-      "Carthage at full strength against Roma, on notice: Roma's Guards section says one more band takes it to 88%, still at 80% or more, so it may still declare from its named day",
+      "Carthage at full strength against Roma, on notice: Roma's Guards section says it may still declare from its named day, that one more band takes it to 88%, and that 2 bands, 4,000 gold, take it below 80%",
     );
     await page.getByTestId('guards-hire').click();
     await expect(page.getByTestId('guards-threat')).toContainText(

@@ -10,7 +10,8 @@
   import type { PeaceTerms } from '../sim/state/peace.ts';
   import type { Actions } from './actions.ts';
   import { unansweredOffer } from '../app/modals.ts';
-  import { standingThreats, THREAT_WARN, weighedNotes } from '../app/threat-news.ts';
+  import { standingThreats, THREAT_WARN, weighedNotes, type Muster } from '../app/threat-news.ts';
+  import { trainingThreats } from './recruit-threats.ts';
   import { afterWaiting } from './buildings-text.ts';
   import type { World } from '../sim/world/world.ts';
   import {
@@ -41,9 +42,20 @@
   type Payer = 'nobody' | 'us' | 'them';
 
   const room = $derived(warRoomOf(game, pending));
-  const threats = $derived(
-    standingThreats(game, world, afterWaiting(game, pending, world).factions[game.player]?.stores),
-  );
+  const waitingDay = $derived(afterWaiting(game, pending, world));
+  /**
+   * What the men in training do to each field-army threat, reckoned while the game is paused, in
+   * a task of its own: it plays the days to the last muster through the rules, as a recruit card does.
+   */
+  let training = $state<ReadonlyMap<FactionId, Muster> | undefined>(undefined);
+  $effect(() => {
+    training = undefined;
+    if (!paused) return;
+    const at = waitingDay;
+    const timer = setTimeout(() => (training = trainingThreats(at, world)), 0);
+    return () => clearTimeout(timer);
+  });
+  const threats = $derived(standingThreats(game, world, waitingDay, training));
   const near = $derived(threats.filter((threat) => (threat.readiness ?? 0) >= THREAT_WARN));
   const others = $derived(threats.filter((threat) => (threat.readiness ?? 0) < THREAT_WARN));
   // A warning points the player here, so the powers near war and what counts against them open

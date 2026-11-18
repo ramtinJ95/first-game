@@ -70,6 +70,7 @@ export function threatNewsOfDay(
 ): Alert[] {
   const player = after.player;
   const warned: {
+    power: FactionId;
     name: string;
     threat: Threat;
     from: string;
@@ -97,6 +98,7 @@ export function threatNewsOfDay(
     forget(remembered, power.id);
     remembered.add(`${prefixOf(power.id)}${before.day}`);
     warned.push({
+      power: power.id,
       name: factionName(after, power.id),
       threat,
       from: mayDeclare(before, power.noticeSince),
@@ -110,8 +112,8 @@ export function threatNewsOfDay(
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
   const text =
     others.length === 0
-      ? `${first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${percent(first.threat)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.threat, undefined, first.by, 'corner')} See At peace in Wars.`
-      : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => percent(w.threat)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`;
+      ? `${first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner')} See At peace in Wars.`
+      : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`;
   return [
     {
       kind: 'warThreat',
@@ -192,7 +194,7 @@ export function threatFadedNewsOfDay(
       kind: 'warThreatFaded',
       day: before.day,
       tone: 'good',
-      text: `${name}'s threat has passed for now: ${whyFaded(after, power.id, threat)}, and must stand at ${Math.round(NOTICE_SHARE * 100)}% for ${NOTICE_DAYS} days before it may.`,
+      text: `${name}'s threat has passed for now: ${whyFaded(after, power.id, threat)}.`,
     });
   }
   return alerts;
@@ -215,20 +217,20 @@ function endedOn(remembered: ReadonlySet<string>, faction: string): number | und
  */
 function whyFaded(state: State, power: FactionId, threat: Threat | undefined): string {
   if (threat && threat.readiness > 0)
-    return `it has fallen to ${percent(threat) === '0%' ? 'under 1%' : percent(threat)} of the strength it needs to declare war on you`;
+    return `it has fallen to ${percent(threat.readiness) === '0%' ? 'under 1%' : share(threat.readiness)} of the strength it needs to declare war on you, and must stand at ${percent(NOTICE_SHARE)} for ${NOTICE_DAYS} days before it may`;
+  const name = factionName(state, power);
+  const notice = `${name} must stand at ${percent(NOTICE_SHARE)} for ${NOTICE_DAYS} days before it may declare`;
   if (threat)
     return threat.heldBy.length > 0
-      ? `it is at war with ${listed(threat.heldBy.map((enemy) => factionName(state, enemy)))}, which ties down all its armies`
-      : 'it has no strength to spare against you';
+      ? `it is at war with ${listed(threat.heldBy.map((enemy) => factionName(state, enemy)))}, which ties down all its armies, and ${notice}`
+      : `it has no strength to spare against you, and must stand at ${percent(NOTICE_SHARE)} for ${NOTICE_DAYS} days before it may`;
   const ready = Object.values(state.armies).some(
     (army) =>
       army.owner === power &&
       (army.activity.kind === 'idle' || army.activity.kind === 'marching') &&
       canFight(state, army),
   );
-  return ready
-    ? 'none of its cities is near enough to yours to weigh a war on you'
-    : 'none of its armies stands ready to march';
+  return `${ready ? 'none of its cities is near enough to yours to weigh a war on you' : 'none of its armies stands ready to march'}, and ${notice}`;
 }
 
 const listed = (items: readonly string[]) =>
@@ -253,7 +255,55 @@ function readinessOf(state: State, world: World, power: FactionId): Threat | und
   return day.get(power);
 }
 
-const percent = (threat: Threat) => `${Math.round(Math.min(1, threat.readiness) * 100)}%`;
+const percent = (n: number) => `${Math.round(Math.min(1, n) * 100)}%`;
+
+/** A share of the strength a power needs, where one below NOTICE_SHARE that rounds up to it reads "just under", not as the notice. */
+export function share(n: number): string {
+  return n < NOTICE_SHARE && percent(n) === percent(NOTICE_SHARE)
+    ? `just under ${percent(NOTICE_SHARE)}`
+    : percent(n);
+}
+
+/**
+ * Whether a share leaves the power free to declare: still at NOTICE_SHARE or more, so from its
+ * named day, or below, so not until it has stood at NOTICE_SHARE for NOTICE_DAYS.
+ */
+export function verdictText(state: State, power: FactionId, readiness: number): string {
+  return readiness >= NOTICE_SHARE
+    ? `still at ${percent(NOTICE_SHARE)} or more, so it may still declare ${mayDeclareWhen(state, power)}`
+    : `${share(readiness).startsWith('just under') ? '' : `below ${percent(NOTICE_SHARE)}, `}so it may not declare until it has stood at ${percent(NOTICE_SHARE)} for ${NOTICE_DAYS} days`;
+}
+
+/** What men in training do to one power's threat by the day the last of them musters, as `recruitThreats` plays the days. */
+export interface Muster {
+  /** Its share the day after they muster. */
+  readonly mustered: number;
+  /** The day the last of them musters. */
+  readonly musters: number;
+  /** The day the rules end its notice, before it may first declare and by the muster; undefined if they do not. */
+  readonly ended: number | undefined;
+}
+
+/** The first day the power may declare; one not yet on notice that stays at it comes on notice today. */
+export const firstDay = (state: State, power: FactionId) =>
+  (state.factions[power]?.noticeSince ?? state.day) + NOTICE_DAYS;
+
+/**
+ * `men`, the men and the share they muster to, with what that does to the power's notice: the day
+ * the rules end it, at the muster or before, or, with none, still free to declare from its day,
+ * or the men too late when they muster on or after it.
+ */
+export function musterVerdict(state: State, power: FactionId, muster: Muster, men: string): string {
+  const { mustered, musters, ended } = muster;
+  const first = firstDay(state, power);
+  if (ended === musters)
+    return `${men}, ${verdictText(state, power, Math.min(mustered, NOTICE_SHARE - 1e-9))}`;
+  if (ended !== undefined)
+    return `${men}; it falls below ${share(NOTICE_SHARE)} on ${dateText(ended)}, so it may not declare until it has stood at ${share(NOTICE_SHARE)} for ${NOTICE_DAYS} days`;
+  if (musters >= first && mustered < NOTICE_SHARE)
+    return `${men}, ${share(mustered).startsWith('just under') ? '' : `below ${share(NOTICE_SHARE)}, `}but it may declare ${first <= state.day ? 'any day now' : `from ${dateText(first)}`}, before they muster`;
+  return `${men}, ${verdictText(state, power, mustered)}`;
+}
 
 /** What the power weighs: the forces near one of the player's cities, or every army the player has in the field. */
 function weighed(state: State, threat: Threat): string {
@@ -271,13 +321,15 @@ function weighed(state: State, threat: Threat): string {
  */
 function whatCounts(
   state: State,
+  power: FactionId,
   threat: Threat,
-  stores: DeepReadonly<Stores> | undefined,
+  waiting: State,
   by: number | undefined,
   where: Where = 'panel',
+  muster?: Muster,
 ): string {
   if (threat.pressed)
-    return ` ${raiseAdvice(state, stores ?? state.factions[state.player]?.stores, by, where)}. It weighs you so only while you hold no more cities than at the start.`;
+    return ` ${raiseAdvice(state, power, waiting, by, where, muster)}. It weighs you so only while you hold no more cities than at the start.`;
   const front = state.cities[threat.front];
   const gold = state.factions[state.player]?.stores.gold ?? 0;
   const hoard =
@@ -311,7 +363,8 @@ export interface StandingThreat {
 export function standingThreats(
   state: State,
   world: World,
-  stores?: DeepReadonly<Stores>,
+  waiting: State = state,
+  training?: ReadonlyMap<FactionId, Muster>,
 ): StandingThreat[] {
   const player = state.player;
   return Object.values(state.factions)
@@ -338,7 +391,15 @@ export function standingThreats(
         };
       // What counts at a city and what the treasury takes off are the same for every power, so the notes say them once.
       const advice = threat.pressed
-        ? whatCounts(state, threat, stores, dayToCome(state, power.noticeSince))
+        ? whatCounts(
+            state,
+            power.id,
+            threat,
+            waiting,
+            dayToCome(state, power.noticeSince),
+            'panel',
+            training?.get(power.id),
+          )
         : '';
       return {
         power: power.id,
@@ -346,7 +407,7 @@ export function standingThreats(
         readiness: Math.min(1, threat.readiness),
         weighs: threat.pressed ? 'field' : threat.front,
         hoard: threat.hoard,
-        text: `${name} has ${percent(threat)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${advice}${power.noticeSince === null ? '' : ` It may declare ${mayDeclare(state, power.noticeSince)} if it holds it.`}`,
+        text: `${name} has ${share(threat.readiness)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${advice}${power.noticeSince === null ? '' : ` It may declare ${mayDeclare(state, power.noticeSince)} if it holds it.`}`,
       };
     });
 }
@@ -442,27 +503,77 @@ function notCounted(army: DeepReadonly<Army>, point: MapPoint): { text: string; 
 }
 
 /**
- * What raising men takes today, as the field-army threat advises it: the cheapest troop the
- * player can afford with the stores given, which the wars panel reckons after the orders
- * waiting, among those that finish training before the day `by` the power may first declare,
- * since it decides before that day's recruits muster, with its quickest training among the
- * cities that may recruit now. With none affordable in time, the cheapest it can afford and the
- * day it would muster, since men who muster on or after that day still lower a notice the power
- * holds. With none affordable, the cheapest troop's price and days and what the player lacks
- * for it. Once that day has passed, `by` is undefined and every troop is in time. The corner
- * names the muster day only, as its warning names the day war may come.
+ * What raising men takes today, as the field-army threat advises it. First the men already in
+ * training, the waiting orders' too, by troop, city and muster day, and, when `muster` gives
+ * the days played to the last muster, what they do to the share; then what more the player can
+ * order with the stores the waiting orders leave: the cheapest troop it can afford among those
+ * that finish training before the day `by` the power may first declare, since it decides before
+ * that day's recruits muster, with its quickest training among the cities that may recruit now.
+ * With none affordable in time, the cheapest it can afford and the day it would muster, since men
+ * who muster on or after that day still lower a notice the power holds. With none affordable,
+ * the cheapest troop's price and days and what the player lacks for it. Once that day has passed,
+ * `by` is undefined and every troop is in time. The corner names the men in training, or else
+ * the muster day only, as its warning names the day war may come.
  */
 function raiseAdvice(
   state: State,
-  stores: DeepReadonly<Stores> | undefined,
+  power: FactionId,
+  waiting: State,
   by: number | undefined,
   where: Where,
+  muster: Muster | undefined,
 ): string {
+  const training = inTraining(waiting);
+  const stores = waiting.factions[state.player]?.stores;
+  if (training.length > 0) {
+    if (where === 'corner') return `More men lower it, not guards: ${trainingText(training, true)}`;
+    const men = trainingText(training, false);
+    const told = muster
+      ? musterVerdict(
+          state,
+          power,
+          muster,
+          `${men}${training.length === 1 ? ' and take' : ', which take'} it to ${share(muster.mustered)}`,
+        )
+      : men;
+    const more = orderAdvice(state, stores, by);
+    const then =
+      more.kind === 'none'
+        ? `You can raise no more now${more.text === '' ? '' : `: even ${more.text}`}`
+        : `Besides them, ${more.text}`;
+    return `More men lower it, not guards. ${told}. ${then}`;
+  }
+  const advice = orderAdvice(state, stores, by);
+  if (advice.kind === 'none')
+    return advice.text === ''
+      ? 'More men lower it, not guards, but no city of yours may recruit now'
+      : `More men lower it, not guards, but even ${advice.text}`;
+  if (advice.kind === 'late' && where === 'corner')
+    // The corner names the day war may come just before, and has no room to say it twice.
+    return `More men lower it, not guards: ${TROOP_NAMES[advice.troop]} ordered now muster on ${dateText(advice.musters)}`;
+  return `More men lower it, not guards: ${advice.text}`;
+}
+
+/** What more the player can order: a troop in time, one that musters late, or none, with what it lacks; '' with no city that may recruit. */
+type OrderAdvice =
+  | { readonly kind: 'inTime'; readonly text: string }
+  | {
+      readonly kind: 'late';
+      readonly text: string;
+      readonly troop: Troop;
+      readonly musters: number;
+    }
+  | { readonly kind: 'none'; readonly text: string };
+
+function orderAdvice(
+  state: State,
+  stores: DeepReadonly<Stores> | undefined,
+  by: number | undefined,
+): OrderAdvice {
   const cities = Object.values(state.cities).filter(
     (city) => city.owner === state.player && city.unrestDays === 0 && !beleaguered(state, city),
   );
-  if (cities.length === 0)
-    return 'More men lower it, not guards, but no city of yours may recruit now';
+  if (cities.length === 0) return { kind: 'none', text: '' };
   const days = (troop: Troop) =>
     Math.min(...cities.map((city) => trainingDaysAt(city, TROOPS[troop].recruit.days)));
   const gold = stores?.gold ?? 0;
@@ -475,24 +586,80 @@ function raiseAdvice(
   );
   const inTime = affordable.find((troop) => by === undefined || state.day + days(troop) < by);
   if (inTime)
-    return `More men lower it, not guards: ${TROOP_NAMES[inTime]} cost ${whole(TROOPS[inTime].recruit.gold)} gold and train in ${whole(days(inTime))} days`;
+    return {
+      kind: 'inTime',
+      text: `${TROOP_NAMES[inTime]} cost ${whole(TROOPS[inTime].recruit.gold)} gold and train in ${whole(days(inTime))} days`,
+    };
   const [late] = affordable;
   if (late && by !== undefined) {
     const musters = state.day + days(late);
-    // The corner names the day war may come just before, and has no room to say it twice.
-    if (where === 'corner')
-      return `More men lower it, not guards: ${TROOP_NAMES[late]} ordered now muster on ${dateText(musters)}`;
     const when =
       musters === by
         ? 'the first day war may come'
         : `${whole(musters - by)} ${musters - by === 1 ? 'day' : 'days'} after war may first come`;
-    return `More men lower it, not guards: order ${TROOP_NAMES[late]} now for ${whole(TROOPS[late].recruit.gold)} gold; they muster and lower it from ${dateText(musters)}, ${when}`;
+    return {
+      kind: 'late',
+      troop: late,
+      musters,
+      text: `order ${TROOP_NAMES[late]} now for ${whole(TROOPS[late].recruit.gold)} gold; they muster and lower it from ${dateText(musters)}, ${when}`,
+    };
   }
   const [cheapest] = troops;
-  if (!cheapest) return 'More men lower it, not guards';
+  if (!cheapest) return { kind: 'none', text: '' };
   const { gold: price, men } = TROOPS[cheapest].recruit;
   const name = TROOP_NAMES[cheapest];
-  return gold < price
-    ? `More men lower it, not guards, but even ${name} cost ${whole(price)} gold, ${whole(days(cheapest))} days; you have ${whole(gold)} gold`
-    : `More men lower it, not guards, but even ${name} need ${whole(men)} men, ${whole(days(cheapest))} days; you have ${whole(manpower)} manpower`;
+  return {
+    kind: 'none',
+    text:
+      gold < price
+        ? `${name} cost ${whole(price)} gold, ${whole(days(cheapest))} days; you have ${whole(gold)} gold`
+        : `${name} need ${whole(men)} men, ${whole(days(cheapest))} days; you have ${whole(manpower)} manpower`,
+  };
+}
+
+/** One kind of troop in training at one of the player's cities, mustering on one day. */
+interface Training {
+  readonly troop: Troop;
+  readonly city: string;
+  readonly musters: number;
+}
+
+/** The player's men in training on the state, by muster day, one entry for each troop, city and day. */
+function inTraining(state: State): Training[] {
+  const found = new Map<string, Training>();
+  for (const city of Object.values(state.cities)) {
+    if (city.owner !== state.player) continue;
+    for (const recruit of city.recruits)
+      found.set(`${recruit.troop}:${city.id}:${recruit.readyOn}`, {
+        troop: recruit.troop,
+        city: city.name,
+        musters: recruit.readyOn,
+      });
+  }
+  return [...found.values()].sort((a, b) => a.musters - b.musters || a.city.localeCompare(b.city));
+}
+
+/**
+ * "Skirmishers in training at Roma muster on Year 1, day 111 and Spearmen at Capua on Year 1,
+ * day 115", the first NAMED_ARMIES and the rest counted, or in the corner, where room is short,
+ * "Skirmishers in training muster on Year 1, day 111", or of several troops "men in training
+ * muster by Year 1, day 115".
+ */
+function trainingText(training: readonly Training[], short: boolean): string {
+  const last = training.at(-1)?.musters ?? 0;
+  if (short) {
+    const [troop, ...others] = new Set(training.map((t) => TROOP_NAMES[t.troop]));
+    return `${others.length === 0 ? troop : 'men'} in training muster ${training.length === 1 ? 'on' : 'by'} ${dateText(last)}`;
+  }
+  const [first, ...others] = training;
+  if (!first) return '';
+  const shown = others
+    .slice(0, NAMED_ARMIES - 1)
+    .map((t) => `${TROOP_NAMES[t.troop]} at ${t.city} on ${dateText(t.musters)}`);
+  const more = others.length - shown.length;
+  return listed([
+    `${TROOP_NAMES[first.troop]} in training at ${first.city} muster on ${dateText(first.musters)}`,
+    ...shown,
+    ...(more > 0 ? [`${whole(more)} more by ${dateText(last)}`] : []),
+  ]);
 }

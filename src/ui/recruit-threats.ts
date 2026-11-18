@@ -1,37 +1,40 @@
 import { dateText, factionName, whole } from '../app/names.ts';
-import { powersNearWar, standingThreats, THREAT_WARN } from '../app/threat-news.ts';
+import {
+  musterVerdict,
+  powersNearWar,
+  share,
+  standingThreats,
+  THREAT_WARN,
+  verdictText,
+  type Muster,
+} from '../app/threat-news.ts';
 import { NOTICE_DAYS, NOTICE_SHARE, WAR_FRONT_KM } from '../sim/ai/thresholds.ts';
+import { truceBetween } from '../sim/peace/truce.ts';
+import { areAtWar } from '../sim/wars.ts';
 import { standsWithin } from '../sim/ai/situation.ts';
 import { warReadiness } from '../sim/ai/war.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { CityId, FactionId } from '../sim/ids.ts';
+import type { FactionId } from '../sim/ids.ts';
 import { executeOrder, type Order } from '../sim/orders/orders.ts';
-import type { City, Recruit } from '../sim/state/city.ts';
+import type { City } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { RALLY_DISTANCE } from '../sim/systems/economy.ts';
 import { SYSTEMS } from '../sim/systems.ts';
 import type { Troop } from '../sim/troops.ts';
 import type { World } from '../sim/world/world.ts';
 import { afterWaiting } from './buildings-text.ts';
-import { share, verdictText } from './guards-text.ts';
 
 type State = DeepReadonly<GameState>;
 
 /** What one troop ordered in a city does to one power's threat, as its card says it. */
-export interface RecruitThreat {
+export interface RecruitThreat extends Muster {
   readonly power: FactionId;
   /** Its share today, as the waiting orders leave the day. */
   readonly now: number;
   /** Its share the day after the order, once the gold is paid. */
   readonly paid: number;
-  /** Its share the day after the men muster. */
-  readonly mustered: number;
-  /** The day the men muster. */
-  readonly musters: number;
   /** Whether the power counts the mustered men at all. */
   readonly counted: boolean;
-  /** The day the rules end its notice, from the order's day through the muster, before it may first declare; undefined if they do not. */
-  readonly ended: number | undefined;
   readonly text: string;
 }
 
@@ -70,7 +73,9 @@ export function recruitThreats(
       continue;
     const recruit = ordered.cities[city.id]?.recruits.at(-1);
     if (!recruit) continue;
-    const days = playToMuster(ordered, world, near, city.id, recruit);
+    const days = playToMuster(ordered, world, near, recruit.readyOn, (played) =>
+      Boolean(played.cities[city.id]?.recruits.includes(recruit)),
+    );
     const { musters } = days;
     // The men rally to the army of the player's at the city, which holds a formation new since today.
     const army = Object.values(days.played.armies).find(
@@ -105,14 +110,15 @@ export function recruitThreats(
  * Plays each day from the order's through the muster day with the rules' own systems, as a tick
  * plays it with no orders, and reads each power's share the day after the order and the day after
  * the muster, and the day its notice ends before it may first declare. A power not yet on notice
- * that stays near war comes on notice the day the order is played.
+ * that stays near war comes on notice the day the order is played. A city an enemy besieges
+ * musters its recruits at once, so the men muster the first day `training` finds them gone.
  */
 function playToMuster(
   ordered: GameState,
   world: World,
   near: readonly { power: FactionId }[],
-  city: CityId,
-  recruit: DeepReadonly<Recruit>,
+  readyOn: number,
+  training: (played: GameState) => boolean,
 ) {
   const from = ordered.day;
   const held = new Map(
@@ -121,12 +127,11 @@ function playToMuster(
   let played = ordered;
   let paid = new Map<FactionId, number>();
   const ended = new Map<FactionId, number>();
-  let musters = recruit.readyOn;
+  let musters = readyOn;
   for (let day = from; day <= musters; day++) {
     played = renewed(played);
     for (const system of SYSTEMS) system(played, world);
-    // A city an enemy besieges musters its recruits at once, so the men muster the day they leave training.
-    if (!played.cities[city]?.recruits.includes(recruit)) musters = day;
+    if (!training(played)) musters = day;
     for (const [power, since] of held)
       if (
         !ended.has(power) &&
@@ -139,9 +144,48 @@ function playToMuster(
   return { played, paid, ended, musters, mustered: sharesOf(renewed(played), world, near) };
 }
 
-/** The first day the power may declare; one not yet on notice that stays at it comes on notice the day the order is played. */
-const firstDay = (state: State, power: FactionId) =>
-  (state.factions[power]?.noticeSince ?? state.day) + NOTICE_DAYS;
+/**
+ * What the men the player has in training on `waiting`, the day as the waiting orders leave it,
+ * do to each great power at peace with it that weighs its field armies, by the day after the last
+ * of them musters: the days a recruit card plays, with no new order. Empty with none in training.
+ */
+export function trainingThreats(waiting: State, world: World): ReadonlyMap<FactionId, Muster> {
+  const player = waiting.player;
+  const own = Object.values(waiting.cities).filter((city) => city.owner === player);
+  const training = (state: State) =>
+    own.some((city) => (state.cities[city.id]?.recruits.length ?? 0) > 0);
+  if (!training(waiting)) return new Map();
+  const pressed = Object.values(waiting.factions)
+    .filter(
+      (power) =>
+        power.id !== player &&
+        power.kind === 'greatPower' &&
+        !areAtWar(waiting, power.id, player) &&
+        !truceBetween(waiting, power.id, player) &&
+        warReadiness(waiting, world, power.id, player)?.pressed === true,
+    )
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .map((power) => ({ power: power.id }));
+  if (pressed.length === 0) return new Map();
+  const readyOn = Math.max(...own.flatMap((city) => city.recruits.map((r) => r.readyOn)));
+  const days = playToMuster(
+    structuredClone(waiting) as GameState,
+    world,
+    pressed,
+    readyOn,
+    training,
+  );
+  return new Map(
+    pressed.map(({ power }) => [
+      power,
+      {
+        mustered: days.mustered.get(power) ?? 0,
+        musters: days.musters,
+        ended: days.ended.get(power),
+      },
+    ]),
+  );
+}
 
 /**
  * The state with fresh collections, as a tick's own copy gives each day: the AI caches by the
@@ -188,19 +232,14 @@ function threatText(
 ): string {
   const { power, now, paid, mustered, musters, counted, ended } = forecast;
   const name = factionName(state, power);
-  const first = firstDay(state, power);
   const opening = `${name} ${share(now)} now, ${share(paid)} once paid`;
   const men = `${share(mustered)} once they muster on ${dateText(musters)}${counted ? '' : `, beyond ${whole(WAR_FRONT_KM)} km of ${front ?? 'the city it weighs'}, where they do not count`}`;
   // A notice the rules end reads as below the line, whatever the next day's share rounds to.
-  const below = (n: number) => verdictText(state, power, Math.min(n, NOTICE_SHARE - 1e-9));
-  if (ended === state.day) return `${opening}, ${below(paid)}; ${men}`;
-  if (ended === musters) return `${opening}, ${men}, ${below(mustered)}`;
-  if (ended !== undefined)
-    return `${opening}, ${men}; it falls below ${share(NOTICE_SHARE)} on ${dateText(ended)}, so it may not declare until it has stood at ${share(NOTICE_SHARE)} for ${NOTICE_DAYS} days`;
-  if (musters >= first && mustered < NOTICE_SHARE)
-    return `${opening}, ${men}, ${share(mustered).startsWith('just under') ? '' : `below ${share(NOTICE_SHARE)}, `}but it may declare ${first <= state.day ? 'any day now' : `from ${dateText(first)}`}, before they muster`;
-  return `${opening}, ${men}, ${verdictText(state, power, mustered)}`;
+  if (ended === state.day)
+    return `${opening}, ${verdictText(state, power, Math.min(paid, NOTICE_SHARE - 1e-9))}; ${men}`;
+  return `${opening}, ${musterVerdict(state, power, forecast, men)}`;
 }
+
 /** While the clock runs, the cards say to pause instead of reckoning every troop each day: the names of the powers near war. */
 export function nearWarNames(state: State, world: World): string[] {
   return standingThreats(state, world)

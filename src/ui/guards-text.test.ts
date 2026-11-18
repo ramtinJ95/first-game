@@ -97,7 +97,7 @@ describe('the threat a hire answers', () => {
     expect(shown.hire.threats).toEqual([
       expect.stringMatching(
         new RegExp(
-          `^Carthage ${now}% of the strength it needs to declare war\\. One more band, counted until ${dateText(state.day + 90)}, takes it to (\\d+)%, still at 80% or more, so it may still declare once it has stood at 80% for 30 days\\.$`,
+          `^Carthage ${now}% of the strength it needs to declare war, still at 80% or more, so it may still declare once it has stood at 80% for 30 days\\. One more band, counted until ${dateText(state.day + 90)}, takes it to (\\d+)%; \\d bands, [\\d,]+ gold, take it to \\d+%, below 80%, so it may not declare until it has stood at 80% for 30 days\\.$`,
         ),
       ),
     ]);
@@ -151,7 +151,7 @@ describe('a band that does not take a power off notice', () => {
     const state = carthageAt(6000);
     expect(warReadiness(state, atlas, carthage, f.rome)?.readiness).toBeGreaterThanOrEqual(1);
     expect(cityGuards(state, [], roma(state), atlas).hire.threats).toEqual([
-      'Carthage 100% of the strength it needs to declare war. One more band, counted until Year 1, day 190, takes it to 88%, still at 80% or more, so it may still declare from Year 1, day 110.',
+      'Carthage 100% of the strength it needs to declare war, still at 80% or more, so it may still declare from Year 1, day 110. One more band, counted until Year 1, day 190, takes it to 88%; 2 bands, 4,000 gold, take it to 78%, below 80%, so it may not declare until it has stood at 80% for 30 days.',
     ]);
     expect(cityGuards(state, [hireAtRoma], roma(state), atlas).hire.threats).toEqual([
       'Carthage, with the band you hired: 88% of the strength it needs to declare war, still at 80% or more, so it may still declare from Year 1, day 110. One more band, counted until Year 1, day 190, takes it to 78%, below 80%, so it may not declare until it has stood at 80% for 30 days.',
@@ -191,13 +191,70 @@ describe('a band that does not take a power off notice', () => {
     expect(line).not.toContain('takes it to 80%');
   });
 
-  it('says even one more band after the one hired leaves it at 80% or more', () => {
+  it('says, at the most guards a city may hold, that guards alone cannot take it below 80%', () => {
     const state = carthageAt(8000);
     expect(cityGuards(state, [hireAtRoma], roma(state), atlas).hire.threats).toEqual([
+      'Carthage, with the band you hired: 100% of the strength it needs to declare war, still at 80% or more, so it may still declare from Year 1, day 110. One more band, counted until Year 1, day 190, takes it to 100%, and all 5 Roma may still hire, 10,000 gold, to 97%: guards alone cannot take it below 80%.',
+    ]);
+    const full = carthageAt(8000);
+    roma(full).guards = Array.from({ length: 4 }, () => band(374));
+
+    expect(cityGuards(full, [hireAtRoma], roma(full), atlas).hire.threats).toEqual([
       expect.stringMatching(
-        /^Carthage, with the band you hired: \d+% of the strength it needs to declare war, still at 80% or more, so it may still declare from Year 1, day 110\. One more band, counted until Year 1, day 190, takes it to \d+%, still at 80% or more, so it may still declare from Year 1, day 110\.$/,
+        /^Carthage, with the band you hired: 100% .*\. One more band, counted until Year 1, day 190 and the last Roma may hold, takes it to 100%: guards alone cannot take it below 80%\.$/,
       ),
     ]);
+  });
+
+  it('says no lower when the bands a city may still hire leave the share where one more takes it', () => {
+    const state = carthageAt(8000);
+    expect(cityGuards(state, [hireAtRoma, hireAtRoma], roma(state), atlas).hire.threats).toEqual([
+      expect.stringMatching(
+        /^Carthage, with the 2 bands you hired: .* One more band, counted until Year 1, day 190, takes it to (\d+)%, and all 4 Roma may still hire, 8,000 gold, no lower: guards alone cannot take it below 80%\.$/,
+      ),
+    ]);
+  });
+
+  it('says how many bands take a capped share below 80%, as the rules count them', () => {
+    const state = carthageAt(6000);
+    const [line] = cityGuards(state, [], roma(state), atlas).hire.threats;
+    const bands = Number(/; (\d) bands, /.exec(line ?? '')?.[1]);
+    let hired = state;
+    for (let band = 0; band < bands; band++) hired = afterHire(hired);
+    const share = warReadiness(hired, atlas, carthage, f.rome)?.readiness ?? 1;
+    expect(share).toBeLessThan(0.8);
+    expect(
+      warReadiness(afterHire(state), atlas, carthage, f.rome)?.readiness,
+    ).toBeGreaterThanOrEqual(0.8);
+    expect(line).toContain(`take it to ${Math.round(share * 100)}%, below 80%`);
+  });
+
+  it('names the bands hired today, not one band, after two hires in a day', () => {
+    const state = carthageAt(8000);
+    const [line] = cityGuards(state, [hireAtRoma, hireAtRoma], roma(state), atlas).hire.threats;
+    expect(line).toMatch(/^Carthage, with the 2 bands you hired: /);
+    expect(line).not.toContain('the band you hired');
+  });
+
+  it('says once in a line that the power may still declare from its day', () => {
+    for (const men of [5300, 5400, 6000, 6360, 8000, 12_000])
+      for (const pending of [[], [hireAtRoma], [hireAtRoma, hireAtRoma]]) {
+        const state = carthageAt(men);
+        for (const line of cityGuards(state, pending, roma(state), atlas).hire.threats)
+          expect(line.split('may still declare').length - 1, `${men}: ${line}`).toBeLessThanOrEqual(
+            1,
+          );
+      }
+  });
+
+  it('writes a share just under 80% the same way before and after the hire', () => {
+    const state = carthageAt(5400);
+    const [before] = cityGuards(state, [], roma(state), atlas).hire.threats;
+    expect(before).toContain('takes it to just under 80%');
+    const [after] = cityGuards(state, [hireAtRoma], roma(state), atlas).hire.threats;
+    expect(after).toMatch(
+      /^Carthage just under 80% → \d+% of the strength it needs to declare war/,
+    );
   });
 
   it('says one band that is enough takes it below 80%, and keeps the arrow once it stands below', () => {
