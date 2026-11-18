@@ -88,7 +88,7 @@ describe('fateChoices', () => {
     ['sacked', 'sack'],
     ['enslaved', 'enslave'],
   ] as const)(
-    'gives the yield of a %s city once calm, as the city yields it the day its unrest ends',
+    'gives the yield of the city once calm after it is %s, as it yields it the day its unrest ends',
     (_, kind) => {
       const { fallen, [kind]: choice } = fates();
       const after = play(fallen, choice, choice.unrestDays + 1);

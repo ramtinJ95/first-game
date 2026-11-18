@@ -287,8 +287,9 @@ describe('the economy of the new game meets its tuning targets', () => {
 });
 
 /**
- * The day's systems less battles, sieges and the AI's notice: with no AI no war begins, so the
- * first two have nothing to play and nothing here reads the third, and they are most of a day's cost.
+ * The day's systems less battles, sieges and the AI's notice, most of a day's cost. With no AI no
+ * war begins, so battles and sieges only bring back morale and walls that stay full here, and
+ * nothing here reads the notice.
  */
 const PEACETIME = SYSTEMS.filter((system) => ![battles, sieges, notice].includes(system));
 
