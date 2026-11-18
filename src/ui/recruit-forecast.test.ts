@@ -389,6 +389,19 @@ it('names Canals in another city of the player when the city raising cannot star
   expect(forecast.canal).toBeUndefined();
 });
 
+it('names a later day for Canals when the gold pays for them but not for the raise as well', () => {
+  const state = foodDeficitAfterSpearmen(-5, 0.1);
+  required(state.factions[f.rome]).stores.gold = 4000;
+  const canal = required(recruitForecast(state, [], world, 'spearmen', 15, f.roma).canal);
+  expect(canal).not.toContain('raised now');
+  const wait = Number(/in about ([\d,]+) days/.exec(canal)?.[1]?.replace(',', ''));
+  expect(shortWithCanals(state, wait + 1)).toBeUndefined();
+  required(state.factions[f.rome]).stores.gold = 6400;
+  expect(recruitForecast(state, [], world, 'spearmen', 15, f.roma).canal).toContain(
+    'fed if raised now',
+  );
+});
+
 it('names no Canals when food does not hold the raise back', () => {
   const state = goldOnly();
   const forecast = recruitForecast(state, [], world, 'spearmen', 15, f.roma);

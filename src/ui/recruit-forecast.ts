@@ -107,7 +107,7 @@ export function recruitForecast(
           return later.food === undefined && later.gold === undefined;
         })
       : undefined;
-  const fedWithCanal = (plan: Plan) =>
+  const withCanal = (plan: Plan, paysOn?: number) =>
     daysUntilShort(
       stores.food,
       balance.food,
@@ -116,14 +116,23 @@ export function recruitForecast(
       GRANARY_DAYS * UPKEEP_PER_MAN.food,
       byDay([...plan, { inDays: BUILDINGS.canals.days, men: 0, gain: BUILDINGS.canals.food }]),
       yearly.food,
+    ) === undefined &&
+    daysUntilShort(
+      stores.gold - BUILDINGS.canals.gold - (paysOn === undefined ? cost.gold : 0),
+      balance.gold,
+      limits.gold,
+      UPKEEP_PER_MAN.gold,
+      0,
+      paysOn === undefined ? plan : byDay([...plan, { inDays: paysOn, men: 0, pay: cost.gold }]),
+      yearly.gold,
     ) === undefined;
   const site = troop && short.food !== undefined ? canalSite(waiting, at) : undefined;
   const canalWait = !site
     ? undefined
-    : fedWithCanal([...queued, { inDays: daysToMuster, men: cost.men }])
+    : withCanal(byDay([...queued, { inDays: daysToMuster, men: cost.men }]))
       ? 0
       : firstWait(Math.max(BUILDINGS.canals.days, ...queued.map((r) => r.inDays)), (wait) =>
-          fedWithCanal([...queued, { inDays: daysToMuster + wait, men: cost.men }]),
+          withCanal(byDay([...queued, { inDays: daysToMuster + wait, men: cost.men }]), wait),
         );
   const canal =
     site && canalWait !== undefined && canalWait < (holdsAfter ?? Infinity)
