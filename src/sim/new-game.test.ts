@@ -17,7 +17,10 @@ import { loadGame, saveGame } from './save.ts';
 import { GameStateSchema, type GameState } from './state/game-state.ts';
 import { UNREST_DAYS } from './cities.ts';
 import { dailyBalances, menOf, UPKEEP_PER_MAN } from './systems/economy.ts';
-import { fullDefences } from './systems/sieges.ts';
+import { battles } from './systems/battles.ts';
+import { notice } from './systems/notice.ts';
+import { fullDefences, sieges } from './systems/sieges.ts';
+import { SYSTEMS } from './systems.ts';
 import { tick } from './tick.ts';
 import { TROOPS, type Troop } from './troops.ts';
 import { buildWorld } from './world/world.ts';
@@ -283,6 +286,13 @@ describe('the economy of the new game meets its tuning targets', () => {
   });
 });
 
+/**
+ * The day's systems less battles, sieges and the AI's notice, most of a day's cost. With no AI no
+ * war begins, so battles and sieges only bring back morale and walls that stay full here, and
+ * nothing here reads the notice.
+ */
+const PEACETIME = SYSTEMS.filter((system) => ![battles, sieges, notice].includes(system));
+
 describe('a power that raises every troop it can afford', () => {
   test('waits on gold, runs short of food, and falls back to the men its land feeds', () => {
     const round: readonly Troop[] = [
@@ -311,8 +321,9 @@ describe('a power that raises every troop it can afford', () => {
         orders.push({ kind: 'recruit', faction: rome, city: 'roma' as CityId, troop });
         next++;
       }
-      state = tick(state, orders, world).state;
+      state = tick(state, orders, world, PEACETIME).state;
     }
+    expect(state.wars, 'no war began, so battles and sieges had nothing to play').toEqual({});
     const men = Object.values(state.armies)
       .filter((army) => army.owner === rome)
       .reduce((sum, army) => sum + menOf(state, army), 0);

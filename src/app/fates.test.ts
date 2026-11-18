@@ -46,12 +46,18 @@ function yieldOf(state: GameState) {
   return cityBalance(state, city);
 }
 
+/** Mediolanum fallen to Rome, with its three fates in the order the prompt gives them. */
+function fates() {
+  const fallen = mediolanumFalls();
+  const [occupy, sack, enslave] = fateChoices(fallen, world, mediolanum);
+  if (!occupy || !sack || !enslave) throw new Error('three fates');
+  return { fallen, occupy, sack, enslave };
+}
+
 describe('fateChoices', () => {
-  it("gives each fate's yield in unrest and once calm, as the city yields them through the days", () => {
-    const fallen = mediolanumFalls();
+  it("gives each fate's yield in unrest, as the city yields it the next day", () => {
+    const { fallen, occupy, sack, enslave } = fates();
     expect(fallen.cities[mediolanum]?.owner).toBe(rome);
-    const [occupy, sack, enslave] = fateChoices(fallen, world, mediolanum);
-    if (!occupy || !sack || !enslave) throw new Error('three fates');
 
     expect(occupy.unrestDays).toBe(fallen.cities[mediolanum]?.unrestDays);
     expect(occupy.calm.gold).toBeGreaterThan(occupy.unrest.gold * 2);
@@ -64,25 +70,35 @@ describe('fateChoices', () => {
       expect(Math.abs(nextDay.gold - choice.unrest.gold)).toBeLessThan(0.05 * nextDay.gold);
       expect(Math.abs(nextDay.food - choice.unrest.food)).toBeLessThan(0.5);
     }
+    expect(sack.calm.gold).toBeLessThan(occupy.calm.gold);
+  });
 
+  it('gives the yield of an occupied city once calm, as the city yields it a hundred days on', () => {
+    const { fallen, occupy } = fates();
     const hundredDaysOn = play(fallen, occupy, 100);
     expect(hundredDaysOn.cities[mediolanum]?.unrestDays).toBe(0);
     const calm = yieldOf(hundredDaysOn);
     expect(occupy.calm.gold).toBeCloseTo(calm.gold, 0);
     expect(Math.abs(occupy.calm.food - calm.food)).toBeLessThan(0.1 * Math.abs(calm.food) + 0.5);
     expect(Math.abs(occupy.calm.manpower - calm.manpower)).toBeLessThan(0.1 * calm.manpower);
+    expectConsistent(hundredDaysOn);
+  });
 
-    for (const choice of [sack, enslave]) {
+  it.each([
+    ['sacked', 'sack'],
+    ['enslaved', 'enslave'],
+  ] as const)(
+    'gives the yield of the city once calm after it is %s, as it yields it the day its unrest ends',
+    (_, kind) => {
+      const { fallen, [kind]: choice } = fates();
       const after = play(fallen, choice, choice.unrestDays + 1);
       expect(after.cities[mediolanum]?.unrestDays).toBe(0);
       const real = yieldOf(after);
       expect(Math.abs(choice.calm.gold - real.gold)).toBeLessThan(0.1 * real.gold);
       expect(Math.abs(choice.calm.food - real.food)).toBeLessThan(0.1 * Math.abs(real.food) + 0.5);
       expectConsistent(after);
-    }
-    expect(sack.calm.gold).toBeLessThan(occupy.calm.gold);
-    expectConsistent(hundredDaysOn);
-  });
+    },
+  );
 
   it('writes a day of yield with its sign', () => {
     expect(dailyText({ gold: 2.14, food: -0.4, manpower: 120 })).toBe(
