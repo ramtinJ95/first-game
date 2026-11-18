@@ -34,7 +34,7 @@ export default defineScenario({
     await page.getByTestId('recruit-warning').scrollIntoViewIfNeeded();
     await shot(
       'recruit-shortfall',
-      'A lasting deficit warns at any distance: 8 days of food and 823 days of gold, as the top bar counts them, both red, and the raise asks Raise anyway',
+      'A lasting deficit warns at any distance: 8 days of food and 826 days of gold, as the top bar counts them, both red, and the raise asks Raise anyway',
     );
 
     await loadWarnings(page, foodShortUnlessWaiting());
@@ -46,7 +46,7 @@ export default defineScenario({
     await page.getByTestId('recruit-warning').scrollIntoViewIfNeeded();
     await shot(
       'recruit-wait',
-      'A regiment the filling granary would carry later names the day: food lasts about 602 days now, raised in about 838 days the men are fed as the people grow, and Raise anyway stays',
+      'A regiment the filling granary would carry later names the day: food lasts about 669 days now, raised in about 251 days the men are fed as the people grow, and Raise anyway stays',
     );
 
     await loadWarnings(page, slowFoodDeficit());

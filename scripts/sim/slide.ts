@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { threatNewsOfDay } from '../../src/app/threat-news.ts';
+import { dateText } from '../../src/app/names.ts';
 import type { FactionId } from '../../src/sim/ids.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
 import { dailyBalances, limitsOf, menOf, UPKEEP_PER_MAN } from '../../src/sim/systems/economy.ts';
@@ -36,8 +37,8 @@ type Player = keyof typeof PLAYERS;
 /** The troop the warnings name when nothing else is affordable: the cheapest in gold. */
 const CHEAPEST = 'skirmishers';
 const { men: CHEAPEST_MEN, gold: CHEAPEST_GOLD } = TROOPS[CHEAPEST].recruit;
-/** The early and middle game the play-throughs call fun: the first five years. */
-const MIDDLE_ENDS = 5 * 365;
+/** The first day after the early and middle game the play-throughs call fun: Year 6, day 1. */
+const MIDDLE_ENDS = 5 * 365 + 1;
 const STORES = ['manpower', 'food', 'gold'] as const;
 type Store = (typeof STORES)[number];
 
@@ -154,7 +155,7 @@ function play(player: Player, seed: number, years: number): Game {
     years,
     ({ before, after, events }) => {
       const day = before.day;
-      const year = game.years[Math.floor(day / 365)];
+      const year = game.years[Math.floor((day - 1) / 365)];
       if (!year) return;
       for (const alert of threatNewsOfDay(before, after, world, told)) {
         game.stops++;
@@ -175,7 +176,9 @@ function play(player: Player, seed: number, years: number): Game {
           game.lossDays.push(day);
         }
       const now = romeNow(after);
-      if (now.stores.gold >= now.limits.gold - 1) year.goldCapDays++;
+      // The economy caps gold before the people grow, so the day's cap is the limit of the morning's people.
+      const cap = limitsOf(before).get(rome as FactionId)?.gold ?? Infinity;
+      if (now.stores.gold >= cap - 1) year.goldCapDays++;
       if (now.stores.food < 0) year.hungryDays++;
       const training = Object.values(after.cities)
         .filter((c) => c.owner === rome)
@@ -187,7 +190,7 @@ function play(player: Player, seed: number, years: number): Game {
           year.shortDays[store]++;
           game.firstShort[store] ??= after.day;
         }
-      if (after.day % 365 === 0)
+      if ((after.day - 1) % 365 === 0)
         Object.assign(year, {
           foodDay: now.balance.food,
           food: now.stores.food,
@@ -210,8 +213,7 @@ function play(player: Player, seed: number, years: number): Game {
   return game;
 }
 
-const yearDay = (day: number | null) =>
-  day === null ? 'never' : `Y${Math.floor(day / 365) + 1} d${(day % 365) + 1}`;
+const yearDay = (day: number | null) => (day === null ? 'never' : dateText(day));
 const at = (sorted: readonly number[], share: number) =>
   sorted[Math.min(sorted.length - 1, Math.floor(share * sorted.length))] ?? 0;
 const spread = (all: readonly number[], digits = 0) => {
