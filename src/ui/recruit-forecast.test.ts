@@ -30,7 +30,7 @@ it('warns for a gold-only shortfall even before the new formation musters', () =
 });
 
 it('warns of a lasting deficit years away, which the people grow too slowly to close', () => {
-  const state = foodDeficitAfterSpearmen(-20);
+  const state = foodDeficitAfterSpearmen(-30);
   const forecast = recruitForecast(state, [], world, 'spearmen');
   expect(forecast.lasts.food).toBeGreaterThan(365);
   expect(forecast.short.food).toBeGreaterThan(365);
@@ -46,7 +46,7 @@ it('warns of a lasting deficit years away, which the people grow too slowly to c
 });
 
 it('names the wait after which stores carry the raise until the people feed it, to the day', () => {
-  const state = foodDeficitAfterSpearmen(-5, 0.1);
+  const state = foodDeficitAfterSpearmen(-8, 0.1);
   const forecast = recruitForecast(state, [], world, 'spearmen');
   const wait = required(forecast.holdsAfter);
   expect(forecast.short.food).toBeDefined();
@@ -99,19 +99,19 @@ it('names no wait on which the treasury could not pay the raise before the dayâ€
     manpower: 50_000,
   });
   const forecast = recruitForecast(state, [], world, 'spearmen');
-  expect(forecast.holdsAfter).toBe(866);
-  expect(() => firstShortfall(state, 'gold', true, 867)).toThrow('Stores never ran short');
+  expect(forecast.holdsAfter).toBe(438);
+  expect(() => firstShortfall(state, 'gold', true, 439)).toThrow('Stores never ran short');
   expectConsistent(state);
 });
 
 it('tries each wait while other recruits are still training, since a later muster can lose granary room', () => {
   const state = buildFixture();
   for (const city of Object.values(state.cities))
-    if (city.owner === f.rome) city.population = 40_000;
-  required(state.formations[f.hastati]).men = 585;
+    if (city.owner === f.rome) city.population = 39_848;
+  required(state.formations[f.hastati]).men = 760;
   Object.assign(required(state.factions[f.rome]).stores, {
     gold: 100_000,
-    food: 3082.4,
+    food: 3200,
     manpower: 100_000,
   });
   for (let i = 0; i < 3; i++)
@@ -151,7 +151,8 @@ it('stays plain for a small deficit that the growing people close before the sto
 
 it('still warns of a deficit that outlasts a century, with no horizon to hide it', () => {
   const state = goldOnly();
-  required(state.cities[f.capua]).population = 2000;
+  required(state.cities[f.roma]).population = 200;
+  required(state.cities[f.capua]).population = 200;
   required(state.factions[f.rome]).stores.gold = 2_000_000;
   const forecast = recruitForecast(state, [], world, 'spearmen');
   expect(forecast.short.gold).toBeGreaterThan(100 * 365);
@@ -280,7 +281,7 @@ function foodDeficitAfterSpearmen(after: number, full = 1, capua = 200_000): Gam
 }
 
 it('says what moved the named day: the troops raised since, who are fed first', () => {
-  const state = foodDeficitAfterSpearmen(-5, 0.1);
+  const state = foodDeficitAfterSpearmen(-8, 0.1);
   const before = recruitForecast(state, [], world, 'spearmen').named;
   const skirmishers = {
     kind: 'recruit',
@@ -312,7 +313,7 @@ it('says a lost city moved the named day', () => {
 });
 
 it('says the stores it counted on changed when no troop was raised and no city lost', () => {
-  const state = foodDeficitAfterSpearmen(-5, 0.1);
+  const state = foodDeficitAfterSpearmen(-8, 0.1);
   const before = recruitForecast(state, [], world, 'spearmen').named;
   const emptier = structuredClone(state);
   required(emptier.factions[f.rome]).stores.food /= 2;
@@ -364,14 +365,14 @@ function canalWait(state: GameState): number {
 }
 
 it('names Canals and the sooner day they feed a raise that food delays, to the day', () => {
-  const state = foodDeficitAfterSpearmen(-10, 0.1);
+  const state = foodDeficitAfterSpearmen(-12, 0.1);
   const without = required(recruitForecast(state, [], world, 'spearmen', 15, f.roma).holdsAfter);
   expect(canalWait(state)).toBeLessThan(without);
   expectConsistent(state);
 });
 
 it('names Canals and the day they feed a raise that no wait carries without them', () => {
-  const state = foodDeficitAfterSpearmen(-12, 0.1);
+  const state = foodDeficitAfterSpearmen(-14, 0.1);
   expect(recruitForecast(state, [], world, 'spearmen', 15, f.roma).holdsAfter).toBeUndefined();
   expect(canalWait(state)).toBeGreaterThan(0);
   expectConsistent(state);
@@ -390,7 +391,7 @@ it('names Canals in another city of the player when the city raising cannot star
 });
 
 it('names a later day for Canals when the gold pays for them but not for the raise as well', () => {
-  const state = foodDeficitAfterSpearmen(-5, 0.1);
+  const state = foodDeficitAfterSpearmen(-8, 0.1);
   required(state.factions[f.rome]).stores.gold = 4000;
   const canal = required(recruitForecast(state, [], world, 'spearmen', 15, f.roma).canal);
   expect(canal).not.toContain('raised now');

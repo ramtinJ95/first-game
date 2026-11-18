@@ -6,7 +6,7 @@ import { defineScenario } from '../scenario.ts';
 export default defineScenario({
   name: 'recruit-moved',
   title:
-    'A Spearmen raise warns and names Year 3, day 109; after 500 Skirmishers are raised, the same card names a later day and says the Skirmishers moved it',
+    'A Spearmen raise warns and names Year 1, day 252; after 500 Skirmishers are raised, the same card names a later day and says the Skirmishers moved it',
   async run({ page, shot }) {
     await openGame(page);
     await loadWarnings(page, foodShortUnlessWaiting());
@@ -14,11 +14,11 @@ export default defineScenario({
     const cards = page.getByTestId('recruit-cards');
     const warning = page.getByTestId('recruit-warning');
     await cards.getByRole('button', { name: /^Spearmen/ }).click();
-    await expect(warning).toContainText('on Year 3, day 109');
+    await expect(warning).toContainText('on Year 1, day 252');
     await warning.scrollIntoViewIfNeeded();
     await shot(
       'recruit-moved-before',
-      'Before the second raise: Spearmen at Roma name Year 3, day 109',
+      'Before the second raise: Spearmen at Roma name Year 1, day 252',
     );
     await warning.getByRole('button', { name: 'Cancel raising' }).click();
     await cards.getByRole('button', { name: /^Skirmishers/ }).click();
@@ -29,7 +29,7 @@ export default defineScenario({
     await moved.scrollIntoViewIfNeeded();
     await shot(
       'recruit-moved-after',
-      'After 500 Skirmishers are raised: the card names Year 10 and says the Skirmishers, fed first, moved the day',
+      'After 500 Skirmishers are raised: the card names Year 5, day 35 and says the Skirmishers, fed first, moved the day',
     );
   },
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ENSLAVE, FATE_DAYS, SACK } from '../cities.ts';
+import { changeCityOwner, ENSLAVE, FATE_DAYS, SACK } from '../cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import { expectConsistent } from '../references.ts';
 import type { GameState } from '../state/game-state.ts';
@@ -196,10 +196,26 @@ describe('the choice of fate', () => {
     expectConsistent(recovered);
   });
 
-  test('enslaving gives more manpower at once than the occupied city raises in a year', () => {
-    const now = manpower(afterFate(enslave, 0));
-    const occupied = manpower(afterFate(undefined, 365));
-    const start = manpower(afterFate(undefined, 0));
-    expect(now - start).toBeGreaterThan(occupied - start);
+  test('enslaving gives more manpower at once than the occupied city raises in its first year', () => {
+    const atOnce = manpower(afterFate(enslave, 0)) - manpower(afterFate(undefined, 0));
+    const held = capuaFallen();
+    const without = capuaFallen();
+    changeCityOwner(without, FIXTURE.capua, FIXTURE.rome);
+    const carthago = without.cities[FIXTURE.carthago];
+    const punic = without.armies[FIXTURE.punicArmy];
+    if (!carthago || !punic) throw new Error('the fixture is missing records');
+    punic.activity = { kind: 'idle', position: { ...carthago.position } };
+    // Carthage's store stops at its call-up limit, so a year is read from what the rules raise each day, not from the store.
+    const raisedInAYear = (state: GameState) => {
+      let raised = 0;
+      for (let day = 0; day < 365; day++) {
+        raised += dailyBalances(state).get(FIXTURE.carthage)?.manpower ?? 0;
+        state = tick(state, [], world).state;
+      }
+      return raised;
+    };
+    const capuaYear = raisedInAYear(held) - raisedInAYear(without);
+    expect(capuaYear).toBeGreaterThan(0);
+    expect(atOnce).toBeGreaterThan(capuaYear);
   });
 });

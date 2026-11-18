@@ -40,7 +40,7 @@ describe('evacuate', () => {
       if (Object.keys(next.refugeeColumns).length === 0) {
         const roma = walking.cities[FIXTURE.roma]?.population ?? 0;
         expect(next.cities[FIXTURE.roma]?.population).toBeCloseTo(
-          roma * 1.02 ** (1 / 365) + 4500,
+          roma * 1.04 ** (1 / 365) + 4500,
           6,
         );
         expectConsistent(next);

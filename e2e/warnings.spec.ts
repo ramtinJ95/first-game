@@ -49,10 +49,10 @@ test('recruitment forecasts upkeep and demands confirmation before a food shortf
     'Food: about 8 days left as the people grow',
   );
   await expect(page.getByTestId('store-food-note')).toHaveText('8 days left');
-  await expect(warning).toContainText('Gold shortfall: stores last about 823 days');
+  await expect(warning).toContainText('Gold shortfall: stores last about 826 days');
   await expect(page.getByTestId('recruit-runway-food')).toHaveClass('bad');
   await expect(page.getByTestId('recruit-runway-gold')).toHaveText(
-    'Gold: about 823 days left as the people grow',
+    'Gold: about 826 days left as the people grow',
   );
   await expect(page.getByTestId('recruit-runway-gold')).toHaveClass('bad');
   await expect(page.getByTestId('city-raising')).not.toContainText('ordered');
@@ -76,7 +76,7 @@ test('a lasting gold deficit more than two years away still asks Raise anyway', 
     .getByRole('button', { name: /^Spearmen/ })
     .click();
   const warning = page.getByTestId('recruit-warning');
-  await expect(warning).toContainText('Gold shortfall: stores last about 823 days');
+  await expect(warning).toContainText('Gold shortfall: stores last about 826 days');
   await expect(page.getByTestId('recruit-runway-gold')).toHaveClass('bad');
   await expect(page.getByTestId('recruit-forecast')).toContainText('−21.6 gold/day');
   await expect(page.getByTestId('city-raising')).not.toContainText('ordered');
@@ -98,9 +98,9 @@ test('a shortfall the filling granary would carry names the day to raise instead
     .getByRole('button', { name: /^Spearmen/ })
     .click();
   const warning = page.getByTestId('recruit-warning');
-  await expect(warning).toContainText('Food shortfall: stores last about 602 days');
+  await expect(warning).toContainText('Food shortfall: stores last about 669 days');
   await expect(warning).toContainText(
-    `Stores grow while you wait: raised in about 838 days, on ${dateText(state.day + 838)}, these men are fed as the people grow, if you raise no other troops and lose no city before then. Raise now only if you need them sooner.`,
+    `Stores grow while you wait: raised in about 251 days, on ${dateText(state.day + 251)}, these men are fed as the people grow, if you raise no other troops and lose no city before then. Raise now only if you need them sooner.`,
   );
   await expect(warning).not.toContainText('Raise fewer troops');
   await warning.getByRole('button', { name: 'Raise anyway' }).click();
@@ -119,10 +119,10 @@ test('on the day a warned raise named, the same card raises at once and the old 
   const cards = page.getByTestId('recruit-cards');
   await cards.getByRole('button', { name: /^Spearmen/ }).click();
   const warning = page.getByTestId('recruit-warning');
-  await expect(warning).toContainText('raised in about 838 days');
+  await expect(warning).toContainText('raised in about 251 days');
   const world = fixtureWorld();
   let named = state;
-  for (let day = 0; day < 838; day++) named = tick(named, [], world).state;
+  for (let day = 0; day < 251; day++) named = tick(named, [], world).state;
   await loadWarnings(page, named);
   await showOwnCity(page, 'Roma');
   await cards.getByRole('button', { name: /^Spearmen/ }).click();
@@ -141,7 +141,7 @@ test('a raise that moves the named day is told on the card, with what moved it',
   const cards = page.getByTestId('recruit-cards');
   const warning = page.getByTestId('recruit-warning');
   await cards.getByRole('button', { name: /^Spearmen/ }).click();
-  await expect(warning).toContainText('on Year 3, day 109');
+  await expect(warning).toContainText('on Year 1, day 252');
   await expect(page.getByTestId('recruit-moved')).toHaveCount(0);
   await warning.getByRole('button', { name: 'Cancel raising' }).click();
   await cards.getByRole('button', { name: /^Skirmishers/ }).click();
@@ -150,13 +150,13 @@ test('a raise that moves the named day is told on the card, with what moved it',
   );
   await cards.getByRole('button', { name: /^Spearmen/ }).click();
   await expect(page.getByTestId('recruit-moved')).toHaveText(
-    /^Now Year 10, day \d+, not Year 3, day 109 as this card said on Year 1, day 1: since then you raised 500 Skirmishers, who are fed first\.$/,
+    /^Now Year 5, day 35, not Year 1, day 252 as this card said on Year 1, day 1: since then you raised 500 Skirmishers, who are fed first\.$/,
   );
 
   await loadWarnings(page, foodShortUnlessWaiting());
   await showOwnCity(page, 'Roma');
   await cards.getByRole('button', { name: /^Spearmen/ }).click();
-  await expect(warning).toContainText('on Year 3, day 109');
+  await expect(warning).toContainText('on Year 1, day 252');
   await expect(page.getByTestId('recruit-moved')).toHaveCount(0);
 });
 
