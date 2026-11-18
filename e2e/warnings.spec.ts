@@ -141,7 +141,7 @@ test('a raise that moves the named day is told on the card, with what moved it',
   const cards = page.getByTestId('recruit-cards');
   const warning = page.getByTestId('recruit-warning');
   await cards.getByRole('button', { name: /^Spearmen/ }).click();
-  await expect(warning).toContainText('on Year 3, day 109');
+  await expect(warning).toContainText('on Year 1, day 252');
   await expect(page.getByTestId('recruit-moved')).toHaveCount(0);
   await warning.getByRole('button', { name: 'Cancel raising' }).click();
   await cards.getByRole('button', { name: /^Skirmishers/ }).click();
@@ -150,13 +150,13 @@ test('a raise that moves the named day is told on the card, with what moved it',
   );
   await cards.getByRole('button', { name: /^Spearmen/ }).click();
   await expect(page.getByTestId('recruit-moved')).toHaveText(
-    /^Now Year 10, day \d+, not Year 3, day 109 as this card said on Year 1, day 1: since then you raised 500 Skirmishers, who are fed first\.$/,
+    /^Now Year 5, day 35, not Year 1, day 252 as this card said on Year 1, day 1: since then you raised 500 Skirmishers, who are fed first\.$/,
   );
 
   await loadWarnings(page, foodShortUnlessWaiting());
   await showOwnCity(page, 'Roma');
   await cards.getByRole('button', { name: /^Spearmen/ }).click();
-  await expect(warning).toContainText('on Year 3, day 109');
+  await expect(warning).toContainText('on Year 1, day 252');
   await expect(page.getByTestId('recruit-moved')).toHaveCount(0);
 });
 

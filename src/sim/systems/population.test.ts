@@ -13,10 +13,10 @@ function play(state: GameState, days: number): GameState {
 }
 
 describe('population', () => {
-  test('a city grows by 2 percent in a year while its owner has food', () => {
+  test('a city grows by 4 percent in a year while its owner has food', () => {
     const state = play(buildFixture(), 365);
-    expect(state.cities[FIXTURE.roma]?.population).toBeCloseTo(40_800, 6);
-    expect(state.cities[FIXTURE.carthago]?.population).toBeCloseTo(51_000, 6);
+    expect(state.cities[FIXTURE.roma]?.population).toBeCloseTo(41_600, 6);
+    expect(state.cities[FIXTURE.carthago]?.population).toBeCloseTo(52_000, 6);
     expectConsistent(state);
   });
 
@@ -27,7 +27,7 @@ describe('population', () => {
     rome.stores.food = -100_000;
     const state = play(start, 365);
     expect(state.cities[FIXTURE.roma]?.population).toBeCloseTo(36_000, 6);
-    expect(state.cities[FIXTURE.carthago]?.population).toBeCloseTo(51_000, 6);
+    expect(state.cities[FIXTURE.carthago]?.population).toBeCloseTo(52_000, 6);
     expectConsistent(state);
   });
 

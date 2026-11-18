@@ -4,7 +4,7 @@ import type { MapPoint } from '../state/map-point.ts';
 import { removeRecord } from '../records.ts';
 
 /** A city grows by this share in a year while its owner's food store is not below zero. */
-export const YEARLY_GROWTH = 0.02;
+export const YEARLY_GROWTH = 0.04;
 /** A city shrinks by this share in a year while its owner's food store is below zero. */
 export const YEARLY_DECLINE = 0.1;
 /** A refugee column this close to its destination city, in kilometres, has arrived. */

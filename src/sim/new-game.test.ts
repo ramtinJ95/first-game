@@ -258,7 +258,7 @@ describe('the economy of the new game meets its tuning targets', () => {
       expect(stores.manpower / men).toBeLessThan(3);
     }
     const roma = state.cities['roma' as CityId]?.population ?? 0;
-    expect(roma / 40_000).toBeCloseTo(1.02, 6);
+    expect(roma / 40_000).toBeCloseTo(1.04, 6);
     expectConsistent(state);
   });
 
