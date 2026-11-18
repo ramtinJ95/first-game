@@ -10,7 +10,12 @@
   import type { PeaceTerms } from '../sim/state/peace.ts';
   import type { Actions } from './actions.ts';
   import { unansweredOffer } from '../app/modals.ts';
-  import { standingThreats, THREAT_WARN, weighedNotes, type Muster } from '../app/threat-news.ts';
+  import {
+    standingThreats,
+    THREAT_WARN,
+    weighedNotes,
+    type TrainingMuster,
+  } from '../app/threat-news.ts';
   import { trainingThreats } from './recruit-threats.ts';
   import { afterWaiting } from './buildings-text.ts';
   import type { World } from '../sim/world/world.ts';
@@ -47,7 +52,7 @@
    * What the men in training do to each field-army threat, reckoned while the game is paused, in
    * a task of its own: it plays the days to the last muster through the rules, as a recruit card does.
    */
-  let training = $state<ReadonlyMap<FactionId, Muster> | undefined>(undefined);
+  let training = $state<ReadonlyMap<FactionId, TrainingMuster> | undefined>(undefined);
   $effect(() => {
     training = undefined;
     if (!paused) return;

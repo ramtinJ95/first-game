@@ -550,6 +550,40 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     );
   });
 
+  test('names each city its own muster day when a siege musters one city early and another trains on', () => {
+    const { ordered } = trainingFor(20);
+    const capua = ordered.cities['capua' as CityId];
+    const roma = ordered.cities['roma' as CityId];
+    const army = Object.values(ordered.armies).find((a) => a.owner === macedon);
+    const legion = Object.values(ordered.armies).find((a) => a.owner === rome);
+    if (!roma || !capua || !army || !legion) throw new Error('no Roma, Capua or armies');
+    capua.recruits.push({ troop: 'spearmen', readyOn: 115 as Day });
+    ordered.wars[warKey(rome, macedon)] = newWar(macedon, rome, ordered.day);
+    army.activity = {
+      kind: 'marching',
+      position: { x: roma.position.x + 30, y: roma.position.y },
+      waypoints: [{ ...roma.position }],
+    };
+    legion.activity = { kind: 'idle', position: { ...capua.position } };
+    const forecast = trainingThreats(ordered, world);
+    let played = ordered;
+    let romaMustered: number | undefined;
+    while ((played.cities['capua' as CityId]?.recruits.length ?? 0) > 0) {
+      played = tick(played, [], world).state;
+      if (romaMustered === undefined && played.cities['roma' as CityId]?.recruits.length === 0)
+        romaMustered = played.day - 1;
+    }
+    expect(romaMustered, 'the siege musters Roma early').toBeLessThan(110);
+    expect(played.day - 1, 'Capua trains on to its day').toBe(115);
+    expect(forecast.get(carthage)?.musters).toBe(115);
+    const line =
+      standingThreats(ordered, world, ordered, forecast).find((t) => t.power === carthage)?.text ??
+      '';
+    expect(line).toContain(
+      `Skirmishers in training at Roma muster on ${dateText(romaMustered ?? 0)} and Spearmen at Capua on Year 1, day 115, which take it to`,
+    );
+  });
+
   test('a warning with men in training names them in no more room than the advice it replaces', () => {
     const { state } = trainingFor(10);
     for (const [troop, readyOn] of [

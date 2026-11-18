@@ -6,7 +6,9 @@ import {
   standingThreats,
   THREAT_WARN,
   verdictText,
+  trainingKey,
   type Muster,
+  type TrainingMuster,
 } from '../app/threat-news.ts';
 import { NOTICE_DAYS, NOTICE_SHARE, WAR_FRONT_KM } from '../sim/ai/thresholds.ts';
 import { truceBetween } from '../sim/peace/truce.ts';
@@ -118,7 +120,7 @@ function playToMuster(
   world: World,
   near: readonly { power: FactionId }[],
   readyOn: number,
-  training: (played: GameState) => boolean,
+  training: (played: GameState, day: number) => boolean,
 ) {
   const from = ordered.day;
   const held = new Map(
@@ -131,7 +133,7 @@ function playToMuster(
   for (let day = from; day <= musters; day++) {
     played = renewed(played);
     for (const system of SYSTEMS) system(played, world);
-    if (!training(played)) musters = day;
+    if (!training(played, day)) musters = day;
     for (const [power, since] of held)
       if (
         !ended.has(power) &&
@@ -149,12 +151,13 @@ function playToMuster(
  * do to each great power at peace with it that weighs its field armies, by the day after the last
  * of them musters: the days a recruit card plays, with no new order. Empty with none in training.
  */
-export function trainingThreats(waiting: State, world: World): ReadonlyMap<FactionId, Muster> {
+export function trainingThreats(
+  waiting: State,
+  world: World,
+): ReadonlyMap<FactionId, TrainingMuster> {
   const player = waiting.player;
   const own = Object.values(waiting.cities).filter((city) => city.owner === player);
-  const training = (state: State) =>
-    own.some((city) => (state.cities[city.id]?.recruits.length ?? 0) > 0);
-  if (!training(waiting)) return new Map();
+  if (own.every((city) => city.recruits.length === 0)) return new Map();
   const pressed = Object.values(waiting.factions)
     .filter(
       (power) =>
@@ -168,13 +171,29 @@ export function trainingThreats(waiting: State, world: World): ReadonlyMap<Facti
     .map((power) => ({ power: power.id }));
   if (pressed.length === 0) return new Map();
   const readyOn = Math.max(...own.flatMap((city) => city.recruits.map((r) => r.readyOn)));
-  const days = playToMuster(
-    structuredClone(waiting) as GameState,
-    world,
-    pressed,
-    readyOn,
-    training,
+  const ordered = structuredClone(waiting) as GameState;
+  const left = new Map(
+    own.flatMap((city) =>
+      (ordered.cities[city.id]?.recruits ?? []).map(
+        (recruit) =>
+          [
+            recruit,
+            { city: city.id, key: trainingKey(recruit.troop, city.id, recruit.readyOn) },
+          ] as const,
+      ),
+    ),
   );
+  const musteredOn = new Map<string, number>();
+  // Each kind at each city musters on the day its last man leaves training, early under a siege.
+  const training = (played: State, day: number) => {
+    for (const [recruit, { city, key }] of left)
+      if (!played.cities[city]?.recruits.includes(recruit)) {
+        musteredOn.set(key, day);
+        left.delete(recruit);
+      }
+    return left.size > 0;
+  };
+  const days = playToMuster(ordered, world, pressed, readyOn, training);
   return new Map(
     pressed.map(({ power }) => [
       power,
@@ -182,6 +201,7 @@ export function trainingThreats(waiting: State, world: World): ReadonlyMap<Facti
         mustered: days.mustered.get(power) ?? 0,
         musters: days.musters,
         ended: days.ended.get(power),
+        musteredOn,
       },
     ]),
   );

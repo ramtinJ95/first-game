@@ -284,6 +284,11 @@ export interface Muster {
   readonly ended: number | undefined;
 }
 
+/** What the men in training do to a power's threat, with the day each kind at each city musters as the days played it (`trainingKey`). */
+export interface TrainingMuster extends Muster {
+  readonly musteredOn: ReadonlyMap<string, number>;
+}
+
 /**
  * Said of men who muster on the first day the power may declare: the power decides that day on
  * the state the day begins with, and the day's recruits muster after its orders.
@@ -332,7 +337,7 @@ function whatCounts(
   waiting: State,
   by: number | undefined,
   where: Where = 'panel',
-  muster?: Muster,
+  muster?: TrainingMuster,
 ): string {
   if (threat.pressed)
     return ` ${raiseAdvice(state, power, waiting, by, where, muster)}. It weighs you so only while you hold no more cities than at the start.`;
@@ -370,7 +375,7 @@ export function standingThreats(
   state: State,
   world: World,
   waiting: State = state,
-  training?: ReadonlyMap<FactionId, Muster>,
+  training?: ReadonlyMap<FactionId, TrainingMuster>,
 ): StandingThreat[] {
   const player = state.player;
   return Object.values(state.factions)
@@ -527,16 +532,18 @@ function raiseAdvice(
   waiting: State,
   by: number | undefined,
   where: Where,
-  muster: Muster | undefined,
+  muster: TrainingMuster | undefined,
 ): string {
   const training = inTraining(waiting);
   const stores = waiting.factions[state.player]?.stores;
   if (training.length > 0) {
     if (where === 'corner') return `More men lower it, not guards: ${trainingText(training, true)}`;
-    // A siege musters the men the day it begins, so a forecast that played one names that day.
+    // A siege musters a city's men the day it begins, so a forecast that played one names that day.
     const men = trainingText(
       muster
-        ? training.map((t) => ({ ...t, musters: Math.min(t.musters, muster.musters) }))
+        ? training
+            .map((t) => ({ ...t, musters: muster.musteredOn.get(t.key) ?? t.musters }))
+            .sort(byMuster)
         : training,
       false,
     );
@@ -631,10 +638,18 @@ function orderAdvice(
 
 /** One kind of troop in training at one of the player's cities, mustering on one day. */
 interface Training {
+  readonly key: string;
   readonly troop: Troop;
   readonly city: string;
   readonly musters: number;
 }
+
+/** One kind of troop in training at one city, due on one day, as the field-army advice names it. */
+export const trainingKey = (troop: Troop, city: CityId, readyOn: number) =>
+  `${troop}:${city}:${readyOn}`;
+
+const byMuster = (a: Training, b: Training) =>
+  a.musters - b.musters || a.city.localeCompare(b.city);
 
 /** The player's men in training on the state, by muster day, one entry for each troop, city and day. */
 function inTraining(state: State): Training[] {
@@ -642,13 +657,14 @@ function inTraining(state: State): Training[] {
   for (const city of Object.values(state.cities)) {
     if (city.owner !== state.player) continue;
     for (const recruit of city.recruits)
-      found.set(`${recruit.troop}:${city.id}:${recruit.readyOn}`, {
+      found.set(trainingKey(recruit.troop, city.id, recruit.readyOn), {
+        key: trainingKey(recruit.troop, city.id, recruit.readyOn),
         troop: recruit.troop,
         city: city.name,
         musters: recruit.readyOn,
       });
   }
-  return [...found.values()].sort((a, b) => a.musters - b.musters || a.city.localeCompare(b.city));
+  return [...found.values()].sort(byMuster);
 }
 
 /**
