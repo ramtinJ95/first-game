@@ -8,6 +8,9 @@ import { afterWaiting } from './buildings-text.ts';
 import { signed } from './describe.ts';
 import type { World } from '../sim/world/world.ts';
 import { YEARLY_GROWTH } from '../sim/systems/population.ts';
+import { BUILDINGS } from '../sim/buildings/buildings.ts';
+import { buildRefusal } from '../sim/buildings/build.ts';
+import type { CityId } from '../sim/ids.ts';
 
 export function recruitForecast(
   game: DeepReadonly<GameState>,
@@ -15,6 +18,7 @@ export function recruitForecast(
   world: World,
   troop?: Troop,
   daysToMuster = troop ? TROOPS[troop].recruit.days : 0,
+  at?: CityId,
 ) {
   const waiting = afterWaiting(game, pending, world);
   const balance = dailyBalances(waiting).get(game.player);
@@ -103,6 +107,37 @@ export function recruitForecast(
           return later.food === undefined && later.gold === undefined;
         })
       : undefined;
+  const withCanal = (plan: Plan, paysOn?: number) =>
+    daysUntilShort(
+      stores.food,
+      balance.food,
+      limits.food,
+      UPKEEP_PER_MAN.food,
+      GRANARY_DAYS * UPKEEP_PER_MAN.food,
+      byDay([...plan, { inDays: BUILDINGS.canals.days, men: 0, gain: BUILDINGS.canals.food }]),
+      yearly.food,
+    ) === undefined &&
+    daysUntilShort(
+      stores.gold - BUILDINGS.canals.gold - (paysOn === undefined ? cost.gold : 0),
+      balance.gold,
+      limits.gold,
+      UPKEEP_PER_MAN.gold,
+      0,
+      paysOn === undefined ? plan : byDay([...plan, { inDays: paysOn, men: 0, pay: cost.gold }]),
+      yearly.gold,
+    ) === undefined;
+  const site = troop && short.food !== undefined ? canalSite(waiting, at) : undefined;
+  const canalWait = !site
+    ? undefined
+    : withCanal(byDay([...queued, { inDays: daysToMuster, men: cost.men }]))
+      ? 0
+      : firstWait(Math.max(BUILDINGS.canals.days, ...queued.map((r) => r.inDays)), (wait) =>
+          withCanal(byDay([...queued, { inDays: daysToMuster + wait, men: cost.men }]), wait),
+        );
+  const canal =
+    site && canalWait !== undefined && canalWait < (holdsAfter ?? Infinity)
+      ? `Or build Canals at ${site.name} for ${whole(BUILDINGS.canals.gold)} gold, which grow ${BUILDINGS.canals.food} more food a day once built in ${BUILDINGS.canals.days} days: with them these men are fed if raised ${canalWait === 0 ? 'now' : `in about ${whole(canalWait)} days, on ${dateText(game.day + canalWait)}`}.`
+      : undefined;
   const warnings = (['food', 'gold'] as const).flatMap((key) => {
     const days = short[key];
     if (days === undefined) return [];
@@ -131,6 +166,7 @@ export function recruitForecast(
       };
     }),
     holdsAfter,
+    canal,
     named:
       holdsAfter === undefined ? undefined : realmFor(waiting, game.day, game.day + holdsAfter),
     warning: warnings.length
@@ -165,11 +201,20 @@ function grownRealm(state: DeepReadonly<GameState>): DeepReadonly<GameState> {
 /** Full days of stores before the day they run short, as the top bar counts them. */
 const daysLeft = (shortOn: number) => Math.max(0, shortOn - 1);
 
-/** A recruit's start of upkeep, and for a raise not yet ordered, the gold it pays that day. */
+/** A recruit's start of upkeep, for a raise not yet ordered the gold it pays that day, and for a building the food a day it adds from then. */
 interface Muster {
   inDays: number;
   men: number;
   pay?: number;
+  gain?: number;
+}
+
+/** The player's city where Canals could be started today: the one named, else the first other by id. */
+function canalSite(state: DeepReadonly<GameState>, at: CityId | undefined) {
+  const own = Object.values(state.cities)
+    .filter((city) => city.owner === state.player)
+    .sort((a, b) => (a.id === at ? -1 : b.id === at ? 1 : a.id < b.id ? -1 : 1));
+  return own.find((city) => buildRefusal(state, city, 'canals') === undefined);
 }
 
 /** The longest wait the warning names; a raise that needs longer waits for better income instead. */
@@ -221,7 +266,7 @@ function daysUntilShort(
     while (next < schedule.length && (schedule[next]?.inDays ?? Infinity) < day) {
       const men = schedule[next]?.men ?? 0;
       amount -= schedule[next]?.pay ?? 0;
-      change -= men * upkeep;
+      change += (schedule[next]?.gain ?? 0) - men * upkeep;
       limit += men * capPerMan;
       next++;
     }

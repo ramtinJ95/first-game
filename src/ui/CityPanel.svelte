@@ -76,6 +76,7 @@
       world,
       confirming,
       confirming ? trainingDaysAt(city, TROOPS[confirming].recruit.days) : 0,
+      city.id,
     ),
   );
 
@@ -352,6 +353,9 @@
       <div data-testid="recruit-warning">
         {#if outlook.warning}<p class="bad">{TROOP_NAMES[troop]}: {outlook.warning}</p>{/if}
         {#if outlook.warning && moved}<p class="bad" data-testid="recruit-moved">{moved}</p>{/if}
+        {#if outlook.warning && outlook.canal}<p data-testid="recruit-canal">
+            {outlook.canal}
+          </p>{/if}
         <div class="row">
           <button
             type="button"
