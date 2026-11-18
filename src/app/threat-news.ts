@@ -527,7 +527,13 @@ function raiseAdvice(
   const stores = waiting.factions[state.player]?.stores;
   if (training.length > 0) {
     if (where === 'corner') return `More men lower it, not guards: ${trainingText(training, true)}`;
-    const men = trainingText(training, false);
+    // A siege musters the men the day it begins, so a forecast that played one names that day.
+    const men = trainingText(
+      muster
+        ? training.map((t) => ({ ...t, musters: Math.min(t.musters, muster.musters) }))
+        : training,
+      false,
+    );
     const told = muster
       ? musterVerdict(
           state,

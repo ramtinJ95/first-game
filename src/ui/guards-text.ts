@@ -6,6 +6,8 @@ import {
   GUARD_BAND,
   GUARD_DETER_DAYS,
   GUARD_GOLD,
+  guardLimit,
+  guardMen,
   guardRefusal,
 } from '../sim/guards.ts';
 import { executeOrder, type Order } from '../sim/orders/orders.ts';
@@ -75,6 +77,7 @@ export function cityGuards(
         next,
         world,
         next.guards.length - city.guards.length,
+        guardMen(next) + GUARD_BAND > guardLimit(next),
       ),
       gold: GUARD_GOLD,
       change: open ? hireChange(short ? withGold(waiting, next) : waiting, next, world) : undefined,
@@ -101,8 +104,8 @@ function hireChange(state: State, city: DeepReadonly<City>, world: World): strin
  * bands hired, is told whether it is still free to declare from its day, once, and where one more
  * band takes it; when one is not enough, how many bands the city may still hold take it below
  * NOTICE_SHARE, or that guards alone cannot, since a share that falls reads as an answer and is
- * not one while it stays on notice. One below NOTICE_SHARE keeps the share now and with one more
- * band.
+ * not one while it stays on notice, and, at a city that holds the most guards it may (`full`), that
+ * guards alone cannot. One below NOTICE_SHARE keeps the share now and with one more band.
  */
 function hireThreats(
   state: State,
@@ -110,6 +113,7 @@ function hireThreats(
   city: DeepReadonly<City>,
   world: World,
   hired: number,
+  full: boolean,
 ): string[] {
   const until = dateText(state.day + GUARD_DETER_DAYS);
   const lines: string[] = [];
@@ -135,13 +139,13 @@ function hireThreats(
         );
       continue;
     }
-    if (hired === 0 && then === undefined) continue;
+    if (hired === 0 && then === undefined && !full) continue;
     const opening =
       hired > 0
         ? `${name}, with the ${hired === 1 ? 'band' : `${whole(hired)} bands`} you hired: ${share(now.readiness)} of the strength it needs to declare war`
         : `${name} ${share(now.readiness)} of the strength it needs to declare war`;
     lines.push(
-      `${opening}${bandsText(state, power.id, now.readiness, bands, hired > 0, until, city)}`,
+      `${opening}${bandsText(state, power.id, now.readiness, bands, hired > 0, until, city)}${full ? ` ${city.name} holds the most guards it may: guards alone cannot take it below ${share(NOTICE_SHARE)}.` : ''}`,
     );
   }
   return lines;

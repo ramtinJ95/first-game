@@ -178,7 +178,11 @@ describe('a band that does not take a power off notice', () => {
     const shown = cityGuards(state, [hireAtRoma], city, atlas);
     expect(shown.hire.why).toBe('Roma holds 3,000 guards, and 3,000 is the most it can');
     expect(shown.hire.threats).toEqual([
-      'Carthage, with the band you hired: 100% of the strength it needs to declare war, still at 80% or more, so it may still declare from Year 1, day 110.',
+      'Carthage, with the band you hired: 100% of the strength it needs to declare war, still at 80% or more, so it may still declare from Year 1, day 110. Roma holds the most guards it may: guards alone cannot take it below 80%.',
+    ]);
+    city.guards.push(band(465));
+    expect(cityGuards(state, [], city, atlas).hire.threats).toEqual([
+      'Carthage 100% of the strength it needs to declare war, still at 80% or more, so it may still declare from Year 1, day 110. Roma holds the most guards it may: guards alone cannot take it below 80%.',
     ]);
   });
 

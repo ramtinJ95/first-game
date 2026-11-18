@@ -13,7 +13,7 @@ import { executeOrder } from '../sim/orders/orders.ts';
 import { tick } from '../sim/tick.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { warKey } from '../sim/state/war.ts';
+import { newWar, warKey } from '../sim/state/war.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
 import { buildWorld } from '../sim/world/world.ts';
 import { dateText } from './names.ts';
@@ -469,6 +469,35 @@ describe('how near each power at peace stands to declaring war, as the wars pane
         }. Besides them, `,
       );
     }
+  });
+
+  test('names the day a siege musters the men in training, as the forecast plays it', () => {
+    const { ordered } = trainingFor(20);
+    ordered.wars[warKey(rome, macedon)] = newWar(macedon, rome, ordered.day);
+    const roma = ordered.cities['roma' as CityId];
+    const army = Object.values(ordered.armies).find((a) => a.owner === macedon);
+    const legion = Object.values(ordered.armies).find((a) => a.owner === rome);
+    const capua = ordered.cities['capua' as CityId];
+    if (!roma || !army || !legion || !capua) throw new Error('no Roma, Capua or armies');
+    army.activity = {
+      kind: 'marching',
+      position: { x: roma.position.x + 30, y: roma.position.y },
+      waypoints: [{ ...roma.position }],
+    };
+    legion.activity = { kind: 'idle', position: { ...capua.position } };
+    const forecast = trainingThreats(ordered, world);
+    const muster = forecast.get(carthage);
+    if (!muster) throw new Error('no forecast for Carthage');
+    let played = ordered;
+    while ((played.cities['roma' as CityId]?.recruits.length ?? 0) > 0)
+      played = tick(played, [], world).state;
+    expect(muster.musters, 'the siege musters them before their day').toBeLessThan(110);
+    expect(muster.musters).toBe(played.day - 1);
+    expect(
+      standingThreats(ordered, world, ordered, forecast).find((t) => t.power === carthage)?.text,
+    ).toContain(
+      `Skirmishers in training at Roma muster on ${dateText(muster.musters)} and take it to`,
+    );
   });
 
   test('a warning with men in training names them in no more room than the advice it replaces', () => {
