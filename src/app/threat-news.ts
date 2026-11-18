@@ -284,6 +284,12 @@ export interface Muster {
   readonly ended: number | undefined;
 }
 
+/**
+ * Said of men who muster on the first day the power may declare: the power decides that day on
+ * the state the day begins with, and the day's recruits muster after its orders.
+ */
+const SAME_DAY = 'it may declare that same day, before they muster';
+
 /** The first day the power may declare; one not yet on notice that stays at it comes on notice today. */
 export const firstDay = (state: State, power: FactionId) =>
   (state.factions[power]?.noticeSince ?? state.day) + NOTICE_DAYS;
@@ -301,7 +307,7 @@ export function musterVerdict(state: State, power: FactionId, muster: Muster, me
   if (ended !== undefined)
     return `${men}; it falls below ${share(NOTICE_SHARE)} on ${dateText(ended)}, so it may not declare until it has stood at ${share(NOTICE_SHARE)} for ${NOTICE_DAYS} days`;
   if (musters >= first && mustered < NOTICE_SHARE)
-    return `${men}, ${share(mustered).startsWith('just under') ? '' : `below ${share(NOTICE_SHARE)}, `}but it may declare ${first <= state.day ? 'any day now' : `from ${dateText(first)}`}, before they muster`;
+    return `${men}, ${share(mustered).startsWith('just under') ? '' : `below ${share(NOTICE_SHARE)}, `}but ${first <= state.day ? 'it may declare any day now, before they muster' : musters === first ? SAME_DAY : `it may declare from ${dateText(first)}, before they muster`}`;
   return `${men}, ${verdictText(state, power, mustered)}`;
 }
 
@@ -601,7 +607,7 @@ function orderAdvice(
     const musters = state.day + days(late);
     const when =
       musters === by
-        ? 'the first day war may come'
+        ? `but ${SAME_DAY}`
         : `${whole(musters - by)} ${musters - by === 1 ? 'day' : 'days'} after war may first come`;
     return {
       kind: 'late',

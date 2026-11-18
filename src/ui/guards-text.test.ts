@@ -198,7 +198,7 @@ describe('a band that does not take a power off notice', () => {
   it('says, at the most guards a city may hold, that guards alone cannot take it below 80%', () => {
     const state = carthageAt(8000);
     expect(cityGuards(state, [hireAtRoma], roma(state), atlas).hire.threats).toEqual([
-      'Carthage, with the band you hired: 100% of the strength it needs to declare war, still at 80% or more, so it may still declare from Year 1, day 110. One more band, counted until Year 1, day 190, takes it to 100%, and all 5 Roma may still hire, 10,000 gold, to 97%: guards alone cannot take it below 80%.',
+      'Carthage, with the band you hired: 100% of the strength it needs to declare war, still at 80% or more, so it may still declare from Year 1, day 110. One more band, counted until Year 1, day 190, takes it to 100%, and all 5 bands Roma may still hire, 10,000 gold, take it to 97%: guards alone cannot take it below 80%.',
     ]);
     const full = carthageAt(8000);
     roma(full).guards = Array.from({ length: 4 }, () => band(374));
@@ -214,7 +214,7 @@ describe('a band that does not take a power off notice', () => {
     const state = carthageAt(8000);
     expect(cityGuards(state, [hireAtRoma, hireAtRoma], roma(state), atlas).hire.threats).toEqual([
       expect.stringMatching(
-        /^Carthage, with the 2 bands you hired: .* One more band, counted until Year 1, day 190, takes it to (\d+)%, and all 4 Roma may still hire, 8,000 gold, no lower: guards alone cannot take it below 80%\.$/,
+        /^Carthage, with the 2 bands you hired: .* One more band, counted until Year 1, day 190, takes it to (\d+)%, and all 4 bands Roma may still hire, 8,000 gold, take it no lower: guards alone cannot take it below 80%\.$/,
       ),
     ]);
   });

@@ -204,7 +204,7 @@ function bandsText(
   const cap = `guards alone cannot take it below ${share(NOTICE_SHARE)}`;
   return count === 1
     ? `${held} ${one} and the last ${city.name} may hold, takes it to ${share(then)}: ${cap}.`
-    : `${held} ${one}, takes it to ${share(then)}, and all ${whole(count)} ${city.name} may still hire, ${whole(count * GUARD_GOLD)} gold, ${share(last) === share(then) ? 'no lower' : `to ${share(last)}`}: ${cap}.`;
+    : `${held} ${one}, takes it to ${share(then)}, and all ${whole(count)} bands ${city.name} may still hire, ${whole(count * GUARD_GOLD)} gold, take it ${share(last) === share(then) ? 'no lower' : `to ${share(last)}`}: ${cap}.`;
 }
 
 /**

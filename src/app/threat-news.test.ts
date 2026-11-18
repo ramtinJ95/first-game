@@ -19,7 +19,9 @@ import { buildWorld } from '../sim/world/world.ts';
 import { dateText } from './names.ts';
 import { NOTICE_DAYS } from '../sim/ai/thresholds.ts';
 import { notice } from '../sim/systems/notice.ts';
-import { trainingThreats } from '../ui/recruit-threats.ts';
+import { recruitThreats, trainingThreats } from '../ui/recruit-threats.ts';
+import { decideOrders } from '../sim/ai/decide.ts';
+import { areAtWar } from '../sim/wars.ts';
 import { ALL_PAUSES, stopsOfDay } from './pauses.ts';
 import type { Alert } from './alerts.ts';
 import {
@@ -352,7 +354,7 @@ describe('how near each power at peace stands to declaring war, as the wars pane
   test('with none affordable ready in time, names the one that is and the day it musters, from which it lowers the threat', () => {
     // The power decides on its day before that day's recruits muster, so these come on the day, not before it.
     expect(lineOf(pressedFor(10, { gold: 5000, manpower: 5000 }))).toContain(
-      'More men lower it, not guards: order Skirmishers now for 900 gold; they muster and lower it from Year 1, day 110, the first day war may come.',
+      'More men lower it, not guards: order Skirmishers now for 900 gold; they muster and lower it from Year 1, day 110, but it may declare that same day, before they muster.',
     );
     // The tenth play-through's warning, 11 days before war: Light cavalry, the one troop affordable, train in 20.
     expect(lineOf(pressedFor(11, { gold: 2229, manpower: 450 }))).toContain(
@@ -434,7 +436,7 @@ describe('how near each power at peace stands to declaring war, as the wars pane
 
   test("names the men already in training, and their day, before what more could be ordered: the tester's second lot", () => {
     expect(lineOf(trainingFor(10).ordered)).toContain(
-      'More men lower it, not guards. Skirmishers in training at Roma muster on Year 1, day 110. Besides them, order Skirmishers now for 900 gold; they muster and lower it from Year 1, day 110, the first day war may come.',
+      'More men lower it, not guards. Skirmishers in training at Roma muster on Year 1, day 110. Besides them, order Skirmishers now for 900 gold; they muster and lower it from Year 1, day 110, but it may declare that same day, before they muster.',
     );
     expect(lineOf(trainingFor(-1).ordered)).toContain(
       'More men lower it, not guards. Skirmishers in training at Roma muster on Year 1, day 110. Besides them, Skirmishers cost 900 gold and train in 10 days.',
@@ -464,11 +466,59 @@ describe('how near each power at peace stands to declaring war, as the wars pane
       expect(line).toContain(
         `More men lower it, not guards. Skirmishers in training at Roma muster on Year 1, day 110 and take it to ${Math.round(real * 100)}%, ${
           left === 10
-            ? 'below 80%, but it may declare from Year 1, day 110, before they muster'
+            ? 'below 80%, but it may declare that same day, before they muster'
             : 'below 80%, so it may not declare until it has stood at 80% for 30 days'
         }. Besides them, `,
       );
     }
+  });
+
+  test("the power decides on its first day of war before that day's recruits muster, so men due that day come too late", () => {
+    /** Carthage of 2,500 pressing Rome's 1,000 on day 110, its first day of war, with Skirmishers at Roma due on `readyOn`. */
+    const firstDayOfWar = (readyOn: number) => {
+      const state = game(2500, 'empty', 109);
+      spearmenOf(state, rome).men = 1000;
+      const power = state.factions[carthage];
+      if (!power) throw new Error('no Carthage');
+      power.noticeSince = 80 as Day;
+      state.cities['roma' as CityId]?.recruits.push({
+        troop: 'skirmishers',
+        readyOn: readyOn as Day,
+      });
+      return tick(state, [], world).state;
+    };
+    const mustered = firstDayOfWar(109);
+    expect(mustered.day).toBe(110);
+    expect(decideOrders(mustered, world, carthage)).not.toContainEqual(
+      expect.objectContaining({ kind: 'declareWar', against: rome }),
+    );
+    const due = firstDayOfWar(110);
+    const orders = decideOrders(due, world, carthage);
+    expect(orders).toContainEqual(expect.objectContaining({ kind: 'declareWar', against: rome }));
+    const played = tick(due, orders, world).state;
+    expect(played.cities['roma' as CityId]?.recruits).toEqual([]);
+    expect(areAtWar(played, carthage, rome)).toBe(true);
+    expectConsistent(played);
+  });
+
+  test('men who muster on the first day of war are told of in the same words by the line, its advice and the recruit card', () => {
+    const { ordered } = trainingFor(10);
+    const sameDay = 'but it may declare that same day, before they muster';
+    const line =
+      standingThreats(ordered, world, ordered, trainingThreats(ordered, world)).find(
+        (t) => t.power === carthage,
+      )?.text ?? '';
+    expect(line).toContain(
+      `Skirmishers in training at Roma muster on Year 1, day 110 and take it to 70%, below 80%, ${sameDay}. Besides them, order Skirmishers now for 900 gold; they muster and lower it from Year 1, day 110, ${sameDay}.`,
+    );
+    expect(line).not.toContain('first day war may come');
+    const roma = ordered.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    const [card] =
+      recruitThreats(ordered, [], roma, world, ['skirmishers']).get('skirmishers') ?? [];
+    expect(card?.text).toMatch(
+      new RegExp(`once they muster on Year 1, day 110, below 80%, ${sameDay}$`),
+    );
   });
 
   test('names the day a siege musters the men in training, as the forecast plays it', () => {
