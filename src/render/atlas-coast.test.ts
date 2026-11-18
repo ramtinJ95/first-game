@@ -45,20 +45,36 @@ test('a different physical world explicitly refuses a stale drawing asset, even 
   expect(() => atlasLand(different)).toThrow('Drawing coast is stale');
 });
 
+/**
+ * The greatest distance from a sample to the coast. A sample no farther from the last one
+ * measured than that one's distance falls short of the greatest is not measured, since a
+ * distance to the coast grows no faster than the distance walked.
+ */
+function farthest(samples: Iterable<Point>, coast: CoastDistance): number {
+  let max = 0;
+  let last: { point: Point; distance: number } | undefined;
+  for (const point of samples) {
+    if (
+      last &&
+      last.distance + Math.hypot(point[0] - last.point[0], point[1] - last.point[1]) < max - 1e-9
+    )
+      continue;
+    last = { point, distance: coast.nearest(point).distance };
+    max = Math.max(max, last.distance);
+  }
+  return max;
+}
+
 test('inhabited coast is within 8.15 km of the physical coast in both continuous directions', () => {
   const coast = atlasCoast(map);
   const scenery = new Set(drawing.scenery);
   const inhabitedRings = coast.land.flatMap((polygon, p) => (scenery.has(p) ? [] : polygon));
   const inhabitedPoints = new Set(inhabitedRings.flat());
   const shared = coast.lines.filter((line) => inhabitedPoints.has(line[0] as Point));
-  const physical = new CoastDistance(map.coastline);
-  const art = new CoastDistance(coast.lines);
-  let drawnToPhysical = 0,
-    physicalToDrawn = 0;
-  for (const point of coastSamples(shared))
-    drawnToPhysical = Math.max(drawnToPhysical, physical.nearest(point).distance + SAMPLE_KM / 2);
-  for (const point of coastSamples(map.coastline))
-    physicalToDrawn = Math.max(physicalToDrawn, art.nearest(point).distance + SAMPLE_KM / 2);
+  const drawnToPhysical =
+    farthest(coastSamples(shared), new CoastDistance(map.coastline)) + SAMPLE_KM / 2;
+  const physicalToDrawn =
+    farthest(coastSamples(map.coastline), new CoastDistance(coast.lines)) + SAMPLE_KM / 2;
   expect(drawnToPhysical).toBeLessThanOrEqual(8.15);
   expect(physicalToDrawn).toBeLessThanOrEqual(8.15);
 });

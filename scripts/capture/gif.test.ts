@@ -4,7 +4,7 @@ import { encodeGif } from './gif.ts';
 
 function solidPng(width: number, height: number, [r, g, b]: [number, number, number]): Buffer {
   const png = new PNG({ width, height });
-  for (let i = 0; i < width * height; i++) png.data.set([r, g, b, 255], i * 4);
+  png.data.fill(Buffer.from([r, g, b, 255]));
   return PNG.sync.write(png);
 }
 
