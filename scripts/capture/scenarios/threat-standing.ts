@@ -7,6 +7,7 @@ import {
   openGame,
   pause,
   rome,
+  twoNearWarAtWar,
   untilDrawn,
 } from '../../../e2e/support.ts';
 import type { CityId } from '../../../src/sim/ids.ts';
@@ -30,9 +31,10 @@ export default defineScenario({
     const rows = page.getByTestId('wars-panel').getByTestId('threat-row');
     await expect(rows.filter({ hasText: /^Carthage has \d+% of the strength/ })).toHaveCount(1);
     await expect(rows).toHaveCount(4);
+    await expect(page.getByTestId('threat-note').first()).toContainText('First Legion (4,300 men)');
     await shot(
       'threat-standing-panel',
-      "Carthage, grown to twelve cities, stands near the strength it needs against Rome, and the other powers stand further off, each with what Rome's treasury and guards do",
+      'Carthage, grown to twelve cities, stands near the strength it needs against Rome, with the armies that count near Roma by name, and the other powers stand further off below',
     );
     await page.getByTestId('wars-button').click();
     const atWar = carthageNearsWar();
@@ -48,6 +50,16 @@ export default defineScenario({
     await shot(
       'threat-standing-at-war',
       'At war with Mediolanum and with Carthage on notice, the wars panel opens on Carthage first in At peace, above the war',
+    );
+    await page.getByTestId('wars-button').click();
+    await dropSave(page, twoNearWarAtWar());
+    await untilDrawn(page);
+    await page.getByTestId('wars-button').click();
+    await expect(rows.first()).toContainText('Egypt has 100%');
+    await expect(page.getByTestId('threat-note').first()).toContainText('Near Ariminum');
+    await shot(
+      'threat-standing-two-near-war',
+      "The twelfth play-through's panel: at war with Persia, Egypt and Macedon stand at 100% near Ariminum, the armies that count there are named once for both, and the war and its first offer stay in view",
     );
   },
 });

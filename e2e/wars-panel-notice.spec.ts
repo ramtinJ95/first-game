@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { changeCityOwner } from '../src/sim/cities.ts';
 import type { CityId, FactionId, FormationId } from '../src/sim/ids.ts';
 import type { Day } from '../src/sim/state/day.ts';
@@ -13,6 +13,7 @@ import {
   pause,
   rome,
   startGame,
+  twoNearWarAtWar,
   untilDrawn,
 } from './support.ts';
 
@@ -81,4 +82,42 @@ test.describe('the Wars panel at 1280 × 720 opens on the At peace line of a pow
       ).toBeLessThanOrEqual(frame.y + frame.height);
     });
   }
+});
+
+test.describe('the Wars panel at 1280 × 720 at war with two powers near war', () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  test('shows both near-war lines with the armies that count, the war, and its first peace offer unscrolled', async ({
+    page,
+  }) => {
+    await openGame(page);
+    const panel = await openWars(page, twoNearWarAtWar());
+    const frame = await panel.boundingBox();
+    if (!frame) throw new Error('no panel');
+    expect(await panel.evaluate((element) => element.scrollTop)).toBe(0);
+    const inside = async (name: string, element: Locator) => {
+      await expect(element, name).toHaveCount(1);
+      const box = await element.boundingBox();
+      if (!box) throw new Error(`no ${name}`);
+      expect(box.y, `${name} starts inside the panel`).toBeGreaterThanOrEqual(frame.y);
+      expect(
+        box.y + box.height,
+        `${name} ends inside the panel without a scroll`,
+      ).toBeLessThanOrEqual(frame.y + frame.height);
+    };
+    for (const power of ['Egypt', 'Macedon'])
+      await inside(
+        `${power}'s line`,
+        panel.getByTestId('threat-row').filter({ hasText: `${power} has 100%` }),
+      );
+    await inside(
+      'the armies that count near Ariminum',
+      panel.getByTestId('threat-note').filter({ hasText: 'Near Ariminum' }),
+    );
+    await expect(
+      panel.getByTestId('threat-note').filter({ hasText: 'Near Ariminum' }),
+    ).toContainText('Second Legion (3,000 men)');
+    await inside('the war with Persia', panel.getByText('At war with Persia.'));
+    await inside("the war's first peace offer", panel.getByTestId('peace-choice').first());
+  });
 });
