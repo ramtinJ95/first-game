@@ -365,14 +365,14 @@ function canalWait(state: GameState): number {
 }
 
 it('names Canals and the sooner day they feed a raise that food delays, to the day', () => {
-  const state = foodDeficitAfterSpearmen(-10, 0.1);
+  const state = foodDeficitAfterSpearmen(-12, 0.1);
   const without = required(recruitForecast(state, [], world, 'spearmen', 15, f.roma).holdsAfter);
   expect(canalWait(state)).toBeLessThan(without);
   expectConsistent(state);
 });
 
 it('names Canals and the day they feed a raise that no wait carries without them', () => {
-  const state = foodDeficitAfterSpearmen(-12, 0.1);
+  const state = foodDeficitAfterSpearmen(-14, 0.1);
   expect(recruitForecast(state, [], world, 'spearmen', 15, f.roma).holdsAfter).toBeUndefined();
   expect(canalWait(state)).toBeGreaterThan(0);
   expectConsistent(state);
@@ -391,7 +391,7 @@ it('names Canals in another city of the player when the city raising cannot star
 });
 
 it('names a later day for Canals when the gold pays for them but not for the raise as well', () => {
-  const state = foodDeficitAfterSpearmen(-5, 0.1);
+  const state = foodDeficitAfterSpearmen(-8, 0.1);
   required(state.factions[f.rome]).stores.gold = 4000;
   const canal = required(recruitForecast(state, [], world, 'spearmen', 15, f.roma).canal);
   expect(canal).not.toContain('raised now');
