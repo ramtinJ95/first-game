@@ -12,6 +12,7 @@ import { executeOrder, type Order } from '../sim/orders/orders.ts';
 import type { City, GuardBand } from '../sim/state/city.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import type { World } from '../sim/world/world.ts';
+import type { FactionId } from '../sim/ids.ts';
 import { NOTICE_DAYS, NOTICE_SHARE } from '../sim/ai/thresholds.ts';
 import { mayDeclareWhen } from '../app/threat-news.ts';
 import { afterWaiting } from './buildings-text.ts';
@@ -115,23 +116,13 @@ function hireThreats(
     executeOrder(next, { kind: 'hireGuards', faction: city.owner, city: city.id }, world);
   }
   const until = dateText(state.day + GUARD_DETER_DAYS);
-  const percent = (n: number) => `${Math.round(Math.min(1, n) * 100)}%`;
-  // A share that rounds up to the notice must not read as it beside "below 80%".
-  const share = (n: number) =>
-    n < NOTICE_SHARE && percent(n) === percent(NOTICE_SHARE)
-      ? `just under ${percent(NOTICE_SHARE)}`
-      : percent(n);
   const lines: string[] = [];
   for (const power of Object.values(state.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (power.id === city.owner || power.kind !== 'greatPower') continue;
     const now = warReadiness(state, world, power.id, city.owner);
     if (!now || (now.front !== city.id && !now.pressed)) continue;
     const name = factionName(state, power.id);
-    const when = mayDeclareWhen(state, power.id);
-    const verdict = (readiness: number) =>
-      readiness >= NOTICE_SHARE
-        ? `still at ${percent(NOTICE_SHARE)} or more, so it may still declare ${when}`
-        : `${share(readiness).startsWith('just under') ? '' : `below ${percent(NOTICE_SHARE)}, `}so it may not declare until it has stood at ${percent(NOTICE_SHARE)} for ${NOTICE_DAYS} days`;
+    const verdict = (readiness: number) => verdictText(state, power.id, readiness);
     if (now.pressed) {
       if (next)
         lines.push(
@@ -156,6 +147,25 @@ function hireThreats(
       );
   }
   return lines;
+}
+
+const percent = (n: number) => `${Math.round(Math.min(1, n) * 100)}%`;
+
+/** A share of the strength a power needs, where one below NOTICE_SHARE that rounds up to it reads "just under", not as the notice. */
+export function share(n: number): string {
+  return n < NOTICE_SHARE && percent(n) === percent(NOTICE_SHARE)
+    ? `just under ${percent(NOTICE_SHARE)}`
+    : percent(n);
+}
+
+/**
+ * Whether a share leaves the power free to declare: still at NOTICE_SHARE or more, so from its
+ * named day, or below, so not until it has stood at NOTICE_SHARE for NOTICE_DAYS.
+ */
+export function verdictText(state: State, power: FactionId, readiness: number): string {
+  return readiness >= NOTICE_SHARE
+    ? `still at ${percent(NOTICE_SHARE)} or more, so it may still declare ${mayDeclareWhen(state, power)}`
+    : `${share(readiness).startsWith('just under') ? '' : `below ${percent(NOTICE_SHARE)}, `}so it may not declare until it has stood at ${percent(NOTICE_SHARE)} for ${NOTICE_DAYS} days`;
 }
 
 /**

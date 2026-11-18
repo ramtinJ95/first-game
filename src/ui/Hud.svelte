@@ -106,6 +106,7 @@
             {sight}
             pending={view.current.pending}
             occupied={view.current.occupied}
+            paused={view.current.paused}
             {actions}
           />
         {/key}

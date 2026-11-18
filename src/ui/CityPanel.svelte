@@ -36,6 +36,7 @@
   } from './describe.ts';
   import WarStatus from './WarStatus.svelte';
   import { movedText, recruitForecast } from './recruit-forecast.ts';
+  import { nearWarNames, recruitThreats, type RecruitThreat } from './recruit-threats.ts';
   import { namedWaits } from './named-waits.ts';
   import CityTrade from './CityTrade.svelte';
   import type { World } from '../sim/world/world.ts';
@@ -48,6 +49,7 @@
     sight,
     pending,
     occupied,
+    paused,
     actions,
   }: {
     game: DeepReadonly<GameState>;
@@ -57,6 +59,7 @@
     sight: Sight;
     pending: readonly Order[];
     occupied: Occupied;
+    paused: boolean;
     actions: Actions;
   } = $props();
 
@@ -146,6 +149,31 @@
     if (available.manpower < men) return `Needs ${whole(men - available.manpower)} more manpower`;
     return undefined;
   }
+
+  const orderable = $derived((Object.keys(TROOPS) as Troop[]).filter((t) => !refusal(t)));
+  /**
+   * What each troop does to each power near war, reckoned while the game is paused, one troop a
+   * task: each plays the days to its muster through the rules, tens of milliseconds a troop.
+   */
+  let threats = $state<ReadonlyMap<Troop, readonly RecruitThreat[]>>(new Map());
+  $effect(() => {
+    threats = new Map();
+    if (!own || !paused) return;
+    const [snapshot, waiting, at, troops] = [game, pending, city, orderable];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const next = (i: number) => {
+      const troop = troops[i];
+      if (!troop) return;
+      timer = setTimeout(() => {
+        const lines = recruitThreats(snapshot, waiting, at, world, [troop]).get(troop);
+        if (lines) threats = new Map([...threats, [troop, lines]]);
+        next(i + 1);
+      }, 0);
+    };
+    next(0);
+    return () => clearTimeout(timer);
+  });
+  const pauseToSee = $derived(own && !paused ? nearWarNames(game, world) : []);
 
   const destinations = $derived(
     Object.values(game.cities)
@@ -338,7 +366,12 @@
         </div>
       </div>
     {/if}
-    <div class="troops" data-testid="recruit-cards">
+    {#if pauseToSee.length > 0}
+      <p class="muted small" data-testid="recruit-threat-paused">
+        Pause the game to see what each troop does to the threat of {pauseToSee.join(' and ')}.
+      </p>
+    {/if}
+    <div class="troops" class:threatened={threats.size > 0} data-testid="recruit-cards">
       {#each Object.keys(TROOPS) as Troop[] as troop (troop)}
         {@const why = refusal(troop)}
         {@const cost = TROOPS[troop].recruit}
@@ -356,6 +389,9 @@
           >
           <span class="cost">{forecast.upkeepText}</span>
           {#if why}<span class="why">{why}</span>{/if}
+          {#each threats.get(troop) ?? [] as threat (threat.power)}
+            <span class="threat" data-testid="recruit-threat">{threat.text}</span>
+          {/each}
         </button>
       {/each}
     </div>
@@ -418,8 +454,17 @@
     text-align: left;
   }
 
+  .troops.threatened {
+    grid-template-columns: 1fr;
+  }
+
   .troop {
     font-weight: bold;
+  }
+
+  .threat {
+    font-size: 12px;
+    color: var(--bad);
   }
 
   .cost,
