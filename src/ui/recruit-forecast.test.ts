@@ -12,6 +12,7 @@ import { tick } from '../sim/tick.ts';
 import { MOVED_DAYS, movedText, recruitForecast } from './recruit-forecast.ts';
 import { TROOP_NAMES } from '../app/names.ts';
 import { population } from '../sim/systems/population.ts';
+import { construction } from '../sim/systems/construction.ts';
 import { TROOPS } from '../sim/troops.ts';
 import { executeOrder } from '../sim/orders/orders.ts';
 import { recruit } from '../sim/orders/recruit.ts';
@@ -321,4 +322,76 @@ it('says the stores it counted on changed when no troop was raised and no city l
   expect(movedText(before, now, TROOP_NAMES)).toBe(
     `Now ${dateText(now.named)}, not ${dateText(before.named)} as this card said on ${dateText(state.day)}: the stores or income it counted on changed since then.`,
   );
+});
+
+/** The day Rome's food first runs short when it starts Canals at Roma on day 1 and raises Spearmen on `raiseOn`. */
+function shortWithCanals(initial: GameState, raiseOn: number) {
+  let state = initial;
+  for (let day = 1; day <= 6000; day++) {
+    const orders = [
+      ...(day === 1
+        ? [{ kind: 'build', faction: f.rome, city: f.roma, building: 'canals' } as const]
+        : []),
+      ...(day === raiseOn
+        ? [{ kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' } as const]
+        : []),
+    ];
+    const result = tick(state, orders, fixtureWorld(), [
+      economy,
+      construction,
+      population,
+      (state) => {
+        state.day = (state.day + 1) as Day;
+      },
+    ]);
+    expect(result.rejected).toEqual([]);
+    state = result.state;
+    if (required(state.factions[f.rome]).stores.food < 0) return day;
+  }
+  return undefined;
+}
+
+/** The wait the card's Canals line names, checked against the played days: a raise then is fed, a day sooner is not. */
+function canalWait(state: GameState): number {
+  const canal = required(recruitForecast(state, [], world, 'spearmen', 15, f.roma).canal);
+  const wait = Number(/in about ([\d,]+) days/.exec(canal)?.[1]?.replace(',', ''));
+  expect(canal).toBe(
+    `Or build Canals at Roma for 4,000 gold, which grow 5 more food a day once built in 45 days: with them these men are fed if raised in about ${wait.toLocaleString('en-US')} days, on ${dateText(state.day + wait)}.`,
+  );
+  expect(shortWithCanals(state, wait + 1)).toBeUndefined();
+  expect(shortWithCanals(state, wait)).toBeDefined();
+  return wait;
+}
+
+it('names Canals and the sooner day they feed a raise that food delays, to the day', () => {
+  const state = foodDeficitAfterSpearmen(-10, 0.1);
+  const without = required(recruitForecast(state, [], world, 'spearmen', 15, f.roma).holdsAfter);
+  expect(canalWait(state)).toBeLessThan(without);
+  expectConsistent(state);
+});
+
+it('names Canals and the day they feed a raise that no wait carries without them', () => {
+  const state = foodDeficitAfterSpearmen(-12, 0.1);
+  expect(recruitForecast(state, [], world, 'spearmen', 15, f.roma).holdsAfter).toBeUndefined();
+  expect(canalWait(state)).toBeGreaterThan(0);
+  expectConsistent(state);
+});
+
+it('names Canals in another city of the player when the city raising cannot start them', () => {
+  const state = foodDeficitAfterSpearmen(-12, 0.1);
+  required(state.cities[f.roma]).construction = { building: 'forum', daysLeft: 30 };
+  expect(recruitForecast(state, [], world, 'spearmen', 15, f.roma).canal).toContain(
+    'Or build Canals at Capua for 4,000 gold',
+  );
+  required(state.cities[f.capua]).construction = { building: 'temple', daysLeft: 30 };
+  const forecast = recruitForecast(state, [], world, 'spearmen', 15, f.roma);
+  expect(forecast.short.food).toBeDefined();
+  expect(forecast.canal).toBeUndefined();
+});
+
+it('names no Canals when food does not hold the raise back', () => {
+  const state = goldOnly();
+  const forecast = recruitForecast(state, [], world, 'spearmen', 15, f.roma);
+  expect(forecast.short.food).toBeUndefined();
+  expect(forecast.canal).toBeUndefined();
 });
