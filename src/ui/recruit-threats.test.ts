@@ -14,7 +14,7 @@ import { limitsOf } from '../sim/systems/economy.ts';
 import { tick } from '../sim/tick.ts';
 import { TROOPS, type Troop } from '../sim/troops.ts';
 import { buildWorld } from '../sim/world/world.ts';
-import { share } from './guards-text.ts';
+import { share } from '../app/threat-news.ts';
 import { recruitThreats } from './recruit-threats.ts';
 
 const map = parseMap(
@@ -155,7 +155,7 @@ describe('what a troop does to a threat, on its recruit card', () => {
       'heavyCavalry',
     ) ?? [undefined];
     expect(late?.text).toBe(
-      'Carthage 90% now, 81% once paid, 75% once they muster on Year 1, day 31, below 80%, but it may declare from Year 1, day 31, before they muster',
+      'Carthage 90% now, 81% once paid, 75% once they muster on Year 1, day 31, below 80%, but it may declare that same day, before they muster',
     );
   });
 
