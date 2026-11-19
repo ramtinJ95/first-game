@@ -1,7 +1,8 @@
 import { parseArgs } from 'node:util';
 
 /**
- * Prints how long each CI job's steps named like `--step`, the Chromium install by default, took over the last `--runs` runs of the
+ * Prints how long each CI job's steps whose name matches the pattern `--step`, the Chromium install
+ * by default as it was named before and after it had a limit of its own, took over the last `--runs` runs of the
  * CI workflow, from the GitHub API's step timings: the median, the slowest, and how many took more
  * than a minute, by job. `--run <id>` reads one run instead. Reads GH_TOKEN.
  */
@@ -9,7 +10,7 @@ const { values } = parseArgs({
   options: {
     runs: { type: 'string', default: '20' },
     run: { type: 'string' },
-    step: { type: 'string', default: 'chromium' },
+    step: { type: 'string', default: 'install --with-deps|its system packages' },
     repo: { type: 'string', default: 'ramtinJ95/first-game' },
   },
 });
@@ -38,20 +39,21 @@ const ids = values.run
         `actions/workflows/ci.yml/runs?per_page=${values.runs}&status=completed`,
       )
     ).workflow_runs.map((run) => run.id);
+const pattern = new RegExp(values.step, 'i');
 const byJob = new Map<string, number[]>();
 for (const id of ids) {
   const { jobs } = await api<{ jobs: Job[] }>(`actions/runs/${id}/jobs?per_page=100`);
   for (const job of jobs)
     for (const step of job.steps ?? []) {
       if (step.name.startsWith('Post ')) continue;
-      if (!step.name.toLowerCase().includes(values.step.toLowerCase())) continue;
+      if (!pattern.test(step.name)) continue;
       if (!step.started_at || !step.completed_at) continue;
       const seconds = (Date.parse(step.completed_at) - Date.parse(step.started_at)) / 1000;
       const kind = job.name.replace(/ \(\d+\)$/, '');
       byJob.set(kind, [...(byJob.get(kind) ?? []), seconds]);
     }
 }
-console.log(`Steps matching "${values.step}" over ${ids.length} runs`);
+console.log(`Steps matching /${values.step}/i over ${ids.length} runs`);
 console.log('| Job | Steps | Median (s) | Slowest (s) | Over 60 s |');
 console.log('| --- | --- | --- | --- | --- |');
 for (const [job, all] of [...byJob].sort()) {
