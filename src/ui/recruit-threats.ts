@@ -37,6 +37,8 @@ export interface RecruitThreat extends Muster {
   readonly paid: number;
   /** Whether the power counts the mustered men at all. */
   readonly counted: boolean;
+  /** What the same days do with no new order: the share the day after the muster, and the day the rules end the notice. */
+  readonly without: { readonly mustered: number; readonly ended: number | undefined };
   readonly text: string;
 }
 
@@ -69,6 +71,7 @@ export function recruitThreats(
       return now && now.readiness >= THREAT_WARN ? [{ power: power.id, now }] : [];
     });
   if (near.length === 0) return threats;
+  const without = baselineOf(state, pending, waiting, world, near);
   for (const troop of troops) {
     const ordered = structuredClone(waiting) as GameState;
     if (executeOrder(ordered, { kind: 'recruit', faction: player, city: city.id, troop }, world))
@@ -86,6 +89,7 @@ export function recruitThreats(
         standsWithin(a, city.position, RALLY_DISTANCE) &&
         a.formations.some((id) => !waiting.formations[id]),
     );
+    const alone = without(musters);
     threats.set(
       troop,
       near.map(({ power, now }) => {
@@ -100,6 +104,10 @@ export function recruitThreats(
           musters,
           counted,
           ended: days.ended.get(power),
+          without: {
+            mustered: alone.mustered.get(power) ?? 0,
+            ended: alone.ended(power, musters),
+          },
         };
         return { ...forecast, text: threatText(state, forecast, front?.name) };
       }),
@@ -144,6 +152,73 @@ function playToMuster(
     if (day === from) paid = sharesOf(renewed(played), world, near);
   }
   return { played, paid, ended, musters, mustered: sharesOf(renewed(played), world, near) };
+}
+
+/** What the days to a muster do with no new order, played once for a state and its waiting orders. */
+interface Baseline {
+  played: GameState;
+  /** Each power's share the day after each day played, by day. */
+  readonly shares: Map<number, Map<FactionId, number>>;
+  /** The day the rules end each power's notice before it may first declare. */
+  readonly ended: Map<FactionId, number>;
+  readonly held: ReadonlyMap<FactionId, number>;
+}
+
+const baselines = new WeakMap<State, WeakMap<readonly Order[], Baseline>>();
+
+/**
+ * The days a card plays, from the order's through a muster day, played with no new order, so a
+ * card can say what its troop changes. Each card reads the same play, which goes on only as far
+ * as the latest muster asked of it, so six cards add one play of the longest training.
+ */
+function baselineOf(
+  state: State,
+  pending: readonly Order[],
+  waiting: State,
+  world: World,
+  near: readonly { power: FactionId }[],
+) {
+  let byOrders = baselines.get(state);
+  if (!byOrders) {
+    byOrders = new WeakMap();
+    baselines.set(state, byOrders);
+  }
+  let base = byOrders.get(pending);
+  if (!base) {
+    const played = structuredClone(waiting) as GameState;
+    base = {
+      played,
+      shares: new Map(),
+      ended: new Map(),
+      held: new Map(
+        near.map(({ power }) => [power, played.factions[power]?.noticeSince ?? played.day]),
+      ),
+    };
+    byOrders.set(pending, base);
+  }
+  const from = waiting.day;
+  const known = base;
+  return (musters: number) => {
+    for (let day = known.played.day; day <= musters; day++) {
+      known.played = renewed(known.played);
+      for (const system of SYSTEMS) system(known.played, world);
+      for (const [power, since] of known.held)
+        if (
+          !known.ended.has(power) &&
+          day < since + NOTICE_DAYS &&
+          known.played.factions[power]?.noticeSince !== since
+        )
+          known.ended.set(power, day);
+      known.shares.set(day, sharesOf(renewed(known.played), world, near));
+    }
+    return {
+      mustered: known.shares.get(Math.max(from, musters)) ?? new Map<FactionId, number>(),
+      ended: (power: FactionId, by: number) => {
+        const day = known.ended.get(power);
+        return day !== undefined && day <= by ? day : undefined;
+      },
+    };
+  };
 }
 
 /**
@@ -239,21 +314,34 @@ function sharesOf(
 }
 
 /**
- * "Carthage 81% now, 74% once paid, 65% once they muster on Year 1, day 140, below 80%, so it may
- * not declare until it has stood at 80% for 30 days": the verdict comes from the day the rules end
- * the notice, the order's day, the muster's, or a day between, and with none it is still free to
- * declare from its day, or the men come too late when they muster on or after it. Men who muster
- * beyond its reach are said not to count.
+ * "Carthage 81% now, 74% once paid, 65% once they muster on Year 1, day 140, against 78% without
+ * them, below 80%, so it may not declare until it has stood at 80% for 30 days": the verdict comes
+ * from the day the rules end the notice, the order's day, the muster's, or a day between, and with
+ * none it is still free to declare from its day, or the men come too late when they muster on or
+ * after it. Men who muster beyond its reach are said not to count. A notice the same days end with
+ * no new order is not the troop's doing, and the card says it ends with or without them.
  */
 function threatText(
   state: State,
   forecast: Omit<RecruitThreat, 'text'>,
   front: string | undefined,
 ): string {
-  const { power, now, paid, mustered, musters, counted, ended } = forecast;
+  const { power, now, paid, mustered, musters, counted, ended, without } = forecast;
   const name = factionName(state, power);
   const opening = `${name} ${share(now)} now, ${share(paid)} once paid`;
-  const men = `${share(mustered)} once they muster on ${dateText(musters)}${counted ? '' : `, beyond ${whole(WAR_FRONT_KM)} km of ${front ?? 'the city it weighs'}, where they do not count`}`;
+  const alone =
+    share(without.mustered) === share(mustered)
+      ? ''
+      : `, against ${share(without.mustered)} without them`;
+  const men = `${share(mustered)} once they muster on ${dateText(musters)}${counted ? '' : `, beyond ${whole(WAR_FRONT_KM)} km of ${front ?? 'the city it weighs'}, where they do not count`}${alone}`;
+  const notice = `so it may not declare until it has stood at ${share(NOTICE_SHARE)} for ${NOTICE_DAYS} days`;
+  if (without.ended !== undefined && ended !== undefined) {
+    const falls =
+      ended >= without.ended
+        ? `it falls below ${share(NOTICE_SHARE)} on ${dateText(without.ended)} with or without them`
+        : `it falls below ${share(NOTICE_SHARE)} on ${dateText(ended)}, not until ${dateText(without.ended)} without them`;
+    return `${opening}, ${men}; ${falls}, ${notice}`;
+  }
   // A notice the rules end reads as below the line, whatever the next day's share rounds to.
   if (ended === state.day)
     return `${opening}, ${verdictText(state, power, Math.min(paid, NOTICE_SHARE - 1e-9))}; ${men}`;

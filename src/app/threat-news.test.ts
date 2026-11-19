@@ -517,7 +517,9 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     const [card] =
       recruitThreats(ordered, [], roma, world, ['skirmishers']).get('skirmishers') ?? [];
     expect(card?.text).toMatch(
-      new RegExp(`once they muster on Year 1, day 110, below 80%, ${sameDay}$`),
+      new RegExp(
+        `once they muster on Year 1, day 110, against \\d+% without them, below 80%, ${sameDay}$`,
+      ),
     );
   });
 
@@ -581,6 +583,34 @@ describe('how near each power at peace stands to declaring war, as the wars pane
       '';
     expect(line).toContain(
       `Skirmishers in training at Roma muster on ${dateText(romaMustered ?? 0)} and Spearmen at Capua on Year 1, day 115, which take it to`,
+    );
+  });
+
+  test('the corner says in a few words whether the men in training are enough, as the At peace line says it', () => {
+    const corner = (left: number, carthageMen?: number) => {
+      const { ordered } = trainingFor(left);
+      if (carthageMen !== undefined) spearmenOf(ordered, carthage).men = carthageMen;
+      const forecast = trainingThreats(ordered, world);
+      const line =
+        standingThreats(ordered, world, ordered, forecast).find((t) => t.power === carthage)
+          ?.text ?? '';
+      const [warning] = threatNewsOfDay(ordered, ordered, world, new Set(), trainingThreats);
+      return { line, warning: warning?.text ?? '' };
+    };
+    const enough = corner(20);
+    expect(enough.line).toContain('below 80%, so it may not declare until it has stood at 80%');
+    expect(enough.warning).toContain(
+      'More men lower it, not guards: Skirmishers in training muster on Year 1, day 110, which is enough. It weighs you so only',
+    );
+    const late = corner(10);
+    expect(late.line).toContain('below 80%, but it may declare that same day, before they muster');
+    expect(late.warning).toContain(
+      'Skirmishers in training muster on Year 1, day 110, too late. It weighs you',
+    );
+    const short = corner(20, 4000);
+    expect(short.line).toContain('still at 80% or more, so it may still declare');
+    expect(short.warning).toContain(
+      'Skirmishers in training muster on Year 1, day 110, not enough. It weighs you',
     );
   });
 

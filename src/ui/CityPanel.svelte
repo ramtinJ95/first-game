@@ -11,7 +11,7 @@
   import type { GameState } from '../sim/state/game-state.ts';
   import { OUTPUT_PER_PERSON } from '../sim/systems/economy.ts';
   import { trainingDaysAt } from '../sim/buildings/buildings.ts';
-  import { fullDefences } from '../sim/systems/sieges.ts';
+  import { beleaguered, fullDefences } from '../sim/systems/sieges.ts';
   import { TROOPS, type Troop } from '../sim/troops.ts';
   import type { Actions } from './actions.ts';
   import ArmiesHere from './ArmiesHere.svelte';
@@ -138,14 +138,15 @@
       .map((order) => ({ troop: order.troop, when: 'ordered for the next day' })),
   ]);
 
-  /** What the player has left once the recruits and buildings waiting for the next day are paid. */
-  const available = $derived(
-    afterWaiting(game, pending, world).factions[game.player]?.stores ?? { gold: 0, manpower: 0 },
-  );
+  /** The day as the next tick starts it, once the recruits and buildings waiting for it are paid. */
+  const waiting = $derived(afterWaiting(game, pending, world));
+  const available = $derived(waiting.factions[game.player]?.stores ?? { gold: 0, manpower: 0 });
 
+  /** Why the rules' recruit order would refuse the troop at the city, in the order it checks. */
   function refusal(troop: Troop): string | undefined {
     const { gold, men } = TROOPS[troop].recruit;
     if (city.unrestDays > 0) return `In unrest for ${unrestDaysLeft(game, city)} more days`;
+    if (beleaguered(waiting, city)) return 'An enemy is at the walls, so no training starts';
     if (available.gold < gold) return `Needs ${whole(gold - available.gold)} more gold`;
     if (available.manpower < men) return `Needs ${whole(men - available.manpower)} more manpower`;
     return undefined;
@@ -160,14 +161,14 @@
   $effect(() => {
     threats = new Map();
     if (!own || !paused) return;
-    const [snapshot, waiting, at, troops] = [game, pending, city, orderable];
+    const [snapshot, orders, at, troops] = [game, pending, city, orderable];
     let timer: ReturnType<typeof setTimeout> | undefined;
     const next = (i: number) => {
       const troop = troops[i];
       if (!troop) return;
       timer = setTimeout(() => {
-        const lines = recruitThreats(snapshot, waiting, at, world, [troop]).get(troop);
-        if (lines) threats = new Map([...threats, [troop, lines]]);
+        const lines = recruitThreats(snapshot, orders, at, world, [troop]).get(troop) ?? [];
+        threats = new Map([...threats, [troop, lines]]);
         next(i + 1);
       }, 0);
     };
@@ -175,6 +176,8 @@
     return () => clearTimeout(timer);
   });
   const pauseToSee = $derived(own && !paused ? nearWarNames(game, world) : []);
+  /** The powers near war whose threat each card is still reckoning, so no card waits in silence. */
+  const reckoning = $derived(own && paused ? nearWarNames(game, world) : []);
 
   const destinations = $derived(
     Object.values(game.cities)
@@ -396,6 +399,11 @@
           {#each threats.get(troop) ?? [] as threat (threat.power)}
             <span class="threat" data-testid="recruit-threat">{threat.text}</span>
           {/each}
+          {#if !why && !threats.has(troop) && reckoning.length > 0}
+            <span class="muted small" data-testid="recruit-threat-reckoning"
+              >Reckoning what they do to the threat of {reckoning.join(' and ')}…</span
+            >
+          {/if}
         </button>
       {/each}
     </div>

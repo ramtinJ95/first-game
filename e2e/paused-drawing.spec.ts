@@ -11,6 +11,7 @@ import {
   startGame,
   untilDrawn,
 } from './support.ts';
+import { tradingRome } from './trade-game.ts';
 
 /**
  * How many screen frames after the input the frame that shows it may start. The page
@@ -169,6 +170,36 @@ test.describe('a paused game', () => {
       expect(over.started, `frames started, the last because: ${over.because}`).toBe(0);
     });
   }
+
+  test("a zoom in over Capua's caravans and Roma's ships, once drawn, holds still with nothing left to finish, in the full drawing", async ({
+    page,
+  }) => {
+    test.slow();
+    await openGame(page, { query: 'draw=full' });
+    await pause(page);
+    const state = tradingRome();
+    await dropSave(page, state);
+    await expect(page.getByTestId('time-controls-day')).toHaveAttribute(
+      'data-day',
+      String(state.day),
+    );
+    await untilDrawn(page);
+    const view = camera(page);
+    await view.jumpTo(
+      { x: (cityPoint('roma').x + cityPoint('capua').x) / 2, y: cityPoint('roma').y },
+      1,
+    );
+    await page.mouse.move(0, 0);
+    await untilStill(page);
+    await view.zoom({ x: 640, y: 360 }, 3);
+    await page.mouse.move(0, 0);
+    await untilStill(page);
+    const over = await framesOver(page, UNTOUCHED_SCREENS);
+    expect(
+      over.started,
+      `frames started after the view was still, the last because: ${over.because}`,
+    ).toBe(0);
+  });
 
   test('draws a pan and a zoom in the next frame', async ({ page }) => {
     const view = await pausedGame(page);
