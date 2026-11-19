@@ -1,6 +1,5 @@
 import { spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
-import { noteTestRun, yieldToTests } from './runs.ts';
+import { noteTestRun, writeWhole, yieldToTests } from './runs.ts';
 
 /**
  * Stands in for the commands `runs.test.ts` watches. `heavy <file> [leave]` yields, then starts
@@ -10,11 +9,15 @@ import { noteTestRun, yieldToTests } from './runs.ts';
  */
 const [role, file, leave] = process.argv.slice(2);
 if (role === 'tests') {
-  const end = noteTestRun();
+  // The handler comes first: the note is out before noteTestRun returns, and a SIGTERM a test
+  // sends on seeing it waits for the handler instead of ending the run before its end is noted.
+  let end = () => {};
   process.on('SIGTERM', () => {
     end();
-    process.exit(0);
+    // Output to a pipe is written later, so the process ends once it is out, or its last line is lost.
+    process.stdout.write('', () => process.exit(0));
   });
+  end = noteTestRun();
   setInterval(() => {}, 1000);
 } else {
   await yieldToTests();
@@ -22,7 +25,7 @@ if (role === 'tests') {
     detached: true,
     stdio: 'ignore',
   });
-  writeFileSync(file ?? '', JSON.stringify({ copy: process.pid, busy: busy.pid }));
+  writeWhole(file ?? '', JSON.stringify({ copy: process.pid, busy: busy.pid }));
   if (leave) process.exit(0);
   setInterval(() => {}, 1000);
 }
