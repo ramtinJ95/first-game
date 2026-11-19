@@ -8,6 +8,7 @@ import { saveGame } from '../src/sim/save.ts';
 import { tick } from '../src/sim/tick.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 import { camera, cityPoint, map, openGame, pause, startGame, untilDrawn } from './support.ts';
+import { yieldToTests } from '../scripts/runs.ts';
 
 /**
  * What a paused game that nobody touches costs: the frames the map draws a second, the
@@ -18,6 +19,7 @@ import { camera, cityPoint, map, openGame, pause, startGame, untilDrawn } from '
  *
  *   node e2e/paused-bench.ts [--seconds 30] [--days 300] [--rounds 1] [--root <dir>] [--args "--flag ..."]
  */
+await yieldToTests();
 const { values } = parseArgs({
   options: {
     seconds: { type: 'string', default: '30' },

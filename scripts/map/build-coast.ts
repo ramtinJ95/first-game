@@ -20,7 +20,7 @@ import {
 } from './geometry.ts';
 import { landInExtent } from './build-map.ts';
 import { mapPlane } from './projection.ts';
-import { loadDrawingLand, SOURCES } from './sources.ts';
+import { loadDrawingLand, SOURCES, type LonLatPolygon } from './sources.ts';
 
 export const DRAWING_TOLERANCE_KM = 0.1;
 export const COAST_BAND_KM = 8;
@@ -98,12 +98,13 @@ function frameLines(map: GameMap): Point[][] {
     );
 }
 
-export async function buildDrawingCoast() {
+/** Builds the drawing coast from `drawingLand`, the finer land `loadDrawingLand` reads. */
+export function buildDrawingCoast(drawingLand: LonLatPolygon[]) {
   const map = parseMap(JSON.parse(readFileSync('data/map/map.json', 'utf8')));
   const plane = mapPlane();
   const physical = landOutline(map);
   const inherited = simplify(naturalCoast(map).land, 0.08);
-  const source = landInExtent(await loadDrawingLand());
+  const source = landInExtent(drawingLand);
   const fine = simplify(source, DRAWING_TOLERANCE_KM);
   const world = buildWorld(map);
   // A fixed physical coast wins at inhabited ground and navigable bottlenecks.
@@ -258,7 +259,7 @@ export async function buildDrawingCoast() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const result = await buildDrawingCoast();
+  const result = buildDrawingCoast(await loadDrawingLand());
   writeFileSync('data/map/drawing-coast.json', JSON.stringify(result) + '\n');
   console.log(
     `${result.land.length} land pieces, ${result.land.flat(2).length / 2} outline points`,

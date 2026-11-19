@@ -8,6 +8,7 @@ import { preview } from 'vite';
 import { SOFTWARE_GL } from '../playwright.config.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { camera, cityPoint, dropSave, openGame, pause, untilDrawn } from './support.ts';
+import { yieldToTests } from '../scripts/runs.ts';
 
 /**
  * Plays the seventh play-through's minute on each built checkout: Rome has opened
@@ -47,6 +48,7 @@ import { camera, cityPoint, dropSave, openGame, pause, untilDrawn } from './supp
  * pan out and back, so the camera stands over Roma again when the next one picks. That is
  * short enough for CI's frame job.
  */
+await yieldToTests();
 const { values } = parseArgs({
   options: {
     roots: { type: 'string', default: '.' },

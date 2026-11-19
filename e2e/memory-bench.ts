@@ -18,6 +18,7 @@ import { MAX_SCALE } from '../src/render/camera.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { collectGarbage, countObjects } from './count-objects.ts';
 import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
+import { yieldToTests } from '../scripts/runs.ts';
 
 /**
  * Measures what the tab holds as a long session plays. `--loads <n>` drops one saved
@@ -56,6 +57,7 @@ import { dropSave, map, openGame, startGame, untilDrawn } from './support.ts';
  *
  *   node e2e/memory-bench.ts [--loads 30 | --years 10] [--days 300] [--draw full] [--out file.csv]
  */
+await yieldToTests();
 const { values } = parseArgs({
   options: {
     loads: { type: 'string' },

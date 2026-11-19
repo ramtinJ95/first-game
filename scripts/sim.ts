@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { generateRegistries } from './registries.ts';
+import { yieldToTests } from './runs.ts';
 
 const scripts = new URL('./', import.meta.url);
 const available = readdirSync(new URL('sim/', scripts))
@@ -15,6 +16,7 @@ if (name === '--help') {
   console.error(`Choose a simulation: ${available.join(', ')}`);
   process.exitCode = 1;
 } else {
+  await yieldToTests();
   generateRegistries();
   const result = spawnSync(
     process.execPath,

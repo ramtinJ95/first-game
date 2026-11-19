@@ -8,6 +8,10 @@ import { readCandidates, type SettlementCandidate } from './settlements.ts';
 const CACHE_DIR = resolve(import.meta.dirname, '../../.cache/map');
 const DOWNLOADS_AT_ONCE = 8;
 const DOWNLOAD_ATTEMPTS = 3;
+/** How long one attempt at one file may take before it is tried again. */
+const ATTEMPT_LIMIT_MS = 30_000;
+/** How long all the downloads of one load may take, retries included. */
+export const DOWNLOAD_LIMIT_MS = 90_000;
 
 const NATURAL_EARTH =
   'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson';
@@ -142,6 +146,7 @@ export interface Sources {
 }
 
 export async function loadSources(): Promise<Sources> {
+  const deadline = AbortSignal.timeout(DOWNLOAD_LIMIT_MS);
   const [
     land,
     rivers,
@@ -152,14 +157,16 @@ export async function loadSources(): Promise<Sources> {
     ecoregions,
     settlementCandidates,
   ] = await Promise.all([
-    readJson(SOURCES.land).then(parseLand),
-    readJson(SOURCES.rivers).then(parseRivers),
-    readJson(SOURCES.regions).then(parseRegions),
-    readJson(SOURCES.elevationPoints).then(parseElevationPoints),
-    readJson(SOURCES.lakes).then(parseLakes),
-    readSource(SOURCES.elevation).then(parseElevation),
-    readJson(SOURCES.ecoregionOverview).then(readEcoregions),
-    readPleiades(),
+    readJson(SOURCES.land, deadline).then(parseLand),
+    readJson(SOURCES.rivers, deadline).then(parseRivers),
+    readJson(SOURCES.regions, deadline).then(parseRegions),
+    readJson(SOURCES.elevationPoints, deadline).then(parseElevationPoints),
+    readJson(SOURCES.lakes, deadline).then(parseLakes),
+    readSource(SOURCES.elevation, deadline).then(parseElevation),
+    readJson(SOURCES.ecoregionOverview, deadline).then((overview) =>
+      readEcoregions(overview, deadline),
+    ),
+    readPleiades(deadline),
   ]);
   return {
     land,
@@ -173,33 +180,34 @@ export async function loadSources(): Promise<Sources> {
   };
 }
 
-async function readPleiades(): Promise<SettlementCandidate[]> {
+async function readPleiades(deadline: AbortSignal): Promise<SettlementCandidate[]> {
   const [places, locationPoints, placeTypes, connections, timePeriods, names] = await Promise.all([
-    readText(SOURCES.places),
-    readText(SOURCES.locationPoints),
-    readText(SOURCES.placeTypes),
-    readText(SOURCES.connections),
-    readText(SOURCES.timePeriods),
-    readText(SOURCES.names),
+    readText(SOURCES.places, deadline),
+    readText(SOURCES.locationPoints, deadline),
+    readText(SOURCES.placeTypes, deadline),
+    readText(SOURCES.connections, deadline),
+    readText(SOURCES.timePeriods, deadline),
+    readText(SOURCES.names, deadline),
   ]);
   return readCandidates({ places, locationPoints, placeTypes, connections, timePeriods, names });
 }
 
-async function readJson(source: Source): Promise<unknown> {
-  return JSON.parse(await readText(source));
+async function readJson(source: Source, deadline: AbortSignal): Promise<unknown> {
+  return JSON.parse(await readText(source, deadline));
 }
 
 /** Finer land for the renderer only; never an input to buildMap. */
 export async function loadDrawingLand(): Promise<LonLatPolygon[]> {
-  return parseLand(await readJson(SOURCES.drawingLand), SOURCES.drawingLand.url);
+  const deadline = AbortSignal.timeout(DOWNLOAD_LIMIT_MS);
+  return parseLand(await readJson(SOURCES.drawingLand, deadline), SOURCES.drawingLand.url);
 }
 
-async function readText(source: Source): Promise<string> {
-  return (await readSource(source)).toString('utf8');
+async function readText(source: Source, deadline: AbortSignal): Promise<string> {
+  return (await readSource(source, deadline)).toString('utf8');
 }
 
-async function readSource({ url, sha256 }: Source): Promise<Buffer> {
-  const [body] = await readSources([url], sha256, url);
+async function readSource({ url, sha256 }: Source, deadline: AbortSignal): Promise<Buffer> {
+  const [body] = await readSources([url], sha256, url, deadline);
   return body as Buffer;
 }
 
@@ -207,7 +215,12 @@ async function readSource({ url, sha256 }: Source): Promise<Buffer> {
  * Reads `urls` through the cache. One sha256 covers their bytes concatenated in order; it is
  * checked on download, before anything is cached, and on every read.
  */
-async function readSources(urls: string[], sha256: string, what: string): Promise<Buffer[]> {
+async function readSources(
+  urls: string[],
+  sha256: string,
+  what: string,
+  deadline: AbortSignal,
+): Promise<Buffer[]> {
   const paths = urls.map((url) => join(CACHE_DIR, new URL(url).pathname));
   const missing = paths.flatMap((path, i) => (existsSync(path) ? [] : [i]));
   const downloaded = new Map<number, Buffer>();
@@ -215,7 +228,7 @@ async function readSources(urls: string[], sha256: string, what: string): Promis
   await Promise.all(
     Array.from({ length: DOWNLOADS_AT_ONCE }, async () => {
       for (let i = missing[next++]; i !== undefined; i = missing[next++]) {
-        downloaded.set(i, await download(urls[i] as string));
+        downloaded.set(i, await download(urls[i] as string, deadline));
       }
     }),
   );
@@ -243,16 +256,40 @@ async function readSources(urls: string[], sha256: string, what: string): Promis
   return bodies;
 }
 
-async function download(url: string): Promise<Buffer> {
-  for (let attempt = 1; ; attempt++) {
+/**
+ * Downloads `url`, trying again when an attempt fails or takes over ATTEMPT_LIMIT_MS, and
+ * fails in words that name the file once the attempts or the load's deadline run out.
+ */
+async function download(url: string, deadline: AbortSignal): Promise<Buffer> {
+  const seconds = (ms: number) => `${ms / 1000} s`;
+  const reasons: string[] = [];
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
     try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`${url} answered ${response.status}`);
+      const signal = AbortSignal.any([deadline, AbortSignal.timeout(ATTEMPT_LIMIT_MS)]);
+      const response = await fetch(url, { signal });
+      if (!response.ok) throw new Error(`it answered ${response.status}`);
       return Buffer.from(await response.arrayBuffer());
     } catch (error) {
-      if (attempt === DOWNLOAD_ATTEMPTS) throw error;
+      if (deadline.aborted)
+        throw new Error(
+          `The map source ${url} did not finish downloading within the ${seconds(DOWNLOAD_LIMIT_MS)} all the map downloads may take.`,
+          { cause: error },
+        );
+      const timedOut = error instanceof DOMException && error.name === 'TimeoutError';
+      reasons.push(
+        timedOut
+          ? `attempt ${attempt} took over ${seconds(ATTEMPT_LIMIT_MS)}`
+          : `attempt ${attempt}: ${explain(error)}`,
+      );
     }
   }
+  throw new Error(`Could not download the map source ${url}: ${reasons.join('; ')}.`);
+}
+
+/** An error's message with its cause's, as fetch puts the network's reason in the cause. */
+function explain(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  return error.cause === undefined ? error.message : `${error.message} (${explain(error.cause)})`;
 }
 
 function verify(bodies: Buffer[], expected: string, where: string, hint: string): void {
@@ -264,7 +301,7 @@ function verify(bodies: Buffer[], expected: string, where: string, hint: string)
 }
 
 /** The ecoregions whose outline touches the extent's box grown by `ECOREGION_MARGIN_DEG`. */
-async function readEcoregions(overview: unknown): Promise<Ecoregion[]> {
+async function readEcoregions(overview: unknown, deadline: AbortSignal): Promise<Ecoregion[]> {
   const where = SOURCES.ecoregionOverview.url;
   const { west, east, south, north } = EXTENT_BOX;
   const m = ECOREGION_MARGIN_DEG;
@@ -282,7 +319,12 @@ async function readEcoregions(overview: unknown): Promise<Ecoregion[]> {
     })
     .sort((a, b) => a - b);
   const urls = ids.map((id) => `${RESOLVE}/features/${id}.geojson`);
-  const bodies = await readSources(urls, ECOREGION_FEATURES_SHA256, `${RESOLVE}/features`);
+  const bodies = await readSources(
+    urls,
+    ECOREGION_FEATURES_SHA256,
+    `${RESOLVE}/features`,
+    deadline,
+  );
   return bodies.map((body, i) => parseEcoregion(JSON.parse(body.toString('utf8')), urls[i] ?? ''));
 }
 
