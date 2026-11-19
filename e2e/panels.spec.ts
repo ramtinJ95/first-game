@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { changeCityOwner } from '../src/sim/cities.ts';
 import { allocateId, type CityId, type FactionId } from '../src/sim/ids.ts';
+import type { Day } from '../src/sim/state/day.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import {
   armyOf,
@@ -437,23 +438,29 @@ test.describe('the panels', () => {
   test('an alert keeps its own button as newer news comes in above it, so a click opens what it says', async ({
     page,
   }) => {
+    // The First Legion arrives at Capua on the first day played, and Skirmishers muster at Roma
+    // on the third: one known piece of news comes in above the arrival.
+    const state = startGame();
+    const capua = cityPoint('capua');
+    armyOf(state, rome).activity = {
+      kind: 'marching',
+      position: { x: capua.x + 5, y: capua.y },
+      waypoints: [{ ...capua }],
+    };
+    state.cities['roma' as CityId]?.recruits.push({
+      troop: 'skirmishers',
+      readyOn: (state.day + 2) as Day,
+    });
     await pause(page);
-    const view = camera(page);
-    await page.mouse.click(view.banner(cityPoint('roma')).x, view.banner(cityPoint('roma')).y);
-    const capua = view.city('capua');
-    await page.mouse.click(capua.x, capua.y, { button: 'right' });
-    await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
+    await load(page, state);
+    await page.getByRole('button', { name: 'Speed 1', exact: true }).click();
     await resume(page);
     const alerts = page.getByTestId('alerts').getByRole('button');
     const arrived = alerts.filter({ hasText: /First Legion arrived/ });
-    await expect(arrived).toBeVisible({ timeout: 15_000 });
-    await pause(page);
-    await page.keyboard.press('Escape');
+    await expect(arrived).toBeVisible();
     const button = await arrived.elementHandle();
     if (!button) throw new Error('no button for the arrival');
-    const above = await alerts.first().innerText();
-    await resume(page);
-    await expect(alerts.first()).not.toHaveText(above, { timeout: 30_000 });
+    await expect(alerts.filter({ hasText: /Skirmishers/ })).toBeVisible();
     await pause(page);
     expect(await button.innerText()).toMatch(/First Legion arrived/);
     await button.click();
