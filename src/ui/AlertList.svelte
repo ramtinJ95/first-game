@@ -12,7 +12,7 @@
 
 {#if alerts.length > 0}
   <ol class="alerts" data-testid="alerts" aria-label="Alerts">
-    {#each alerts as alert, i (i)}
+    {#each alerts as alert (alert)}
       <li>
         <button
           type="button"

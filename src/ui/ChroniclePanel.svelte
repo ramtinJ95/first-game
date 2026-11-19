@@ -12,7 +12,7 @@
     <p class="muted">Nothing has happened yet.</p>
   {/if}
   <ol class="entries">
-    {#each alerts as alert, i (i)}
+    {#each alerts as alert (alert)}
       <li>
         <button
           type="button"
