@@ -1,0 +1,47 @@
+[
+  {
+    "file": "middle-roma.png",
+    "title": "A month on, Roma selected: its three routes traced, ships along both lanes and caravans on the road north",
+    "kind": "screenshot"
+  },
+  {
+    "file": "massalia-lane.png",
+    "title": "Roma selected, at Corsica's northern cape: the lane to Massalia rounds it at sea, and so do its ships",
+    "kind": "screenshot"
+  },
+  {
+    "file": "middle.png",
+    "title": "The same day with nothing selected: the merchants stay on the map",
+    "kind": "screenshot"
+  },
+  {
+    "file": "closest.png",
+    "title": "The closest zoom on the road north of Roma, nothing selected: caravans coming and going",
+    "kind": "screenshot"
+  },
+  {
+    "file": "closest-roma.png",
+    "title": "Roma selected at the closest zoom: its road and lane traced under the merchants",
+    "kind": "screenshot"
+  },
+  {
+    "file": "closest-later.png",
+    "title": "Four months in, still Roma selected: the road still carries its caravans",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A game played on from Rome opening three routes from Roma: caravans on the road and ships on the lanes at middle and closest zoom, Roma selected and not",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A game played on from Rome opening three routes from Roma: caravans on the road and ships on the lanes at middle and closest zoom, Roma selected and not (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A game played on from Rome opening three routes from Roma: caravans on the road and ships on the lanes at middle and closest zoom, Roma selected and not (Playwright trace)",
+    "kind": "trace"
+  }
+]

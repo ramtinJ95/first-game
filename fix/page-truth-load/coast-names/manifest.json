@@ -1,0 +1,97 @@
+[
+  {
+    "file": "before-delta.png",
+    "title": "before: Nile delta shore, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-azov.png",
+    "title": "before: Sea of Azov, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-aegean.png",
+    "title": "before: Aegean islands, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-bosporus.png",
+    "title": "before: Bosporus, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-atlantic.png",
+    "title": "before: Atlantic shore by Olisipo, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-sand.png",
+    "title": "before: Village names on sand, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-forest.png",
+    "title": "before: Village names in Gaul, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-farmland.png",
+    "title": "before: Village names in Italy, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-delta.png",
+    "title": "after: Nile delta shore, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-azov.png",
+    "title": "after: Sea of Azov, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-aegean.png",
+    "title": "after: Aegean islands, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-bosporus.png",
+    "title": "after: Bosporus, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-atlantic.png",
+    "title": "after: Atlantic shore by Olisipo, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-sand.png",
+    "title": "after: Village names on sand, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-forest.png",
+    "title": "after: Village names in Gaul, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-farmland.png",
+    "title": "after: Village names in Italy, same day 1 at 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Natural sea shores and readable village names, before and after",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Natural sea shores and readable village names, before and after (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Natural sea shores and readable village names, before and after (Playwright trace)",
+    "kind": "trace"
+  }
+]

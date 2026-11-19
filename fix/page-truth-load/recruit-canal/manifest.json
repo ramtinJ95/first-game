@@ -1,0 +1,27 @@
+[
+  {
+    "file": "recruit-canal-1280.png",
+    "title": "The Spearmen card after 500 Skirmishers: Year 5, day 35, the line that says the Skirmishers moved it from Year 1, day 252, and the Canals line that feeds the Spearmen if raised now, at 1280 by 720",
+    "kind": "screenshot"
+  },
+  {
+    "file": "recruit-canal-390.png",
+    "title": "The same card at 390 px wide, where the side column is a sheet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The Spearmen card at Roma names Year 1, day 252; after 500 Skirmishers it names Year 5, day 35, says the Skirmishers moved it, and says Canals at Roma, for 4,000 gold and 5 more food a day, would feed the Spearmen if raised now",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The Spearmen card at Roma names Year 1, day 252; after 500 Skirmishers it names Year 5, day 35, says the Skirmishers moved it, and says Canals at Roma, for 4,000 gold and 5 more food a day, would feed the Spearmen if raised now (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The Spearmen card at Roma names Year 1, day 252; after 500 Skirmishers it names Year 5, day 35, says the Skirmishers moved it, and says Canals at Roma, for 4,000 gold and 5 more food a day, would feed the Spearmen if raised now (Playwright trace)",
+    "kind": "trace"
+  }
+]

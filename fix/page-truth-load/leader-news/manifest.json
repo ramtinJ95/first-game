@@ -1,0 +1,22 @@
+[
+  {
+    "file": "leader-news.png",
+    "title": "Seed 8, 200 days around a change of lead: Carthage is told once as it takes the lead, and not again after a tie",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The leading-power news of a ten-year game around a change of lead, told once for each power that takes the lead",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The leading-power news of a ten-year game around a change of lead, told once for each power that takes the lead (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The leading-power news of a ten-year game around a change of lead, told once for each power that takes the lead (Playwright trace)",
+    "kind": "trace"
+  }
+]

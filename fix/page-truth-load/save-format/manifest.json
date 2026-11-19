@@ -1,0 +1,27 @@
+[
+  {
+    "file": "missing-change.png",
+    "title": "The import is refused: \"This save is from an older version of the game and cannot be opened, so choose a power on the start screen to begin a new game.\" The running game is not replaced",
+    "kind": "screenshot"
+  },
+  {
+    "file": "unknown-change.png",
+    "title": "The import is refused: \"This save is from a newer version of the game and cannot be opened here, so open it in that version or choose a power on the start screen to begin a new game.\" The running game is not replaced",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A save the game cannot open is refused in one sentence that says what to do, and the missing or unknown change goes to the console",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A save the game cannot open is refused in one sentence that says what to do, and the missing or unknown change goes to the console (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A save the game cannot open is refused in one sentence that says what to do, and the missing or unknown change goes to the console (Playwright trace)",
+    "kind": "trace"
+  }
+]

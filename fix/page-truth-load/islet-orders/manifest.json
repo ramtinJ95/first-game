@@ -1,0 +1,32 @@
+[
+  {
+    "file": "islet-refused.png",
+    "title": "First Legion selected, a right click on Zembra off Cap Bon at the closest zoom: no army can land on that islet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "islet-of-carthago-refused.png",
+    "title": "A right click on the islet east of Cap Bon, which Carthago's province holds and no city stands on: the same words, no army can land on that islet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "massalia-camp.png",
+    "title": "Rome besieging Massalia at the closest zoom: the camp keeps off the Aquae Sextiae symbol and name, close beside them",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A right click on an islet the atlas draws, or on one a province holds with no city on it, says no army can land there, and a siege camp at Massalia beside Aquae Sextiae",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A right click on an islet the atlas draws, or on one a province holds with no city on it, says no army can land there, and a siege camp at Massalia beside Aquae Sextiae (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A right click on an islet the atlas draws, or on one a province holds with no city on it, says no army can land there, and a siege camp at Massalia beside Aquae Sextiae (Playwright trace)",
+    "kind": "trace"
+  }
+]

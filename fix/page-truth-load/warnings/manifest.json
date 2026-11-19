@@ -1,0 +1,57 @@
+[
+  {
+    "file": "recruit-shortfall.png",
+    "title": "A lasting deficit warns at any distance: 8 days of food and 826 days of gold, as the top bar counts them, both red, and the raise asks Raise anyway",
+    "kind": "screenshot"
+  },
+  {
+    "file": "recruit-wait.png",
+    "title": "A regiment the filling granary would carry later names the day: food lasts about 669 days now, raised in about 251 days the men are fed as the people grow, and Raise anyway stays",
+    "kind": "screenshot"
+  },
+  {
+    "file": "recruit-growth-closes.png",
+    "title": "With Spearmen selected, a small deficit the growing people close stays plain: 2,808 days at today's yields, no warning, and a plain Raise troops",
+    "kind": "screenshot"
+  },
+  {
+    "file": "standing-desertion.png",
+    "title": "Hunger stays visible each day after its first notice; the Chronicle tracks start, a tenth lost and the final total instead of daily spam",
+    "kind": "screenshot"
+  },
+  {
+    "file": "own-siege-begins.png",
+    "title": "The siege of your own city pauses on its first day",
+    "kind": "screenshot"
+  },
+  {
+    "file": "own-city-danger.png",
+    "title": "Seven days of food left: a second pause says to relieve, sally or seek peace",
+    "kind": "screenshot"
+  },
+  {
+    "file": "quiet-sally.png",
+    "title": "A one-day 100-man sally does not pause a realm with a reserve: one quiet result in the corner, details in the Chronicle",
+    "kind": "screenshot"
+  },
+  {
+    "file": "defeat-dialog.png",
+    "title": "Defeat is a native modal dialog: focus stays inside it and the backdrop makes the game beneath inert",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A cautious player sees the cost of waiting: recruitment upkeep, continuing desertion, own-city siege pauses, quiet sallies and a modal defeat",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A cautious player sees the cost of waiting: recruitment upkeep, continuing desertion, own-city siege pauses, quiet sallies and a modal defeat (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A cautious player sees the cost of waiting: recruitment upkeep, continuing desertion, own-city siege pauses, quiet sallies and a modal defeat (Playwright trace)",
+    "kind": "trace"
+  }
+]

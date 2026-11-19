@@ -1,0 +1,47 @@
+[
+  {
+    "file": "fate-prompt.png",
+    "title": "Mediolanum falls to Rome: each fate on one line, with what it gives now, how long the unrest lasts, the yield a day at first, and the yield once calm",
+    "kind": "screenshot"
+  },
+  {
+    "file": "battle-pause.png",
+    "title": "A battle of Rome begins at speed 3: the game pauses on its first day, and the alert says why, with the camera where it was",
+    "kind": "screenshot"
+  },
+  {
+    "file": "battle-panel-600.png",
+    "title": "At 1280x600 the selected army in battle shows its stance controls once, in the battle panel, and the side column scrolls to the defenders",
+    "kind": "screenshot"
+  },
+  {
+    "file": "chronicle.png",
+    "title": "The chronicle keeps every alert of the game with its day, and a save keeps it",
+    "kind": "screenshot"
+  },
+  {
+    "file": "phone-sheet.png",
+    "title": "At 390 px the open sheet stands alone at the bottom: the alerts wait in the chronicle",
+    "kind": "screenshot"
+  },
+  {
+    "file": "overview-names.png",
+    "title": "The overview names each army: First, Second, and Third Legion",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "The page tells the truth and stops when the player must decide: the fate prompt with each yield once calm, the pause at a battle, the chronicle, the battle panel at 600 px, the phone sheet, and named armies",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "The page tells the truth and stops when the player must decide: the fate prompt with each yield once calm, the pause at a battle, the chronicle, the battle panel at 600 px, the phone sheet, and named armies (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "The page tells the truth and stops when the player must decide: the fate prompt with each yield once calm, the pause at a battle, the chronicle, the battle panel at 600 px, the phone sheet, and named armies (Playwright trace)",
+    "kind": "trace"
+  }
+]

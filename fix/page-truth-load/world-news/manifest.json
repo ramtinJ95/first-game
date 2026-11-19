@@ -1,0 +1,37 @@
+[
+  {
+    "file": "world-news-corner.png",
+    "title": "Egypt takes Carthago far out of Rome's sight: the corner tells it, in muted italic beside Rome's own news",
+    "kind": "screenshot"
+  },
+  {
+    "file": "world-news-chronicle.png",
+    "title": "The chronicle also keeps the fall of Mediolanum to Macedon, 306 km from Rome, which the corner leaves out",
+    "kind": "screenshot"
+  },
+  {
+    "file": "five-fleets.png",
+    "title": "Five Punic fleets come into sight on one day: one line, \"5 fleets of Carthage with 2,129 men are sailing for Roma\"",
+    "kind": "screenshot"
+  },
+  {
+    "file": "fate-ordered.png",
+    "title": "Sack chosen while the game is paused: the notice says when it happens, and the city panel shows the sack ordered for the next day in place of the choices",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "News of the world and of invasions: a fallen capital out of sight, a city near Rome's land in the chronicle, five fleets in one line, and a fate chosen in a paused game",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "News of the world and of invasions: a fallen capital out of sight, a city near Rome's land in the chronicle, five fleets in one line, and a fate chosen in a paused game (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "News of the world and of invasions: a fallen capital out of sight, a city near Rome's land in the chronicle, five fleets in one line, and a fate chosen in a paused game (Playwright trace)",
+    "kind": "trace"
+  }
+]
