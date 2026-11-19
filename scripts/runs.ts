@@ -1,5 +1,13 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { setPriority, tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -52,6 +60,16 @@ function alive(pid: number, start?: string): boolean {
   return start === undefined || startOf(pid) === start;
 }
 
+/**
+ * Writes the file whole under another name and renames it into place, so a reader in another
+ * process finds the old note, the new one, or none, and never half of one.
+ */
+export function writeWhole(path: string, text: string): void {
+  const part = `${path}.${process.pid}.part`;
+  writeFileSync(part, text);
+  renameSync(part, path);
+}
+
 function notes(): Note[] {
   let names: string[];
   try {
@@ -60,6 +78,7 @@ function notes(): Note[] {
     return [];
   }
   return names.flatMap((name) => {
+    if (!name.endsWith('.json')) return [];
     const path = join(DIR, name);
     try {
       const note = JSON.parse(readFileSync(path, 'utf8')) as Note;
@@ -96,7 +115,7 @@ function startRun(kind: Kind, what: string): { others: () => Note[]; end: () => 
   };
   const path = join(DIR, `${kind}-${process.pid}.json`);
   mkdirSync(DIR, { recursive: true });
-  writeFileSync(path, JSON.stringify(note));
+  writeWhole(path, JSON.stringify(note));
   const others = () =>
     notes().filter(
       (other) =>
@@ -107,7 +126,7 @@ function startRun(kind: Kind, what: string): { others: () => Note[]; end: () => 
   return {
     others,
     end: () => {
-      writeFileSync(path, JSON.stringify({ ...note, ended: Date.now() }));
+      writeWhole(path, JSON.stringify({ ...note, ended: Date.now() }));
       return others();
     },
   };
