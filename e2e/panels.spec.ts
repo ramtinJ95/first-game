@@ -434,6 +434,34 @@ test.describe('the panels', () => {
     );
   });
 
+  test('an alert keeps its own button as newer news comes in above it, so a click opens what it says', async ({
+    page,
+  }) => {
+    await pause(page);
+    const view = camera(page);
+    await page.mouse.click(view.banner(cityPoint('roma')).x, view.banner(cityPoint('roma')).y);
+    const capua = view.city('capua');
+    await page.mouse.click(capua.x, capua.y, { button: 'right' });
+    await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
+    await resume(page);
+    const alerts = page.getByTestId('alerts').getByRole('button');
+    const arrived = alerts.filter({ hasText: /First Legion arrived/ });
+    await expect(arrived).toBeVisible({ timeout: 15_000 });
+    await pause(page);
+    await page.keyboard.press('Escape');
+    const button = await arrived.elementHandle();
+    if (!button) throw new Error('no button for the arrival');
+    const above = await alerts.first().innerText();
+    await resume(page);
+    await expect(alerts.first()).not.toHaveText(above, { timeout: 30_000 });
+    await pause(page);
+    expect(await button.innerText()).toMatch(/First Legion arrived/);
+    await button.click();
+    await expect(page.getByTestId('army-panel').getByTestId('army-activity')).toHaveText(
+      /^Idle (at|near) Capua$/,
+    );
+  });
+
   test("a foreign army's panel shows a war under way with its owner", async ({ page }) => {
     const state = startGame();
     declareWar(state, rome, carthage);
