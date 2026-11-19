@@ -16,6 +16,8 @@ import { construction } from '../sim/systems/construction.ts';
 import { TROOPS } from '../sim/troops.ts';
 import { executeOrder } from '../sim/orders/orders.ts';
 import { recruit } from '../sim/orders/recruit.ts';
+import { newWar, warKey } from '../sim/state/war.ts';
+import type { Order } from '../sim/orders/orders.ts';
 
 const world = fixtureWorld();
 
@@ -419,4 +421,82 @@ it('names no Canals when food does not hold the raise back', () => {
   const forecast = recruitForecast(state, [], world, 'spearmen', 15, f.roma);
   expect(forecast.short.food).toBeUndefined();
   expect(forecast.canal).toBeUndefined();
+});
+
+/** Plays `days` days of Rome's economy, construction and people, with the orders on the first. */
+function playEconomy(initial: GameState, days: number, first: Order[] = []) {
+  let state = initial;
+  for (let day = 1; day <= days; day++) {
+    const result = tick(state, day === 1 ? first : [], fixtureWorld(), [
+      economy,
+      construction,
+      population,
+      (state) => {
+        state.day = (state.day + 1) as Day;
+      },
+    ]);
+    expect(result.rejected).toEqual([]);
+    state = result.state;
+  }
+  return state;
+}
+
+const canalsAtRoma = { kind: 'build', faction: f.rome, city: f.roma, building: 'canals' } as const;
+
+it("the tester's Canals: a player who builds them finds a card that agrees on the day the line named", () => {
+  const state = foodDeficitAfterSpearmen(-13, 0.16);
+  const wait = canalWait(state);
+  expect(wait, 'the Canals are still at work on the named day').toBeLessThan(45);
+  const ordered = recruitForecast(state, [canalsAtRoma], world, 'spearmen', 15, f.roma);
+  expect(ordered.holdsAfter, 'the waiting order counts its Canals').toBe(wait);
+  const dayBefore = playEconomy(state, wait - 1, [canalsAtRoma]);
+  expect(required(dayBefore.cities[f.roma]).construction?.building).toBe('canals');
+  const before = recruitForecast(dayBefore, [], world, 'spearmen', 15, f.roma);
+  expect(before.warning).toContain(`on ${dateText(state.day + wait)}`);
+  const named = playEconomy(dayBefore, 1);
+  expect(named.day).toBe(state.day + wait);
+  const card = recruitForecast(named, [], world, 'spearmen', 15, f.roma);
+  expect(card.short.food).toBeUndefined();
+  expect(card.warning).toBeUndefined();
+  expectConsistent(named);
+});
+
+it('counts a Forum at work, with the people it grows with, as the days played count it', () => {
+  const state = goldOnly();
+  const roma = required(state.cities[f.roma]);
+  roma.population = 40_000;
+  roma.construction = { building: 'forum', daysLeft: 20 };
+  required(state.factions[f.rome]).stores.gold = 6000;
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  const without = structuredClone(state);
+  required(without.cities[f.roma]).construction = null;
+  const unbuilt = required(recruitForecast(without, [], world, 'spearmen').short.gold);
+  expect(unbuilt, 'the stores last past the Forum').toBeGreaterThan(21);
+  let played = state;
+  let short: number | undefined;
+  for (let day = 1; day <= 6000 && short === undefined; day++) {
+    played = playEconomy(
+      played,
+      1,
+      day === 1 ? [{ kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' }] : [],
+    );
+    if (required(played.factions[f.rome]).stores.gold < 0) short = day;
+  }
+  expect(forecast.short.gold).toBe(short);
+  expectConsistent(state);
+});
+
+it('counts no building whose city has an enemy at its walls, which works no day until it leaves', () => {
+  const state = foodDeficitAfterSpearmen(-13, 0.16);
+  const atPeace = structuredClone(state);
+  const capua = required(state.cities[f.capua]);
+  capua.construction = { building: 'canals', daysLeft: 1 };
+  state.wars[warKey(f.rome, f.carthage)] = newWar(f.carthage, f.rome, state.day);
+  for (const army of Object.values(state.armies))
+    if (army.owner === f.carthage)
+      army.activity = { kind: 'idle', position: { ...capua.position } };
+  const unbuilt = recruitForecast(atPeace, [], world, 'spearmen', 15, f.roma).short.food;
+  expect(unbuilt).toBeDefined();
+  expect(recruitForecast(state, [], world, 'spearmen', 15, f.roma).short.food).toBe(unbuilt);
+  expect(required(playEconomy(state, 5).cities[f.capua]).construction?.daysLeft).toBe(1);
 });

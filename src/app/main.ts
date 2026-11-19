@@ -55,6 +55,7 @@ import {
 } from './saves.ts';
 import { turningPoints } from './turning-points.ts';
 import { threatFadedNewsOfDay, threatNewsOfDay } from './threat-news.ts';
+import { trainingThreats } from '../ui/recruit-threats.ts';
 import { leaderNews, leadingPower, worldNewsOfDay } from './world-news.ts';
 import {
   createView,
@@ -264,7 +265,7 @@ const clock = createClock({
         ...worldNewsOfDay(before, after, events, world),
         ...leader.alerts,
         ...threatFadedNewsOfDay(before, after, world, toldOnce),
-        ...threatNewsOfDay(before, after, world, toldOnce),
+        ...threatNewsOfDay(before, after, world, toldOnce, trainingThreats),
         ...guardNewsOfDay(before, after),
       ]),
       newsPauses ? pauses : NO_PAUSES,

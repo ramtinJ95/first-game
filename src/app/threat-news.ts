@@ -67,6 +67,8 @@ export function threatNewsOfDay(
   after: State,
   world: World,
   remembered: Set<string>,
+  training: (state: State, world: World) => ReadonlyMap<FactionId, TrainingMuster> = () =>
+    new Map(),
 ): Alert[] {
   const player = after.player;
   const warned: {
@@ -112,7 +114,7 @@ export function threatNewsOfDay(
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
   const text =
     others.length === 0
-      ? `${first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner')} See At peace in Wars.`
+      ? `${first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined)} See At peace in Wars.`
       : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`;
   return [
     {
@@ -537,7 +539,8 @@ function raiseAdvice(
   const training = inTraining(waiting);
   const stores = waiting.factions[state.player]?.stores;
   if (training.length > 0) {
-    if (where === 'corner') return `More men lower it, not guards: ${trainingText(training, true)}`;
+    if (where === 'corner')
+      return `More men lower it, not guards: ${trainingText(training, true)}${muster ? enoughText(state, power, muster) : ''}`;
     // A siege musters a city's men the day it begins, so a forecast that played one names that day.
     const men = trainingText(
       muster
@@ -571,6 +574,17 @@ function raiseAdvice(
     // The corner names the day war may come just before, and has no room to say it twice.
     return `More men lower it, not guards: ${TROOP_NAMES[advice.troop]} ordered now muster on ${dateText(advice.musters)}`;
   return `More men lower it, not guards: ${advice.text}`;
+}
+
+/**
+ * Whether the men in training are enough, in the corner's few words, as the At peace line says it
+ * at length: their muster takes the power below NOTICE_SHARE, or the rules end its notice, before
+ * the first day it may declare; or they leave it at NOTICE_SHARE or more; or they muster too late.
+ */
+function enoughText(state: State, power: FactionId, muster: Muster): string {
+  if (muster.ended !== undefined) return ', which is enough';
+  if (muster.mustered >= NOTICE_SHARE) return ', not enough';
+  return muster.musters >= firstDay(state, power) ? ', too late' : ', which is enough';
 }
 
 /** What more the player can order: a troop in time, one that musters late, or none, with what it lacks; '' with no city that may recruit. */

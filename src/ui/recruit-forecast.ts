@@ -5,12 +5,14 @@ import { dailyBalances, limitsOf, GRANARY_DAYS, UPKEEP_PER_MAN } from '../sim/sy
 import { TROOPS, type Troop } from '../sim/troops.ts';
 import { dateText, whole } from '../app/names.ts';
 import { afterWaiting } from './buildings-text.ts';
-import { signed } from './describe.ts';
 import type { World } from '../sim/world/world.ts';
 import { YEARLY_GROWTH } from '../sim/systems/population.ts';
 import { BUILDINGS } from '../sim/buildings/buildings.ts';
+import { beleaguered } from '../sim/systems/sieges.ts';
 import { buildRefusal } from '../sim/buildings/build.ts';
 import type { CityId } from '../sim/ids.ts';
+import type { Stores } from '../sim/state/faction.ts';
+import { signed, unrestDaysLeft } from './describe.ts';
 
 export function recruitForecast(
   game: DeepReadonly<GameState>,
@@ -55,6 +57,10 @@ export function recruitForecast(
     food: { change: grownBalance.food - balance.food, limit: grownLimits.food - limits.food },
     gold: { change: grownBalance.gold - balance.gold, limit: grownLimits.gold - limits.gold },
   };
+  type Plan = readonly Muster[];
+  const byDay = (plan: Plan) => [...plan].sort((a, b) => a.inDays - b.inDays);
+  const atWork = buildingsAtWork(waiting, balance, grownBalance);
+  const atToday = (plan: Plan) => plan.map((muster) => ({ ...muster, growth: 0 }));
   const lasts = {
     food: daysUntilShort(
       stores.food,
@@ -62,7 +68,7 @@ export function recruitForecast(
       limits.food,
       UPKEEP_PER_MAN.food,
       GRANARY_DAYS * UPKEEP_PER_MAN.food,
-      schedule,
+      byDay([...schedule, ...atToday(atWork.food)]),
     ),
     gold: daysUntilShort(
       stores.gold - cost.gold,
@@ -70,11 +76,9 @@ export function recruitForecast(
       limits.gold,
       UPKEEP_PER_MAN.gold,
       0,
-      schedule,
+      byDay([...schedule, ...atToday(atWork.gold)]),
     ),
   };
-  type Plan = readonly Muster[];
-  const byDay = (plan: Plan) => [...plan].sort((a, b) => a.inDays - b.inDays);
   const shortWith = (plan: Plan, paysOn?: number) => ({
     food: daysUntilShort(
       stores.food,
@@ -82,7 +86,7 @@ export function recruitForecast(
       limits.food,
       UPKEEP_PER_MAN.food,
       GRANARY_DAYS * UPKEEP_PER_MAN.food,
-      plan,
+      byDay([...plan, ...atWork.food]),
       yearly.food,
     ),
     gold: daysUntilShort(
@@ -91,7 +95,11 @@ export function recruitForecast(
       limits.gold,
       UPKEEP_PER_MAN.gold,
       0,
-      paysOn === undefined ? plan : byDay([...plan, { inDays: paysOn, men: 0, pay: cost.gold }]),
+      byDay([
+        ...plan,
+        ...atWork.gold,
+        ...(paysOn === undefined ? [] : [{ inDays: paysOn, men: 0, pay: cost.gold }]),
+      ]),
       yearly.gold,
     ),
   });
@@ -114,7 +122,11 @@ export function recruitForecast(
       limits.food,
       UPKEEP_PER_MAN.food,
       GRANARY_DAYS * UPKEEP_PER_MAN.food,
-      byDay([...plan, { inDays: BUILDINGS.canals.days, men: 0, gain: BUILDINGS.canals.food }]),
+      byDay([
+        ...plan,
+        ...atWork.food,
+        { inDays: BUILDINGS.canals.days, men: 0, gain: BUILDINGS.canals.food },
+      ]),
       yearly.food,
     ) === undefined &&
     daysUntilShort(
@@ -123,7 +135,11 @@ export function recruitForecast(
       limits.gold,
       UPKEEP_PER_MAN.gold,
       0,
-      paysOn === undefined ? plan : byDay([...plan, { inDays: paysOn, men: 0, pay: cost.gold }]),
+      byDay([
+        ...plan,
+        ...atWork.gold,
+        ...(paysOn === undefined ? [] : [{ inDays: paysOn, men: 0, pay: cost.gold }]),
+      ]),
       yearly.gold,
     ) === undefined;
   const site = troop && short.food !== undefined ? canalSite(waiting, at) : undefined;
@@ -201,12 +217,52 @@ function grownRealm(state: DeepReadonly<GameState>): DeepReadonly<GameState> {
 /** Full days of stores before the day they run short, as the top bar counts them. */
 const daysLeft = (shortOn: number) => Math.max(0, shortOn - 1);
 
-/** A recruit's start of upkeep, for a raise not yet ordered the gold it pays that day, and for a building the food a day it adds from then. */
+/**
+ * A recruit's start of upkeep, for a raise not yet ordered the gold it pays that day, and for a
+ * building the store a day it adds from then, with `growth` more for each YEARLY_GROWTH of people.
+ */
 interface Muster {
   inDays: number;
   men: number;
   pay?: number;
   gain?: number;
+  growth?: number;
+}
+
+/**
+ * What each building at work in the player's cities adds to its food and gold once finished,
+ * from the day after its last day of work: the economy's balance with the building and without,
+ * today and in the grown realm. Its days are counted on from the day the city's unrest ends,
+ * as the construction system works no day of unrest. A city with an enemy at its walls works
+ * none, and when the enemy leaves is not foreseen, so its building is not counted.
+ */
+function buildingsAtWork(
+  state: DeepReadonly<GameState>,
+  balance: DeepReadonly<Stores>,
+  grownBalance: DeepReadonly<Stores>,
+): { food: Muster[]; gold: Muster[] } {
+  const found = { food: [] as Muster[], gold: [] as Muster[] };
+  for (const city of Object.values(state.cities)) {
+    const work = city.construction;
+    if (city.owner !== state.player || !work || beleaguered(state, city)) continue;
+    const built = {
+      ...state,
+      cities: {
+        ...state.cities,
+        [city.id]: { ...city, buildings: [...city.buildings, work.building], construction: null },
+      },
+    } as DeepReadonly<GameState>;
+    const now = dailyBalances(built).get(state.player);
+    const grown = dailyBalances(grownRealm(built)).get(state.player);
+    if (!now || !grown) continue;
+    const inDays = work.daysLeft + unrestDaysLeft(state, city);
+    for (const key of ['food', 'gold'] as const) {
+      const gain = now[key] - balance[key];
+      const growth = grown[key] - grownBalance[key] - gain;
+      if (gain !== 0 || growth !== 0) found[key].push({ inDays, men: 0, gain, growth });
+    }
+  }
+  return found;
 }
 
 /** The player's city where Canals could be started today: the one named, else the first other by id. */
@@ -261,21 +317,23 @@ function daysUntilShort(
 ): number | undefined {
   if (amount < 0) return 0;
   const grown = (day: number) => (DAILY ** (day - 1) - 1) / YEARLY_GROWTH;
+  let growth = yearly.change;
   let next = 0;
   for (let day = 1; ; day++) {
     while (next < schedule.length && (schedule[next]?.inDays ?? Infinity) < day) {
       const men = schedule[next]?.men ?? 0;
       amount -= schedule[next]?.pay ?? 0;
       change += (schedule[next]?.gain ?? 0) - men * upkeep;
+      growth += schedule[next]?.growth ?? 0;
       limit += men * capPerMan;
       next++;
     }
     // An order is paid before the day's income comes in, so it must be affordable then.
     if (amount < 0) return day;
-    const today = change + yearly.change * grown(day);
+    const today = change + growth * grown(day);
     if (next === schedule.length) {
       if (today >= -ROUNDING) return undefined;
-      return fallingStores(day - 1, amount, change, yearly.change);
+      return fallingStores(day - 1, amount, change, growth);
     }
     const cap = limit + yearly.limit * grown(day);
     amount = today > 0 ? Math.max(amount, Math.min(cap, amount + today)) : amount + today;

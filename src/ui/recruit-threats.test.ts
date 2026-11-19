@@ -118,7 +118,7 @@ describe('what a troop does to a threat, on its recruit card', () => {
     expect(spearmen.paid).toBeLessThan(spearmen.now);
     expect(spearmen.mustered).toBeLessThan(spearmen.paid);
     expect(spearmen.text).toMatch(
-      /^Carthage (\d+%|100%) now, \d+% once paid, \d+% once they muster on Year 1, day 16, (still at 80% or more, so it may still declare from Year 1, day 30|below 80%, so it may not declare until it has stood at 80% for 30 days)$/,
+      /^Carthage (\d+%|100%) now, \d+% once paid, \d+% once they muster on Year 1, day 16, against \d+% without them, (still at 80% or more, so it may still declare from Year 1, day 30|below 80%, so it may not declare until it has stood at 80% for 30 days)$/,
     );
   });
 
@@ -145,7 +145,7 @@ describe('what a troop does to a threat, on its recruit card', () => {
       'spearmen',
     ) ?? [undefined];
     expect(late?.text).toBe(
-      'Carthage 90% now, 82% once paid, 71% once they muster on Year 1, day 16, below 80%, but it may declare from Year 1, day 10, before they muster',
+      'Carthage 90% now, 82% once paid, 71% once they muster on Year 1, day 16, against 89% without them, below 80%, but it may declare from Year 1, day 10, before they muster',
     );
   });
 
@@ -155,7 +155,7 @@ describe('what a troop does to a threat, on its recruit card', () => {
       'heavyCavalry',
     ) ?? [undefined];
     expect(late?.text).toBe(
-      'Carthage 90% now, 81% once paid, 75% once they muster on Year 1, day 31, below 80%, but it may declare that same day, before they muster',
+      'Carthage 90% now, 81% once paid, 75% once they muster on Year 1, day 31, against 89% without them, below 80%, but it may declare that same day, before they muster',
     );
   });
 
@@ -214,23 +214,38 @@ describe('what a troop does to a threat, on its recruit card', () => {
     expect(far?.counted).toBe(false);
   });
 
-  test('men already in training that take the power below first end its notice, and the card says so, not that these come too late', () => {
+  test("the tester's day 217: a fall that comes without the troop is said to come with or without it, on every card", () => {
     const state = game(5300, -20);
     cityOf(state, 'roma').recruits.push({ troop: 'spearmen', readyOn: 2 as Day });
-    const [card] = recruitThreats(state, [], cityOf(state, 'roma'), world, ['heavyCavalry']).get(
-      'heavyCavalry',
-    ) ?? [undefined];
-    expect(card?.ended).toBe(2);
-    expect(card?.text).toMatch(
-      /; it falls below 80% on Year 1, day 2, so it may not declare until it has stood at 80% for 30 days$/,
-    );
-    let played = tick(
-      state,
-      [{ kind: 'recruit', faction: rome, city: 'roma' as CityId, troop: 'heavyCavalry' }],
-      world,
-    ).state;
-    while (played.day <= 10) played = tick(played, [], world).state;
-    expect(played.factions[carthage]?.noticeSince).not.toBe(-20);
+    let alone = state;
+    while (alone.factions[carthage]?.noticeSince === -20 && alone.day <= 10)
+      alone = tick(alone, [], world).state;
+    expect(alone.day - 1, 'with no order the notice ends on day 2').toBe(2);
+    const cards = recruitThreats(state, [], cityOf(state, 'roma'), world, ALL);
+    for (const troop of ALL) {
+      const [card] = cards.get(troop) ?? [undefined];
+      const sooner = (card?.ended ?? 2) < 2;
+      expect(card?.text, troop).toMatch(
+        sooner
+          ? /; it falls below 80% on Year 1, day 1, not until Year 1, day 2 without them, so it may not declare until it has stood at 80% for 30 days$/
+          : /; it falls below 80% on Year 1, day 2 with or without them, so it may not declare until it has stood at 80% for 30 days$/,
+      );
+      expect(card?.text, troop).not.toMatch(/, below 80%|, still at/);
+      expect(card?.without.ended, troop).toBe(2);
+    }
+  });
+
+  test('what a card says it changes is the difference from the same days played with no order', () => {
+    const state = game(5300);
+    const cards = recruitThreats(state, [], cityOf(state, 'roma'), world, ALL);
+    for (const troop of ALL) {
+      const [card] = cards.get(troop) ?? [undefined];
+      if (!card) throw new Error(`no card for ${troop}`);
+      let alone = state;
+      while (alone.day <= card.musters) alone = tick(alone, [], world).state;
+      expect(percent(card.without.mustered), troop).toBe(percent(shareOf(alone)));
+      expect(card.text, troop).toContain(`, against ${share(shareOf(alone))} without them`);
+    }
   });
 
   test('an army that regains its morale while the men train is counted as the game counts it', () => {

@@ -16,7 +16,7 @@ import {
   weakSiegeOfMediolanum,
 } from '../../../e2e/support.ts';
 import { ownCityInDangerTomorrow } from '../../../e2e/warnings-game.ts';
-import type { FactionId, FormationId } from '../../../src/sim/ids.ts';
+import type { CityId, FactionId, FormationId } from '../../../src/sim/ids.ts';
 
 const macedon = 'macedon' as FactionId;
 import type { Day } from '../../../src/sim/state/day.ts';
@@ -96,6 +96,30 @@ function carthageStillNearCity(): GameState {
   return state;
 }
 
+/**
+ * Carthage pressing Rome as in `carthagePresses`, with Heavy cavalry, the longest troop name, in
+ * training at Roma for 20 days: the first warning's longest advice, the men in training and
+ * whether they are enough.
+ */
+function carthagePressesTraining(): GameState {
+  const state = carthagePresses();
+  state.cities['roma' as CityId]?.recruits.push({
+    troop: 'heavyCavalry',
+    readyOn: (state.day + 20) as Day,
+  });
+  return state;
+}
+
+/** The reminder of `carthageStillNearWar`, with Heavy cavalry in training at Roma: the longest warning with men in training. */
+function carthageStillNearWarTraining(): GameState {
+  const state = carthageStillNearWar();
+  state.cities['roma' as CityId]?.recruits.push({
+    troop: 'heavyCavalry',
+    readyOn: (state.day + 20) as Day,
+  });
+  return state;
+}
+
 function battleTomorrow(): GameState {
   const state = startGame();
   outnumberedAt(state, 'roma', 1500);
@@ -156,6 +180,19 @@ const STOPS: readonly {
     told: ['threat:carthage:306'],
     atPeaceAt: 1280,
     atPeace: 'It may declare any day now if it holds it.',
+  },
+  {
+    name: 'a warning with men in training',
+    make: carthagePressesTraining,
+    line: /could soon declare war on you.*Heavy cavalry in training muster on Year 1, day 21, which is enough\. It weighs/,
+    shot: 'training-warning',
+  },
+  {
+    name: 'a reminder with men in training',
+    make: carthageStillNearWarTraining,
+    line: /still stands near war with you, as warned on .*Heavy cavalry in training muster on Year 2, day 55, too late\. It weighs/,
+    shot: 'training-reminder',
+    told: ['threat:carthage:306'],
   },
   {
     name: 'a reminder by a city',

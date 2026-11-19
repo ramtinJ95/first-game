@@ -11,7 +11,7 @@
   import type { GameState } from '../sim/state/game-state.ts';
   import { OUTPUT_PER_PERSON } from '../sim/systems/economy.ts';
   import { trainingDaysAt } from '../sim/buildings/buildings.ts';
-  import { fullDefences } from '../sim/systems/sieges.ts';
+  import { beleaguered, fullDefences } from '../sim/systems/sieges.ts';
   import { TROOPS, type Troop } from '../sim/troops.ts';
   import type { Actions } from './actions.ts';
   import ArmiesHere from './ArmiesHere.svelte';
@@ -37,6 +37,7 @@
   import WarStatus from './WarStatus.svelte';
   import { movedText, recruitForecast } from './recruit-forecast.ts';
   import { nearWarNames, recruitThreats, type RecruitThreat } from './recruit-threats.ts';
+  import { THREAT_WARN } from '../app/threat-news.ts';
   import { namedWaits } from './named-waits.ts';
   import CityTrade from './CityTrade.svelte';
   import type { World } from '../sim/world/world.ts';
@@ -129,23 +130,24 @@
     ),
   );
   const raising = $derived([
-    ...city.recruits.map((recruit) => ({
-      troop: recruit.troop,
-      when: `${Math.max(0, recruit.readyOn - game.day)} days left`,
-    })),
+    ...city.recruits.map((recruit) => {
+      const left = Math.max(0, recruit.readyOn - game.day);
+      return { troop: recruit.troop, when: `${left} ${left === 1 ? 'day' : 'days'} left` };
+    }),
     ...ordered
       .filter((order) => order.city === city.id)
       .map((order) => ({ troop: order.troop, when: 'ordered for the next day' })),
   ]);
 
-  /** What the player has left once the recruits and buildings waiting for the next day are paid. */
-  const available = $derived(
-    afterWaiting(game, pending, world).factions[game.player]?.stores ?? { gold: 0, manpower: 0 },
-  );
+  /** The day as the next tick starts it, once the recruits and buildings waiting for it are paid. */
+  const waiting = $derived(afterWaiting(game, pending, world));
+  const available = $derived(waiting.factions[game.player]?.stores ?? { gold: 0, manpower: 0 });
 
+  /** Why the rules' recruit order would refuse the troop at the city, in the order it checks. */
   function refusal(troop: Troop): string | undefined {
     const { gold, men } = TROOPS[troop].recruit;
     if (city.unrestDays > 0) return `In unrest for ${unrestDaysLeft(game, city)} more days`;
+    if (beleaguered(waiting, city)) return 'An enemy is at the walls, so no training starts';
     if (available.gold < gold) return `Needs ${whole(gold - available.gold)} more gold`;
     if (available.manpower < men) return `Needs ${whole(men - available.manpower)} more manpower`;
     return undefined;
@@ -157,17 +159,21 @@
    * task: each plays the days to its muster through the rules, tens of milliseconds a troop.
    */
   let threats = $state<ReadonlyMap<Troop, readonly RecruitThreat[]>>(new Map());
+  /** Whether the orders waiting for the next day already take every power near war below its notice. */
+  let lowered = $state(false);
   $effect(() => {
     threats = new Map();
+    lowered = false;
     if (!own || !paused) return;
-    const [snapshot, waiting, at, troops] = [game, pending, city, orderable];
+    const [snapshot, orders, at, troops] = [game, pending, city, orderable];
     let timer: ReturnType<typeof setTimeout> | undefined;
     const next = (i: number) => {
       const troop = troops[i];
       if (!troop) return;
       timer = setTimeout(() => {
-        const lines = recruitThreats(snapshot, waiting, at, world, [troop]).get(troop);
-        if (lines) threats = new Map([...threats, [troop, lines]]);
+        const reckoned = recruitThreats(snapshot, orders, at, world, [troop]);
+        if (reckoned.size === 0) lowered = true;
+        threats = new Map([...threats, [troop, reckoned.get(troop) ?? []]]);
         next(i + 1);
       }, 0);
     };
@@ -175,6 +181,8 @@
     return () => clearTimeout(timer);
   });
   const pauseToSee = $derived(own && !paused ? nearWarNames(game, world) : []);
+  /** The powers near war whose threat each card is still reckoning, so no card waits in silence. */
+  const reckoning = $derived(own && paused ? nearWarNames(game, world) : []);
 
   const destinations = $derived(
     Object.values(game.cities)
@@ -396,6 +404,18 @@
           {#each threats.get(troop) ?? [] as threat (threat.power)}
             <span class="threat" data-testid="recruit-threat">{threat.text}</span>
           {/each}
+          {#if !why && lowered && reckoning.length > 0}
+            <span class="muted small" data-testid="recruit-threat-lowered"
+              >Your orders waiting for tomorrow already take {reckoning.join(' and ')} below {Math.round(
+                THREAT_WARN * 100,
+              )}%.</span
+            >
+          {/if}
+          {#if !why && !threats.has(troop) && reckoning.length > 0}
+            <span class="muted small" data-testid="recruit-threat-reckoning"
+              >Reckoning what they do to the threat of {reckoning.join(' and ')}…</span
+            >
+          {/if}
         </button>
       {/each}
     </div>
