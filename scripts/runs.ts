@@ -6,6 +6,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { setPriority, tmpdir } from 'node:os';
@@ -78,8 +79,16 @@ function notes(): Note[] {
     return [];
   }
   return names.flatMap((name) => {
-    if (!name.endsWith('.json')) return [];
     const path = join(DIR, name);
+    if (!name.endsWith('.json')) {
+      // A writer that died between writing and renaming left its part behind.
+      try {
+        if (Date.now() - statSync(path).mtimeMs > DAY_MS) rmSync(path, { force: true });
+      } catch {
+        // Another reader removed it first.
+      }
+      return [];
+    }
     try {
       const note = JSON.parse(readFileSync(path, 'utf8')) as Note;
       const over = note.ended ?? (alive(note.pid, note.start) ? undefined : note.started);
