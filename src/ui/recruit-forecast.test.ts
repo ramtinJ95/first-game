@@ -488,15 +488,13 @@ it('counts a Forum at work, with the people it grows with, as the days played co
 
 it('counts no building whose city has an enemy at its walls, which works no day until it leaves', () => {
   const state = foodDeficitAfterSpearmen(-13, 0.16);
+  const atPeace = structuredClone(state);
   const capua = required(state.cities[f.capua]);
   capua.construction = { building: 'canals', daysLeft: 1 };
   state.wars[warKey(f.rome, f.carthage)] = newWar(f.carthage, f.rome, state.day);
   for (const army of Object.values(state.armies))
     if (army.owner === f.carthage)
       army.activity = { kind: 'idle', position: { ...capua.position } };
-  const atPeace = structuredClone(state);
-  delete atPeace.wars[warKey(f.rome, f.carthage)];
-  required(atPeace.cities[f.capua]).construction = null;
   const unbuilt = recruitForecast(atPeace, [], world, 'spearmen', 15, f.roma).short.food;
   expect(unbuilt).toBeDefined();
   expect(recruitForecast(state, [], world, 'spearmen', 15, f.roma).short.food).toBe(unbuilt);
