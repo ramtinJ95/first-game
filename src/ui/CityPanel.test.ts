@@ -109,3 +109,29 @@ it('a city with an enemy at its walls says so on each card, as the rules refuse 
   for (const [troop, card] of cardsOf(state, true))
     expect(card, troop).toContain('An enemy is at the walls, so no training starts');
 });
+
+it('the Raising list counts one day as a day', () => {
+  const state = nearWar();
+  state.cities['roma' as CityId]?.recruits.push(
+    { troop: 'spearmen', readyOn: (state.day + 1) as Day },
+    { troop: 'archers', readyOn: (state.day + 2) as Day },
+  );
+  const city = state.cities['roma' as CityId];
+  if (!city) throw new Error('no Roma');
+  const { body } = render(CityPanel, {
+    props: {
+      game: state,
+      map,
+      world,
+      city,
+      sight: sightOf(state, world, rome),
+      pending: [],
+      occupied: new Map(),
+      paused: false,
+      actions: {} as Actions,
+    },
+  });
+  const raising = body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  expect(raising).toContain('Spearmen · 1 day left');
+  expect(raising).toContain('Archers · 2 days left');
+});

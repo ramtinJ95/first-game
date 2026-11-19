@@ -37,6 +37,7 @@
   import WarStatus from './WarStatus.svelte';
   import { movedText, recruitForecast } from './recruit-forecast.ts';
   import { nearWarNames, recruitThreats, type RecruitThreat } from './recruit-threats.ts';
+  import { THREAT_WARN } from '../app/threat-news.ts';
   import { namedWaits } from './named-waits.ts';
   import CityTrade from './CityTrade.svelte';
   import type { World } from '../sim/world/world.ts';
@@ -129,10 +130,10 @@
     ),
   );
   const raising = $derived([
-    ...city.recruits.map((recruit) => ({
-      troop: recruit.troop,
-      when: `${Math.max(0, recruit.readyOn - game.day)} days left`,
-    })),
+    ...city.recruits.map((recruit) => {
+      const left = Math.max(0, recruit.readyOn - game.day);
+      return { troop: recruit.troop, when: `${left} ${left === 1 ? 'day' : 'days'} left` };
+    }),
     ...ordered
       .filter((order) => order.city === city.id)
       .map((order) => ({ troop: order.troop, when: 'ordered for the next day' })),
@@ -158,8 +159,11 @@
    * task: each plays the days to its muster through the rules, tens of milliseconds a troop.
    */
   let threats = $state<ReadonlyMap<Troop, readonly RecruitThreat[]>>(new Map());
+  /** Whether the orders waiting for the next day already take every power near war below its notice. */
+  let lowered = $state(false);
   $effect(() => {
     threats = new Map();
+    lowered = false;
     if (!own || !paused) return;
     const [snapshot, orders, at, troops] = [game, pending, city, orderable];
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -167,8 +171,9 @@
       const troop = troops[i];
       if (!troop) return;
       timer = setTimeout(() => {
-        const lines = recruitThreats(snapshot, orders, at, world, [troop]).get(troop) ?? [];
-        threats = new Map([...threats, [troop, lines]]);
+        const reckoned = recruitThreats(snapshot, orders, at, world, [troop]);
+        if (reckoned.size === 0) lowered = true;
+        threats = new Map([...threats, [troop, reckoned.get(troop) ?? []]]);
         next(i + 1);
       }, 0);
     };
@@ -399,6 +404,13 @@
           {#each threats.get(troop) ?? [] as threat (threat.power)}
             <span class="threat" data-testid="recruit-threat">{threat.text}</span>
           {/each}
+          {#if !why && lowered && reckoning.length > 0}
+            <span class="muted small" data-testid="recruit-threat-lowered"
+              >Your orders waiting for tomorrow already take {reckoning.join(' and ')} below {Math.round(
+                THREAT_WARN * 100,
+              )}%.</span
+            >
+          {/if}
           {#if !why && !threats.has(troop) && reckoning.length > 0}
             <span class="muted small" data-testid="recruit-threat-reckoning"
               >Reckoning what they do to the threat of {reckoning.join(' and ')}…</span
