@@ -135,3 +135,20 @@ it('the Raising list counts one day as a day', () => {
   expect(raising).toContain('Spearmen · 1 day left');
   expect(raising).toContain('Archers · 2 days left');
 });
+
+it("a card that needs more manpower names Barracks, and a card that needs nothing names none: the tester's Year 7 Rome", () => {
+  const state = nearWar();
+  const stores = state.factions[rome]?.stores;
+  if (!stores) throw new Error('no Roman stores');
+  stores.food = limitsOf(state).get(rome)?.food ?? 0;
+  stores.gold = 20_000;
+  const cards = cardsOf(state, false);
+  for (const troop of ['spearmen', 'swordsmen'] as const) {
+    expect(cards.get(troop), troop).toContain('Needs 415 more manpower');
+    expect(cards.get(troop), troop).toMatch(
+      /Or build Barracks at \w+ for 7,000 gold, which give [\d,]+ more men to call up and \d+\.\d more a day once built in 40 days: with them these men can be raised in about [\d,]+ days, on Year \d+, day \d+\./,
+    );
+  }
+  for (const troop of ['skirmishers', 'archers', 'lightCavalry', 'heavyCavalry'] as const)
+    expect(cards.get(troop), troop).not.toContain('Barracks');
+});
