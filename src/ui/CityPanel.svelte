@@ -145,10 +145,15 @@
 
   /** Why the rules' recruit order would refuse the troop at the city, in the order it checks. */
   function refusal(troop: Troop): string | undefined {
-    const { gold, men } = TROOPS[troop].recruit;
+    const { gold } = TROOPS[troop].recruit;
     if (city.unrestDays > 0) return `In unrest for ${unrestDaysLeft(game, city)} more days`;
     if (beleaguered(waiting, city)) return 'An enemy is at the walls, so no training starts';
     if (available.gold < gold) return `Needs ${whole(gold - available.gold)} more gold`;
+    return manpowerShort(troop);
+  }
+
+  function manpowerShort(troop: Troop): string | undefined {
+    const { men } = TROOPS[troop].recruit;
     if (available.manpower < men) return `Needs ${whole(men - available.manpower)} more manpower`;
     return undefined;
   }
@@ -393,6 +398,7 @@
           world,
           troop,
           trainingDaysAt(city, cost.days),
+          city.id,
         )}
         <button type="button" disabled={why !== undefined} title={why} onclick={() => raise(troop)}>
           <span class="troop">{TROOP_NAMES[troop]}</span>
@@ -401,6 +407,10 @@
           >
           <span class="cost">{forecast.upkeepText}</span>
           {#if why}<span class="why">{why}</span>{/if}
+          {#if forecast.barracks && why === manpowerShort(troop)}<span
+              class="cost"
+              data-testid="recruit-barracks">{forecast.barracks}</span
+            >{/if}
           {#each threats.get(troop) ?? [] as threat (threat.power)}
             <span class="threat" data-testid="recruit-threat">{threat.text}</span>
           {/each}
