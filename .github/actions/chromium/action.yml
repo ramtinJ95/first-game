@@ -1,0 +1,33 @@
+name: Chromium
+description: >-
+  Chromium for Playwright and the system packages it needs, from the cache when it can, within a
+  limit of its own, so a slow install fails in words that name it and never spends a test's time.
+inputs:
+  minutes:
+    description: The most minutes the install may take.
+    default: '8'
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v5
+      with:
+        path: ~/.cache/ms-playwright
+        key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+    - uses: actions/cache@v5
+      with:
+        path: ~/.cache/chromium-debs
+        key: chromium-debs-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ hashFiles('package-lock.json') }}
+    - name: Install Chromium and its system packages
+      shell: bash
+      env:
+        MINUTES: ${{ inputs.minutes }}
+      run: |
+        set +e
+        timeout "${MINUTES}m" bash "$GITHUB_ACTION_PATH/install.sh"
+        code=$?
+        if [ "$code" -eq 124 ]; then
+          echo "::error title=Chromium install::Installing Chromium and its system packages took more than ${MINUTES} minutes, so no test or bench ran; the tests were not reached."
+        elif [ "$code" -ne 0 ]; then
+          echo "::error title=Chromium install::Installing Chromium and its system packages failed (exit ${code}), so no test or bench ran; the tests were not reached."
+        fi
+        exit "$code"
