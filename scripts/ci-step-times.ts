@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 
 /**
- * Prints how long each CI job's steps named like `--step` took over the last `--runs` runs of the
+ * Prints how long each CI job's steps named like `--step`, the Chromium install by default, took over the last `--runs` runs of the
  * CI workflow, from the GitHub API's step timings: the median, the slowest, and how many took more
  * than a minute, by job. `--run <id>` reads one run instead. Reads GH_TOKEN.
  */
@@ -9,7 +9,7 @@ const { values } = parseArgs({
   options: {
     runs: { type: 'string', default: '20' },
     run: { type: 'string' },
-    step: { type: 'string', default: 'install' },
+    step: { type: 'string', default: 'chromium' },
     repo: { type: 'string', default: 'ramtinJ95/first-game' },
   },
 });
@@ -43,6 +43,7 @@ for (const id of ids) {
   const { jobs } = await api<{ jobs: Job[] }>(`actions/runs/${id}/jobs?per_page=100`);
   for (const job of jobs)
     for (const step of job.steps ?? []) {
+      if (step.name.startsWith('Post ')) continue;
       if (!step.name.toLowerCase().includes(values.step.toLowerCase())) continue;
       if (!step.started_at || !step.completed_at) continue;
       const seconds = (Date.parse(step.completed_at) - Date.parse(step.started_at)) / 1000;
