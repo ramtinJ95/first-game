@@ -92,44 +92,65 @@ test.describe('the game stops when the player must decide', () => {
   });
 });
 
-test('loading a save puts back the camera, the selection, the open panel, and the chronicle', async ({
-  page,
-}) => {
-  await openGame(page);
-  await pause(page);
-  await loadSave(page, battleTomorrow());
-  await page.getByRole('button', { name: 'Resume' }).click();
-  await expect(page.getByTestId('battle-panel')).toBeVisible();
-  await pause(page);
-  const told = await page.getByTestId('alerts').getByRole('button').allInnerTexts();
-  expect(told.length).toBeGreaterThan(0);
+/**
+ * A save in this browser and its load, each in a page of its own, so each starts the map once:
+ * the save keeps the camera, the selection, the open panel and the chronicle, and a fresh page
+ * that loads it puts them back. On a two-core machine one page that saved, reloaded and loaded
+ * started the map twice and drew two zooms, past a test's time.
+ */
+test.describe.serial('a save in this browser', () => {
+  let stored:
+    { save: string; zoom: string; told: string[]; arretium: { x: number; y: number } } | undefined;
 
-  const view = camera(page);
-  await view.jumpTo(cityPoint('roma'), 0.7);
-  await untilDrawn(page);
-  const capua = view.city('capua');
-  await page.mouse.click(capua.x, capua.y);
-  await expect(page.getByTestId('city-name')).toHaveText('Capua');
-  await page.getByRole('button', { name: 'Chronicle' }).click();
-  await expect(page.getByTestId('chronicle')).toBeVisible();
-  await openMenu(page);
-  await page.getByRole('menuitem', { name: 'Save in this browser' }).click();
+  test('keeps the camera, the selection, the open panel, and the chronicle', async ({ page }) => {
+    await openGame(page);
+    await pause(page);
+    await loadSave(page, battleTomorrow());
+    await page.getByRole('button', { name: 'Resume' }).click();
+    await expect(page.getByTestId('battle-panel')).toBeVisible();
+    await pause(page);
+    const told = await page.getByTestId('alerts').getByRole('button').allInnerTexts();
+    expect(told.length).toBeGreaterThan(0);
 
-  await page.reload();
-  await page.getByTestId('top-bar').waitFor();
-  await expect(page.getByTestId('city-panel')).toBeHidden();
-  await expect(page.getByTestId('chronicle')).toBeHidden();
+    const view = camera(page);
+    await view.jumpTo(cityPoint('roma'), 0.35);
+    await untilDrawn(page);
+    const capua = view.city('capua');
+    await page.mouse.click(capua.x, capua.y);
+    await expect(page.getByTestId('city-name')).toHaveText('Capua');
+    await page.getByRole('button', { name: 'Chronicle' }).click();
+    await expect(page.getByTestId('chronicle')).toBeVisible();
+    await openMenu(page);
+    await page.getByRole('menuitem', { name: 'Save in this browser' }).click();
+    const save = await page.evaluate(() => localStorage.getItem('save:manual'));
+    const zoom = await page.locator('canvas[data-renderer]').getAttribute('data-zoom');
+    expect(save).toBeTruthy();
+    expect(zoom).toBe('0.3500');
+    // Where Arretium stood under the camera this page was moved to, kept apart from the save.
+    stored = { save: save ?? '', zoom: zoom ?? '', told, arretium: view.city('arretium') };
+  });
 
-  await openMenu(page);
-  await page.getByRole('menuitem', { name: /Load your save/ }).click();
-  await expect(page.getByTestId('city-name')).toHaveText('Capua');
-  await expect(page.getByTestId('chronicle').getByRole('listitem')).toHaveCount(told.length);
-  await expect(page.getByTestId('alerts').getByRole('button')).toHaveText(told);
+  test('loads into a fresh page, which puts them back', async ({ page }) => {
+    if (!stored) throw new Error('the save before did not keep one');
+    await page.addInitScript((save) => localStorage.setItem('save:manual', save), stored.save);
+    await openGame(page);
+    await expect(page.getByTestId('city-panel')).toBeHidden();
+    await expect(page.getByTestId('chronicle')).toBeHidden();
 
-  await untilDrawn(page);
-  const arretium = view.city('arretium');
-  await page.mouse.click(arretium.x, arretium.y);
-  await expect(page.getByTestId('city-name')).toHaveText('Arretium');
+    await openMenu(page);
+    await page.getByRole('menuitem', { name: /Load your save/ }).click();
+    await expect(page.getByTestId('city-name')).toHaveText('Capua');
+    await expect(page.getByTestId('chronicle').getByRole('listitem')).toHaveCount(
+      stored.told.length,
+    );
+    await expect(page.getByTestId('alerts').getByRole('button')).toHaveText(stored.told);
+
+    await untilDrawn(page);
+    await expect(page.locator('canvas[data-renderer]')).toHaveAttribute('data-zoom', stored.zoom);
+    const { arretium } = stored;
+    await page.mouse.click(arretium.x, arretium.y);
+    await expect(page.getByTestId('city-name')).toHaveText('Arretium');
+  });
 });
 
 test.describe('one stance block, and a side column that scrolls to its last row', () => {
