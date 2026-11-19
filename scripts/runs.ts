@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { setPriority, tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -7,8 +7,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 /**
  * Test runs and heavy commands leave a note here while they go, so each can say what ran
  * beside it. The folder is the machine's, not the checkout's, as the cores are.
+ * `FIRST_GAME_RUNS_DIR` moves it, so a test of this module keeps apart from real runs.
  */
-const DIR = join(tmpdir(), 'first-game-runs');
+const DIR = process.env['FIRST_GAME_RUNS_DIR'] ?? join(tmpdir(), 'first-game-runs');
 /** The lowest CPU priority: beside a process at the normal priority it gets about 1.4 % of a core. */
 const LOWEST_PRIORITY = 19;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -122,27 +123,33 @@ function command(): string {
 
 /** Set in the copy of a heavy command that runs in its own session. */
 const COPY = 'FIRST_GAME_HEAVY_COPY';
+const MARK = 'FIRST_GAME_HEAVY_RUN';
 const FORWARDED = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 /** How often a heavy command looks for a test run to pause for. */
-const WATCH_MS = 1000;
+const WATCH_MS = Number(process.env['FIRST_GAME_RUNS_WATCH_MS'] ?? 1000);
 /** How long what the copy left running has to end after a SIGTERM before it is killed. */
 const LEFTOVER_GRACE_MS = 5000;
 
 const seconds = (ms: number) => `${Math.round(ms / 1000)} s`;
 
 /**
- * `roots` and every process they started, parents before children. Chromium and ffmpeg take
- * sessions of their own, so a signal to the copy's process group would miss them.
+ * `roots`, every process whose environment holds `mark`, and every process they started,
+ * parents before children. Chromium and ffmpeg take sessions of their own, so a signal to
+ * the copy's process group would miss them, and a process the copy started and left goes to
+ * init, out of its tree, but keeps the mark it was started with.
  */
-function processTree(roots: number[]): number[] {
+function processTree(roots: number[], mark: string): number[] {
   const children = new Map<number, number[]>();
+  const marked: number[] = [];
   for (const name of readdirSync('/proc').filter((entry) => /^\d+$/.test(entry))) {
     const stat = readOr(`/proc/${name}/stat`, '');
     if (stat === '') continue;
     const parent = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
     children.set(parent, [...(children.get(parent) ?? []), Number(name)]);
+    if (`\0${readOr(`/proc/${name}/environ`, '')}`.includes(`\0${mark}\0`))
+      marked.push(Number(name));
   }
-  const tree = [...new Set(roots)];
+  const tree = [...new Set([...roots, ...marked])];
   const seen = new Set(tree);
   for (let i = 0; i < tree.length; i++) {
     for (const child of children.get(tree[i] as number) ?? []) {
@@ -168,6 +175,13 @@ function processTree(roots: number[]): number[] {
  * exits as the copy does.
  */
 export async function yieldToTests(): Promise<void> {
+  if (!existsSync('/proc/self/stat')) {
+    setPriority(LOWEST_PRIORITY);
+    console.error(
+      `${command()} runs at the lowest CPU priority. It cannot pause for test runs here, as this system has no /proc to find its processes in.`,
+    );
+    return;
+  }
   if (process.env[COPY] !== undefined) {
     try {
       writeFileSync('/proc/self/autogroup', String(LOWEST_PRIORITY));
@@ -182,10 +196,12 @@ export async function yieldToTests(): Promise<void> {
   console.error(
     `${what} pauses while a test run goes on this machine, and otherwise runs at the lowest CPU priority, so a test run gets the cores first.`,
   );
+  // Names this run's processes, as their environment passes on to all they start.
+  const mark = `${process.pid}:${startOf(process.pid) ?? Date.now()}`;
   const copy = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
     detached: true,
     stdio: 'inherit',
-    env: { ...process.env, [COPY]: what },
+    env: { ...process.env, [COPY]: what, [MARK]: mark },
   });
   // Every process the copy has started, as the copy's own children outlive it under init.
   const known = new Map<number, string | undefined>();
@@ -194,7 +210,7 @@ export async function yieldToTests(): Promise<void> {
     for (const [pid, start] of known) if (!alive(pid, start)) known.delete(pid);
     const roots = [...known.keys()];
     if (copy.pid !== undefined && alive(copy.pid, copyStart)) roots.push(copy.pid);
-    for (const pid of processTree(roots)) {
+    for (const pid of processTree(roots, `${MARK}=${mark}`)) {
       if (!known.has(pid)) known.set(pid, startOf(pid));
     }
     return [...known.keys()];
