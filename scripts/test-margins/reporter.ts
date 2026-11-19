@@ -2,6 +2,7 @@ import { appendFileSync } from 'node:fs';
 import { relative } from 'node:path';
 import type { RunnerTask, RunnerTestSuite } from 'vitest';
 import type { Reporter, Vitest } from 'vitest/node';
+import { DOWNLOAD_LIMIT_MS } from '../map/sources.ts';
 
 export interface Timing {
   file: string;
@@ -14,10 +15,15 @@ export interface Timing {
 
 const TEST_LIMIT_MS = 5_000;
 const HOOK_LIMIT_MS = 10_000;
-/** The hooks that pass their own timeout. `run.ts` fails when a test file gains another. */
+/**
+ * The hooks that pass their own timeout, by file and name. `run.ts` fails when a test file
+ * gains another.
+ */
 export const HOOK_LIMITS: Record<string, number> = {
-  'scripts/map/build-coast.test.ts': 60_000,
-  'scripts/map/build-map.test.ts': 60_000,
+  'scripts/map/build-coast.test.ts > beforeAll': DOWNLOAD_LIMIT_MS + 30_000,
+  'scripts/map/build-coast.test.ts > the drawing coast > beforeAll': 60_000,
+  'scripts/map/build-map.test.ts > beforeAll': DOWNLOAD_LIMIT_MS + 30_000,
+  'scripts/map/build-map.test.ts > the map built from the pinned sources > beforeAll': 60_000,
 };
 /** A suite whose first test starts this much after the suite does ran a beforeAll. */
 const HOOK_GAP_MS = 20;
@@ -33,13 +39,14 @@ function walk(file: string, suite: RunnerTestSuite, path: string[], out: Timing[
       : Number.isFinite(firstStart)
         ? firstStart - suiteStart
         : (suite.result?.duration ?? 0);
+  const name = [...path, 'beforeAll'].join(' > ');
   if (hookMs > HOOK_GAP_MS) {
     out.push({
       file,
-      name: [...path, 'beforeAll'].join(' > '),
+      name,
       kind: 'beforeAll',
       ms: hookMs,
-      limitMs: HOOK_LIMITS[file] ?? HOOK_LIMIT_MS,
+      limitMs: HOOK_LIMITS[`${file} > ${name}`] ?? HOOK_LIMIT_MS,
       state: suite.result?.state ?? 'unknown',
     });
   }

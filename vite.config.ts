@@ -8,5 +8,6 @@ export default defineConfig({
   },
   test: {
     include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
+    globalSetup: ['./scripts/test-runs.ts'],
   },
 });

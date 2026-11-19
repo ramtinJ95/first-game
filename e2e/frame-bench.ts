@@ -13,6 +13,7 @@ import { tick } from '../src/sim/tick.ts';
 import type { MapPoint } from '../src/sim/state/map-point.ts';
 import { buildWorld } from '../src/sim/world/world.ts';
 import { map, openGame, pause, resume, startGame } from './support.ts';
+import { yieldToTests } from '../scripts/runs.ts';
 
 /**
  * Plays the built page under each drawing and prints the frame interval that the
@@ -31,6 +32,7 @@ import { map, openGame, pause, resume, startGame } from './support.ts';
  *
  *   node e2e/frame-bench.ts [--rounds 3] [--days 300] [--only full,draw=test] [--zooms widest,middle,closest] [--args "--flag ..."]
  */
+await yieldToTests();
 const { values } = parseArgs({
   options: {
     rounds: { type: 'string', default: '3' },

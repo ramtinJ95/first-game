@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { chromium, type Browser } from '@playwright/test';
 import { clipFrame } from './clip.ts';
 import {
@@ -26,6 +27,7 @@ import {
 import { SOFTWARE_GL } from '../../playwright.config.ts';
 import type { Scenario } from './scenario.ts';
 import { shardScenarios } from './shard.ts';
+import { yieldToTests } from '../runs.ts';
 import { timesAnnotation } from './timings.ts';
 import { stillScreenshot } from './still.ts';
 import measuredSeconds from './scenario-seconds.json' with { type: 'json' };
@@ -273,7 +275,12 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
 });
 
-process.exitCode = await main(positionals, values.shard).catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
-  return 1;
-});
+await yieldToTests();
+const built = spawnSync('npm', ['run', 'build'], { stdio: 'inherit' });
+process.exitCode =
+  built.status !== 0
+    ? (built.status ?? 1)
+    : await main(positionals, values.shard).catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : error);
+        return 1;
+      });

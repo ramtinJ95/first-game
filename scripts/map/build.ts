@@ -10,7 +10,9 @@ import { writePreview } from './preview.ts';
 import * as settlementRules from './settlements.ts';
 import { loadSources } from './sources.ts';
 import * as terrainRules from './terrain.ts';
+import { yieldToTests } from '../runs.ts';
 
+await yieldToTests();
 const { values } = parseArgs({
   options: {
     preview: { type: 'boolean', default: false },
