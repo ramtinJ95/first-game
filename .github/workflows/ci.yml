@@ -37,8 +37,13 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  # The install has ten minutes of its own, eight for itself and two to restore its caches. The
+  # steps that run tests and benches keep what they had when one limit held the whole job: that
+  # limit less the setup and install of a healthy run (CI's step times over 20 runs before this
+  # change), as a step limit, or for steps that shared it, as one budget they share (BUDGET_*).
+  # Each job's limit is then the sum.
   browser-tests:
-    timeout-minutes: 10
+    timeout-minutes: 22
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -51,12 +56,11 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - uses: actions/cache@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
-      - run: npx playwright install --with-deps chromium
+      - name: Chromium and its system packages
+        uses: ./.github/actions/chromium
+        timeout-minutes: 10
       - run: npm run e2e -- --shard=${{ matrix.shard }}/8
+        timeout-minutes: 9
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
@@ -76,7 +80,7 @@ jobs:
         run: test "$RESULT" = success
 
   frame-benches:
-    timeout-minutes: 5
+    timeout-minutes: 17
     continue-on-error: true
     runs-on: ubuntu-latest
     steps:
@@ -86,17 +90,21 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - uses: actions/cache@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
-      - run: npx playwright install --with-deps chromium
-      - run: npm run build
+      - name: Chromium and its system packages
+        uses: ./.github/actions/chromium
+        timeout-minutes: 10
+      - name: Start the benches' budget
+        run: |
+          echo "BUDGET_NAME=the build and the benches" >> "$GITHUB_ENV"
+          echo "BUDGET_SECONDS=239" >> "$GITHUB_ENV"
+          echo "BUDGET_DEADLINE=$(($(date +%s) + 239))" >> "$GITHUB_ENV"
+      - run: bash .github/within-budget.sh npm run build
       - name: Frame times in software
-        run: node e2e/frame-bench.ts --rounds 1 --only full,draw=test >> "$GITHUB_STEP_SUMMARY"
+        run: bash .github/within-budget.sh node e2e/frame-bench.ts --rounds 1 --only full,draw=test >> "$GITHUB_STEP_SUMMARY"
       - name: Frame times with the GPU flags of headless Chromium
         continue-on-error: true
         run: >-
+          bash .github/within-budget.sh
           node e2e/frame-bench.ts --rounds 1 --only full
           --args="--enable-gpu --ignore-gpu-blocklist --use-angle=vulkan --enable-features=Vulkan"
           >> "$GITHUB_STEP_SUMMARY"
@@ -109,12 +117,13 @@ jobs:
       # Last, so that its failure skips no other step.
       - name: A selected city in software
         run: >-
+          bash .github/within-budget.sh
           node e2e/trade-minute-bench.ts --alternate 4 --segment 4 --rounds 1 --panel-budget
           >> "$GITHUB_STEP_SUMMARY"
   # Thirty loads of a saved game, each followed by zooms to the middle and the closest
   # view over the next place on the map: the heap holds within a tenth of loads 3 to 5.
   memory:
-    timeout-minutes: 60
+    timeout-minutes: 72
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -123,28 +132,31 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - uses: actions/cache@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
-      - run: npx playwright install --with-deps chromium
-      - run: npm run build
+      - name: Chromium and its system packages
+        uses: ./.github/actions/chromium
+        timeout-minutes: 10
+      - name: Start the memory benches' budget
+        run: |
+          echo "BUDGET_NAME=the build and the memory benches" >> "$GITHUB_ENV"
+          echo "BUDGET_SECONDS=3536" >> "$GITHUB_ENV"
+          echo "BUDGET_DEADLINE=$(($(date +%s) + 3536))" >> "$GITHUB_ENV"
+      - run: bash .github/within-budget.sh npm run build
       - name: Memory over thirty loads
         shell: bash
-        run: node e2e/memory-bench.ts --loads 30 --draw test --bound 0.1 --process-bound 0.25 --out memory.csv | tee -a "$GITHUB_STEP_SUMMARY"
+        run: bash .github/within-budget.sh node e2e/memory-bench.ts --loads 30 --draw test --bound 0.1 --process-bound 0.25 --out memory.csv | tee -a "$GITHUB_STEP_SUMMARY"
       # A stranger's session: a new game from the Game menu as each power in turn, then a
       # load, ten times in one tab. Each cycle must hold what the first one held.
       - name: Memory over ten new games and loads
         if: ${{ !cancelled() }}
         shell: bash
-        run: node e2e/memory-bench.ts --cycles 10 --draw full --play 5 --cycle-bound 0.1 --out cycles.csv | tee -a "$GITHUB_STEP_SUMMARY"
+        run: bash .github/within-budget.sh node e2e/memory-bench.ts --cycles 10 --draw full --play 5 --cycle-bound 0.1 --out cycles.csv | tee -a "$GITHUB_STEP_SUMMARY"
       # Rome, Carthage, Macedon and a minor at every size of figure sheet a screen of twice
       # the density rests at would hold 197 MB of sheets; the budget keeps them to 160 MB,
       # and going back and forth between two neighbouring zooms paints nothing again.
       - name: Figure sheets in one game
         if: ${{ !cancelled() }}
         shell: bash
-        run: node e2e/memory-bench.ts --sheets 4 --dpr 2 --viewport 640x360 --draw full --sheet-bound 160 --out sheets.csv | tee -a "$GITHUB_STEP_SUMMARY"
+        run: bash .github/within-budget.sh node e2e/memory-bench.ts --sheets 4 --dpr 2 --viewport 640x360 --draw full --sheet-bound 160 --out sheets.csv | tee -a "$GITHUB_STEP_SUMMARY"
       # The curve as an annotation too, which the API serves to readers who cannot fetch logs.
       - name: The curve as an annotation
         if: ${{ !cancelled() }}
@@ -154,7 +166,7 @@ jobs:
           test -f sheets.csv && echo "::notice title=memory sheets::$(sed ':a;N;$!ba;s/\n/%0A/g' sheets.csv)"
 
   capture-shards:
-    timeout-minutes: 16
+    timeout-minutes: 28
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -167,12 +179,11 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - uses: actions/cache@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
-      - run: npx playwright install --with-deps chromium
+      - name: Chromium and its system packages
+        uses: ./.github/actions/chromium
+        timeout-minutes: 10
       - run: npm run capture -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        timeout-minutes: 14
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:

@@ -500,3 +500,127 @@ it('counts no building whose city has an enemy at its walls, which works no day 
   expect(recruitForecast(state, [], world, 'spearmen', 15, f.roma).short.food).toBe(unbuilt);
   expect(required(playEconomy(state, 5).cities[f.capua]).construction?.daysLeft).toBe(1);
 });
+
+/** Rome's two cities of `people` each, fed by Canals, with 30,000 gold, a full granary and `manpower` men to call up. */
+function shortOfMen(people: number, manpower: number, gold = 30_000): GameState {
+  const state = buildFixture();
+  for (const city of Object.values(state.cities))
+    if (city.owner === f.rome) {
+      city.population = people;
+      city.buildings = ['canals'];
+    }
+  Object.assign(required(state.factions[f.rome]).stores, {
+    gold,
+    manpower,
+    food: required(limitsOf(state).get(f.rome)).food,
+  });
+  return state;
+}
+
+const barracksAtRoma = {
+  kind: 'build',
+  faction: f.rome,
+  city: f.roma,
+  building: 'barracks',
+} as const;
+
+/** Whether Spearmen ordered at Roma on day `raiseOn` are taken, with Barracks at Roma ordered on day 1 or not. */
+function raisedOn(initial: GameState, raiseOn: number, barracks: boolean) {
+  let state = initial;
+  for (let day = 1; day <= raiseOn; day++) {
+    const result = tick(
+      state,
+      [
+        ...(barracks && day === 1 ? [barracksAtRoma] : []),
+        ...(day === raiseOn
+          ? [{ kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' } as const]
+          : []),
+      ],
+      fixtureWorld(),
+      [
+        economy,
+        construction,
+        population,
+        (state) => {
+          state.day = (state.day + 1) as Day;
+        },
+      ],
+    );
+    if (day < raiseOn) expect(result.rejected).toEqual([]);
+    else return result.rejected.length === 0;
+    state = result.state;
+  }
+  return false;
+}
+
+/** The wait the card's Barracks line names, held against the played days: a raise then is taken, a day sooner is not. */
+function barracksWait(state: GameState): number {
+  const line = required(recruitForecast(state, [], world, 'spearmen', 15, f.roma).barracks);
+  const wait = Number(/in about ([\d,]+) days/.exec(line)?.[1]?.replace(',', ''));
+  expect(line).toMatch(
+    new RegExp(
+      `^Or build Barracks at Roma for 7,000 gold, which give [\\d,]+ more men to call up and \\d+\\.\\d more a day once built in 40 days: with them these men can be raised in about ${wait.toLocaleString('en-US')} days, on ${dateText(state.day + wait)}\\.$`,
+    ),
+  );
+  expect(raisedOn(state, wait + 1, true), 'raised on the named day').toBe(true);
+  expect(raisedOn(state, wait, true), 'raised a day sooner').toBe(false);
+  return wait;
+}
+
+it('names Barracks and the day they let a raise that the call-up limit holds back for good', () => {
+  const state = shortOfMen(20_000, 100);
+  required(state.formations[f.hastati]).men += 1500;
+  expect(required(limitsOf(state).get(f.rome)).manpower).toBeLessThan(0);
+  expect(recruitForecast(state, [], world, 'spearmen', 15, f.roma).barracks).toBeUndefined();
+  required(state.formations[f.hastati]).men -= 1000;
+  const wait = barracksWait(state);
+  expect(raisedOn(state, 3650, false), 'without them, not in ten years').toBe(false);
+  expect(wait).toBeGreaterThan(40);
+  expectConsistent(state);
+});
+
+it('names Barracks and the sooner day they let a raise that wants men', () => {
+  const state = shortOfMen(40_000, 500);
+  const wait = barracksWait(state);
+  expect(raisedOn(state, wait + 1, false), 'without them, not yet on that day').toBe(false);
+});
+
+it('waits for the gold of both the Barracks and the raise', () => {
+  const poor = shortOfMen(40_000, 100, 7400);
+  expect(barracksWait(poor)).toBeGreaterThan(barracksWait(shortOfMen(40_000, 100)));
+});
+
+it('names no Barracks when they would not bring the raise sooner', () => {
+  const state = shortOfMen(80_000, 500);
+  expect(recruitForecast(state, [], world, 'spearmen', 15, f.roma).barracks).toBeUndefined();
+});
+
+it('counts Barracks at work toward the men to call up, and names none to build again', () => {
+  const state = shortOfMen(40_000, 500);
+  const wait = barracksWait(state);
+  const atWork = playEconomy(state, 1, [barracksAtRoma]);
+  expect(required(atWork.cities[f.roma]).construction?.building).toBe('barracks');
+  const card = recruitForecast(atWork, [], world, 'spearmen', 15, f.roma);
+  expect(card.barracks ?? '').not.toContain('Barracks at Roma');
+  let played = atWork;
+  for (let day = 2; day <= wait; day++) played = playEconomy(played, 1);
+  expect(required(played.factions[f.rome]).stores.manpower).toBeGreaterThanOrEqual(1000);
+});
+
+it('names the day Barracks let the raise while the treasury still holds its gold, though it falls after', () => {
+  const state = shortOfMen(40_000, 500, 10_000);
+  const army = required(state.armies[f.romanArmy]);
+  const men = army.formations.reduce((sum, id) => sum + required(state.formations[id]).men, 0);
+  required(state.formations[f.hastati]).men += 4000 - men;
+  const wait = barracksWait(state);
+  expect(raisedOn(state, wait + 1, false), 'without them, not yet on that day').toBe(false);
+});
+
+it('names no day past the day the stores run out before the raise, when men desert', () => {
+  const state = buildFixture();
+  for (const city of Object.values(state.cities))
+    if (city.owner === f.rome) city.population = 20_000;
+  Object.assign(required(state.factions[f.rome]).stores, { gold: 30_000, manpower: 0, food: 0 });
+  const line = recruitForecast(state, [], world, 'spearmen', 15, f.roma).barracks;
+  if (line !== undefined) barracksWait(state);
+});

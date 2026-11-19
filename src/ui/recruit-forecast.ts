@@ -7,7 +7,9 @@ import { dateText, whole } from '../app/names.ts';
 import { afterWaiting } from './buildings-text.ts';
 import type { World } from '../sim/world/world.ts';
 import { YEARLY_GROWTH } from '../sim/systems/population.ts';
-import { BUILDINGS } from '../sim/buildings/buildings.ts';
+import { BUILDINGS, type BuildingKind } from '../sim/buildings/buildings.ts';
+import { buildingGain } from '../sim/buildings/gains.ts';
+import type { City } from '../sim/state/city.ts';
 import { beleaguered } from '../sim/systems/sieges.ts';
 import { buildRefusal } from '../sim/buildings/build.ts';
 import type { CityId } from '../sim/ids.ts';
@@ -59,7 +61,8 @@ export function recruitForecast(
   };
   type Plan = readonly Muster[];
   const byDay = (plan: Plan) => [...plan].sort((a, b) => a.inDays - b.inDays);
-  const atWork = buildingsAtWork(waiting, balance, grownBalance);
+  const sums = { balance, limits, grownBalance, grownLimits };
+  const atWork = buildingsAtWork(waiting, sums);
   const atToday = (plan: Plan) => plan.map((muster) => ({ ...muster, growth: 0 }));
   const lasts = {
     food: daysUntilShort(
@@ -154,6 +157,65 @@ export function recruitForecast(
     site && canalWait !== undefined && canalWait < (holdsAfter ?? Infinity)
       ? `Or build Canals at ${site.name} for ${whole(BUILDINGS.canals.gold)} gold, which grow ${BUILDINGS.canals.food} more food a day once built in ${BUILDINGS.canals.days} days: with them these men are fed if raised ${canalWait === 0 ? 'now' : `in about ${whole(canalWait)} days, on ${dateText(game.day + canalWait)}`}.`
       : undefined;
+  const barracksLine = (): string | undefined => {
+    const yard = barracksSite(waiting, at);
+    if (!yard) return undefined;
+    const { days: built, gold: price } = BUILDINGS.barracks;
+    const yearlyMen = {
+      change: grownBalance.manpower - balance.manpower,
+      limit: grownLimits.manpower - limits.manpower,
+    };
+    const men = (levies: readonly Levy[]) =>
+      manpowerByDay(
+        stores.manpower,
+        balance.manpower,
+        limits.manpower,
+        yearlyMen,
+        levies,
+        MAX_WAIT,
+      );
+    const food = storeByDay(
+      stores.food,
+      balance.food,
+      limits.food,
+      UPKEEP_PER_MAN.food,
+      GRANARY_DAYS * UPKEEP_PER_MAN.food,
+      byDay([...queued, ...atWork.food]),
+      yearly.food,
+      MAX_WAIT,
+    );
+    const gold = (extra: number) =>
+      storeByDay(
+        stores.gold - extra,
+        balance.gold,
+        limits.gold,
+        UPKEEP_PER_MAN.gold,
+        0,
+        byDay([...queued, ...atWork.gold]),
+        yearly.gold,
+        MAX_WAIT,
+      );
+    /**
+     * The first day the rules take the order, its men and gold in the stores. A store that runs
+     * out before it starves or unpays men who then desert, which the days played do not foresee,
+     * so no day is named past it. Whether the men are fed once raised is the warning's to say.
+     */
+    const firstDay = (men: readonly number[], gold: readonly number[]) => {
+      for (let wait = 1; wait <= MAX_WAIT; wait++) {
+        if ((gold[wait] ?? -1) < 0 || (food[wait] ?? -1) < 0) return undefined;
+        if ((men[wait] ?? 0) >= cost.men && (gold[wait] ?? 0) >= cost.gold) return wait;
+      }
+      return undefined;
+    };
+    if ((gold(price)[0] ?? -1) < 0) return undefined;
+    const without = firstDay(men(atWork.levies), gold(0));
+    const gains = gainsOf(waiting, sums, yard, 'barracks', built);
+    const wait = firstDay(men([...atWork.levies, gains.levy]), gold(price));
+    if (wait === undefined || wait >= (without ?? Infinity)) return undefined;
+    const shown = buildingGain(waiting, yard, 'barracks');
+    return `Or build Barracks at ${yard.name} for ${whole(price)} gold, which give ${whole(shown.levy)} more men to call up and ${shown.daily.manpower.toFixed(1)} more a day once built in ${built} days: with them these men can be raised in about ${whole(wait)} days, on ${dateText(game.day + wait)}.`;
+  };
+  const barracks = troop && stores.manpower < cost.men ? barracksLine() : undefined;
   const warnings = (['food', 'gold'] as const).flatMap((key) => {
     const days = short[key];
     if (days === undefined) return [];
@@ -183,6 +245,7 @@ export function recruitForecast(
     }),
     holdsAfter,
     canal,
+    barracks,
     named:
       holdsAfter === undefined ? undefined : realmFor(waiting, game.day, game.day + holdsAfter),
     warning: warnings.length
@@ -229,40 +292,163 @@ interface Muster {
   growth?: number;
 }
 
+/** The realm's sums today and a year of growth on, which a building's gains are measured against. */
+interface Sums {
+  readonly balance: DeepReadonly<Stores>;
+  readonly limits: DeepReadonly<Stores>;
+  readonly grownBalance: DeepReadonly<Stores>;
+  readonly grownLimits: DeepReadonly<Stores>;
+}
+
+/** A building's manpower a day and call-up limit, from the day after its last day of work, each with its growth for each YEARLY_GROWTH of people. */
+interface Levy {
+  readonly inDays: number;
+  readonly gain: number;
+  readonly growth: number;
+  readonly limit: number;
+  readonly limitGrowth: number;
+}
+
 /**
- * What each building at work in the player's cities adds to its food and gold once finished,
- * from the day after its last day of work: the economy's balance with the building and without,
- * today and in the grown realm. Its days are counted on from the day the city's unrest ends,
- * as the construction system works no day of unrest. A city with an enemy at its walls works
- * none, and when the enemy leaves is not foreseen, so its building is not counted.
+ * What the building adds in the city once finished `inDays` from now: the economy's balance and
+ * limits with it and without it, today and in the grown realm.
  */
-function buildingsAtWork(
+function gainsOf(
   state: DeepReadonly<GameState>,
-  balance: DeepReadonly<Stores>,
-  grownBalance: DeepReadonly<Stores>,
-): { food: Muster[]; gold: Muster[] } {
-  const found = { food: [] as Muster[], gold: [] as Muster[] };
+  sums: Sums,
+  city: DeepReadonly<City>,
+  building: BuildingKind,
+  inDays: number,
+): { food: Muster[]; gold: Muster[]; levy: Levy } {
+  const built = {
+    ...state,
+    cities: {
+      ...state.cities,
+      [city.id]: { ...city, buildings: [...city.buildings, building], construction: null },
+    },
+  } as DeepReadonly<GameState>;
+  const grownBuilt = grownRealm(built);
+  const zero = { gold: 0, food: 0, manpower: 0 };
+  const now = dailyBalances(built).get(state.player) ?? zero;
+  const grown = dailyBalances(grownBuilt).get(state.player) ?? zero;
+  const limit = limitsOf(built).get(state.player) ?? zero;
+  const grownLimit = limitsOf(grownBuilt).get(state.player) ?? zero;
+  const store = (key: 'food' | 'gold'): Muster[] => {
+    const gain = now[key] - sums.balance[key];
+    const growth = grown[key] - sums.grownBalance[key] - gain;
+    return gain !== 0 || growth !== 0 ? [{ inDays, men: 0, gain, growth }] : [];
+  };
+  const gain = now.manpower - sums.balance.manpower;
+  const more = limit.manpower - sums.limits.manpower;
+  return {
+    food: store('food'),
+    gold: store('gold'),
+    levy: {
+      inDays,
+      gain,
+      growth: grown.manpower - sums.grownBalance.manpower - gain,
+      limit: more,
+      limitGrowth: grownLimit.manpower - sums.grownLimits.manpower - more,
+    },
+  };
+}
+
+/**
+ * What each building at work in the player's cities adds to its food, gold, and manpower once
+ * finished, from the day after its last day of work. Its days are counted on from the day the
+ * city's unrest ends, as the construction system works no day of unrest. A city with an enemy at
+ * its walls works none, and when the enemy leaves is not foreseen, so its building is not counted.
+ */
+function buildingsAtWork(state: DeepReadonly<GameState>, sums: Sums) {
+  const found = { food: [] as Muster[], gold: [] as Muster[], levies: [] as Levy[] };
   for (const city of Object.values(state.cities)) {
     const work = city.construction;
     if (city.owner !== state.player || !work || beleaguered(state, city)) continue;
-    const built = {
-      ...state,
-      cities: {
-        ...state.cities,
-        [city.id]: { ...city, buildings: [...city.buildings, work.building], construction: null },
-      },
-    } as DeepReadonly<GameState>;
-    const now = dailyBalances(built).get(state.player);
-    const grown = dailyBalances(grownRealm(built)).get(state.player);
-    if (!now || !grown) continue;
-    const inDays = work.daysLeft + unrestDaysLeft(state, city);
-    for (const key of ['food', 'gold'] as const) {
-      const gain = now[key] - balance[key];
-      const growth = grown[key] - grownBalance[key] - gain;
-      if (gain !== 0 || growth !== 0) found[key].push({ inDays, men: 0, gain, growth });
-    }
+    const gains = gainsOf(
+      state,
+      sums,
+      city,
+      work.building,
+      work.daysLeft + unrestDaysLeft(state, city),
+    );
+    found.food.push(...gains.food);
+    found.gold.push(...gains.gold);
+    found.levies.push(gains.levy);
   }
   return found;
+}
+
+/**
+ * The manpower after each day from now, as the economy fills it: each day's gain stops at the
+ * call-up limit, and both grow with the people from the second day on and with each building
+ * from the day after its work.
+ */
+function manpowerByDay(
+  amount: number,
+  change: number,
+  limit: number,
+  yearly: { change: number; limit: number },
+  levies: readonly Levy[],
+  days: number,
+): number[] {
+  const grown = (day: number) => (DAILY ** (day - 1) - 1) / YEARLY_GROWTH;
+  const amounts = [amount];
+  for (let day = 1; day <= days; day++) {
+    let today = change + yearly.change * grown(day);
+    let cap = limit + yearly.limit * grown(day);
+    for (const levy of levies)
+      if (levy.inDays < day) {
+        today += levy.gain + levy.growth * grown(day);
+        cap += levy.limit + levy.limitGrowth * grown(day);
+      }
+    amount = today > 0 ? Math.max(amount, Math.min(cap, amount + today)) : amount + today;
+    amounts.push(amount);
+  }
+  return amounts;
+}
+
+/**
+ * A store after each day from now, as the economy plays it and as `daysUntilShort` reckons it:
+ * each muster's upkeep, payment and gain from its day, gains stopping at the limit, and the
+ * balance and limit growing with the people from the second day on.
+ */
+function storeByDay(
+  amount: number,
+  change: number,
+  limit: number,
+  upkeep: number,
+  capPerMan: number,
+  schedule: readonly Muster[],
+  yearly: { change: number; limit: number },
+  days: number,
+): number[] {
+  const grown = (day: number) => (DAILY ** (day - 1) - 1) / YEARLY_GROWTH;
+  let growth = yearly.change;
+  let next = 0;
+  const amounts = [amount];
+  for (let day = 1; day <= days; day++) {
+    while (next < schedule.length && (schedule[next]?.inDays ?? Infinity) < day) {
+      const men = schedule[next]?.men ?? 0;
+      amount -= schedule[next]?.pay ?? 0;
+      change += (schedule[next]?.gain ?? 0) - men * upkeep;
+      growth += schedule[next]?.growth ?? 0;
+      limit += men * capPerMan;
+      next++;
+    }
+    const today = change + growth * grown(day);
+    const cap = limit + yearly.limit * grown(day);
+    amount = today > 0 ? Math.max(amount, Math.min(cap, amount + today)) : amount + today;
+    amounts.push(amount);
+  }
+  return amounts;
+}
+
+/** The player's city where Barracks could be started today: the one named, else the first other by id. */
+function barracksSite(state: DeepReadonly<GameState>, at: CityId | undefined) {
+  const own = Object.values(state.cities)
+    .filter((city) => city.owner === state.player)
+    .sort((a, b) => (a.id === at ? -1 : b.id === at ? 1 : a.id < b.id ? -1 : 1));
+  return own.find((city) => buildRefusal(state, city, 'barracks') === undefined);
 }
 
 /** The player's city where Canals could be started today: the one named, else the first other by id. */
