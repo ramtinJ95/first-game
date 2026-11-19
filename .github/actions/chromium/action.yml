@@ -1,0 +1,54 @@
+name: Chromium
+description: >-
+  Chromium for Playwright and the system packages it needs, from the cache when it can, within a
+  limit of its own, so a slow install fails in words that name it and never spends a test's time.
+inputs:
+  minutes:
+    description: The most minutes the install may take.
+    default: '8'
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v5
+      with:
+        path: ~/.cache/ms-playwright
+        key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+    # The packages are kept by what they are, so a new runner image or lock file starts from the
+    # newest set any run fetched: apt takes a cached .deb whenever its version still matches.
+    - id: restore
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/.cache/chromium-debs
+        key: chromium-debs-v2-${{ runner.os }}-${{ runner.arch }}-
+        restore-keys: chromium-debs-v2-${{ runner.os }}-${{ runner.arch }}-
+    - name: Install Chromium and its system packages
+      shell: bash
+      env:
+        MINUTES: ${{ inputs.minutes }}
+      run: |
+        set +e
+        timeout "${MINUTES}m" bash "$GITHUB_ACTION_PATH/install.sh"
+        code=$?
+        if [ "$code" -eq 124 ]; then
+          echo "::error title=Chromium install::Installing Chromium and its system packages took more than ${MINUTES} minutes, so no test or bench ran; the tests were not reached."
+        elif [ "$code" -ne 0 ]; then
+          echo "::error title=Chromium install::Installing Chromium and its system packages failed (exit ${code}), so no test or bench ran; the tests were not reached."
+        fi
+        exit "$code"
+    # Kept even when the install fails, so the packages one job fetched serve every later one.
+    - id: kept
+      if: ${{ always() }}
+      shell: bash
+      run: |
+        debs="$HOME/.cache/chromium-debs"
+        mkdir -p "$debs"
+        find /var/cache/apt/archives -maxdepth 1 -name '*.deb' -exec cp -n -t "$debs" {} +
+        if [ -n "$(find "$debs" -name '*.deb' -print -quit)" ]; then
+          sum=$(find "$debs" -name '*.deb' -printf '%f\n' | sort | sha256sum | cut -c1-16)
+          echo "key=chromium-debs-v2-${RUNNER_OS}-${RUNNER_ARCH}-${sum}" >> "$GITHUB_OUTPUT"
+        fi
+    - if: ${{ always() && steps.kept.outputs.key != '' && steps.kept.outputs.key != steps.restore.outputs.cache-matched-key }}
+      uses: actions/cache/save@v5
+      with:
+        path: ~/.cache/chromium-debs
+        key: ${{ steps.kept.outputs.key }}

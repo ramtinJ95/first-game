@@ -1,5 +1,13 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -160,6 +168,18 @@ describe.runIf(existsSync('/proc/self/stat'))('a heavy command beside test runs'
     work.child.kill('SIGTERM');
     await work.exited;
     await until('the heavy work to end', () => !state(work.copy) && !state(work.busy));
+  });
+
+  it('removes the part a writer left a day ago, and keeps one still being written', async () => {
+    const old = join(dir, 'tests-1.json.1.part');
+    const fresh = join(dir, 'tests-2.json.2.part');
+    writeFileSync(old, '{"kind":');
+    writeFileSync(fresh, '{"kind":');
+    const dayAgo = (Date.now() - 25 * 60 * 60 * 1000) / 1000;
+    utimesSync(old, dayAgo, dayAgo);
+    await end(await testRun());
+    expect(existsSync(old)).toBe(false);
+    expect(existsSync(fresh)).toBe(true);
   });
 
   it('ends what the copy left running when the copy ends, and exits as the copy did', async () => {
