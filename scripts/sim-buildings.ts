@@ -3,7 +3,12 @@ import { parseArgs } from 'node:util';
 import { buildingWorth, construction } from '../src/sim/ai/build.ts';
 import { recruitment } from '../src/sim/ai/budget.ts';
 import { homeCapital, menUnderArms } from '../src/sim/ai/situation.ts';
-import { BUILDING_KINDS, BUILDINGS, type BuildingKind } from '../src/sim/buildings/buildings.ts';
+import {
+  FIRST_LEVELS,
+  BUILDINGS,
+  type BuildingKind,
+  type FirstLevel,
+} from '../src/sim/buildings/buildings.ts';
 import { buildingGain } from '../src/sim/buildings/gains.ts';
 import type { DeepReadonly } from '../src/sim/deep-readonly.ts';
 import type { CityId, FactionId } from '../src/sim/ids.ts';
@@ -53,7 +58,7 @@ if (!capital) throw new Error('rome has no capital');
 console.log('## The buildings\n');
 table(
   ['building', 'gold', 'days', 'needs people', 'does'],
-  BUILDING_KINDS.map((kind) => {
+  FIRST_LEVELS.map((kind) => {
     const { name, gold, days, needs } = BUILDINGS[kind];
     const { daily, levy, walls, garrison, trainingShare, calmed } = buildingGain(
       start,
@@ -145,19 +150,19 @@ console.log(
 const firsts = new Set<BuildingKind>();
 const suits = new Map<BuildingKind, number>();
 table(
-  ['city', ...BUILDING_KINDS.map((kind) => BUILDINGS[kind].name), 'first choice'],
+  ['city', ...FIRST_LEVELS.map((kind) => BUILDINGS[kind].name), 'first choice'],
   sampleCities().map(({ label, state, city }) => {
-    const years = BUILDING_KINDS.map((kind) => {
+    const years = FIRST_LEVELS.map((kind) => {
       if (city.population < BUILDINGS[kind].needs.people) return undefined;
       const worth = buildingWorth(state, city, kind);
       return worth > 0 ? BUILDINGS[kind].gold / worth / 365 : undefined;
     });
-    let first: BuildingKind | undefined;
+    let first: FirstLevel | undefined;
     years.forEach((y, i) => {
-      const kind = need(BUILDING_KINDS[i]);
+      const kind = need(FIRST_LEVELS[i]);
       if (y === undefined) return;
       suits.set(kind, Math.min(suits.get(kind) ?? Infinity, y));
-      if (!first || y < (years[BUILDING_KINDS.indexOf(first)] ?? Infinity)) first = kind;
+      if (!first || y < (years[FIRST_LEVELS.indexOf(first)] ?? Infinity)) first = kind;
     });
     if (first) firsts.add(first);
     return [
@@ -168,11 +173,11 @@ table(
   }),
 );
 console.log(
-  `In the city it suits best: ${BUILDING_KINDS.map((kind) => `${BUILDINGS[kind].name} ${suits.get(kind)?.toFixed(1) ?? '-'} years`).join(', ')}.`,
+  `In the city it suits best: ${FIRST_LEVELS.map((kind) => `${BUILDINGS[kind].name} ${suits.get(kind)?.toFixed(1) ?? '-'} years`).join(', ')}.`,
 );
 console.log(
   `Target 2 to 6 years: ${
-    BUILDING_KINDS.every((kind) => {
+    FIRST_LEVELS.every((kind) => {
       const y = suits.get(kind);
       return y !== undefined && y >= 2 && y <= 6;
     })

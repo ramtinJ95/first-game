@@ -1,5 +1,11 @@
 import { buildRefusal } from '../buildings/build.ts';
-import { BUILDING_KINDS, BUILDINGS, hasBuilt, type BuildingKind } from '../buildings/buildings.ts';
+import {
+  BUILDING_KINDS,
+  BUILDINGS,
+  FIRST_LEVELS,
+  hasBuilt,
+  type BuildingKind,
+} from '../buildings/buildings.ts';
 import { buildingGain } from '../buildings/gains.ts';
 import { UNREST_DAYS } from '../cities.ts';
 import type { FactionId } from '../ids.ts';
@@ -15,8 +21,17 @@ export const FOOD_PRICE = OUTPUT_PER_PERSON.gold / OUTPUT_PER_PERSON.food;
 export const MANPOWER_PRICE = OUTPUT_PER_PERSON.gold / OUTPUT_PER_PERSON.manpower;
 /** A city with a city of a great power or of an enemy this close, in km, is on a border. */
 export const BORDER_KM = 400;
-/** The AI builds only what pays its gold back within this many years. */
+/** The AI builds only a first level that pays its gold back within this many years. */
 export const BUILD_PAYBACK_YEARS = 6;
+/** The AI builds a second level or a great work that pays its gold back within this many years. */
+export const PROJECT_PAYBACK_YEARS = 9;
+
+/** The years within which the AI builds this kind. */
+export function paybackLimit(kind: BuildingKind): number {
+  return (FIRST_LEVELS as readonly BuildingKind[]).includes(kind)
+    ? BUILD_PAYBACK_YEARS
+    : PROJECT_PAYBACK_YEARS;
+}
 /** The cities a power takes in a year near a border temple, by which the AI prices one. */
 export const CONQUESTS_A_YEAR = 1;
 
@@ -60,7 +75,8 @@ export function buildingWorth(state: State, city: CityView, kind: BuildingKind):
 /**
  * Orders at most one building a day, on a day the power raised no recruit: the one that
  * pays back its gold soonest among those its cities can start, if that is within
- * BUILD_PAYBACK_YEARS. It builds only while its gold and food balances are not falling
+ * BUILD_PAYBACK_YEARS for a first level and PROJECT_PAYBACK_YEARS for a second level or a
+ * great work. It builds only while its gold and food balances are not falling
  * and only with gold left over the reserve for its men and the price of the recruit it
  * would raise next, so a building never stops it keeping or growing an army. A ruler
  * that never recruits, `keepsRecruits` false, keeps only the reserve for its men.
@@ -87,7 +103,7 @@ export function construction(
       const worth = buildingWorth(state, city, kind);
       if (worth <= 0) continue;
       const payback = gold / worth / 365;
-      if (payback <= BUILD_PAYBACK_YEARS && (!best || payback < best.payback)) {
+      if (payback <= paybackLimit(kind) && (!best || payback < best.payback)) {
         best = { city, kind, payback };
       }
     }

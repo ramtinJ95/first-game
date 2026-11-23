@@ -64,6 +64,16 @@ describe('file-based registries', () => {
     },
   );
 
+  it('passes on a change that older saves may lack, and only as true', () => {
+    write('src/sim/save-changes/more.json', { adds: 'More kinds.', olderSavesLoad: true });
+    generateRegistries(url);
+    expect(
+      JSON.parse(readFileSync(join(root, 'src/sim/save-changes.generated.json'), 'utf8')),
+    ).toContainEqual({ name: 'more', adds: 'More kinds.', olderSavesLoad: true });
+    write('src/sim/save-changes/more.json', { adds: 'More kinds.', olderSavesLoad: 'yes' });
+    expect(() => generateRegistries(url)).toThrow('more.json may set olderSavesLoad only to true');
+  });
+
   it('rejects malformed alert names and change filenames', () => {
     write('src/app/alert-kinds/bad.json', ['bad-name']);
     expect(() => generateRegistries(url)).toThrow(

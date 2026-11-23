@@ -1,12 +1,19 @@
 import { reasonText, whole } from '../app/names.ts';
+import { buildingWorth } from '../sim/ai/build.ts';
 import { buildRefusal, cancelRefund } from '../sim/buildings/build.ts';
 import {
   BUILDING_KINDS,
   BUILDINGS,
+  FIRST_LEVELS,
+  firstLevelOf,
+  greatWorkOf,
   hasBuilt,
+  isGreatWork,
+  levelOf,
+  SECOND_LEVELS,
   type BuildingKind,
 } from '../sim/buildings/buildings.ts';
-import { buildingGain, type BuildingGain } from '../sim/buildings/gains.ts';
+import { buildingGain, gainOf, type BuildingGain } from '../sim/buildings/gains.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { CityId, FactionId } from '../sim/ids.ts';
 import { executeOrder, type Order } from '../sim/orders/orders.ts';
@@ -26,10 +33,24 @@ export interface BuildingLine {
   readonly effect: string;
 }
 
+/** A building that stands: a first building at its level, with its second's effect added, or a great work. */
+export interface StandingLine extends BuildingLine {
+  /** 1 or 2 for a first building, undefined for a great work. */
+  readonly level: 1 | 2 | undefined;
+}
+
+/** What an option is: a first building, the second level of one, or a great work. */
+export type OptionTier = 'first' | 'second' | 'work';
+
 export interface BuildOption extends BuildingLine {
+  readonly tier: OptionTier;
+  /** The first building a second level raises, named for the player. */
+  readonly raises: string | undefined;
   readonly caution: string | undefined;
   readonly gold: number;
   readonly days: number;
+  /** The years its gold comes back in this city today, by the same worth the AI builds by, or undefined if never. */
+  readonly payback: number | undefined;
   /** Why this building cannot start, when the reason is its own, such as its gold or its people. */
   readonly why: string | undefined;
 }
@@ -50,7 +71,7 @@ export type Work =
     };
 
 export interface CityBuildings {
-  readonly built: readonly BuildingLine[];
+  readonly built: readonly StandingLine[];
   readonly work: Work | undefined;
   /** The reason no building can start, said once, or undefined. */
   readonly blocked: string | undefined;
@@ -81,25 +102,62 @@ export function cityBuildings(
 ): CityBuildings {
   const waiting = afterWaiting(state, pending, world);
   const next = waiting.cities[city.id] ?? city;
-  const built = city.buildings.map((kind) => line(state, city, kind));
+  const built = standing(state, city);
   const atWork = [city.construction?.building, next.construction?.building];
-  const whys = BUILDING_KINDS.filter((kind) => !hasBuilt(city, kind) && !atWork.includes(kind)).map(
-    (kind) => [kind, refusal(state, waiting, next, kind)] as const,
-  );
+  const holdsWork = greatWorkOf(city) !== undefined || atWork.some((k) => k && isGreatWork(k));
+  const offered = BUILDING_KINDS.filter((kind) => {
+    if (hasBuilt(city, kind) || atWork.includes(kind)) return false;
+    if (isGreatWork(kind)) return !holdsWork;
+    const first = firstLevelOf(kind);
+    return !first || hasBuilt(city, first);
+  });
+  const whys = offered.map((kind) => [kind, refusal(state, waiting, next, kind)] as const);
   const shared = whys[0]?.[1];
   const blocked = whys.length > 1 && whys.every(([, why]) => why === shared) ? shared : undefined;
   return {
     built,
     work: work(state, pending, city, next),
     blocked,
-    options: whys.map(([kind, why]) => ({
-      ...line(state, city, kind),
-      caution: gainCaution(waiting, next, kind),
-      gold: BUILDINGS[kind].gold,
-      days: BUILDINGS[kind].days,
-      why: blocked ? undefined : why,
-    })),
+    options: whys.map(([kind, why]) => {
+      const first = firstLevelOf(kind);
+      const worth = buildingWorth(state, city, kind);
+      return {
+        ...line(state, city, kind),
+        tier: isGreatWork(kind) ? 'work' : first ? 'second' : 'first',
+        raises: first && BUILDINGS[first].name,
+        caution: gainCaution(waiting, next, kind),
+        gold: BUILDINGS[kind].gold,
+        days: BUILDINGS[kind].days,
+        payback: worth > 0 ? BUILDINGS[kind].gold / worth / 365 : undefined,
+        why: blocked ? undefined : why,
+      };
+    }),
   };
+}
+
+/** An option's payback in words, as its button shows it. */
+export function paybackText(years: number | undefined): string {
+  if (years === undefined) return 'does not pay back here today';
+  return `pays back in ${years < 10 ? years.toFixed(1) : whole(years)} years`;
+}
+
+/** Each first building that stands, at its level and with both levels' effect, then the great work. */
+function standing(state: State, city: DeepReadonly<City>): StandingLine[] {
+  const lines: StandingLine[] = FIRST_LEVELS.flatMap((first) => {
+    const level = levelOf(city, first);
+    if (level === 0) return [];
+    const kinds = level === 2 ? [first, SECOND_LEVELS[first]] : [first];
+    return [
+      {
+        kind: first,
+        name: BUILDINGS[first].name,
+        level,
+        effect: gainText(gainOf(state, city, kinds), city.id),
+      },
+    ];
+  });
+  const work = greatWorkOf(city);
+  return work ? [...lines, { ...line(state, city, work), level: undefined }] : lines;
 }
 
 /** Current usefulness, separate from permission to build and the building's lasting effect. */
@@ -213,14 +271,16 @@ function withGold(state: State, faction: FactionId, gold: number): State {
 /** A building refusal as the rules write it, with cities, factions, buildings, and large numbers put into words. */
 export function buildingReasonText(state: State, reason: string): string {
   const kinds = BUILDING_KINDS.join('|');
+  const name = (kind: string) =>
+    BUILDING_KINDS.find((k) => k.toLowerCase() === kind.toLowerCase()) ?? kind;
   return reasonText(
     state,
     reason.replace(new RegExp(`\\ba (${kinds})\\b`, 'g'), '$1').replace(/\bcity (?=[a-z])/g, ''),
   )
-    .replace(
-      new RegExp(`\\b(${kinds})\\b`, 'gi'),
-      (kind) => BUILDINGS[kind.toLowerCase() as BuildingKind].name,
-    )
+    .replace(new RegExp(`\\b(${kinds})\\b`, 'gi'), (kind) => {
+      const found = name(kind);
+      return found in BUILDINGS ? BUILDINGS[found as BuildingKind].name : kind;
+    })
     .replace(/\b\d{4,}\b/g, (n) => whole(Number(n)));
 }
 

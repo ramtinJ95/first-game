@@ -81,7 +81,17 @@ export function playCautiousRome(
     peaceful = false,
     guards = 'never',
     answer = false,
-  }: { peaceful?: boolean; guards?: GuardPlay; answer?: boolean } = {},
+    builds,
+    drops = [],
+  }: {
+    peaceful?: boolean;
+    guards?: GuardPlay;
+    answer?: boolean;
+    /** Rome's building orders for the day, in place of the AI's. */
+    builds?: (state: GameState) => Order[];
+    /** Kinds of Rome's AI orders it does not give, such as `recruit` for a ruler who raises men only to answer a warning. */
+    drops?: readonly Order['kind'][];
+  } = {},
 ): GameState {
   const told = new Set<string>();
   let answering: { city: CityId; until: number; raise: boolean } | undefined;
@@ -103,6 +113,7 @@ export function playCautiousRome(
     const orders: Order[] = ai.filter(
       (o) =>
         !held(o) &&
+        !(o.faction === rome && ((builds && o.kind === 'build') || drops.includes(o.kind))) &&
         (o.faction !== rome ||
           !['openTrade', 'acceptTrade', 'closeTrade', 'improveTrade'].includes(o.kind)),
     );
@@ -124,7 +135,7 @@ export function playCautiousRome(
                 ])
               : [];
     threatened = [];
-    orders.unshift(...trade, ...hires);
+    orders.unshift(...trade, ...hires, ...(builds?.(state) ?? []));
     if (answering && state.day >= answering.until) answering = undefined;
     if (answering) {
       const answers = answerOrders(state, answering.city, answering.raise);

@@ -2,15 +2,40 @@ import type { DeepReadonly } from '../deep-readonly.ts';
 import type { City } from '../state/city.ts';
 import type { GameState } from '../state/game-state.ts';
 
-export const BUILDING_KINDS = ['forum', 'canals', 'barracks', 'towers', 'temple'] as const;
-export type BuildingKind = (typeof BUILDING_KINDS)[number];
+/** The five buildings every city may build first. */
+export const FIRST_LEVELS = ['forum', 'canals', 'barracks', 'towers', 'temple'] as const;
+export type FirstLevel = (typeof FIRST_LEVELS)[number];
 
-/** What every building has: its price in gold, its days of work, and the people its city needs to start it. */
+/** The second level of each first building, which a city builds only on its first. */
+export const SECOND_LEVELS = {
+  forum: 'lawCourts',
+  canals: 'reservoirs',
+  barracks: 'drillField',
+  towers: 'outerWalls',
+  temple: 'sanctuary',
+} as const satisfies Record<FirstLevel, string>;
+export type SecondLevel = (typeof SECOND_LEVELS)[FirstLevel];
+
+/** The large projects, of which a city holds one at most. */
+export const GREAT_WORKS = ['treasuryHall', 'merchantsQuarter', 'stronghold'] as const;
+export type GreatWork = (typeof GREAT_WORKS)[number];
+
+export const BUILDING_KINDS = [
+  ...FIRST_LEVELS,
+  ...FIRST_LEVELS.map((kind) => SECOND_LEVELS[kind]),
+  ...GREAT_WORKS,
+] as const;
+export type BuildingKind = FirstLevel | SecondLevel | GreatWork;
+
+/**
+ * What every building has: its price in gold, its days of work, the people its city
+ * needs to start it, and the building it must stand with first, if any.
+ */
 interface BuildingRow {
   readonly name: string;
   readonly gold: number;
   readonly days: number;
-  readonly needs: { readonly people: number };
+  readonly needs: { readonly people: number; readonly building?: FirstLevel };
 }
 
 /**
@@ -57,6 +82,39 @@ export const BUILDINGS = {
     unrestPace: 3,
     reachKm: 400,
   },
+  lawCourts: {
+    name: 'Law courts',
+    gold: 10_000,
+    days: 75,
+    needs: { people: 0, building: 'forum' },
+  },
+  reservoirs: {
+    name: 'Reservoirs',
+    gold: 9000,
+    days: 60,
+    needs: { people: 0, building: 'canals' },
+  },
+  drillField: {
+    name: 'Drill field',
+    gold: 10_000,
+    days: 60,
+    needs: { people: 0, building: 'barracks' },
+  },
+  outerWalls: {
+    name: 'Outer walls',
+    gold: 7500,
+    days: 75,
+    needs: { people: 0, building: 'towers' },
+  },
+  sanctuary: { name: 'Sanctuary', gold: 2500, days: 45, needs: { people: 0, building: 'temple' } },
+  treasuryHall: { name: 'Treasury hall', gold: 28_000, days: 420, needs: { people: 0 } },
+  merchantsQuarter: { name: "Merchants' quarter", gold: 24_000, days: 400, needs: { people: 0 } },
+  stronghold: {
+    name: 'Stronghold',
+    gold: 24_000,
+    days: 365,
+    needs: { people: 0, building: 'towers' },
+  },
 } as const satisfies Record<BuildingKind, BuildingRow & { readonly [effect: string]: unknown }>;
 
 /** The share of a building's gold that cancelling its work gives back. The rest is spent. */
@@ -66,6 +124,32 @@ type Built = DeepReadonly<Pick<City, 'buildings'>>;
 
 export function hasBuilt(city: Built, kind: BuildingKind): boolean {
   return city.buildings.includes(kind);
+}
+
+export function isGreatWork(kind: BuildingKind): kind is GreatWork {
+  return (GREAT_WORKS as readonly BuildingKind[]).includes(kind);
+}
+
+/** The level a first building stands at in the city: 0 unbuilt, 1, or 2 with its second level. */
+export function levelOf(city: Built, kind: FirstLevel): 0 | 1 | 2 {
+  if (!hasBuilt(city, kind)) return 0;
+  return hasBuilt(city, SECOND_LEVELS[kind]) ? 2 : 1;
+}
+
+/** The first building a second level stands on, or undefined for a first level or a great work. */
+export function firstLevelOf(kind: BuildingKind): FirstLevel | undefined {
+  return FIRST_LEVELS.find((first) => SECOND_LEVELS[first] === kind);
+}
+
+/** The first building the city must stand with before it may start this one, if any. */
+export function neededFirst(kind: BuildingKind): FirstLevel | undefined {
+  const row: BuildingRow = BUILDINGS[kind];
+  return row.needs.building;
+}
+
+/** The great work the city stands with, or undefined. */
+export function greatWorkOf(city: Built): GreatWork | undefined {
+  return GREAT_WORKS.find((work) => hasBuilt(city, work));
 }
 
 /** What the city's gold yield is multiplied by. */

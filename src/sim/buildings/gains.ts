@@ -31,13 +31,19 @@ export function buildingGain(
   city: DeepReadonly<City>,
   kind: BuildingKind,
 ): BuildingGain {
+  return gainOf(state, city, [kind]);
+}
+
+/** What the buildings together change for the city's owner, such as a first level and its second. */
+export function gainOf(
+  state: DeepReadonly<GameState>,
+  city: DeepReadonly<City>,
+  kinds: readonly BuildingKind[],
+): BuildingGain {
   const realm = realmOf(state, city);
-  const without = withBuildings(
-    realm,
-    city,
-    city.buildings.filter((b) => b !== kind),
-  );
-  const withIt = withBuildings(realm, city, [...city.buildings.filter((b) => b !== kind), kind]);
+  const rest = city.buildings.filter((b) => !kinds.includes(b));
+  const without = withBuildings(realm, city, rest);
+  const withIt = withBuildings(realm, city, [...rest, ...kinds]);
   const before = dailyBalances(without).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
   const after = dailyBalances(withIt).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
   const levyBefore = limitsOf(without).get(city.owner)?.manpower ?? 0;
@@ -53,8 +59,8 @@ export function buildingGain(
     levy: levyAfter - levyBefore,
     walls: fullAfter.walls - fullBefore.walls,
     garrison: fullAfter.garrison - fullBefore.garrison,
-    trainingShare: kind === 'barracks' ? BUILDINGS.barracks.trainingShare : 1,
-    calmed: kind === 'temple' ? calmedBy(state, city) : [],
+    trainingShare: kinds.includes('barracks') ? BUILDINGS.barracks.trainingShare : 1,
+    calmed: kinds.includes('temple') ? calmedBy(state, city) : [],
   };
 }
 
