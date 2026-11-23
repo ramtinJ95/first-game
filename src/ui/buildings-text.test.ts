@@ -206,6 +206,9 @@ describe('cityBuildings', () => {
       /^pays back in [\d.,]+ years if you take one city a year within its reach$/,
     );
     expect(paybackText(4.9, 'lawCourts')).toBe('pays back in 4.9 years');
+    expect(paybackText(4.4, 'temple')).toBe(
+      'pays back in 4.4 years if you take one city a year within its reach',
+    );
   });
 
   it("gives each option's payback in years by the worth the AI builds by", () => {
