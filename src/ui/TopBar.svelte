@@ -111,9 +111,9 @@
       aria-controls="advances"
       title={study.full}
       onclick={() => actions.togglePanel('advances')}
-      ><span class="line">Advances</span><span class="line note" data-testid="study-line"
+      ><span>Advances</span><span class="study-note wide" data-testid="study-line"
         >{study.short}</span
-      ></button
+      ><span class="study-note narrow" data-testid="study-days">{study.days}</span></button
     >
     <button
       type="button"
@@ -148,12 +148,26 @@
     line-height: 1.15;
   }
 
-  .study .note {
+  .study-note {
     font-size: 12px;
   }
 
-  .study.idle .note {
+  .study.idle .study-note {
     color: var(--bad);
+  }
+
+  /* Below 1280 px only the days fit beside the other buttons; the tooltip names the advance. */
+  .study-note.narrow {
+    display: none;
+  }
+
+  @media (max-width: 1279px) {
+    .study-note.wide {
+      display: none;
+    }
+    .study-note.narrow {
+      display: inline;
+    }
   }
 
   .threat-note {

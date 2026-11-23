@@ -116,4 +116,35 @@ test.describe('advances', () => {
     await hint.click();
     await expect(page.getByTestId('advances')).toBeVisible();
   });
+
+  for (const width of [1280, 1024])
+    test(`the top bar keeps one row at ${width}px while the longest advance is studied`, async ({
+      page,
+    }) => {
+      await openGame(page);
+      await page.setViewportSize({ width, height: 768 });
+      const state = startGame();
+      romeOf(state).study = { advance: 'marchingRations', daysLeft: 240 };
+      await load(page, state);
+      const bar = page.getByTestId('top-bar');
+      await expect(bar.getByTestId(width >= 1280 ? 'study-line' : 'study-days')).toHaveText(
+        width >= 1280 ? 'Marching rations · 240 days' : '240 days left',
+      );
+      await expect(bar.getByTestId('advances-button')).toHaveAttribute(
+        'title',
+        'Studying Marching rations: 240 days left.',
+      );
+      const boxes = await bar
+        .locator(':scope > *, .store, .end > *, [data-testid="time-controls"] > *')
+        .evaluateAll((elements) =>
+          elements.map((element) => {
+            const box = element.getBoundingClientRect();
+            return { x: box.x, y: box.y, right: box.right, bottom: box.bottom };
+          }),
+        );
+      expect(Math.max(...boxes.map((b) => b.y))).toBeLessThan(
+        Math.min(...boxes.map((b) => b.bottom)),
+      );
+      for (const box of boxes) expect(box.right).toBeLessThanOrEqual(width);
+    });
 });

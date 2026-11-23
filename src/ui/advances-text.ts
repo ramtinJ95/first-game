@@ -125,13 +125,24 @@ function refusalText(state: State, faction: FactionId, kind: AdvanceKind): strin
   return undefined;
 }
 
-/** What the realm studies and the days left, or that it studies nothing. */
-export function studyLine(state: State, faction: FactionId): { short: string; full: string } {
+/**
+ * What the realm studies and the days left, or that it studies nothing: `short` for a wide
+ * top bar, `days` where only the days fit, and `full` for the panel and the tooltip.
+ */
+export function studyLine(
+  state: State,
+  faction: FactionId,
+): { short: string; days: string; full: string } {
   const study = state.factions[faction]?.study;
-  if (!study) return { short: 'None studied', full: 'Nothing is being studied.' };
+  if (!study)
+    return { short: 'None studied', days: 'None studied', full: 'Nothing is being studied.' };
   const { name } = ADVANCES[study.advance];
   const days = `${study.daysLeft} ${study.daysLeft === 1 ? 'day' : 'days'}`;
-  return { short: `${name} · ${days}`, full: `Studying ${name}: ${days} left.` };
+  return {
+    short: `${name} · ${days}`,
+    days: `${days} left`,
+    full: `Studying ${name}: ${days} left.`,
+  };
 }
 
 /** The words of the cancel button: the gold that giving up the study gives back. */

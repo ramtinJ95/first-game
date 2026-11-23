@@ -12,6 +12,8 @@ import { balanceOf, reserveOf, type State } from './situation.ts';
 /** A realm studies only an advance that pays its gold back within this many years. */
 export const STUDY_PAYBACK_YEARS = 6;
 
+const CHEAPEST = Math.min(...ADVANCE_KINDS.map((kind) => ADVANCES[kind].gold));
+
 /**
  * What an advance is worth to the realm in gold a day, priced as a building is: gold as it
  * is, manpower at MANPOWER_PRICE, and food at FOOD_PRICE while the realm's harvest feeds
@@ -40,6 +42,7 @@ export function bestStudy(
   spare: number,
 ): { advance: AdvanceKind; payback: number } | undefined {
   let best: { advance: AdvanceKind; payback: number } | undefined;
+  if (spare < CHEAPEST) return undefined;
   for (const advance of ADVANCE_KINDS) {
     if (ADVANCES[advance].gold > spare || studyRefusal(state, faction, advance)) continue;
     const payback = studyPayback(state, faction, advance);
