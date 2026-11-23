@@ -1,3 +1,4 @@
+import { BUILDINGS } from '../sim/buildings/buildings.ts';
 import { expect, it } from 'vitest';
 import { trainingDaysAt } from '../sim/buildings/buildings.ts';
 import { buildFixture, FIXTURE as f, fixtureWorld } from '../sim/fixture.ts';
@@ -338,14 +339,16 @@ it('says the stores it counted on changed when no troop was raised and no city l
   );
 });
 
-/** The day Rome's food first runs short when it starts Canals at Roma on day 1 and raises Spearmen on `raiseOn`. */
-function shortWithCanals(initial: GameState, raiseOn: number) {
+/** The day Rome's food first runs short when it starts Canals (or `building`) at Roma on day 1 and raises Spearmen on `raiseOn`. */
+function shortWithCanals(
+  initial: GameState,
+  raiseOn: number,
+  building: 'canals' | 'reservoirs' = 'canals',
+) {
   let state = initial;
   for (let day = 1; day <= 6000; day++) {
     const orders = [
-      ...(day === 1
-        ? [{ kind: 'build', faction: f.rome, city: f.roma, building: 'canals' } as const]
-        : []),
+      ...(day === 1 ? [{ kind: 'build', faction: f.rome, city: f.roma, building } as const] : []),
       ...(day === raiseOn
         ? [{ kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' } as const]
         : []),
@@ -366,16 +369,25 @@ function shortWithCanals(initial: GameState, raiseOn: number) {
 }
 
 /** The wait the card's Canals line names, checked against the played days: a raise then is fed, a day sooner is not. */
-function canalWait(state: GameState): number {
+function canalWait(state: GameState, building: 'canals' | 'reservoirs' = 'canals'): number {
   const canal = required(recruitForecast(state, [], world, 'spearmen', 15, f.roma).canal);
   const wait = Number(/in about ([\d,]+) days/.exec(canal)?.[1]?.replace(',', ''));
+  const { name, gold, food, days } = BUILDINGS[building];
   expect(canal).toBe(
-    `Or build Canals at Roma for 4,000 gold, which grow 5 more food a day once built in 45 days: with them these men are fed if raised in about ${wait.toLocaleString('en-US')} days, on ${dateText(state.day + wait)}.`,
+    `Or build ${name} at Roma for ${gold.toLocaleString('en-US')} gold, which grow ${food} more food a day once built in ${days} days: with them these men are fed if raised in about ${wait.toLocaleString('en-US')} days, on ${dateText(state.day + wait)}.`,
   );
-  expect(shortWithCanals(state, wait + 1)).toBeUndefined();
-  expect(shortWithCanals(state, wait)).toBeDefined();
+  expect(shortWithCanals(state, wait + 1, building)).toBeUndefined();
+  expect(shortWithCanals(state, wait, building)).toBeDefined();
   return wait;
 }
+
+it('names Reservoirs in a city that has Canals, and holds their day against the played days', () => {
+  const state = foodDeficitAfterSpearmen(-12 - BUILDINGS.canals.food, 0.1);
+  required(state.cities[f.roma]).buildings = ['canals'];
+  const without = required(recruitForecast(state, [], world, 'spearmen', 15, f.roma).holdsAfter);
+  expect(canalWait(state, 'reservoirs')).toBeLessThan(without);
+  expectConsistent(state);
+});
 
 it('names Canals and the sooner day they feed a raise that food delays, to the day', () => {
   const state = foodDeficitAfterSpearmen(-12, 0.1);
@@ -524,14 +536,17 @@ const barracksAtRoma = {
   building: 'barracks',
 } as const;
 
-/** Whether Spearmen ordered at Roma on day `raiseOn` are taken, with Barracks at Roma ordered on day 1 or not. */
+/** Whether Spearmen ordered at Roma on day `raiseOn` are taken, with Barracks (or a Drill field on Barracks) at Roma ordered on day 1 or not. */
 function raisedOn(initial: GameState, raiseOn: number, barracks: boolean) {
   let state = initial;
+  const yard = required(initial.cities[f.roma]).buildings.includes('barracks')
+    ? ({ ...barracksAtRoma, building: 'drillField' } as const)
+    : barracksAtRoma;
   for (let day = 1; day <= raiseOn; day++) {
     const result = tick(
       state,
       [
-        ...(barracks && day === 1 ? [barracksAtRoma] : []),
+        ...(barracks && day === 1 ? [yard] : []),
         ...(day === raiseOn
           ? [{ kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' } as const]
           : []),
@@ -557,15 +572,25 @@ function raisedOn(initial: GameState, raiseOn: number, barracks: boolean) {
 function barracksWait(state: GameState): number {
   const line = required(recruitForecast(state, [], world, 'spearmen', 15, f.roma).barracks);
   const wait = Number(/in about ([\d,]+) days/.exec(line)?.[1]?.replace(',', ''));
+  const second = required(state.cities[f.roma]).buildings.includes('barracks');
+  const { gold, days } = BUILDINGS[second ? 'drillField' : 'barracks'];
   expect(line).toMatch(
     new RegExp(
-      `^Or build Barracks at Roma for 7,000 gold, which give [\\d,]+ more men to call up and \\d+\\.\\d more a day once built in 40 days: with them these men can be raised in about ${wait.toLocaleString('en-US')} days, on ${dateText(state.day + wait)}\\.$`,
+      `^Or build ${second ? 'a Drill field' : 'Barracks'} at Roma for ${gold.toLocaleString('en-US')} gold, which ${second ? 'gives' : 'give'} [\\d,]+ more men to call up and \\d+\\.\\d more a day once built in ${days} days: with them these men can be raised in about ${wait.toLocaleString('en-US')} days, on ${dateText(state.day + wait)}\\.$`,
     ),
   );
   expect(raisedOn(state, wait + 1, true), 'raised on the named day').toBe(true);
   expect(raisedOn(state, wait, true), 'raised a day sooner').toBe(false);
   return wait;
 }
+
+it('names a Drill field in a city that has Barracks, and holds its day against the played days', () => {
+  const state = shortOfMen(40_000, 100);
+  required(state.cities[f.roma]).buildings.push('barracks');
+  const wait = barracksWait(state);
+  expect(raisedOn(state, wait + 1, false), 'without it, not yet on that day').toBe(false);
+  expectConsistent(state);
+});
 
 it('names Barracks and the day they let a raise that the call-up limit holds back for good', () => {
   const state = shortOfMen(20_000, 100);
