@@ -9,12 +9,14 @@ import {
   dropSave,
   openGame,
   pause,
+  resizeTo,
   resume,
   romaTreasuryFull,
   startGame,
   untilDay,
   untilDrawn,
 } from './support.ts';
+import { discoveryGame, loadDiscovery } from './guide-game.ts';
 
 const rome = 'rome' as FactionId;
 
@@ -122,13 +124,13 @@ test.describe('advances', () => {
       page,
     }) => {
       await openGame(page);
-      await page.setViewportSize({ width, height: 768 });
-      const state = startGame();
+      await resizeTo(page, { width, height: 768 });
+      const state = discoveryGame();
       romeOf(state).study = { advance: 'marchingRations', daysLeft: 240 };
-      await load(page, state);
+      await loadDiscovery(page, state);
       const bar = page.getByTestId('top-bar');
       await expect(bar.getByTestId(width >= 1280 ? 'study-line' : 'study-days')).toHaveText(
-        width >= 1280 ? 'Marching rations · 240 days' : '240 days left',
+        width >= 1280 ? 'Marching rations · 240 days' : '240 days',
       );
       await expect(bar.getByTestId('advances-button')).toHaveAttribute(
         'title',

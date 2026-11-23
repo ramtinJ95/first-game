@@ -1,6 +1,9 @@
 import { parseArgs } from 'node:util';
 import type { FactionId } from '../../src/sim/ids.ts';
 import type { Order } from '../../src/sim/orders/orders.ts';
+import { ADVANCE_KINDS } from '../../src/sim/advances/advances.ts';
+import { studyRefusal } from '../../src/sim/advances/study.ts';
+import { bestStudy } from '../../src/sim/ai/study.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
 import { dailyBalances, limitsOf } from '../../src/sim/systems/economy.ts';
 import { playCautiousRome, rome } from '../cautious-rome.ts';
@@ -18,12 +21,13 @@ const { values } = parseArgs({
  * Romes at peace: the AI plays Rome, its trade included, and it declares no war. `ruler`
  * does nothing about a warning (the slide's `ignoring`), and `answering` answers each
  * warning as it advises. `stranger` answers too but never builds, a player who has not
- * found the buildings list. Every other
+ * found the buildings list, and studies the advance the panel suggests whenever nothing is
+ * studied. Every other
  * power plays the AI.
  */
 const PLAYERS = ['ruler', 'answering', 'stranger'] as const;
-/** The orders a stranger never gives: it has not found the buildings list. */
-const STRANGER_SKIPS = new Set<Order['kind']>(['build']);
+/** The orders a stranger takes from no rule of the AI: it never builds, and studies as the panel suggests. */
+const STRANGER_SKIPS = new Set<Order['kind']>(['build', 'study']);
 type Player = (typeof PLAYERS)[number];
 
 interface Year {
@@ -36,9 +40,23 @@ interface Year {
   /** The treasury at the end of the year less at its start. */
   rise: number;
   limit: number;
+  /** Days with an advance at work, and days with none at work but one Rome could start. */
+  studying: number;
+  choosing: number;
+  /** Advances Rome had studied by the end of the year. */
+  studied: number;
 }
 
-const emptyYear = (): Year => ({ atLimit: 0, lost: 0, net: 0, rise: 0, limit: 0 });
+const emptyYear = (): Year => ({
+  atLimit: 0,
+  lost: 0,
+  net: 0,
+  rise: 0,
+  limit: 0,
+  studying: 0,
+  choosing: 0,
+  studied: 0,
+});
 
 function count(years: Year[], before: GameState, after: GameState) {
   const year = years[Math.floor((before.day - 1) / 365)];
@@ -53,6 +71,18 @@ function count(years: Year[], before: GameState, after: GameState) {
     year.atLimit++;
     year.lost += Math.max(0, net - (gold(after) - gold(before)));
   }
+  const realm = after.factions[rome];
+  if (realm?.study) year.studying++;
+  else if (ADVANCE_KINDS.some((kind) => !studyRefusal(after, rome, kind))) year.choosing++;
+  year.studied = realm?.advances.length ?? 0;
+}
+
+/** The panel's suggestion, as a stranger who opens the panel takes it, on a day nothing is studied. */
+function asThePanelSuggests(state: GameState): Order[] {
+  const realm = state.factions[rome];
+  if (!realm || realm.study) return [];
+  const best = bestStudy(state, rome, realm.stores.gold);
+  return best ? [{ kind: 'study', faction: rome, advance: best.advance }] : [];
 }
 
 function play(player: Player, seed: number, years: number): Year[] {
@@ -60,9 +90,12 @@ function play(player: Player, seed: number, years: number): Year[] {
   playCautiousRome(seed, years, ({ before, after }) => count(counted, before, after), {
     peaceful: true,
     answer: player !== 'ruler',
-    orders: (orders) =>
+    orders: (orders, state) =>
       player === 'stranger'
-        ? orders.filter((o) => o.faction !== rome || !STRANGER_SKIPS.has(o.kind))
+        ? [
+            ...orders.filter((o) => o.faction !== rome || !STRANGER_SKIPS.has(o.kind)),
+            ...asThePanelSuggests(state),
+          ]
         : orders,
   });
   return counted;
@@ -86,9 +119,9 @@ for (const player of players) {
   const games = Array.from({ length: seeds }, (_, i) => play(player, first + i, years));
   console.log(`\n### ${player}\n`);
   console.log(
-    '| year | days at the limit | gold lost to the limit | treasury rise | spare | net income | limit |',
+    '| year | days at the limit | gold lost to the limit | treasury rise | spare | net income | limit | days studying | days with one to choose | advances studied |',
   );
-  console.log('| ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
+  console.log('| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
   let spareSum = 0;
   let atLimitSum = 0;
   for (let y = 0; y < years; y++) {
@@ -97,10 +130,13 @@ for (const player of players) {
     spareSum += spare;
     atLimitSum += of((r) => r.atLimit);
     console.log(
-      `| ${y + 1} | ${of((r) => r.atLimit)} | ${whole(of((r) => r.lost))} | ${whole(of((r) => r.rise))} | ${whole(spare)} | ${whole(of((r) => r.net))} | ${whole(of((r) => r.limit))} |`,
+      `| ${y + 1} | ${of((r) => r.atLimit)} | ${whole(of((r) => r.lost))} | ${whole(of((r) => r.rise))} | ${whole(spare)} | ${whole(of((r) => r.net))} | ${whole(of((r) => r.limit))} | ${of((r) => r.studying)} | ${of((r) => r.choosing)} | ${of((r) => r.studied)} |`,
     );
   }
+  const busyYears = games.map(
+    (g) => g.slice(1).filter((r) => r.studying > 0 || r.choosing > 0).length,
+  );
   console.log(
-    `\nSummary: | ${player} | days at the limit, years 1–${years}, sum of yearly medians ${atLimitSum} | spare gold ${whole(spareSum)} |`,
+    `\nSummary: | ${player} | days at the limit, years 1–${years}, sum of yearly medians ${atLimitSum} | spare gold ${whole(spareSum)} | seeds with an advance at work or one to choose in every year from 2: ${busyYears.filter((n) => n === years - 1).length} of ${seeds} |`,
   );
 }

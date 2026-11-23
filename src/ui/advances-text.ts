@@ -134,13 +134,12 @@ export function studyLine(
   faction: FactionId,
 ): { short: string; days: string; full: string } {
   const study = state.factions[faction]?.study;
-  if (!study)
-    return { short: 'None studied', days: 'None studied', full: 'Nothing is being studied.' };
+  if (!study) return { short: 'None studied', days: 'None', full: 'Nothing is being studied.' };
   const { name } = ADVANCES[study.advance];
   const days = `${study.daysLeft} ${study.daysLeft === 1 ? 'day' : 'days'}`;
   return {
     short: `${name} · ${days}`,
-    days: `${days} left`,
+    days,
     full: `Studying ${name}: ${days} left.`,
   };
 }

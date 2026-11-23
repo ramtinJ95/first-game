@@ -56,13 +56,13 @@ describe('the advances panel', () => {
     const state = buildFixture();
     expect(studyLine(state, FIXTURE.rome)).toEqual({
       short: 'None studied',
-      days: 'None studied',
+      days: 'None',
       full: 'Nothing is being studied.',
     });
     rome(state).study = { advance: 'fallowFields', daysLeft: 1 };
     expect(studyLine(state, FIXTURE.rome)).toEqual({
       short: 'Fallow fields · 1 day',
-      days: '1 day left',
+      days: '1 day',
       full: 'Studying Fallow fields: 1 day left.',
     });
   });
