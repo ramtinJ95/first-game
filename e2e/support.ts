@@ -28,6 +28,7 @@ import { parseMap, type PowerId } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
 import type { Order } from '../src/sim/orders/orders.ts';
 import { saveGame } from '../src/sim/save.ts';
+import { pageData } from '../src/app/page.ts';
 import { sightOf } from '../src/sim/sight.ts';
 import type { Army } from '../src/sim/state/army.ts';
 import type { Day } from '../src/sim/state/day.ts';
@@ -682,6 +683,48 @@ export function carthageNearsWar(): GameState {
   roman.men = 4000;
   stores.gold = limit.gold;
   return state;
+}
+
+/** The day `carthageWarnsAgain` remembers Carthage's last stop, Year 1, day 250. */
+export const CARTHAGE_STOPPED_ON = 250;
+
+/**
+ * Carthage near war with Rome, by Roma as in `carthageNearsWar` unless `state` says otherwise, on
+ * day 300 or the state's later day, with every other great power bound by a truce with Rome, and a
+ * save whose page remembers that Carthage's warning stopped the game on `stoppedOn` at `share`%
+ * weighing `front`, a city's id or `field`, so its next warning repeats that stop.
+ */
+export function carthageWarnsAgain(
+  share: number,
+  {
+    state = carthageNearsWar(),
+    front = 'roma',
+    stoppedOn = CARTHAGE_STOPPED_ON,
+  }: { state?: GameState; front?: string; stoppedOn?: number } = {},
+): string {
+  state.day = Math.max(300, state.day) as Day;
+  for (const truce of Object.values(state.truces)) truce.endsOn = (state.day + 365) as Day;
+  for (const power of Object.values(state.factions))
+    if (power.kind === 'greatPower' && power.id !== rome && power.id !== carthage)
+      state.truces[warKey(power.id, rome)] = {
+        since: state.day,
+        endsOn: (state.day + 365) as Day,
+      };
+  return saveGame(
+    state,
+    pageData({
+      chronicle: [],
+      camera: undefined,
+      selection: undefined,
+      panel: undefined,
+      occupied: new Map(),
+      told: new Set([
+        `threat:carthage:${stoppedOn}`,
+        `threat-stop:carthage:${stoppedOn}:${share}:${front}`,
+      ]),
+      weakSieges: new Map(),
+    }),
+  );
 }
 
 /** Rome's army of 600 spearmen began the siege of Mediolanum's 1,200 today, too few to cut its food. */

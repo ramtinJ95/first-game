@@ -72,6 +72,8 @@ export interface Snapshot {
   sight: Sight;
   /** The captured cities whose fate the player settled by occupying them. */
   occupied: Occupied;
+  /** The keys of the news told already, which the At peace list reads for a warning that did not stop the game. */
+  told: ReadonlySet<string>;
   frame: Frame;
 }
 

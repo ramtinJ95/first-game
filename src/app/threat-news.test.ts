@@ -25,6 +25,7 @@ import { areAtWar } from '../sim/wars.ts';
 import { ALL_PAUSES, stopsOfDay } from './pauses.ts';
 import type { Alert } from './alerts.ts';
 import {
+  THREAT_SPARE_DAYS,
   THREAT_STAND_DAYS,
   powersNearWar,
   standingThreats,
@@ -700,6 +701,147 @@ describe('a share just under 80%', () => {
     expect(warning?.text).toMatch(
       /^Carthage could soon declare war on you: it has just under 80% of /,
     );
+  });
+});
+
+describe('a warning soon after a stop for the same power runs the game on', () => {
+  /** Carthage's news of a notice that has stood its week on `day`, at a share set by its men. */
+  const repeat = (day: number, men: number, told: Set<string>) =>
+    stopsOfDay(newsOf(game(men, 'full', day), told), ALL_PAUSES, new Set());
+
+  test("the thirteenth play-through's run: Carthage at Ariminum on Year 5, days 211, 248, 278 and 311 stops the game once", () => {
+    const told = new Set<string>();
+    const days = [1671, 1708, 1738, 1771];
+    const news = days.map((day, n) => repeat(day, [5000, 4900, 5000, 4800][n] ?? 0, told));
+    expect(days.map(dateText)).toEqual([
+      'Year 5, day 211',
+      'Year 5, day 248',
+      'Year 5, day 278',
+      'Year 5, day 311',
+    ]);
+    expect(news.map((day) => day.stop)).toEqual([true, false, false, false]);
+    expect(news.map((day) => day.news.length)).toEqual([1, 1, 1, 1]);
+    expect(news[1]?.news[0]?.text).toMatch(
+      /^Carthage could soon declare war on you: 83% of the strength it needs near Roma, from Year 5, day 272\. The game ran on: its stop on Year 5, day 211 was at 85%, and it stands no higher\. See At peace in Wars\.$/,
+    );
+    expect(news[1]?.news[0]?.pause).toBeUndefined();
+  });
+
+  test('a repeat 6 points above the stop stops the game, and one 5 points above runs on and says so', () => {
+    const told = new Set<string>();
+    expect(repeat(1000, 5000, told).stop).toBe(true);
+    const higher = repeat(1040, 5300, told);
+    expect(higher.stop).toBe(false);
+    expect(higher.news[0]?.text).toContain(
+      'The game ran on: its stop on Year 3, day 270 was at 85%, and it stands only 5 points higher.',
+    );
+    expect(repeat(1080, 5400, told).stop).toBe(true);
+  });
+
+  test('a repeat that weighs another front stops the game', () => {
+    const told = new Set<string>();
+    expect(repeat(1000, 5000, told).stop).toBe(true);
+    expect(repeat(1030, 5000, told).stop).toBe(false);
+    const field = game(2000, 'full', 1060);
+    spearmenOf(field, rome).men = 1000;
+    const news = stopsOfDay(newsOf(field, told), ALL_PAUSES, new Set());
+    expect(news.news[0]?.text).toContain('against all your armies in the field');
+    expect(news.stop).toBe(true);
+  });
+
+  test(`a repeat whose war could come more than ${THREAT_SPARE_DAYS} days after the stop stops the game`, () => {
+    // A new notice's next reminder is due 84 days after its warning, and no war of it comes later unwarned.
+    const spared = new Set<string>();
+    expect(repeat(1000, 5000, spared).stop).toBe(true);
+    expect(repeat(1000 + THREAT_SPARE_DAYS - 84, 5000, spared).stop).toBe(false);
+    const late = new Set<string>();
+    expect(repeat(1000, 5000, late).stop).toBe(true);
+    expect(repeat(1000 + THREAT_SPARE_DAYS - 83, 5000, late).stop).toBe(true);
+  });
+
+  test('a reminder of a notice stops the game, though its warning stopped it within the gap', () => {
+    const told = new Set<string>();
+    expect(repeat(1000, 5000, told).stop).toBe(true);
+    const still = game(5000, 'full', 1084);
+    notice(still, world);
+    const punic = still.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 994 as Day;
+    const reminder = stopsOfDay(threatNewsOfDay(still, still, world, told), ALL_PAUSES, new Set());
+    expect(reminder.news[0]?.text).toMatch(
+      /^Carthage still stands near war with you, as warned on /,
+    );
+    expect(reminder.stop).toBe(true);
+  });
+
+  test('a war between them forgets the stop, so the first warning of the next peace stops the game', () => {
+    const told = new Set<string>();
+    expect(repeat(1000, 5000, told).stop).toBe(true);
+    expect(repeat(1030, 5000, told).stop).toBe(false);
+    const atWar = game(5000, 'full', 1040);
+    executeOrder(atWar, { kind: 'declareWar', faction: carthage, against: rome }, world);
+    expect(threatNewsOfDay(atWar, atWar, world, told)).toEqual([]);
+    expect(repeat(1070, 5000, told).stop).toBe(true);
+  });
+
+  test('the At peace list says the power warned again and the game ran on, with the stop it ran on from', () => {
+    const told = new Set<string>();
+    repeat(1671, 5000, told);
+    const state = game(4900, 'full', 1708);
+    newsOf(state, told);
+    expect(standingThreats(state, world, state, undefined, told)[0]?.text).toMatch(
+      /^Carthage has 83% of the strength .* It warned again on Year 5, day 248 and the game ran on: its stop on Year 5, day 211 was at 85%\.$/,
+    );
+    const stopped = game(5000, 'full', 1671);
+    newsOf(stopped, new Set());
+    expect(
+      standingThreats(
+        stopped,
+        world,
+        stopped,
+        undefined,
+        new Set(['threat:carthage:1671', 'threat-stop:carthage:1671:85:roma']),
+      )[0]?.text,
+    ).not.toContain('warned again');
+  });
+
+  test(`over notices that come and go, a war may never come more than ${THREAT_SPARE_DAYS} days after the last stop for its power`, () => {
+    const told = new Set<string>();
+    let seed = 7;
+    const next = (n: number) => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+      return seed % n;
+    };
+    let lastStop: number | undefined;
+    let day = 100;
+    const late: number[] = [];
+    let spared = 0;
+    while (day < 4000) {
+      const state = game(4800 + 100 * next(7), 'full', day);
+      notice(state, world);
+      const power = state.factions[carthage];
+      if (!power) throw new Error('no Carthage');
+      const since = day;
+      const stands = 7 + next(200);
+      for (; day < since + stands; day++) {
+        state.day = day as Day;
+        power.noticeSince = since as Day;
+        if (
+          day >= since + NOTICE_DAYS &&
+          (lastStop === undefined || day - lastStop > THREAT_SPARE_DAYS)
+        )
+          late.push(day);
+        const news = stopsOfDay(threatNewsOfDay(state, state, world, told), ALL_PAUSES, new Set());
+        if (news.stop) lastStop = day;
+        else if (news.news.length > 0) spared++;
+      }
+      const off = game(2000, 'empty', day);
+      notice(off, world);
+      day += 8 + next(60);
+      threatNewsOfDay(off, off, world, told);
+    }
+    expect(spared).toBeGreaterThan(10);
+    expect(late).toEqual([]);
   });
 });
 

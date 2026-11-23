@@ -33,6 +33,7 @@
     world,
     pending,
     paused,
+    told,
     actions,
     close,
   }: {
@@ -40,6 +41,7 @@
     world: World;
     pending: readonly Order[];
     paused: boolean;
+    told: ReadonlySet<string>;
     actions: Actions;
     close: () => void;
   } = $props();
@@ -60,7 +62,7 @@
     const timer = setTimeout(() => (training = trainingThreats(at, world)), 0);
     return () => clearTimeout(timer);
   });
-  const threats = $derived(standingThreats(game, world, waitingDay, training));
+  const threats = $derived(standingThreats(game, world, waitingDay, training, told));
   const near = $derived(threats.filter((threat) => (threat.readiness ?? 0) >= THREAT_WARN));
   const others = $derived(threats.filter((threat) => (threat.readiness ?? 0) < THREAT_WARN));
   // A warning points the player here, so the powers near war and what counts against them open

@@ -339,6 +339,7 @@ const view = createView(
     menu,
     sight: sightFor(clock.state),
     occupied,
+    told: toldOnce,
     frame: {
       powers,
       modal: shownModal(),
