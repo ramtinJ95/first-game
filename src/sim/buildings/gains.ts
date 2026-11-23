@@ -5,7 +5,13 @@ import type { Stores } from '../state/faction.ts';
 import type { GameState } from '../state/game-state.ts';
 import { dailyBalances, limitsOf } from '../systems/economy.ts';
 import { fullDefences } from '../systems/sieges.ts';
-import { BUILDINGS, templeReachOf, type BuildingKind } from './buildings.ts';
+import {
+  BUILDINGS,
+  extraSlotsOf,
+  templeReachOf,
+  tradeShareOf,
+  type BuildingKind,
+} from './buildings.ts';
 
 /** What one building would change for its city's owner, by the rules as they stand today. */
 export interface BuildingGain {
@@ -22,6 +28,10 @@ export interface BuildingGain {
   readonly calmed: readonly CityId[];
   /** How far the city's temple would reach, in km, when the buildings change it. */
   readonly reachKm: number | undefined;
+  /** The route slots more the city would hold. */
+  readonly slots: number;
+  /** The share more its end of each route would earn. */
+  readonly tradeShare: number;
 }
 
 /**
@@ -47,6 +57,8 @@ export function gainOf(
   const without = withBuildings(realm, city, rest);
   const withIt = withBuildings(realm, city, [...rest, ...kinds]);
   const changesReach = kinds.includes('temple') || kinds.includes('sanctuary');
+  const beforeCity = without.cities[city.id] ?? city;
+  const afterCity = withIt.cities[city.id] ?? city;
   const before = dailyBalances(without).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
   const after = dailyBalances(withIt).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
   const levyBefore = limitsOf(without).get(city.owner)?.manpower ?? 0;
@@ -63,8 +75,12 @@ export function gainOf(
     walls: fullAfter.walls - fullBefore.walls,
     garrison: fullAfter.garrison - fullBefore.garrison,
     trainingShare: kinds.includes('barracks') ? BUILDINGS.barracks.trainingShare : 1,
-    calmed: changesReach ? calmedBy(realm, city, withIt.cities[city.id] ?? city) : [],
+    calmed: changesReach
+      ? calmedBy(realm, without.cities[city.id] ?? city, withIt.cities[city.id] ?? city)
+      : [],
     reachKm: changesReach ? templeReachOf(withIt.cities[city.id] ?? city) : undefined,
+    slots: extraSlotsOf(afterCity) - extraSlotsOf(beforeCity),
+    tradeShare: tradeShareOf(afterCity) - tradeShareOf(beforeCity),
   };
 }
 
@@ -100,7 +116,7 @@ function calmedBy(
   const reaches = (temple: DeepReadonly<City>, city: DeepReadonly<City>) =>
     templeReachOf(temple) > 0 &&
     Math.hypot(temple.position.x - city.position.x, temple.position.y - city.position.y) <=
-    templeReachOf(temple);
+      templeReachOf(temple);
   const temples = Object.values(state.cities).filter(
     (other) => other.owner === before.owner && other.id !== before.id,
   );

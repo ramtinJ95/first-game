@@ -3,7 +3,7 @@ import type { Order } from '../orders/orders.ts';
 import { truceBetween } from '../peace/truce.ts';
 import { BLOCKADE_ODDS } from '../systems/sieges.ts';
 import { distance } from '../world/find-path.ts';
-import { routeRate, tradeIncome } from '../trade/routes.ts';
+import { endRate, tradeIncome } from '../trade/routes.ts';
 import { ADMIN_CITIES, limitsOf } from '../systems/economy.ts';
 import type { World } from '../world/world.ts';
 import { weighedGarrison } from '../guards.ts';
@@ -224,7 +224,7 @@ function reckon(context: Context) {
           ((r.owner === faction && r.partner === other) ||
             (r.partner === faction && r.owner === other)),
       )
-      .reduce((sum, r) => sum + routeRate(r), 0);
+      .reduce((sum, r) => sum + endRate(state, r, r.owner === faction ? r.from : r.to), 0);
   const scoreOf = (other: FactionId, theirs: number, km: number) =>
     Math.max(0, free) /
     Math.max(1, theirs) /

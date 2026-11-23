@@ -310,6 +310,11 @@ export function gainText(gain: BuildingGain, city: CityId): string {
     ...(gain.garrison >= 0.5 ? [`+${whole(gain.garrison)} garrison`] : []),
   ];
   if (defence.length > 0) parts.push(defence.join(' and '));
+  if (gain.slots > 0) parts.push(`${gain.slots} more route slot${gain.slots === 1 ? '' : 's'}`);
+  if (gain.tradeShare > 0) {
+    const share = SHARE_WORDS[gain.tradeShare] ?? `${Math.round(gain.tradeShare * 100)}%`;
+    parts.push(`its end of each route earns ${share} more`);
+  }
   if (gain.calmed.length > 0) {
     const { unrestPace } = BUILDINGS.temple;
     const reachKm = gain.reachKm ?? BUILDINGS.temple.reachKm;

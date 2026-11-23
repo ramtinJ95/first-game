@@ -20,7 +20,15 @@ import { trade } from '../systems/trade.ts';
 import { BUILDINGS } from '../buildings/buildings.ts';
 import { tick } from '../tick.ts';
 import { openTrade, acceptTrade, closeTrade } from './orders.ts';
-import { freeSlots, routePoint, routeSlots, tradeForecast, tradeIncome } from './routes.ts';
+import {
+  freeSlots,
+  IMPROVE_STEP,
+  improvementGain,
+  routePoint,
+  routeSlots,
+  tradeForecast,
+  tradeIncome,
+} from './routes.ts';
 
 const world = fixtureWorld();
 const order = {
@@ -491,6 +499,17 @@ describe('caravans, interruption, and saves', () => {
       gold + (2 + share) * route.daily * route.days,
     );
     expectConsistent(state);
+  });
+
+  test("an improvement adds its step at each of the realm's ends, more at a Merchants' quarter", () => {
+    const { state, route } = opened();
+    const step = route.daily * IMPROVE_STEP;
+    expect(improvementGain(state, route, f.rome)).toBeCloseTo(2 * step);
+    state.cities[f.roma]?.buildings.push('merchantsQuarter');
+    expect(improvementGain(state, route, f.rome)).toBeCloseTo(
+      (2 + BUILDINGS.merchantsQuarter.tradeShare) * step,
+    );
+    expect(improvementGain(state, route, f.carthage)).toBe(0);
   });
 
   test('forecast counts toward income and treasury but economy does not pay it a second time', () => {

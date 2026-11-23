@@ -183,6 +183,20 @@ describe('cityBuildings', () => {
     expect(shown.options.filter((o) => o.tier === 'work')).toEqual([]);
   });
 
+  it('gives a standing Temple at level 1 the cities it hastens, as before it stood', () => {
+    const state = rich();
+    const offered = option(state, 'temple').effect;
+    roma(state).buildings = ['temple'];
+    const shown = cityBuildings(state, [], roma(state), fixtureWorld());
+    expect(shown.built).toEqual([{ kind: 'temple', name: 'Temple', level: 1, effect: offered }]);
+  });
+
+  it("names a Merchants' quarter's route slot and its share of each route even where no route runs", () => {
+    expect(option(rich(), 'merchantsQuarter').effect).toBe(
+      `1 more route slot, its end of each route earns ${Math.round(BUILDINGS.merchantsQuarter.tradeShare * 100)}% more`,
+    );
+  });
+
   it("gives each option's payback in years by the worth the AI builds by", () => {
     const state = rich();
     const forum = option(state, 'forum');

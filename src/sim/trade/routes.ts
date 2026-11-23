@@ -92,6 +92,22 @@ export function endRate(state: State, route: DeepReadonly<TradeRoute>, city: Cit
   return routeRate(route) * (end ? tradeShareOf(end) : 1);
 }
 
+/** The gold a day one more improvement adds to the faction's ends of the route, after administration. */
+export function improvementGain(
+  state: State,
+  route: DeepReadonly<TradeRoute>,
+  faction: FactionId,
+): number {
+  return (
+    routeEnds(route)
+      .filter((end) => end.faction === faction)
+      .reduce((sum, end) => {
+        const city = state.cities[end.city];
+        return sum + route.daily * IMPROVE_STEP * (city ? tradeShareOf(city) : 1);
+      }, 0) * adminShareOf(state, faction)
+  );
+}
+
 /** An improvement costs half the route's opening price. */
 export function improvementCost(route: DeepReadonly<TradeRoute>): number {
   return Math.ceil(route.cost / 2);

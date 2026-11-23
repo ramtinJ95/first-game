@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { changeCityOwner } from '../cities.ts';
 import { fixtureWorld } from '../fixture.ts';
-import type { FactionId } from '../ids.ts';
+import type { CityId, FactionId } from '../ids.ts';
 import { newGame } from '../new-game.ts';
 import type { Order } from '../orders/orders.ts';
 import type { GameState } from '../state/game-state.ts';
@@ -40,19 +40,22 @@ function quotedBest(state: GameState, reserve: number): Order | undefined {
 const cases = [1, 2, 3].flatMap((seed) =>
   [4, 12].flatMap((held) =>
     [851, 1702, 3404, 10000].flatMap((budget) =>
-      [0, 1500].map((reserve) => ({ seed, held, budget, reserve })),
+      [0, 1500].flatMap((reserve) =>
+        [undefined, 'capua'].map((quarter) => ({ seed, held, budget, reserve, quarter })),
+      ),
     ),
   ),
 );
 
 test.each(cases)(
-  'best offer equals exhaustive quotes: seed $seed, $held cities, $budget budget, $reserve reserve',
-  ({ seed, held, budget, reserve }) => {
+  "best offer equals exhaustive quotes: seed $seed, $held cities, $budget budget, $reserve reserve, Merchants' quarter at $quarter",
+  ({ seed, held, budget, reserve, quarter }) => {
     const state = newGame(world.map, { seed, player: 'rome' });
     for (const city of Object.values(state.cities)) {
       if (Object.values(state.cities).filter((c) => c.owner === faction).length >= held) break;
       if (city.owner !== faction) changeCityOwner(state, city.id, faction);
     }
+    if (quarter) state.cities[quarter as CityId]?.buildings.push('merchantsQuarter');
     const payer = state.factions[faction];
     if (!payer) throw new Error('missing payer');
     payer.stores.gold = budget + reserve;

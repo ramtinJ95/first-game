@@ -16,7 +16,8 @@
     tradeProblem,
     type TradeForecast,
     improvementCost,
-    IMPROVE_STEP,
+    improvementGain,
+    endRate,
     MAX_IMPROVEMENTS,
     type TradeMode,
   } from '../sim/trade/routes.ts';
@@ -118,7 +119,7 @@
           {@const refusal = problem
             ? `You cannot accept: ${reasonText(game, problem)}.`
             : lapse && `You cannot accept now: accepting would end the invitation, as ${lapse}.`}
-          {@const perDay = route.daily * share}
+          {@const perDay = endRate(waiting, route, city.id) * share}
           {@const left = route.openedOn + TRADE_INVITATION_DAYS - game.day}
           <p data-testid="trade-invitation">
             {other?.name} ({good(route.from)}) invites {city.name} ({good(route.to)}) to trade by {route.mode},
@@ -165,11 +166,7 @@
         {#if own && route.improvedBy.length < MAX_IMPROVEMENTS}
           {@const order = { kind: 'improveTrade', faction: game.player, route: route.id } as const}
           {@const cost = improvementCost(route)}
-          {@const gain =
-            route.daily *
-            IMPROVE_STEP *
-            adminShareOf(waiting, game.player) *
-            (route.owner === route.partner ? 2 : 1)}
+          {@const gain = improvementGain(waiting, route, game.player)}
           {@const blocked = improveProblem(waiting, order)}
           <p class="muted" data-testid="trade-improve">
             Improve for {cost} gold: +{gain.toFixed(1)} gold a day {route.owner === route.partner
