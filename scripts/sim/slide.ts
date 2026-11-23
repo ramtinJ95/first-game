@@ -158,7 +158,7 @@ function play(player: Player, seed: number, years: number): Game {
       const year = game.years[Math.floor((day - 1) / 365)];
       if (!year) return;
       for (const alert of threatNewsOfDay(before, after, world, told)) {
-        game.stops++;
+        if (alert.pause) game.stops++;
         game.warnings += warnedPowers(alert.text).length;
       }
       for (const event of events)
