@@ -5,7 +5,7 @@ import type { Stores } from '../state/faction.ts';
 import type { GameState } from '../state/game-state.ts';
 import { dailyBalances, limitsOf } from '../systems/economy.ts';
 import { fullDefences } from '../systems/sieges.ts';
-import { BUILDINGS, hasBuilt, type BuildingKind } from './buildings.ts';
+import { BUILDINGS, templeReachOf, type BuildingKind } from './buildings.ts';
 
 /** What one building would change for its city's owner, by the rules as they stand today. */
 export interface BuildingGain {
@@ -18,8 +18,10 @@ export interface BuildingGain {
   readonly garrison: number;
   /** The share of its days a recruit trains in the city. */
   readonly trainingShare: number;
-  /** The owner's cities whose unrest would count down faster: within the temple's reach, without another temple. */
+  /** The owner's cities whose unrest would count down faster: within the temple's new reach, which no temple reached before. */
   readonly calmed: readonly CityId[];
+  /** How far the city's temple would reach, in km, when the buildings change it. */
+  readonly reachKm: number | undefined;
 }
 
 /**
@@ -44,6 +46,7 @@ export function gainOf(
   const rest = city.buildings.filter((b) => !kinds.includes(b));
   const without = withBuildings(realm, city, rest);
   const withIt = withBuildings(realm, city, [...rest, ...kinds]);
+  const changesReach = kinds.includes('temple') || kinds.includes('sanctuary');
   const before = dailyBalances(without).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
   const after = dailyBalances(withIt).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
   const levyBefore = limitsOf(without).get(city.owner)?.manpower ?? 0;
@@ -60,7 +63,8 @@ export function gainOf(
     walls: fullAfter.walls - fullBefore.walls,
     garrison: fullAfter.garrison - fullBefore.garrison,
     trainingShare: kinds.includes('barracks') ? BUILDINGS.barracks.trainingShare : 1,
-    calmed: kinds.includes('temple') ? calmedBy(state, city) : [],
+    calmed: changesReach ? calmedBy(realm, city, withIt.cities[city.id] ?? city) : [],
+    reachKm: changesReach ? templeReachOf(withIt.cities[city.id] ?? city) : undefined,
   };
 }
 
@@ -88,19 +92,25 @@ function withBuildings(
   return { ...state, cities: { ...state.cities, [city.id]: { ...city, buildings } } };
 }
 
-function calmedBy(state: DeepReadonly<GameState>, temple: DeepReadonly<City>): CityId[] {
-  const { reachKm } = BUILDINGS.temple;
-  const near = (a: DeepReadonly<City>, b: DeepReadonly<City>) =>
-    Math.hypot(a.position.x - b.position.x, a.position.y - b.position.y) <= reachKm;
+function calmedBy(
+  state: DeepReadonly<GameState>,
+  before: DeepReadonly<City>,
+  after: DeepReadonly<City>,
+): CityId[] {
+  const reaches = (temple: DeepReadonly<City>, city: DeepReadonly<City>) =>
+    templeReachOf(temple) > 0 &&
+    Math.hypot(temple.position.x - city.position.x, temple.position.y - city.position.y) <=
+    templeReachOf(temple);
   const temples = Object.values(state.cities).filter(
-    (other) => other.owner === temple.owner && other.id !== temple.id && hasBuilt(other, 'temple'),
+    (other) => other.owner === before.owner && other.id !== before.id,
   );
   return Object.values(state.cities)
     .filter(
       (city) =>
-        city.owner === temple.owner &&
-        near(city, temple) &&
-        !temples.some((other) => near(city, other)),
+        city.owner === before.owner &&
+        reaches(after, city) &&
+        !reaches(before, city) &&
+        !temples.some((other) => reaches(other, city)),
     )
     .map((city) => city.id)
     .sort();

@@ -9,6 +9,8 @@ import {
   distanceToRoute,
   RAID_KM,
   routeRate,
+  endRate,
+  routeEnds,
   TRADE_INVITATION_DAYS,
 } from '../trade/routes.ts';
 
@@ -95,12 +97,12 @@ export function trade(state: GameState): void {
     if (blocked || state.day < route.departsOn) continue;
     route.progress = Math.min(1, route.progress + 1 / route.days);
     if (route.progress < 1 - 1e-9) continue;
-    for (const owner of [route.owner, route.partner]) {
+    for (const { city, faction: owner } of routeEnds(route)) {
       const faction = state.factions[owner];
       limits ??= limitsOf(state);
       const limit = limits.get(owner);
       if (!faction || !limit) throw new Error(`trade ${route.id} has no treasury for ${owner}`);
-      const pay = routeRate(route) * route.days * adminShareOf(state, owner);
+      const pay = endRate(state, route, city) * route.days * adminShareOf(state, owner);
       const before = faction.stores.gold;
       faction.stores.gold = Math.max(before, Math.min(limit.gold, before + pay));
       route.receipts = {

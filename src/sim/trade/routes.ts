@@ -11,6 +11,7 @@ import type { World } from '../world/world.ts';
 import { emit } from '../events.ts';
 import { removeRecord } from '../records.ts';
 import { mayWalkWithin } from '../world/land-reach.ts';
+import { extraSlotsOf, tradeShareOf } from '../buildings/buildings.ts';
 
 type State = DeepReadonly<GameState>;
 export type TradeMode = 'land' | 'sea';
@@ -75,6 +76,22 @@ export function routeRate(route: DeepReadonly<TradeRoute>): number {
   return route.daily * (1 + IMPROVE_STEP * route.improvedBy.length);
 }
 
+/** The two ends of a route: each city with the faction its end pays. */
+export function routeEnds(
+  route: DeepReadonly<TradeRoute>,
+): readonly { city: CityId; faction: FactionId }[] {
+  return [
+    { city: route.from, faction: route.owner },
+    { city: route.to, faction: route.partner },
+  ];
+}
+
+/** Gold a day at one end, before administration: the route's rate, more at a Merchants' quarter. */
+export function endRate(state: State, route: DeepReadonly<TradeRoute>, city: CityId): number {
+  const end = state.cities[city];
+  return routeRate(route) * (end ? tradeShareOf(end) : 1);
+}
+
 /** An improvement costs half the route's opening price. */
 export function improvementCost(route: DeepReadonly<TradeRoute>): number {
   return Math.ceil(route.cost / 2);
@@ -86,7 +103,8 @@ export function routeSlots(city: DeepReadonly<City>, world: World): number {
     1 +
     Number(city.population >= 25000) +
     Number(city.buildings.includes('forum')) +
-    Number(world.harbours.has(city.id))
+    Number(world.harbours.has(city.id)) +
+    extraSlotsOf(city)
   );
 }
 
@@ -164,8 +182,8 @@ export function tradeForecast(
   const different = state.provinces[from.province]?.good !== state.provinces[to.province]?.good;
   const daily =
     TRADE_BASE * (different ? DIFFERENT_GOODS : 1) * (1 + Math.min(way.km, 1000) / 1000);
-  const fromDaily = daily * adminShareOf(state, from.owner);
-  const toDaily = daily * adminShareOf(state, to.owner);
+  const fromDaily = daily * tradeShareOf(from) * adminShareOf(state, from.owner);
+  const toDaily = daily * tradeShareOf(to) * adminShareOf(state, to.owner);
   const cost = routeOpeningCost(way.km, from.owner === to.owner);
   return {
     ...way,
@@ -243,9 +261,12 @@ export function tradeIncome(state: State): Map<FactionId, number> {
       areAtWar(state, route.owner, route.partner)
     )
       continue;
-    for (const owner of [route.owner, route.partner]) {
-      const share = shares.get(owner) ?? 1;
-      income.set(owner, (income.get(owner) ?? 0) + routeRate(route) * share);
+    for (const end of routeEnds(route)) {
+      const share = shares.get(end.faction) ?? 1;
+      income.set(
+        end.faction,
+        (income.get(end.faction) ?? 0) + endRate(state, route, end.city) * share,
+      );
     }
   }
   return income;

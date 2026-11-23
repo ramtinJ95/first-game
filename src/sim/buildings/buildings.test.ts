@@ -274,6 +274,65 @@ describe('building', () => {
 });
 
 describe('second levels and great works', () => {
+  test('Law courts and a Treasury hall each add their share of the base gold to the Forum', () => {
+    const state = withBuilt(rich(), FIXTURE.roma, 'forum');
+    const roma = need(state.cities[FIXTURE.roma]);
+    const base = buildingGain(state, roma, 'forum').daily.gold / BUILDINGS.forum.goldShare;
+    expect(buildingGain(state, roma, 'lawCourts').daily.gold).toBeCloseTo(
+      base * BUILDINGS.lawCourts.goldShare,
+      9,
+    );
+    expect(buildingGain(state, roma, 'treasuryHall').daily.gold).toBeCloseTo(
+      base * BUILDINGS.treasuryHall.goldShare,
+      9,
+    );
+  });
+
+  test('Reservoirs grow their food on top of the canals', () => {
+    const state = withBuilt(rich(), FIXTURE.capua, 'canals');
+    const gain = buildingGain(state, need(state.cities[FIXTURE.capua]), 'reservoirs');
+    expect(gain.daily.food).toBeCloseTo(BUILDINGS.reservoirs.food, 9);
+  });
+
+  test('a Drill field adds its share of the base manpower and levy to the Barracks', () => {
+    const state = withBuilt(rich(), FIXTURE.roma, 'barracks');
+    const roma = need(state.cities[FIXTURE.roma]);
+    const barracks = buildingGain(state, roma, 'barracks');
+    const drill = buildingGain(state, roma, 'drillField');
+    const ratio = BUILDINGS.drillField.extraLevyShare / (BUILDINGS.barracks.levyShare - 1);
+    expect(drill.daily.manpower).toBeCloseTo(barracks.daily.manpower * ratio, 9);
+    expect(drill.trainingShare).toBe(1);
+  });
+
+  test('Outer walls and a Stronghold add their shares of the base walls and garrison to the towers', () => {
+    const state = withBuilt(rich(), FIXTURE.roma, 'towers');
+    const roma = need(state.cities[FIXTURE.roma]);
+    const { walls, garrison } = CITY_DEFENCES.capital;
+    for (const kind of ['outerWalls', 'stronghold'] as const) {
+      const gain = buildingGain(state, roma, kind);
+      expect(gain.walls).toBeCloseTo(walls * BUILDINGS[kind].wallsShare, 9);
+      expect(gain.garrison).toBeCloseTo(garrison * BUILDINGS[kind].garrisonShare, 0);
+    }
+  });
+
+  test("a Sanctuary carries the temple's pace to its owner's cities within its longer reach", () => {
+    let state = withBuilt(rich(), FIXTURE.roma, 'temple');
+    const roma = need(state.cities[FIXTURE.roma]);
+    const carthago = need(state.cities[FIXTURE.carthago]);
+    const km = Math.hypot(
+      roma.position.x - carthago.position.x,
+      roma.position.y - carthago.position.y,
+    );
+    expect(km).toBeGreaterThan(BUILDINGS.temple.reachKm);
+    expect(km).toBeLessThanOrEqual(BUILDINGS.sanctuary.reachKm);
+    carthago.owner = FIXTURE.rome;
+    carthago.unrestDays = 90;
+    expect(buildingGain(state, roma, 'sanctuary').calmed).toEqual([FIXTURE.carthago]);
+    withBuilt(state, FIXTURE.roma, 'sanctuary');
+    state = tick(state, [], world).state;
+    expect(need(state.cities[FIXTURE.carthago]).unrestDays).toBe(90 - BUILDINGS.temple.unrestPace);
+  });
+
   test('a second level starts only on its first, and finishes as the building at level 2', () => {
     const state = rich();
     const city = need(state.cities[FIXTURE.roma]);
@@ -321,11 +380,12 @@ describe('second levels and great works', () => {
   });
 
   test('a conqueror keeps the levels and the work that stand, and a sack destroys them all', () => {
-    const { state } = capuaFallen(['towers', 'outerWalls', 'stronghold']);
+    const { state } = capuaFallen(['canals', 'reservoirs', 'temple', 'treasuryHall'], 'towers');
     expect(need(state.cities[FIXTURE.capua]).buildings).toEqual([
-      'towers',
-      'outerWalls',
-      'stronghold',
+      'canals',
+      'reservoirs',
+      'temple',
+      'treasuryHall',
     ]);
     const sack: Order = { kind: 'sack', faction: FIXTURE.carthage, city: FIXTURE.capua };
     const { state: after, events } = tick(state, [sack], world);
@@ -333,7 +393,7 @@ describe('second levels and great works', () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         kind: 'buildingsLost',
-        buildings: ['towers', 'outerWalls', 'stronghold'],
+        buildings: ['canals', 'reservoirs', 'temple', 'treasuryHall'],
         cause: 'sack',
       }),
     );
@@ -368,13 +428,13 @@ describe('second levels and great works', () => {
 const NEAR_CAPUA = { x: 2641.8, y: 2448.3 };
 
 /** Carthage starves out Capua, which stands with towers and a temple and has canals at work, on day 2. */
-function capuaFallen(standing: BuildingKind[] = ['towers', 'temple']): {
-  state: GameState;
-  events: DayEvent[];
-} {
+function capuaFallen(
+  standing: BuildingKind[] = ['towers', 'temple'],
+  work: BuildingKind = 'canals',
+): { state: GameState; events: DayEvent[] } {
   let state = rich();
   withBuilt(state, FIXTURE.capua, ...standing);
-  need(state.cities[FIXTURE.capua]).construction = { building: 'canals', daysLeft: 10 };
+  need(state.cities[FIXTURE.capua]).construction = { building: work, daysLeft: 10 };
   executeOrder(
     state,
     { kind: 'declareWar', faction: FIXTURE.carthage, against: FIXTURE.rome },

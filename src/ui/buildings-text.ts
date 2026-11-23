@@ -167,7 +167,7 @@ function gainCaution(
   kind: BuildingKind,
 ): string | undefined {
   const gain = buildingGain(state, city, kind);
-  if (kind === 'temple') {
+  if (kind === 'temple' || kind === 'sanctuary') {
     return gain.calmed.some((id) => (state.cities[id]?.unrestDays ?? 0) > 0)
       ? undefined
       : 'No city whose unrest this would hasten is in unrest now.';
@@ -311,7 +311,8 @@ export function gainText(gain: BuildingGain, city: CityId): string {
   ];
   if (defence.length > 0) parts.push(defence.join(' and '));
   if (gain.calmed.length > 0) {
-    const { unrestPace, reachKm } = BUILDINGS.temple;
+    const { unrestPace } = BUILDINGS.temple;
+    const reachKm = gain.reachKm ?? BUILDINGS.temple.reachKm;
     const where =
       gain.calmed.length === 1 && gain.calmed[0] === city
         ? 'here'

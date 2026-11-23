@@ -54,6 +54,14 @@ interface BuildingRow {
  * - A temple counts unrest down `unrestPace` days a day in every city of its owner
  *   within `reachKm`, itself among them, so a ruler who conquers across a border puts
  *   new cities to work sooner.
+ *
+ * Each second level adds more of its first level's kind of effect: Law courts more of the
+ * city's base gold, Reservoirs more food, a Drill field `extraLevyShare` more of the base
+ * manpower and levy, Outer walls more walls and garrison, and a Sanctuary a longer reach
+ * for the temple. A great work is a large project a city holds one of: a Treasury hall
+ * raises the city's base gold, a Merchants' quarter raises what its end of each route
+ * earns by `tradeShare` and adds `slots` route slots, and a Stronghold raises the walls
+ * and garrison as towers do, but more.
  */
 export const BUILDINGS = {
   forum: { name: 'Forum', gold: 6500, days: 60, needs: { people: 20_000 }, goldShare: 0.5 },
@@ -84,36 +92,62 @@ export const BUILDINGS = {
   },
   lawCourts: {
     name: 'Law courts',
-    gold: 10_000,
+    gold: 7500,
     days: 75,
     needs: { people: 0, building: 'forum' },
+    goldShare: 0.25,
   },
   reservoirs: {
     name: 'Reservoirs',
-    gold: 9000,
+    gold: 6500,
     days: 60,
     needs: { people: 0, building: 'canals' },
+    food: 5,
   },
   drillField: {
     name: 'Drill field',
-    gold: 10_000,
+    gold: 7500,
     days: 60,
     needs: { people: 0, building: 'barracks' },
+    extraLevyShare: 0.25,
   },
   outerWalls: {
     name: 'Outer walls',
     gold: 7500,
     days: 75,
     needs: { people: 0, building: 'towers' },
+    wallsShare: 0.25,
+    garrisonShare: 0.2,
   },
-  sanctuary: { name: 'Sanctuary', gold: 2500, days: 45, needs: { people: 0, building: 'temple' } },
-  treasuryHall: { name: 'Treasury hall', gold: 28_000, days: 420, needs: { people: 0 } },
-  merchantsQuarter: { name: "Merchants' quarter", gold: 24_000, days: 400, needs: { people: 0 } },
+  sanctuary: {
+    name: 'Sanctuary',
+    gold: 1750,
+    days: 45,
+    needs: { people: 0, building: 'temple' },
+    reachKm: 700,
+  },
+  treasuryHall: {
+    name: 'Treasury hall',
+    gold: 12_000,
+    days: 365,
+    needs: { people: 0 },
+    goldShare: 0.4,
+  },
+  merchantsQuarter: {
+    name: "Merchants' quarter",
+    gold: 11_000,
+    days: 365,
+    needs: { people: 0 },
+    tradeShare: 0.4,
+    slots: 1,
+  },
   stronghold: {
     name: 'Stronghold',
-    gold: 24_000,
+    gold: 12_000,
     days: 365,
     needs: { people: 0, building: 'towers' },
+    wallsShare: 1,
+    garrisonShare: 0.35,
   },
 } as const satisfies Record<BuildingKind, BuildingRow & { readonly [effect: string]: unknown }>;
 
@@ -154,17 +188,39 @@ export function greatWorkOf(city: Built): GreatWork | undefined {
 
 /** What the city's gold yield is multiplied by. */
 export function goldShareOf(city: Built): number {
-  return hasBuilt(city, 'forum') ? 1 + BUILDINGS.forum.goldShare : 1;
+  return (
+    1 +
+    (hasBuilt(city, 'forum') ? BUILDINGS.forum.goldShare : 0) +
+    (hasBuilt(city, 'lawCourts') ? BUILDINGS.lawCourts.goldShare : 0) +
+    (hasBuilt(city, 'treasuryHall') ? BUILDINGS.treasuryHall.goldShare : 0)
+  );
 }
 
 /** The food a day the city's buildings grow, in unrest or not. */
 export function extraFoodOf(city: Built): number {
-  return hasBuilt(city, 'canals') ? BUILDINGS.canals.food : 0;
+  return (
+    (hasBuilt(city, 'canals') ? BUILDINGS.canals.food : 0) +
+    (hasBuilt(city, 'reservoirs') ? BUILDINGS.reservoirs.food : 0)
+  );
 }
 
 /** What the city's manpower yield and its share of the realm's levy are multiplied by. */
 export function levyShareOf(city: Built): number {
-  return hasBuilt(city, 'barracks') ? BUILDINGS.barracks.levyShare : 1;
+  if (!hasBuilt(city, 'barracks')) return 1;
+  return (
+    BUILDINGS.barracks.levyShare +
+    (hasBuilt(city, 'drillField') ? BUILDINGS.drillField.extraLevyShare : 0)
+  );
+}
+
+/** What the gold of the city's end of each of its routes is multiplied by. */
+export function tradeShareOf(city: Built): number {
+  return hasBuilt(city, 'merchantsQuarter') ? 1 + BUILDINGS.merchantsQuarter.tradeShare : 1;
+}
+
+/** The route slots the city's buildings add. */
+export function extraSlotsOf(city: Built): number {
+  return hasBuilt(city, 'merchantsQuarter') ? BUILDINGS.merchantsQuarter.slots : 0;
 }
 
 /** The days a recruit of this many days of training takes in the city. */
@@ -172,19 +228,32 @@ export function trainingDaysAt(city: Built, days: number): number {
   return hasBuilt(city, 'barracks') ? Math.ceil(days * BUILDINGS.barracks.trainingShare) : days;
 }
 
+const DEFENCES = ['towers', 'outerWalls', 'stronghold'] as const;
+
 /** What the city's full walls and full garrison are multiplied by. */
 export function defenceSharesOf(city: Partial<Built>): { walls: number; garrison: number } {
-  if (!city.buildings?.includes('towers')) return { walls: 1, garrison: 1 };
-  return { walls: 1 + BUILDINGS.towers.wallsShare, garrison: 1 + BUILDINGS.towers.garrisonShare };
+  const shares = { walls: 1, garrison: 1 };
+  for (const kind of DEFENCES) {
+    if (!city.buildings?.includes(kind)) continue;
+    shares.walls += BUILDINGS[kind].wallsShare;
+    shares.garrison += BUILDINGS[kind].garrisonShare;
+  }
+  return shares;
+}
+
+/** How far the city's temple reaches, in km: farther with a Sanctuary, 0 without a temple. */
+export function templeReachOf(city: Built): number {
+  if (hasBuilt(city, 'sanctuary')) return BUILDINGS.sanctuary.reachKm;
+  return hasBuilt(city, 'temple') ? BUILDINGS.temple.reachKm : 0;
 }
 
 /** The days of unrest the city counts down today: more within reach of its owner's temple. */
 export function unrestPaceOf(state: DeepReadonly<GameState>, city: DeepReadonly<City>): number {
-  const { reachKm, unrestPace } = BUILDINGS.temple;
   for (const other of Object.values(state.cities)) {
-    if (other.owner !== city.owner || !hasBuilt(other, 'temple')) continue;
+    const reach = templeReachOf(other);
+    if (other.owner !== city.owner || reach === 0) continue;
     const km = Math.hypot(other.position.x - city.position.x, other.position.y - city.position.y);
-    if (km <= reachKm) return unrestPace;
+    if (km <= reach) return BUILDINGS.temple.unrestPace;
   }
   return 1;
 }

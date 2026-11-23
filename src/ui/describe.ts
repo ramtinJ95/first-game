@@ -1,5 +1,5 @@
 import { unrestPaceOf } from '../sim/buildings/buildings.ts';
-import { routeRate, routesAt } from '../sim/trade/routes.ts';
+import { endRate, routesAt } from '../sim/trade/routes.ts';
 import {
   AT_CITY_KM,
   armyTitle,
@@ -627,7 +627,7 @@ export function cityBalance(state: State, city: DeepReadonly<City>): Stores {
     .filter(
       (r) => r.status === 'running' && r.blocked === null && !areAtWar(state, r.owner, r.partner),
     )
-    .reduce((sum, r) => sum + routeRate(r), 0);
+    .reduce((sum, r) => sum + endRate(state, r, city.id), 0);
   return {
     gold: (balance.gold + trade) * share,
     food: balance.food,

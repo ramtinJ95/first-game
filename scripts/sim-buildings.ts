@@ -1,11 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { buildingWorth, construction } from '../src/sim/ai/build.ts';
+import { buildingWorth, construction, PROJECT_PAYBACK_YEARS } from '../src/sim/ai/build.ts';
+import { playCautiousRome } from './cautious-rome.ts';
 import { recruitment } from '../src/sim/ai/budget.ts';
 import { homeCapital, menUnderArms } from '../src/sim/ai/situation.ts';
 import {
   FIRST_LEVELS,
   BUILDINGS,
+  GREAT_WORKS,
+  SECOND_LEVELS,
   type BuildingKind,
   type FirstLevel,
 } from '../src/sim/buildings/buildings.ts';
@@ -229,6 +232,7 @@ interface Outcome {
   men: number;
 }
 const outcomes = new Map<Ruler, Outcome>();
+let fedYearFive: DeepReadonly<GameState> = start;
 for (const ruler of RULERS) {
   let state: DeepReadonly<GameState> = start;
   let short = 0;
@@ -248,6 +252,7 @@ for (const ruler of RULERS) {
     }
     if (orders.some((order) => order.kind === 'build')) lastBuilt = day;
     state = tick(state as GameState, orders, world).state;
+    if (ruler === 'both' && day === 5 * 365) fedYearFive = state;
     if (day === 5 * 365 || day === 10 * 365) {
       const stores = need(state.factions[rome]).stores;
       const balance = need(dailyBalances(state).get(rome));
@@ -320,4 +325,88 @@ console.log(
 );
 console.log(
   `- The Rome that only recruits reaches the treasury limit on ${recruits.atLimit} days in years 1-5, as on main, because food and the levy cap its army before its gold. This is outside the buildings and belongs to the balance of recruiting.`,
+);
+
+console.log('\n## Years each second level and great work takes to pay back its gold\n');
+console.log(
+  "By the same valuation, in each city with every first level it may build already standing: Rome's cities and the city at war on day 1, and Rome's cities in year 4 of a peaceful game on this seed under the AI, when Roma trades, and in year 5 of the Rome below that builds and recruits, whose men eat its harvest. Where each suits is read on day 1, as for the first levels, and for the Merchants' quarter and Reservoirs in the later years, as no city trades and no harvest is tight on day 1. A dash pays nothing there.\n",
+);
+const PROJECTS: readonly BuildingKind[] = [
+  ...FIRST_LEVELS.map((kind) => SECOND_LEVELS[kind]),
+  ...GREAT_WORKS,
+];
+/** The city with every first level it has the people for, in a state where it holds them. */
+function withFirsts(state: DeepReadonly<GameState>, city: DeepReadonly<City>) {
+  const buildings = FIRST_LEVELS.filter((kind) => city.population >= BUILDINGS[kind].needs.people);
+  const given = { ...city, buildings, construction: null };
+  return { state: { ...state, cities: { ...state.cities, [city.id]: given } }, city: given };
+}
+const yearFour = playCautiousRome(SEED, 4, () => {}, { peaceful: true, answer: true });
+const projectSamples = [
+  ...sampleCities()
+    .filter(({ label }) => label.includes('(Rome') || label.includes('at war'))
+    .map(({ label, state, city }) => ({
+      label: `${label}, day 1`,
+      day1: true,
+      ...withFirsts(state, city),
+    })),
+  ...Object.values(yearFour.cities)
+    .filter((city) => city.owner === rome)
+    .map((city) => ({ label: `${city.name}, year 4`, day1: false, ...withFirsts(yearFour, city) })),
+  ...Object.values(fedYearFive.cities)
+    .filter((city) => city.owner === rome)
+    .map((city) => ({
+      label: `${city.name}, year 5 of the Rome that builds and recruits`,
+      day1: false,
+      ...withFirsts(fedYearFive, city),
+    })),
+];
+/**
+ * Where each suits is read on day 1, as the first levels' table is, except the Merchants'
+ * quarter, which needs the routes a city opens only later, and Reservoirs, which need a
+ * harvest the realm's men eat, as canals once built leave none to spare on day 1.
+ */
+const readsLate = (kind: BuildingKind) => kind === 'merchantsQuarter' || kind === 'reservoirs';
+const projectSuits = new Map<BuildingKind, number>();
+const projectWorst = new Map<BuildingKind, number>();
+table(
+  ['city', ...PROJECTS.map((kind) => BUILDINGS[kind].name)],
+  projectSamples.map(({ label, state, city, day1 }) => [
+    label,
+    ...PROJECTS.map((kind) => {
+      const worth = buildingWorth(state, city, kind);
+      const years = worth > 0 ? BUILDINGS[kind].gold / worth / 365 : Infinity;
+      if (day1 !== readsLate(kind))
+        projectSuits.set(kind, Math.min(projectSuits.get(kind) ?? Infinity, years));
+      projectWorst.set(kind, Math.max(projectWorst.get(kind) ?? 0, years));
+      return Number.isFinite(years) ? years.toFixed(1) : '-';
+    }),
+  ]),
+);
+const yearsText = (n: number | undefined) =>
+  n === undefined || !Number.isFinite(n) ? 'never' : `${n.toFixed(1)} years`;
+console.log(
+  `In the city each suits best (day 1; Merchants' quarter and Reservoirs later): ${PROJECTS.map((kind) => `${BUILDINGS[kind].name} ${yearsText(projectSuits.get(kind))}`).join(', ')}.`,
+);
+const seconds = FIRST_LEVELS.map((kind) => SECOND_LEVELS[kind]);
+console.log(
+  `Target, a second level about 5 years (4.5 to 5.5) where it suits: ${
+    seconds.every((kind) => {
+      const y = projectSuits.get(kind) ?? Infinity;
+      return y >= 4.5 && y <= 5.5;
+    })
+      ? 'met'
+      : 'not met'
+  }. A great work 4 to 5 years where it suits: ${
+    GREAT_WORKS.every((kind) => {
+      const y = projectSuits.get(kind) ?? Infinity;
+      return y >= 4 && y <= 5;
+    })
+      ? 'met'
+      : 'not met'
+  }. Each great work past PROJECT_PAYBACK_YEARS (${PROJECT_PAYBACK_YEARS}) somewhere, the wrong choice there: ${
+    GREAT_WORKS.every((kind) => (projectWorst.get(kind) ?? 0) > PROJECT_PAYBACK_YEARS)
+      ? 'met'
+      : 'not met'
+  } (${GREAT_WORKS.map((kind) => `${BUILDINGS[kind].name} ${yearsText(projectWorst.get(kind))}`).join(', ')}).\n`,
 );
