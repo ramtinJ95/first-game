@@ -97,3 +97,54 @@ The harness reads a card only on a day the player could click it, with the gold 
 With nothing between, the day is exact. The cautious food waits passed on their day despite what Rome did between; I did not trace why those acts did not move them. What moves the day is what the forecast says it does not predict: gold spent, other troops, a war, a lost city, or trade. The card now names its day and says what it counts on: no other troops raised and no city lost, and for a gold shortfall also no gold spent, an income that holds, and trade gold that comes as each caravan arrives and can move the day by some weeks. The `recruit-wait` capture shows the warning on the first day and the raise passing on Year 3, day 109, the day it named.
 
 In the browser the card at first still warned on that day, while the same forecast in Node passed. The rules agreed, but the panel did not. The warned card's confirmation stayed open after the day's click raised the Spearmen at once, and the confirmation then reckoned one more Spearmen on top of the one just queued. A raise issued straight from a card now closes the confirmation. `e2e/warnings.spec.ts` loads the named day after a warned click and fails on `main`.
+
+## A power that warns again soon after it stopped the game
+
+The thirteenth play-through's Carthage stopped the game at Ariminum on Year 5, days 211, 248, 278 and 311, at 80 to 85% each time, with the line that its threat had passed between each. `npm run sim -- threat-repeats` plays the ignoring and answering Romes of `sim -- slide` on seeds 1–20 for ten years and lists each warning with its day, power, share and the front it weighs. For each window after the power's last stop in the same peace, it counts the warnings that repeat that stop and which of them stopped the game. The share column is the shown share's points against the stop's. A war on Rome ends the peace and forgets the stop. Each window counts every repeat within it, so the 120-day row holds the 60-day row. Before, on `main` at 0bd566d, every warning stopped:
+
+| Rome      | days with a warning | stops | within days of the last stop | repeats | lower / up to +2 / +3 to +5 / +6 to +10 / more | same front | another front |
+| --------- | ------------------: | ----: | ---------------------------: | ------: | ---------------------------------------------- | ---------: | ------------: |
+| ignoring  |                  83 |    83 |                           30 |       5 | 2 / 2 / 0 / 1 / 0                              |          5 |             0 |
+|           |                     |       |                           60 |      12 | 4 / 6 / 0 / 2 / 0                              |         12 |             0 |
+|           |                     |       |                           90 |      21 | 5 / 10 / 2 / 3 / 1                             |         21 |             0 |
+|           |                     |       |                          120 |      26 | 7 / 11 / 4 / 3 / 1                             |         26 |             0 |
+| answering |                 119 |   119 |                           30 |      15 | 7 / 5 / 3 / 0 / 0                              |         15 |             0 |
+|           |                     |       |                           60 |      34 | 16 / 14 / 4 / 0 / 0                            |         31 |             3 |
+|           |                     |       |                           90 |      47 | 20 / 18 / 5 / 3 / 1                            |         40 |             7 |
+|           |                     |       |                          120 |      50 | 21 / 19 / 5 / 4 / 1                            |         42 |             8 |
+
+A third of the ignoring Rome's stops and two fifths of the answering Rome's repeat the same power within 120 days. Most of them stand lower or no more than 2 points higher, at the same city. The answering Rome raises men and moves its armies, which sometimes moves the city a power weighs. Of the 22 wars on Rome, the longest came 82 days after the last stop for its power, and none came more than 90.
+
+`--propose <gaps>:<rises>` replays the stops on the same records. A first warning of a notice runs the game on when it weighs the same front, stands less than the rise above the stop, and its war would still come within the gap of the stop. A reminder always stops, since it says war may come any day. The test on the war is what keeps a war from coming on a player who was not stopped for it. No war of a notice comes unwarned after its reminder, which falls 84 days after its first warning, so a first warning is spared only when that reminder is due within the gap. The records keep no notice, so the replay takes a warning 60 or 84 days after the power's last for a reminder; it counts one stop more than the live rule for the ignoring Rome.
+
+| rule                                    | ignoring stops | answering stops | wars more than the gap after a stop |
+| --------------------------------------- | -------------: | --------------: | ----------------------------------: |
+| every warning stops (before)            |             83 |             119 |                                   0 |
+| gap 120, rise 6                         |             79 |             103 |                                   0 |
+| gap 150, rise 6                         |             72 |              90 |                                   0 |
+| gap 180, rise 6                         |             67 |              88 |                                   0 |
+| gap 200, rise 3                         |             69 |              89 |                                   0 |
+| gap 200, rise 6 (chosen)                |             67 |              86 |                                   0 |
+| gap 200, any rise                       |             65 |              84 |                                   0 |
+| gap 365, rise 6                         |             57 |              75 |                                   0 |
+| gap 200, rise 6, without the war's test |             60 |              78 |                         3 (2 and 1) |
+| gap 90, rise 6, without the war's test  |             68 |              88 |                                   1 |
+
+The chosen gap of 200 days is the shortest round number that spares all three of the tester's repeats. Each falls on a new notice, so its reminder is due 84 days after it, on days 332, 362 and 395, which are 121, 151 and 184 days after the stop on day 211. At 120 days all four would still stop, at 150 the stop on day 278 would come back, and at 180 the one on day 311. A longer gap spares more but lets a war come further from the stop the player last answered: at 365 days that is a year. The rise of 6 points spares the tester's 80 to 85%, which lie within 5 points of each other in any order, and stops a repeat at 91% after a stop at 85%, a threat the player has not yet weighed. The data hold few repeats in that band, so 3 and 6 points differ by only 2 or 3 stops. A repeat at another front always stops: 8 of the answering Rome's 60 repeats within 200 days weigh another front, where the guards or men it raised may not count. A gap counted from the stop to the repeat alone, without the war's test, saves 7 or 8 more stops but lets 3 wars at 200 days and 1 at 90 come more than the gap after the last stop for their power, so it is set aside. Sparing reminders too, as a first version of this change did, spared none in the live run and only one in the replay, and it would have hidden the word that war may now come any day, so it is set aside too.
+
+After, with `THREAT_SPARE_DAYS` 200 and `THREAT_SPARE_RISE` 6 in `src/app/threat-news.ts`, the same command plays the same 40 games. The warnings, wars and fronts are the same day for day, since the test Romes answer every warning they are told, stopped or not:
+
+| Rome      | days with a warning | stops | within days of the last stop | repeats | that stopped | same front | another front |
+| --------- | ------------------: | ----: | ---------------------------: | ------: | -----------: | ---------: | ------------: |
+| ignoring  |                  83 |    66 |                           30 |       4 |            1 |          4 |             0 |
+|           |                     |       |                           60 |       9 |            2 |          9 |             0 |
+|           |                     |       |                           90 |      15 |            3 |         15 |             0 |
+|           |                     |       |                          120 |      22 |            5 |         22 |             0 |
+|           |                     |       |                          200 |      30 |           13 |         30 |             0 |
+| answering |                 119 |    86 |                           30 |      10 |            0 |         10 |             0 |
+|           |                     |       |                           60 |      27 |            4 |         24 |             3 |
+|           |                     |       |                           90 |      40 |           11 |         33 |             7 |
+|           |                     |       |                          120 |      46 |           13 |         38 |             8 |
+|           |                     |       |                          200 |      60 |           27 |         52 |             8 |
+
+The repeats within each window are fewer than before because the windows now run from the stops that remain. The live stops, 66 and 86, are the replay's. The 22 wars on Rome came 8 to 82 days after the last stop for their power, as before, and none more than 200. The rules are unchanged, so each still came 24 days or more after the first warning of the notice it declared on. One came 8 days after the answering Rome's last warning: on seed 16, Carthage warned on day 3355, reminded on day 3439, 84 days later, and declared on day 3447. So the rule spares 17 of 83 stops for the ignoring Rome and 33 of 119 for the answering one, a fifth and a quarter, and every war still comes within 200 days of a stop for its power.

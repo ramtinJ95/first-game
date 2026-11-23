@@ -265,7 +265,14 @@ const clock = createClock({
         ...worldNewsOfDay(before, after, events, world),
         ...leader.alerts,
         ...threatFadedNewsOfDay(before, after, world, toldOnce),
-        ...threatNewsOfDay(before, after, world, toldOnce, trainingThreats),
+        ...threatNewsOfDay(
+          before,
+          after,
+          world,
+          toldOnce,
+          trainingThreats,
+          newsPauses && pauses.warThreat,
+        ),
         ...guardNewsOfDay(before, after),
       ]),
       newsPauses ? pauses : NO_PAUSES,
@@ -339,6 +346,7 @@ const view = createView(
     menu,
     sight: sightFor(clock.state),
     occupied,
+    told: toldOnce,
     frame: {
       powers,
       modal: shownModal(),

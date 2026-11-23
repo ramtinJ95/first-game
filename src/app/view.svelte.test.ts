@@ -25,6 +25,7 @@ describe('view', () => {
       alerts: [],
       panel: undefined,
       occupied: new Map(),
+      told: new Set(),
       notice: undefined,
       menu: undefined,
       sight: sightOf(state, fixtureWorld(), FIXTURE.rome),

@@ -83,6 +83,7 @@
           {world}
           pending={view.current.pending}
           paused={view.current.paused}
+          told={view.current.told}
           {actions}
           close={() => actions.togglePanel('wars')}
         />

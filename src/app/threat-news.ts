@@ -36,7 +36,67 @@ export const THREAT_REMIND_DAYS = 60;
  */
 export const THREAT_STAND_DAYS = 7;
 
+/**
+ * A warning that stopped the game covers its power this many days: the power's first warning of
+ * a later notice runs the game on while any war it could bring would still come within them,
+ * unless it weighs another front or stands THREAT_SPARE_RISE points higher. Agreed after the
+ * thirteenth play-through, where Carthage stopped the game at Ariminum four times in 100 days at
+ * 80 to 85%.
+ */
+export const THREAT_SPARE_DAYS = 200;
+
+/** A repeat whose shown share stands this many points above the stop's stops the game again. */
+export const THREAT_SPARE_RISE = 6;
+
 const prefixOf = (faction: string) => `threat:${faction}:`;
+const STOP = 'threat-stop:';
+
+/** The last warning of the power that stopped the game in this peace: its day, shown share and front. */
+interface Stop {
+  readonly day: number;
+  readonly share: number;
+  readonly front: string;
+}
+
+function stopOf(remembered: ReadonlySet<string>, faction: string): Stop | undefined {
+  const prefix = `${STOP}${faction}:`;
+  for (const key of remembered) {
+    if (!key.startsWith(prefix)) continue;
+    const [day = '', share = '', front = ''] = key.slice(prefix.length).split(':');
+    return { day: Number(day), share: Number(share), front };
+  }
+  return undefined;
+}
+
+function forgetStop(remembered: Set<string>, faction: string) {
+  const prefix = `${STOP}${faction}:`;
+  for (const key of remembered) if (key.startsWith(prefix)) remembered.delete(key);
+}
+
+/** The share a warning shows, in whole points of at most 100. */
+const points = (readiness: number) => Math.round(Math.min(1, readiness) * 100);
+
+const frontOf = (threat: Threat) => (threat.pressed ? 'field' : threat.front);
+
+/**
+ * The stop a power's first warning of a notice is spared by, if any: the power's last stop in
+ * this peace, at the same front, less than THREAT_SPARE_RISE points under the warning's share,
+ * and late enough that the notice's reminder, due on `due`, still falls within THREAT_SPARE_DAYS
+ * of it. A reminder always stops the game and no war of the notice comes after it unwarned, so
+ * every war on the player comes within THREAT_SPARE_DAYS of a stop for its power.
+ */
+function sparedBy(
+  remembered: ReadonlySet<string>,
+  power: FactionId,
+  threat: Threat,
+  due: number,
+): Stop | undefined {
+  const stop = stopOf(remembered, power);
+  if (!stop) return undefined;
+  if (stop.front !== frontOf(threat)) return undefined;
+  if (points(threat.readiness) - stop.share >= THREAT_SPARE_RISE) return undefined;
+  return due - stop.day <= THREAT_SPARE_DAYS ? stop : undefined;
+}
 
 /** The day the power last warned in this peace, kept in the told keys. */
 function warnedOn(remembered: ReadonlySet<string>, faction: string): number | undefined {
@@ -69,6 +129,7 @@ export function threatNewsOfDay(
   remembered: Set<string>,
   training: (state: State, world: World) => ReadonlyMap<FactionId, TrainingMuster> = () =>
     new Map(),
+  stopping = true,
 ): Alert[] {
   const player = after.player;
   const warned: {
@@ -79,11 +140,13 @@ export function threatNewsOfDay(
     by: number | undefined;
     /** For a reminder, the day the player was last warned of this notice. */
     told: number | undefined;
+    spared: Stop | undefined;
   }[] = [];
   for (const power of Object.values(after.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (power.id === player || power.kind !== 'greatPower' || power.defeatedOn !== null) continue;
     if (areAtWar(after, power.id, player) || truceBetween(after, power.id, player)) {
       forget(remembered, power.id);
+      forgetStop(remembered, power.id);
       continue;
     }
     const last = warnedOn(remembered, power.id);
@@ -97,6 +160,7 @@ export function threatNewsOfDay(
       continue;
     const threat = readinessOf(after, world, power.id);
     if (!threat) continue;
+    const reminder = last !== undefined && last >= power.noticeSince;
     forget(remembered, power.id);
     remembered.add(`${prefixOf(power.id)}${before.day}`);
     warned.push({
@@ -105,27 +169,79 @@ export function threatNewsOfDay(
       threat,
       from: mayDeclare(before, power.noticeSince),
       by: dayToCome(before, power.noticeSince),
-      told: last !== undefined && last >= power.noticeSince ? last : undefined,
+      told: reminder ? last : undefined,
+      // A reminder says war may now come any day, so it stops the game as its warning did.
+      spared: reminder
+        ? undefined
+        : sparedBy(
+            remembered,
+            power.id,
+            threat,
+            Math.max(before.day, power.noticeSince + NOTICE_DAYS) + THREAT_REMIND_DAYS,
+          ),
     });
   }
   const [first, ...others] = warned;
   if (!first) return [];
+  // One line tells the day's powers, so it stops for all of them or for none.
+  const stops = warned.some((w) => w.spared === undefined);
+  // A stop the Game menu turned off is no stop the player answered, so it spares nothing later.
+  if (stops && stopping)
+    for (const w of warned) {
+      forgetStop(remembered, w.power);
+      remembered.add(
+        `${STOP}${w.power}:${before.day}:${points(w.threat.readiness)}:${frontOf(w.threat)}`,
+      );
+    }
   const front = after.cities[first.threat.front];
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
-  const text =
-    others.length === 0
+  const text = stops
+    ? others.length === 0
       ? `${first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined)} See At peace in Wars.`
-      : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`;
+      : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`
+    : ranOnText(
+        after,
+        warned.flatMap((w) => (w.spared ? [{ ...w, stop: w.spared }] : [])),
+      );
   return [
     {
       kind: 'warThreat',
       day: before.day,
       tone: 'bad',
-      pause: { kind: 'warThreat' },
+      ...(stops ? { pause: { kind: 'warThreat' } as const } : {}),
       text,
       ...(front ? { focus: { at: front.position } } : {}),
     },
   ];
+}
+
+/**
+ * A warning that runs the game on, told short, since only news that stops the game gets the
+ * corner's larger room: each power's share, the front it weighs, when it may declare, and the
+ * stop it repeats, standing no higher or only a few points higher. What lowers each threat is
+ * left to the At peace list.
+ */
+function ranOnText(
+  state: State,
+  spared: readonly {
+    name: string;
+    threat: Threat;
+    from: string;
+    stop: Stop;
+  }[],
+): string {
+  const [one, ...others] = spared;
+  if (!one) return '';
+  const near = (threat: Threat) =>
+    threat.pressed
+      ? 'against your field armies'
+      : `near ${state.cities[threat.front]?.name ?? 'your land'}`;
+  // Each power's day of war and stop would not fit the corner, so the At peace rows give them.
+  if (others.length > 0)
+    return `${listed(spared.map((w) => w.name))} could soon declare war on you, with ${listed(spared.map((w) => share(w.threat.readiness)))} of the strength each needs. The game ran on: none stands ${THREAT_SPARE_RISE} points above its last stop. See At peace in Wars.`;
+  const rise = points(one.threat.readiness) - one.stop.share;
+  const higher = rise > 0 ? `only ${rise} ${rise === 1 ? 'point' : 'points'} higher` : 'no higher';
+  return `${one.name} could soon declare war on you: ${share(one.threat.readiness)} of the strength it needs ${near(one.threat)}, ${one.from}. The game ran on: its stop on ${dateText(one.stop.day)} was at ${one.stop.share}%, and it stands ${higher}. See At peace in Wars.`;
 }
 
 /** The first day a power on the notice that began on `since` may declare war, while it is still to come. */
@@ -378,6 +494,7 @@ export function standingThreats(
   world: World,
   waiting: State = state,
   training?: ReadonlyMap<FactionId, TrainingMuster>,
+  told: ReadonlySet<string> = new Set(),
 ): StandingThreat[] {
   const player = state.player;
   return Object.values(state.factions)
@@ -420,9 +537,17 @@ export function standingThreats(
         readiness: Math.min(1, threat.readiness),
         weighs: threat.pressed ? 'field' : threat.front,
         hoard: threat.hoard,
-        text: `${name} has ${share(threat.readiness)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${advice}${power.noticeSince === null ? '' : ` It may declare ${mayDeclare(state, power.noticeSince)} if it holds it.`}`,
+        text: `${name} has ${share(threat.readiness)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${advice}${power.noticeSince === null ? '' : ` It may declare ${mayDeclare(state, power.noticeSince)} if it holds it.${ranOnRow(told, power.id, power.noticeSince)}`}`,
       };
     });
+}
+
+/** An At peace row's word that the power's warning on this notice did not stop the game, and the stop that spared it. */
+function ranOnRow(told: ReadonlySet<string>, power: FactionId, since: number): string {
+  const last = warnedOn(told, power);
+  const stop = stopOf(told, power);
+  if (last === undefined || !stop || last < since || last <= stop.day) return '';
+  return ` It warned again on ${dateText(last)} and the game ran on: its stop on ${dateText(stop.day)} was at ${stop.share}%.`;
 }
 
 /** How many great powers at peace with the player stand at THREAT_WARN or nearer today, as the top bar counts them. */
