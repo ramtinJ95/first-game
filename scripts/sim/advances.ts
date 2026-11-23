@@ -6,28 +6,33 @@ import { studyRefusal } from '../../src/sim/advances/study.ts';
 import { bestStudy } from '../../src/sim/ai/study.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
 import { dailyBalances, limitsOf } from '../../src/sim/systems/economy.ts';
-import { playCautiousRome, rome } from '../cautious-rome.ts';
+import { panelBuilds, playCautiousRome, rome, suggested } from '../cautious-rome.ts';
+import { buildingWorth } from '../../src/sim/ai/build.ts';
+import { reserveOf } from '../../src/sim/ai/situation.ts';
+import { BUILDINGS, type BuildingKind } from '../../src/sim/buildings/buildings.ts';
+import { ADVANCES } from '../../src/sim/advances/advances.ts';
 
 const { values } = parseArgs({
   options: {
     seeds: { type: 'string', default: '20' },
     from: { type: 'string', default: '1' },
     years: { type: 'string', default: '10' },
-    players: { type: 'string', default: 'ruler,answering,stranger' },
+    players: { type: 'string', default: 'builder,stranger' },
   },
 });
 
 /**
  * Romes at peace: the AI plays Rome, its trade included, and it declares no war. `ruler`
  * does nothing about a warning (the slide's `ignoring`), and `answering` answers each
- * warning as it advises. `stranger` answers too but never builds, a player who has not
- * found the buildings list, and studies the advance the panel suggests whenever nothing is
- * studied. Every other
- * power plays the AI.
+ * warning as it advises; both build and study by the AI's rules. `builder` answers, builds
+ * as the panel suggests (`panelBuilds`, as `sim -- projects` plays it), and studies the
+ * advance the panel suggests with the gold the day's buildings and the reserve for its men
+ * leave. `stranger` answers, never builds, a player who has not found the buildings list,
+ * and studies the advance the panel suggests with all its gold. Every other power plays the AI.
  */
-const PLAYERS = ['ruler', 'answering', 'stranger'] as const;
-/** The orders a stranger takes from no rule of the AI: it never builds, and studies as the panel suggests. */
-const STRANGER_SKIPS = new Set<Order['kind']>(['build', 'study']);
+const PLAYERS = ['ruler', 'answering', 'builder', 'stranger'] as const;
+/** The years at whose first day the run notes what the panel would build next. */
+const SNAPSHOT_YEARS = [3, 7];
 type Player = (typeof PLAYERS)[number];
 
 interface Year {
@@ -77,28 +82,91 @@ function count(years: Year[], before: GameState, after: GameState) {
   year.studied = realm?.advances.length ?? 0;
 }
 
-/** The panel's suggestion, as a stranger who opens the panel takes it, on a day nothing is studied. */
-function asThePanelSuggests(state: GameState): Order[] {
+/** The panel's suggestion, on a day nothing is studied, with `gold` to spend. */
+function asThePanelSuggests(state: GameState, gold: number): Order[] {
   const realm = state.factions[rome];
   if (!realm || realm.study) return [];
-  const best = bestStudy(state, rome, realm.stores.gold);
+  const best = bestStudy(state, rome, gold);
   return best ? [{ kind: 'study', faction: rome, advance: best.advance }] : [];
 }
 
-function play(player: Player, seed: number, years: number): Year[] {
+/** Rome's orders for the player: the AI's, without its own building and study, then the panel's. */
+function playerOrders(player: Player, orders: Order[], state: GameState): Order[] {
+  if (player === 'ruler' || player === 'answering') return orders;
+  const kept = orders.filter((o) => o.faction !== rome || o.kind !== 'study');
+  const gold = state.factions[rome]?.stores.gold ?? 0;
+  if (player === 'stranger') return [...kept, ...asThePanelSuggests(state, gold)];
+  const building = kept.reduce(
+    (sum, o) => sum + (o.faction === rome && o.kind === 'build' ? BUILDINGS[o.building].gold : 0),
+    0,
+  );
+  return [...kept, ...asThePanelSuggests(state, gold - building - reserveOf(state, rome, 'gold'))];
+}
+
+/** Rome on the first day of a year: its net gold a day, and the building the panel would start next. */
+interface Snapshot {
+  net: number;
+  gold: number;
+  /** Rome's cities with a building at work. */
+  busy: number;
+  building?: { kind: BuildingKind; price: number; worth: number };
+}
+
+function snapshot(state: GameState): Snapshot {
+  const net = dailyBalances(state).get(rome as FactionId)?.gold ?? 0;
+  let building: Snapshot['building'];
+  let busy = 0;
+  for (const city of Object.values(state.cities)) {
+    if (city.owner !== rome) continue;
+    const work = city.construction;
+    if (work) busy++;
+    // A city at work is weighed as it will stand once its work is done.
+    const done = work
+      ? { ...city, construction: null, buildings: [...city.buildings, work.building] }
+      : city;
+    const realm = state.factions[rome];
+    if (!realm) continue;
+    // Weighed with gold enough, so the price alone never refuses it.
+    const after = {
+      ...state,
+      cities: { ...state.cities, [city.id]: done },
+      factions: { ...state.factions, [rome]: { ...realm, stores: { ...realm.stores, gold: 1e9 } } },
+    };
+    const best = suggested(after, done, Infinity);
+    if (!best) continue;
+    const price = BUILDINGS[best.kind].gold;
+    const worth = buildingWorth(after, done, best.kind);
+    if (!building || price / worth < building.price / building.worth)
+      building = { kind: best.kind, price, worth };
+  }
+  return {
+    net,
+    gold: state.factions[rome]?.stores.gold ?? 0,
+    busy,
+    ...(building ? { building } : {}),
+  };
+}
+
+function play(player: Player, seed: number, years: number) {
   const counted = Array.from({ length: years }, emptyYear);
-  playCautiousRome(seed, years, ({ before, after }) => count(counted, before, after), {
-    peaceful: true,
-    answer: player !== 'ruler',
-    orders: (orders, state) =>
-      player === 'stranger'
-        ? [
-            ...orders.filter((o) => o.faction !== rome || !STRANGER_SKIPS.has(o.kind)),
-            ...asThePanelSuggests(state),
-          ]
-        : orders,
-  });
-  return counted;
+  const snapshots = new Map<number, Snapshot>();
+  playCautiousRome(
+    seed,
+    years,
+    ({ before, after }) => {
+      count(counted, before, after);
+      for (const year of SNAPSHOT_YEARS)
+        if (after.day === (year - 1) * 365 + 1) snapshots.set(year, snapshot(after));
+    },
+    {
+      peaceful: true,
+      answer: player !== 'ruler',
+      ...(player === 'builder' ? { builds: panelBuilds } : {}),
+      ...(player === 'stranger' ? { drops: ['build'] as const } : {}),
+      orders: (orders, state) => playerOrders(player, orders, state),
+    },
+  );
+  return { years: counted, snapshots };
 }
 
 const median = (all: readonly number[]) => {
@@ -116,7 +184,8 @@ console.log(
 );
 for (const player of players) {
   if (!PLAYERS.includes(player)) throw new Error(`--players takes ${PLAYERS.join(', ')}`);
-  const games = Array.from({ length: seeds }, (_, i) => play(player, first + i, years));
+  const played = Array.from({ length: seeds }, (_, i) => play(player, first + i, years));
+  const games = played.map((p) => p.years);
   console.log(`\n### ${player}\n`);
   console.log(
     '| year | days at the limit | gold lost to the limit | treasury rise | spare | net income | limit | days studying | days with one to choose | advances studied |',
@@ -139,4 +208,21 @@ for (const player of players) {
   console.log(
     `\nSummary: | ${player} | days at the limit, years 1–${years}, sum of yearly medians ${atLimitSum} | spare gold ${whole(spareSum)} | seeds with an advance at work or one to choose in every year from 2: ${busyYears.filter((n) => n === years - 1).length} of ${seeds} |`,
   );
+  for (const year of SNAPSHOT_YEARS) {
+    const shots = played.flatMap((p) => p.snapshots.get(year) ?? []);
+    const net = median(shots.map((s) => s.net));
+    const withBuilding = shots.flatMap((s) => (s.building ? [s.building] : []));
+    const price = median(withBuilding.map((b) => b.price));
+    const worth = median(withBuilding.map((b) => b.worth));
+    const kinds = [...new Set(withBuilding.map((b) => BUILDINGS[b.kind].name))].join(', ');
+    console.log(
+      `\nYear ${year}, day 1 (${shots.length} seeds alive): net gold ${net.toFixed(1)} a day, treasury ${whole(median(shots.map((s) => s.gold)))}, cities with a building at work ${median(shots.map((s) => s.busy))}. The panel's next building, once each city's work is done, pays back soonest in ${withBuilding.length} seeds: median price ${whole(price)}, worth ${worth.toFixed(1)} gold a day (${kinds}). An advance's price puts it off by price / net days and forgoes its worth for them:`,
+    );
+    console.log(
+      ADVANCE_KINDS.map((kind) => {
+        const days = ADVANCES[kind].gold / Math.max(net, 1);
+        return `${ADVANCES[kind].name} ${whole(ADVANCES[kind].gold)}: ${Math.round(days)} days, ${whole(days * worth)} gold`;
+      }).join('; ') + '.',
+    );
+  }
 }

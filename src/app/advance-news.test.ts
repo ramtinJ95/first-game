@@ -5,7 +5,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
 import { tick } from '../sim/tick.ts';
 import { expectConsistent } from '../sim/references.ts';
-import { advanceNewsOfDay, HINT_SHARE, HINT_TOLD } from './advance-news.ts';
+import { advanceNewsOfDay, HINT_SHARE, HINT_TOLD, HINT_WAIT_DAYS } from './advance-news.ts';
 
 const world = fixtureWorld();
 
@@ -79,5 +79,30 @@ describe('the news of advances', () => {
     rome(learned).advances = ['citizenRolls'];
     const two = tick(learned, [], world);
     expect(advanceNewsOfDay(learned, two.state, two.events, new Set())).toEqual([]);
+  });
+
+  test("waits a month when the buildings' hint is told the same day", () => {
+    const told = new Set<string>();
+    const near = withGold(1);
+    const day = tick(near, [], world);
+    expect(advanceNewsOfDay(near, day.state, day.events, told, true)).toEqual([]);
+    expect(told.has(HINT_TOLD)).toBe(false);
+
+    const full = (state: GameState) => {
+      rome(state).stores.gold = limitsOf(state).get(FIXTURE.rome)?.gold ?? 0;
+    };
+    let state = day.state;
+    for (let i = 0; i < HINT_WAIT_DAYS - 1; i++) {
+      const next = tick(state, [], world);
+      full(next.state);
+      expect(advanceNewsOfDay(state, next.state, next.events, told)).toEqual([]);
+      state = next.state;
+    }
+    const next = tick(state, [], world);
+    full(next.state);
+    expect(advanceNewsOfDay(state, next.state, next.events, told).map((a) => a.kind)).toEqual([
+      'advanceHint',
+    ]);
+    expectConsistent(next.state);
   });
 });
