@@ -39,9 +39,9 @@
     <ul data-testid="city-built">
       {#each shown.built as line (line.kind)}
         <li>
-          <span class="name">{line.name}</span>{#if line.level}
-            · level {line.level}{:else}
-            · great work{/if} · {line.effect}
+          <span class="name">{line.name}</span> · {line.level
+            ? `level ${line.level}`
+            : 'great work'} · {line.effect}
         </li>
       {/each}
     </ul>
@@ -89,8 +89,8 @@
             >
               <span class="top"
                 ><span class="name"
-                  >{option.name}{#if option.raises}<span class="raises">
-                      · {option.raises} level 2</span
+                  >{option.name}{#if option.raises}<span class="raises"
+                      >{` · ${option.raises} level 2`}</span
                     >{/if}</span
                 ><span class="cost">{whole(option.gold)} gold · {option.days} days</span></span
               >

@@ -636,6 +636,27 @@ export function romaTreasuryFull(): GameState {
   return state;
 }
 
+/** Roma stands with all five first buildings and Rome holds 20,000 gold, so every second level and great work is on offer. */
+export function romaWithEveryBuilding(): GameState {
+  const state = startGame();
+  setRich(state);
+  const roma = state.cities['roma' as CityId];
+  if (!roma) throw new Error('no Roma');
+  roma.buildings = ['forum', 'canals', 'barracks', 'towers', 'temple'];
+  return state;
+}
+
+/** Roma with every first building, its Law courts two days from done, and a Treasury hall standing at Capua. */
+export function lawCourtsAtWork(): GameState {
+  const state = romaWithEveryBuilding();
+  const roma = state.cities['roma' as CityId];
+  const capua = state.cities['capua' as CityId];
+  if (!roma || !capua) throw new Error('no Roma or Capua');
+  roma.construction = { building: 'lawCourts', daysLeft: 2 };
+  capua.buildings = ['treasuryHall'];
+  return state;
+}
+
 /**
  * Roma holds two bands of guards: one hired 100 days ago, which great powers no longer
  * count against a war, and one whose year ends today, so it leaves tomorrow.
