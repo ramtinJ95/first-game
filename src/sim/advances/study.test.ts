@@ -41,57 +41,57 @@ function play(state: GameState, days: number) {
 
 describe('studying an advance', () => {
   test('pays the gold at the order and finishes after its days', () => {
-    const { gold, days } = ADVANCES.coinage;
-    const ordered = tick(rich(), [study('coinage')], world);
+    const { gold, days } = ADVANCES.standardCoin;
+    const ordered = tick(rich(), [study('standardCoin')], world);
     expect(ordered.rejected).toEqual([]);
-    expect(rome(ordered.state).study).toEqual({ advance: 'coinage', daysLeft: days - 1 });
+    expect(rome(ordered.state).study).toEqual({ advance: 'standardCoin', daysLeft: days - 1 });
     const before = rome(rich()).stores.gold;
     expect(rome(ordered.state).stores.gold).toBeLessThan(before - gold + 100);
 
     const almost = play(ordered.state, days - 2);
     expect(rome(almost.state).advances).toEqual([]);
     const done = play(almost.state, 1);
-    expect(rome(done.state).advances).toEqual(['coinage']);
+    expect(rome(done.state).advances).toEqual(['standardCoin']);
     expect(rome(done.state).study).toBeNull();
     expect(done.events).toContainEqual({
       kind: 'advanceFinished',
       faction: FIXTURE.rome,
-      advance: 'coinage',
+      advance: 'standardCoin',
     });
     expectConsistent(done.state);
   });
 
   test('studies one advance at a time, each once', () => {
-    const first = tick(rich(), [study('census')], world).state;
-    const second = tick(first, [study('coinage')], world);
-    expect(second.rejected.map((r) => r.reason)).toEqual([`${FIXTURE.rome} is studying census`]);
-    const done = play(second.state, ADVANCES.census.days).state;
-    const again = tick(done, [study('census')], world);
+    const first = tick(rich(), [study('citizenRolls')], world).state;
+    const second = tick(first, [study('standardCoin')], world);
+    expect(second.rejected.map((r) => r.reason)).toEqual([`${FIXTURE.rome} is studying citizenRolls`]);
+    const done = play(second.state, ADVANCES.citizenRolls.days).state;
+    const again = tick(done, [study('citizenRolls')], world);
     expect(again.rejected.map((r) => r.reason)).toEqual([
-      `${FIXTURE.rome} has studied census already`,
+      `${FIXTURE.rome} has studied citizenRolls already`,
     ]);
     expectConsistent(again.state);
   });
 
   test('refuses a realm that lacks the gold and takes none of it', () => {
     const state = buildFixture();
-    rome(state).stores.gold = ADVANCES.governors.gold - 1;
-    const result = tick(state, [study('governors')], world);
+    rome(state).stores.gold = ADVANCES.marketWeights.gold - 1;
+    const result = tick(state, [study('marketWeights')], world);
     expect(result.rejected).toHaveLength(1);
     expect(rome(result.state).study).toBeNull();
-    expect(rome(result.state).stores.gold).toBeGreaterThanOrEqual(ADVANCES.governors.gold - 1);
+    expect(rome(result.state).stores.gold).toBeGreaterThanOrEqual(ADVANCES.marketWeights.gold - 1);
     expectConsistent(result.state);
   });
 
   test('giving up a study gives back half its gold and frees the realm to study another', () => {
-    const ordered = tick(rich(), [study('siegecraft')], world).state;
+    const ordered = tick(rich(), [study('siegeEngineers')], world).state;
     const gold = rome(ordered).stores.gold;
     const cancelled = tick(ordered, [cancel], world).state;
-    const refund = ADVANCES.siegecraft.gold * STUDY_REFUND;
+    const refund = ADVANCES.siegeEngineers.gold * STUDY_REFUND;
     expect(rome(cancelled).study).toBeNull();
     expect(rome(cancelled).stores.gold).toBeGreaterThan(gold + refund - 100);
     expect(rome(cancelled).stores.gold).toBeLessThan(gold + refund + 100);
-    expect(tick(cancelled, [study('coinage')], world).rejected).toEqual([]);
+    expect(tick(cancelled, [study('standardCoin')], world).rejected).toEqual([]);
     expectConsistent(cancelled);
   });
 

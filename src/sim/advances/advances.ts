@@ -5,15 +5,15 @@ export const ADVANCE_BRANCHES = ['military', 'economy', 'statecraft'] as const;
 export type AdvanceBranch = (typeof ADVANCE_BRANCHES)[number];
 
 export const ADVANCE_KINDS = [
-  'officerSchools',
-  'siegecraft',
-  'guardContracts',
-  'coinage',
-  'cropRotation',
-  'weightsAndMeasures',
-  'census',
-  'governors',
+  'drillmasters',
+  'marchingRations',
+  'siegeEngineers',
+  'standardCoin',
+  'fallowFields',
+  'marketWeights',
+  'citizenRolls',
   'clemency',
+  'longContracts',
 ] as const;
 export type AdvanceKind = (typeof ADVANCE_KINDS)[number];
 
@@ -31,15 +31,15 @@ interface AdvanceRow {
  * already exists.
  */
 export const ADVANCES = {
-  officerSchools: { name: 'Officer schools', branch: 'military', gold: 3000, days: 90 },
-  siegecraft: { name: 'Siegecraft', branch: 'military', gold: 3000, days: 90 },
-  guardContracts: { name: 'Guard contracts', branch: 'military', gold: 2500, days: 60 },
-  coinage: { name: 'Coinage', branch: 'economy', gold: 5000, days: 120 },
-  cropRotation: { name: 'Crop rotation', branch: 'economy', gold: 4000, days: 120 },
-  weightsAndMeasures: { name: 'Weights and measures', branch: 'economy', gold: 3500, days: 90 },
-  census: { name: 'Census', branch: 'statecraft', gold: 5000, days: 120 },
-  governors: { name: 'Provincial governors', branch: 'statecraft', gold: 6000, days: 150 },
-  clemency: { name: 'Clemency', branch: 'statecraft', gold: 3000, days: 90 },
+  drillmasters: { name: 'Drillmasters', branch: 'military', gold: 6000, days: 240 },
+  marchingRations: { name: 'Marching rations', branch: 'military', gold: 6000, days: 240 },
+  siegeEngineers: { name: 'Siege engineers', branch: 'military', gold: 2000, days: 120 },
+  standardCoin: { name: 'Standard coin', branch: 'economy', gold: 12000, days: 300 },
+  fallowFields: { name: 'Fallow fields', branch: 'economy', gold: 9000, days: 300 },
+  marketWeights: { name: 'Market weights', branch: 'economy', gold: 10000, days: 300 },
+  citizenRolls: { name: 'Citizen rolls', branch: 'statecraft', gold: 10000, days: 300 },
+  clemency: { name: 'Clemency', branch: 'statecraft', gold: 1500, days: 90 },
+  longContracts: { name: 'Long contracts', branch: 'statecraft', gold: 5000, days: 180 },
 } as const satisfies Record<AdvanceKind, AdvanceRow>;
 
 /** The share of an advance's gold that giving up its study gives back. The rest is spent. */
