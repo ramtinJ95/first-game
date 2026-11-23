@@ -135,10 +135,20 @@ export function cityBuildings(
   };
 }
 
+/**
+ * What a temple's payback is reckoned from: `buildingWorth` prices it by the unrest it would
+ * shorten in one conquest a year within its reach, not by what it adds today.
+ */
+export function paybackBasis(kind: BuildingKind): string {
+  return kind === 'temple' || kind === 'sanctuary'
+    ? ' if you take one city a year within its reach'
+    : '';
+}
+
 /** An option's payback in words, as its button shows it. */
-export function paybackText(years: number | undefined): string {
+export function paybackText(years: number | undefined, kind: BuildingKind): string {
   if (years === undefined) return 'does not pay back here today';
-  return `pays back in ${years < 10 ? years.toFixed(1) : whole(years)} years`;
+  return `pays back in ${years < 10 ? years.toFixed(1) : whole(years)} years${paybackBasis(kind)}`;
 }
 
 /** Each first building that stands, at its level and with both levels' effect, then the great work. */

@@ -95,7 +95,7 @@
                 ><span class="cost">{whole(option.gold)} gold · {option.days} days</span></span
               >
               <span class="effect">{option.effect}</span>
-              <span class="payback">{paybackText(option.payback)}</span>
+              <span class="payback">{paybackText(option.payback, option.kind)}</span>
               {#if option.caution}<span class="caution">{option.caution} You may still build.</span
                 >{/if}
               {#if option.why}<span class="why">{option.why}</span>{/if}
