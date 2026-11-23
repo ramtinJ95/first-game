@@ -4,6 +4,7 @@
   import type { Stores } from '../sim/state/faction.ts';
   import { dailyBalances, limitsOf } from '../sim/systems/economy.ts';
   import { warsOf } from './describe.ts';
+  import { studyLine } from './advances-text.ts';
   import { standingOffer } from '../sim/peace/offer.ts';
   import type { Actions } from './actions.ts';
   import { cssColour, ordersWaitingText, signed, storeAmount, storeNote } from './describe.ts';
@@ -48,6 +49,8 @@
       return offer && offer.from !== game.player;
     }).length,
   );
+  const study = $derived(studyLine(game, game.player));
+  const studying = $derived((game.factions[game.player]?.study ?? null) !== null);
   const waiting = $derived(
     view.current.paused ? ordersWaitingText(view.current.pending, game.player) : undefined,
   );
@@ -101,6 +104,19 @@
     >
     <button
       type="button"
+      class="study"
+      data-testid="advances-button"
+      class:idle={!studying}
+      aria-expanded={view.current.panel === 'advances'}
+      aria-controls="advances"
+      title={study.full}
+      onclick={() => actions.togglePanel('advances')}
+      ><span class="line">Advances</span><span class="line note" data-testid="study-line"
+        >{study.short}</span
+      ></button
+    >
+    <button
+      type="button"
       aria-expanded={view.current.panel === 'overview'}
       aria-controls="overview"
       onclick={() => actions.togglePanel('overview')}>Overview</button
@@ -123,6 +139,21 @@
     gap: 4px 14px;
     align-items: center;
     padding: 5px 12px;
+  }
+
+  .study {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.15;
+  }
+
+  .study .note {
+    font-size: 12px;
+  }
+
+  .study.idle .note {
+    color: var(--bad);
   }
 
   .threat-note {

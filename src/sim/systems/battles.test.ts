@@ -262,6 +262,8 @@ describe('engagement', () => {
       stores: STORES,
       defeatedOn: null,
       noticeSince: null,
+      advances: [],
+      study: null,
     };
     state.factions[persia] = {
       id: persia,
@@ -270,6 +272,8 @@ describe('engagement', () => {
       stores: STORES,
       defeatedOn: null,
       noticeSince: null,
+      advances: [],
+      study: null,
     };
     executeOrder(state, { kind: 'declareWar', faction: egypt, against: FIXTURE.carthage }, world);
     executeOrder(state, { kind: 'declareWar', faction: persia, against: FIXTURE.rome }, world);

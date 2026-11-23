@@ -37,7 +37,7 @@
           class="panel {alert.tone}"
           class:world={alert.world !== undefined}
           class:fresh={day - alert.day <= FRESH_DAYS}
-          disabled={!alert.focus}
+          disabled={!alert.focus && !alert.opens}
           onclick={() => actions.openAlert(alert)}
         >
           <span class="day">{dateText(alert.day)}</span>

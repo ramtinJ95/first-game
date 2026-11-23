@@ -1,3 +1,4 @@
+import type { AdvanceKind } from './advances/advances.ts';
 import type { BuildingKind } from './buildings/buildings.ts';
 import type { ArmyId, BattleId, CityId, FactionId, TradeRouteId } from './ids.ts';
 import type { Day } from './state/day.ts';
@@ -101,6 +102,7 @@ export type DayEvent =
       reason: string;
     }
   | { kind: 'warDeclared'; by: FactionId; against: FactionId }
+  | { kind: 'advanceFinished'; faction: FactionId; advance: AdvanceKind }
   | {
       kind: 'buildingFinished';
       city: CityId;

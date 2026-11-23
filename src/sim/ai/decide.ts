@@ -21,6 +21,7 @@ import { minorOrders } from './minor.ts';
 import { peaceOrders } from './peace.ts';
 import { createRouter } from './routes.ts';
 import { stances } from './stance.ts';
+import { studies } from './study.ts';
 import {
   besieged,
   enemiesOf,
@@ -55,6 +56,7 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
   }
   const muster = musterCity(context);
   const recruits = recruitment(state, faction, muster);
+  const builds = construction(state, faction, recruits.length > 0);
   const orders = [
     ...peaceOrders(context),
     ...stances(context),
@@ -64,7 +66,8 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
     ...storms(context),
     ...movements(context, muster),
     ...recruits,
-    ...construction(state, faction, recruits.length > 0),
+    ...builds,
+    ...studies(state, faction, recruits.length > 0 || builds.length > 0),
     ...warDeclaration(context),
   ];
   return withJoins(context, [...orders, ...trading(state, world, faction, orders)]);

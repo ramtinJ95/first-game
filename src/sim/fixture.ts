@@ -58,6 +58,8 @@ export function buildFixture(seed = 1): GameState {
         league: null,
         defeatedOn: null,
         noticeSince: null,
+        advances: [],
+        study: null,
         armiesRaised: 1,
       },
       [f.carthage]: {
@@ -68,6 +70,8 @@ export function buildFixture(seed = 1): GameState {
         league: null,
         defeatedOn: null,
         noticeSince: null,
+        advances: [],
+        study: null,
         armiesRaised: 1,
       },
       [f.syracusaeFaction]: {
@@ -78,6 +82,8 @@ export function buildFixture(seed = 1): GameState {
         league: null,
         defeatedOn: null,
         noticeSince: null,
+        advances: [],
+        study: null,
       },
     },
     provinces: {
