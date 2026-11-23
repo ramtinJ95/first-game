@@ -31,15 +31,15 @@ interface AdvanceRow {
  * already exists.
  */
 export const ADVANCES = {
-  drillmasters: { name: 'Drillmasters', branch: 'military', gold: 6000, days: 240 },
-  marchingRations: { name: 'Marching rations', branch: 'military', gold: 6000, days: 240 },
-  siegeEngineers: { name: 'Siege engineers', branch: 'military', gold: 2000, days: 120 },
-  standardCoin: { name: 'Standard coin', branch: 'economy', gold: 12000, days: 300 },
-  fallowFields: { name: 'Fallow fields', branch: 'economy', gold: 9000, days: 300 },
-  marketWeights: { name: 'Market weights', branch: 'economy', gold: 10000, days: 300 },
-  citizenRolls: { name: 'Citizen rolls', branch: 'statecraft', gold: 10000, days: 300 },
-  clemency: { name: 'Clemency', branch: 'statecraft', gold: 1500, days: 90 },
-  longContracts: { name: 'Long contracts', branch: 'statecraft', gold: 5000, days: 180 },
+  drillmasters: { name: 'Drillmasters', branch: 'military', gold: 3000, days: 180 },
+  marchingRations: { name: 'Marching rations', branch: 'military', gold: 3000, days: 180 },
+  siegeEngineers: { name: 'Siege engineers', branch: 'military', gold: 1500, days: 120 },
+  standardCoin: { name: 'Standard coin', branch: 'economy', gold: 6000, days: 300 },
+  fallowFields: { name: 'Fallow fields', branch: 'economy', gold: 6000, days: 240 },
+  marketWeights: { name: 'Market weights', branch: 'economy', gold: 5500, days: 240 },
+  citizenRolls: { name: 'Citizen rolls', branch: 'statecraft', gold: 6000, days: 300 },
+  clemency: { name: 'Clemency', branch: 'statecraft', gold: 1500, days: 120 },
+  longContracts: { name: 'Long contracts', branch: 'statecraft', gold: 3000, days: 150 },
 } as const satisfies Record<AdvanceKind, AdvanceRow>;
 
 /** The share of an advance's gold that giving up its study gives back. The rest is spent. */
