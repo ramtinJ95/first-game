@@ -5,7 +5,7 @@ import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { CITY_DEFENCES } from '../sim/systems/sieges.ts';
 import { TROOPS } from '../sim/troops.ts';
-import { cityBuildings } from './buildings-text.ts';
+import { cityBuildings, paybackText } from './buildings-text.ts';
 import { cityBalance, signed } from './describe.ts';
 
 function rich(gold = 20_000): GameState {
@@ -194,6 +194,20 @@ describe('cityBuildings', () => {
   it("names a Merchants' quarter's route slot and its share of each route even where no route runs", () => {
     expect(option(rich(), 'merchantsQuarter').effect).toBe(
       `1 more route slot, its end of each route earns ${Math.round(BUILDINGS.merchantsQuarter.tradeShare * 100)}% more`,
+    );
+  });
+
+  it("says a Sanctuary's payback is reckoned from a conquest a year, where it adds nothing today", () => {
+    const state = rich();
+    roma(state).buildings = ['temple'];
+    const sanctuary = option(state, 'sanctuary');
+    expect(sanctuary.effect).toBe('adds nothing here today');
+    expect(paybackText(sanctuary.payback, 'sanctuary')).toMatch(
+      /^pays back in [\d.,]+ years if you take one city a year within its reach$/,
+    );
+    expect(paybackText(4.9, 'lawCourts')).toBe('pays back in 4.9 years');
+    expect(paybackText(4.4, 'temple')).toBe(
+      'pays back in 4.4 years if you take one city a year within its reach',
     );
   });
 

@@ -7,6 +7,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
 import type { Alert } from './alerts.ts';
 import { whole } from './names.ts';
+import { paybackBasis } from '../ui/buildings-text.ts';
 
 type State = DeepReadonly<GameState>;
 
@@ -57,7 +58,7 @@ export function buildingHintOfDay(before: State, after: State, told: ReadonlySet
       kind: 'buildingWorthGold',
       day: before.day,
       tone: 'neutral',
-      text: `Your gold nears its limit and ${city.name} builds nothing: building ${name} there for ${whole(price)} gold would pay it back in ${years.toFixed(1)} years.`,
+      text: `Your gold nears its limit and ${city.name} builds nothing: building ${name} there for ${whole(price)} gold would pay it back in ${years.toFixed(1)} years${paybackBasis(kind)}.`,
       focus: { at: city.position, select: { kind: 'province', province: city.province } },
     },
   ];
