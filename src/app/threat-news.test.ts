@@ -774,6 +774,34 @@ describe('a warning soon after a stop for the same power runs the game on', () =
     expect(reminder.stop).toBe(true);
   });
 
+  test('a warning the Game menu did not let stop the game spares no later one', () => {
+    const told = new Set<string>();
+    const off = game(5000, 'full', 1000);
+    notice(off, world);
+    for (const power of Object.values(off.factions))
+      if (power.noticeSince !== null) power.noticeSince = (1000 - THREAT_STAND_DAYS + 1) as Day;
+    expect(threatNewsOfDay(off, off, world, told, () => new Map(), false)).toHaveLength(1);
+    expect(repeat(1040, 5000, told).stop).toBe(true);
+  });
+
+  test('a line naming two powers stops for both when one of them has no stop to repeat, and runs on, short, when both repeat theirs', () => {
+    const told = new Set<string>();
+    expect(repeat(1000, 5000, told).stop).toBe(true);
+    const both = (day: number) => {
+      const state = game(5000, 'full', day);
+      spearmenOf(state, macedon).men = 30_000;
+      return stopsOfDay(newsOf(state, told), ALL_PAUSES, new Set());
+    };
+    const first = both(1040);
+    expect(first.news[0]?.text).toMatch(/^Carthage and Macedon could soon declare war on you/);
+    expect(first.stop).toBe(true);
+    const again = both(1080);
+    expect(again.stop).toBe(false);
+    expect(again.news[0]?.text).toMatch(
+      /^Carthage and Macedon could soon declare war on you, with \d+% and \d+% of the strength each needs\. The game ran on: none stands 6 points above its last stop\. See At peace in Wars\.$/,
+    );
+  });
+
   test('a war between them forgets the stop, so the first warning of the next peace stops the game', () => {
     const told = new Set<string>();
     expect(repeat(1000, 5000, told).stop).toBe(true);

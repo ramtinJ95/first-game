@@ -129,6 +129,7 @@ export function threatNewsOfDay(
   remembered: Set<string>,
   training: (state: State, world: World) => ReadonlyMap<FactionId, TrainingMuster> = () =>
     new Map(),
+  stopping = true,
 ): Alert[] {
   const player = after.player;
   const warned: {
@@ -184,7 +185,8 @@ export function threatNewsOfDay(
   if (!first) return [];
   // One line tells the day's powers, so it stops for all of them or for none.
   const stops = warned.some((w) => w.spared === undefined);
-  if (stops)
+  // A stop the Game menu turned off is no stop the player answered, so it spares nothing later.
+  if (stops && stopping)
     for (const w of warned) {
       forgetStop(remembered, w.power);
       remembered.add(
@@ -234,8 +236,9 @@ function ranOnText(
     threat.pressed
       ? 'against your field armies'
       : `near ${state.cities[threat.front]?.name ?? 'your land'}`;
+  // Each power's day of war and stop would not fit the corner, so the At peace rows give them.
   if (others.length > 0)
-    return `${listed(spared.map((w) => w.name))} could soon declare war on you, with ${listed(spared.map((w) => share(w.threat.readiness)))} of the strength each needs; ${listed(spared.map((w) => `${w.name} may declare ${w.from}`))}. The game ran on: ${listed(spared.map((w) => `${w.name}'s stop on ${dateText(w.stop.day)} was at ${w.stop.share}%`))}, and none stands ${THREAT_SPARE_RISE} points higher. See At peace in Wars.`;
+    return `${listed(spared.map((w) => w.name))} could soon declare war on you, with ${listed(spared.map((w) => share(w.threat.readiness)))} of the strength each needs. The game ran on: none stands ${THREAT_SPARE_RISE} points above its last stop. See At peace in Wars.`;
   const rise = points(one.threat.readiness) - one.stop.share;
   const higher = rise > 0 ? `only ${rise} ${rise === 1 ? 'point' : 'points'} higher` : 'no higher';
   return `${one.name} could soon declare war on you: ${share(one.threat.readiness)} of the strength it needs ${near(one.threat)}, ${one.from}. The game ran on: its stop on ${dateText(one.stop.day)} was at ${one.stop.share}%, and it stands ${higher}. See At peace in Wars.`;

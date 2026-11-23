@@ -692,7 +692,8 @@ export const CARTHAGE_STOPPED_ON = 250;
  * Carthage near war with Rome, by Roma as in `carthageNearsWar` unless `state` says otherwise, on
  * day 300 or the state's later day, with every other great power bound by a truce with Rome, and a
  * save whose page remembers that Carthage's warning stopped the game on `stoppedOn` at `share`%
- * weighing `front`, a city's id or `field`, so its next warning repeats that stop.
+ * weighing `front`, a city's id or `field`, so its next warning repeats that stop, and the same
+ * of each power `also` names, at the front it gives.
  */
 export function carthageWarnsAgain(
   share: number,
@@ -700,12 +701,23 @@ export function carthageWarnsAgain(
     state = carthageNearsWar(),
     front = 'roma',
     stoppedOn = CARTHAGE_STOPPED_ON,
-  }: { state?: GameState; front?: string; stoppedOn?: number } = {},
+    also = {},
+  }: {
+    state?: GameState;
+    front?: string;
+    stoppedOn?: number;
+    also?: Readonly<Record<string, string>>;
+  } = {},
 ): string {
   state.day = Math.max(300, state.day) as Day;
   for (const truce of Object.values(state.truces)) truce.endsOn = (state.day + 365) as Day;
   for (const power of Object.values(state.factions))
-    if (power.kind === 'greatPower' && power.id !== rome && power.id !== carthage)
+    if (
+      power.kind === 'greatPower' &&
+      power.id !== rome &&
+      power.id !== carthage &&
+      !Object.hasOwn(also, power.id)
+    )
       state.truces[warKey(power.id, rome)] = {
         since: state.day,
         endsOn: (state.day + 365) as Day,
@@ -718,10 +730,12 @@ export function carthageWarnsAgain(
       selection: undefined,
       panel: undefined,
       occupied: new Map(),
-      told: new Set([
-        `threat:carthage:${stoppedOn}`,
-        `threat-stop:carthage:${stoppedOn}:${share}:${front}`,
-      ]),
+      told: new Set(
+        Object.entries({ ...also, carthage: front }).flatMap(([power, at]) => [
+          `threat:${power}:${stoppedOn}`,
+          `threat-stop:${power}:${stoppedOn}:${share}:${at}`,
+        ]),
+      ),
       weakSieges: new Map(),
     }),
   );

@@ -6,6 +6,7 @@ import {
   carthageWarnsAgain,
   CARTHAGE_STOPPED_ON,
   dropSave,
+  map,
   openGame,
   pause,
   resizeTo,
@@ -14,9 +15,13 @@ import {
   untilDrawn,
 } from '../../../e2e/support.ts';
 import { dateText } from '../../../src/app/names.ts';
-import type { FormationId } from '../../../src/sim/ids.ts';
+import type { FactionId, FormationId } from '../../../src/sim/ids.ts';
+import { warReadiness } from '../../../src/sim/ai/war.ts';
+import { buildWorld } from '../../../src/sim/world/world.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
 import { defineScenario } from '../scenario.ts';
+
+const macedon = 'macedon' as FactionId;
 
 /** Carthage presses Rome's 1,000 men in the field with 2,000, as `paused-news-fits` plays it. */
 function carthagePresses(): GameState {
@@ -27,6 +32,22 @@ function carthagePresses(): GameState {
   punic.men = 2000;
   roman.men = 1000;
   return state;
+}
+
+/** Carthage beside Rome as in `carthageNearsWar`, and Macedon with 30,000 men: both warn on one day. */
+function carthageAndMacedonNearWar(): GameState {
+  const state = carthageNearsWar();
+  const macedonians = state.formations[armyOf(state, macedon).formations[0] as FormationId];
+  if (!macedonians) throw new Error('no Macedonian army');
+  macedonians.men = 30_000;
+  return state;
+}
+
+/** The city Macedon weighs Rome's forces at in the state, or `field`. */
+function macedonFront(state: GameState): string {
+  const threat = warReadiness(state, buildWorld(map), macedon, rome);
+  if (!threat) throw new Error('Macedon weighs no war on Rome');
+  return threat.pressed ? 'field' : threat.front;
 }
 
 /** The warnings that run the game on, with the stop each repeats. */
@@ -43,6 +64,15 @@ const REPEATS = [
     save: () => carthageWarnsAgain(100, { state: carthagePresses(), front: 'field' }),
     line: /could soon declare war on you.*against your field armies.*The game ran on/,
     says: 'against your field armies, ',
+  },
+  {
+    name: 'two warnings on one day',
+    save: () => {
+      const state = carthageAndMacedonNearWar();
+      return carthageWarnsAgain(100, { state, also: { macedon: macedonFront(state) } });
+    },
+    line: /Carthage and Macedon could soon declare war on you.*The game ran on/,
+    says: 'The game ran on: none stands 6 points above its last stop. See At peace in Wars.',
   },
 ] as const;
 
