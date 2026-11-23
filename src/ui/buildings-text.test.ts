@@ -88,7 +88,15 @@ describe('cityBuildings', () => {
     const shown = cityBuildings(state, [order], roma(state), fixtureWorld());
     expect(shown.work).toEqual({ kind: 'ordered', building: 'canals', name: 'Canals' });
     expect(shown.blocked).toBe('Roma is building Canals');
-    expect(shown.options.map((o) => o.kind)).toEqual(['forum', 'barracks', 'towers', 'temple']);
+    expect(shown.options.map((o) => o.kind)).toEqual([
+      'forum',
+      'barracks',
+      'towers',
+      'temple',
+      'treasuryHall',
+      'merchantsQuarter',
+      'stronghold',
+    ]);
     expect(shown.options.every((o) => o.why === undefined)).toBe(true);
   });
 
@@ -139,8 +147,60 @@ describe('cityBuildings', () => {
     const state = rich();
     roma(state).buildings = ['forum'];
     const shown = cityBuildings(state, [], roma(state), fixtureWorld());
-    expect(shown.built.map((b) => b.name)).toEqual(['Forum']);
+    expect(shown.built.map((b) => [b.name, b.level])).toEqual([['Forum', 1]]);
     expect(shown.built[0]?.effect).toMatch(/^\+\d+\.\d gold a day$/);
-    expect(shown.options.map((o) => o.kind)).toEqual(['canals', 'barracks', 'towers', 'temple']);
+    expect(shown.options.map((o) => [o.kind, o.tier])).toEqual([
+      ['canals', 'first'],
+      ['barracks', 'first'],
+      ['towers', 'first'],
+      ['temple', 'first'],
+      ['lawCourts', 'second'],
+      ['treasuryHall', 'work'],
+      ['merchantsQuarter', 'work'],
+      ['stronghold', 'work'],
+    ]);
+    expect(option(state, 'lawCourts').raises).toBe('Forum');
+  });
+
+  it('shows a first building with its second level at level 2, and offers no third', () => {
+    const state = rich();
+    roma(state).buildings = ['forum', 'lawCourts'];
+    const shown = cityBuildings(state, [], roma(state), fixtureWorld());
+    expect(shown.built.map((b) => [b.name, b.level])).toEqual([['Forum', 2]]);
+    expect(shown.options.some((o) => o.kind === 'lawCourts')).toBe(false);
+  });
+
+  it('offers no great work to a city that holds one or works on one, and names what a work needs', () => {
+    const state = rich();
+    expect(option(state, 'stronghold').why).toBe('Stronghold needs Towers first');
+    roma(state).buildings = ['treasuryHall'];
+    let shown = cityBuildings(state, [], roma(state), fixtureWorld());
+    expect(shown.built.map((b) => [b.name, b.level])).toEqual([['Treasury hall', undefined]]);
+    expect(shown.options.filter((o) => o.tier === 'work')).toEqual([]);
+    roma(state).buildings = [];
+    roma(state).construction = { building: 'merchantsQuarter', daysLeft: 300 };
+    shown = cityBuildings(state, [], roma(state), fixtureWorld());
+    expect(shown.options.filter((o) => o.tier === 'work')).toEqual([]);
+  });
+
+  it('gives a standing Temple at level 1 the cities it hastens, as before it stood', () => {
+    const state = rich();
+    const offered = option(state, 'temple').effect;
+    roma(state).buildings = ['temple'];
+    const shown = cityBuildings(state, [], roma(state), fixtureWorld());
+    expect(shown.built).toEqual([{ kind: 'temple', name: 'Temple', level: 1, effect: offered }]);
+  });
+
+  it("names a Merchants' quarter's route slot and its share of each route even where no route runs", () => {
+    expect(option(rich(), 'merchantsQuarter').effect).toBe(
+      `1 more route slot, its end of each route earns ${Math.round(BUILDINGS.merchantsQuarter.tradeShare * 100)}% more`,
+    );
+  });
+
+  it("gives each option's payback in years by the worth the AI builds by", () => {
+    const state = rich();
+    const forum = option(state, 'forum');
+    expect(forum.payback).toBeGreaterThan(0);
+    expect(option(state, 'temple').payback).toBeUndefined();
   });
 });

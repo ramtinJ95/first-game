@@ -6,7 +6,7 @@ The goal is to land parallel units without repeatedly rebasing shared registrati
 
 Add an immutable `src/sim/save-changes/<descriptive-name>.json` containing `{ "adds": "What the new saved state contains." }`. Do not edit an existing change, assign a number, or commit generated files. Each build's format is the sorted set of names. Order is irrelevant; missing, extra, duplicate, and malformed changes are refused before state parsing. The existing import/Continue notice names the missing changes and their descriptions, or unknown change names.
 
-`baseline-format-12` and `peace-and-truces` represent the complete previous state. Decision: refuse legacy numeric saves rather than infer a change set that they never recorded. The notice identifies the missing changes. There is no migration or silent acceptance of a different set. Compatibility remains intentionally strict.
+`baseline-format-12` and `peace-and-truces` represent the complete previous state. Decision: refuse legacy numeric saves rather than infer a change set that they never recorded. The notice identifies the missing changes. There is no migration or silent acceptance of a different set. Compatibility remains intentionally strict. One exception: a change file may set `"olderSavesLoad": true` when a save from before it is already a valid state of the new format, as `city-projects` is, whose new building kinds an older city simply lacks. A save lacking only such changes loads; an older build still refuses a newer save that names them.
 
 ## Commands
 

@@ -4,7 +4,15 @@ import { ownedCity } from '../orders/owned-city.ts';
 import type { City } from '../state/city.ts';
 import type { GameState } from '../state/game-state.ts';
 import { beleaguered } from '../systems/sieges.ts';
-import { BUILDINGS, CANCEL_REFUND, hasBuilt, type BuildingKind } from './buildings.ts';
+import {
+  BUILDINGS,
+  CANCEL_REFUND,
+  greatWorkOf,
+  hasBuilt,
+  isGreatWork,
+  neededFirst,
+  type BuildingKind,
+} from './buildings.ts';
 
 export interface BuildOrder {
   kind: 'build';
@@ -22,7 +30,8 @@ export interface CancelBuildingOrder {
 /**
  * Why the city cannot start this building now, or undefined when it can. A city builds
  * one building at a time, each once, while it is calm and no enemy stands at its walls,
- * and only with the people the building needs and the gold it costs.
+ * and only with the people and the first building it needs and the gold it costs. It
+ * holds one great work at most.
  */
 export function buildRefusal(
   state: DeepReadonly<GameState>,
@@ -38,6 +47,10 @@ export function buildRefusal(
   }
   if (city.unrestDays > 0) return `city ${city.id} is in unrest for ${city.unrestDays} more days`;
   if (beleaguered(state, city)) return `city ${city.id} is under siege`;
+  const needed = neededFirst(building);
+  if (needed && !hasBuilt(city, needed)) return `a ${building} needs a ${needed} first`;
+  const work = greatWorkOf(city);
+  if (work && isGreatWork(building)) return `city ${city.id} has a ${work} already`;
   const gold = state.factions[city.owner]?.stores.gold ?? 0;
   if (gold < row.gold) {
     return `a ${building} costs ${row.gold} gold, but ${city.owner} has ${Math.floor(gold)}`;

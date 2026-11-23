@@ -37,6 +37,7 @@ import { commandTarget, planCommand, plannedRoutes, type Plan } from './command.
 import { fateChoices } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
 import { guardNewsOfDay } from './guard-news.ts';
+import { BUILDING_HINT_KEY, buildingHintOfDay } from './building-hint.ts';
 import { refusalText } from './names.ts';
 import { alertsInSight, followJoin, seesPick, sightOfAll } from './sighted.ts';
 import { enqueue, keepOpen, unansweredOffer, type Modal } from './modals.ts';
@@ -254,6 +255,7 @@ const clock = createClock({
     tradeTroubles = trade.watched;
     const leader = leaderNews(before, after, leaderTold);
     leaderTold = leader.told;
+    const hint = buildingHintOfDay(before, after, toldOnce);
     const stops = stopsOfDay(
       groupAlerts([
         ...alertsInSight(alertsOfDay(before, after, events, occupied, toldOnce), saw, sees),
@@ -274,11 +276,12 @@ const clock = createClock({
           newsPauses && pauses.warThreat,
         ),
         ...guardNewsOfDay(before, after),
+        ...hint,
       ]),
       newsPauses ? pauses : NO_PAUSES,
       toldOnce,
     );
-    toldOnce = stops.told;
+    toldOnce = hint.length > 0 ? new Set([...stops.told, BUILDING_HINT_KEY]) : stops.told;
     if (stops.news.length > 0) {
       chronicle = [...stops.news.reverse(), ...chronicle].slice(0, CHRONICLE_KEPT);
     }

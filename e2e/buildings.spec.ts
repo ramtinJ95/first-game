@@ -7,11 +7,13 @@ import {
   cityPoint,
   day,
   dropSave,
+  lawCourtsAtWork,
   mediolanumFallenWithBuildings,
   openGame,
   pause,
   resume,
   romaTreasuryFull,
+  romaWithEveryBuilding,
   setRich,
   startGame,
   untilDay,
@@ -81,6 +83,72 @@ test.describe('buildings', () => {
     await expect(panel.getByTestId('city-built')).toContainText('Barracks');
     await expect(barracks).toHaveCount(0);
     expect(await trainingDays()).toBe(Math.ceil(before * BUILDINGS.barracks.trainingShare));
+  });
+
+  test("Roma's Forum at level 1 offers its Law courts with their payback, and the order starts their days", async ({
+    page,
+  }) => {
+    await load(page, romaWithEveryBuilding());
+    await openCity(page, 'roma', 'Roma');
+    const panel = page.getByTestId('city-panel');
+    await expect(panel.getByTestId('city-built')).toContainText('Forum · level 1');
+    const courts = panel.getByTestId('build-lawCourts');
+    await expect(courts).toContainText('Law courts · Forum level 2');
+    await expect(courts).toContainText(
+      `${BUILDINGS.lawCourts.gold.toLocaleString('en-US')} gold · ${BUILDINGS.lawCourts.days} days`,
+    );
+    await expect(courts).toContainText(/gold a day/);
+    await expect(courts).toContainText(/pays back in \d+\.\d years/);
+
+    await courts.click();
+    const work = panel.getByTestId('city-construction');
+    await expect(work).toHaveText('Law courts · ordered for the next day');
+    await resume(page);
+    await expect(work).toHaveText(/^Law courts · \d+ days left/);
+    await pause(page);
+    await expect(panel.getByTestId('build-lawCourts')).toHaveCount(0);
+  });
+
+  test('a great work ordered in Roma takes its gold and leaves no other great work on offer', async ({
+    page,
+  }) => {
+    await load(page, romaWithEveryBuilding());
+    await openCity(page, 'roma', 'Roma');
+    const panel = page.getByTestId('city-panel');
+    const works = panel.getByTestId('build-work');
+    await expect(works.getByRole('button')).toHaveCount(3);
+    const hall = panel.getByTestId('build-treasuryHall');
+    await expect(hall).toContainText(/pays back in \d+\.\d years/);
+    await hall.click();
+    await expect(panel.getByTestId('city-construction')).toHaveText(
+      'Treasury hall · ordered for the next day',
+    );
+    await expect(works).toHaveCount(0);
+    await resume(page);
+    await expect(panel.getByTestId('city-construction')).toHaveText(
+      /^Treasury hall · \d+ days left/,
+    );
+    await pause(page);
+    await expect(works).toHaveCount(0);
+  });
+
+  test('a save with Law courts at work loads with them, and they raise the Forum to level 2', async ({
+    page,
+  }) => {
+    await load(page, lawCourtsAtWork());
+    await openCity(page, 'roma', 'Roma');
+    const panel = page.getByTestId('city-panel');
+    const work = panel.getByTestId('city-construction');
+    await expect(work).toHaveText(/^Law courts · 2 days left/);
+    const from = await day(page);
+    await resume(page);
+    await untilDay(page, from + 3);
+    await pause(page);
+    await expect(page.getByTestId('alerts')).toContainText('Law courts finished at Roma');
+    await expect(work).toHaveCount(0);
+    await expect(panel.getByTestId('city-built')).toContainText('Forum · level 2');
+    await openCity(page, 'capua', 'Capua');
+    await expect(page.getByTestId('city-built')).toContainText('Treasury hall · great work');
   });
 
   test('a sack destroys the buildings of a fallen city, as the fate prompt says, and the city panel lists none', async ({

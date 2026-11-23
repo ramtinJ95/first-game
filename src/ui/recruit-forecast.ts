@@ -118,6 +118,8 @@ export function recruitForecast(
           return later.food === undefined && later.gold === undefined;
         })
       : undefined;
+  const site = troop && short.food !== undefined ? canalSite(waiting, at) : undefined;
+  const canalKind = site?.kind ?? 'canals';
   const withCanal = (plan: Plan, paysOn?: number) =>
     daysUntilShort(
       stores.food,
@@ -128,12 +130,12 @@ export function recruitForecast(
       byDay([
         ...plan,
         ...atWork.food,
-        { inDays: BUILDINGS.canals.days, men: 0, gain: BUILDINGS.canals.food },
+        { inDays: BUILDINGS[canalKind].days, men: 0, gain: BUILDINGS[canalKind].food },
       ]),
       yearly.food,
     ) === undefined &&
     daysUntilShort(
-      stores.gold - BUILDINGS.canals.gold - (paysOn === undefined ? cost.gold : 0),
+      stores.gold - BUILDINGS[canalKind].gold - (paysOn === undefined ? cost.gold : 0),
       balance.gold,
       limits.gold,
       UPKEEP_PER_MAN.gold,
@@ -145,22 +147,22 @@ export function recruitForecast(
       ]),
       yearly.gold,
     ) === undefined;
-  const site = troop && short.food !== undefined ? canalSite(waiting, at) : undefined;
   const canalWait = !site
     ? undefined
     : withCanal(byDay([...queued, { inDays: daysToMuster, men: cost.men }]))
       ? 0
-      : firstWait(Math.max(BUILDINGS.canals.days, ...queued.map((r) => r.inDays)), (wait) =>
+      : firstWait(Math.max(BUILDINGS[canalKind].days, ...queued.map((r) => r.inDays)), (wait) =>
           withCanal(byDay([...queued, { inDays: daysToMuster + wait, men: cost.men }]), wait),
         );
   const canal =
     site && canalWait !== undefined && canalWait < (holdsAfter ?? Infinity)
-      ? `Or build Canals at ${site.name} for ${whole(BUILDINGS.canals.gold)} gold, which grow ${BUILDINGS.canals.food} more food a day once built in ${BUILDINGS.canals.days} days: with them these men are fed if raised ${canalWait === 0 ? 'now' : `in about ${whole(canalWait)} days, on ${dateText(game.day + canalWait)}`}.`
+      ? `Or build ${BUILDINGS[canalKind].name} at ${site.city.name} for ${whole(BUILDINGS[canalKind].gold)} gold, which grow ${BUILDINGS[canalKind].food} more food a day once built in ${BUILDINGS[canalKind].days} days: with them these men are fed if raised ${canalWait === 0 ? 'now' : `in about ${whole(canalWait)} days, on ${dateText(game.day + canalWait)}`}.`
       : undefined;
   const barracksLine = (): string | undefined => {
-    const yard = barracksSite(waiting, at);
-    if (!yard) return undefined;
-    const { days: built, gold: price } = BUILDINGS.barracks;
+    const found = barracksSite(waiting, at);
+    if (!found) return undefined;
+    const { city: yard, kind } = found;
+    const { days: built, gold: price } = BUILDINGS[kind];
     const yearlyMen = {
       change: grownBalance.manpower - balance.manpower,
       limit: grownLimits.manpower - limits.manpower,
@@ -209,11 +211,12 @@ export function recruitForecast(
     };
     if ((gold(price)[0] ?? -1) < 0) return undefined;
     const without = firstDay(men(atWork.levies), gold(0));
-    const gains = gainsOf(waiting, sums, yard, 'barracks', built);
+    const gains = gainsOf(waiting, sums, yard, kind, built);
     const wait = firstDay(men([...atWork.levies, gains.levy]), gold(price));
     if (wait === undefined || wait >= (without ?? Infinity)) return undefined;
-    const shown = buildingGain(waiting, yard, 'barracks');
-    return `Or build Barracks at ${yard.name} for ${whole(price)} gold, which give ${whole(shown.levy)} more men to call up and ${shown.daily.manpower.toFixed(1)} more a day once built in ${built} days: with them these men can be raised in about ${whole(wait)} days, on ${dateText(game.day + wait)}.`;
+    const shown = buildingGain(waiting, yard, kind);
+    const what = kind === 'barracks' ? 'Barracks' : `a ${BUILDINGS[kind].name}`;
+    return `Or build ${what} at ${yard.name} for ${whole(price)} gold, which ${kind === 'barracks' ? 'give' : 'gives'} ${whole(shown.levy)} more men to call up and ${shown.daily.manpower.toFixed(1)} more a day once built in ${built} days: with them these men can be raised in about ${whole(wait)} days, on ${dateText(game.day + wait)}.`;
   };
   const barracks = troop && stores.manpower < cost.men ? barracksLine() : undefined;
   const warnings = (['food', 'gold'] as const).flatMap((key) => {
@@ -443,21 +446,30 @@ function storeByDay(
   return amounts;
 }
 
-/** The player's city where Barracks could be started today: the one named, else the first other by id. */
-function barracksSite(state: DeepReadonly<GameState>, at: CityId | undefined) {
+/**
+ * The player's city where the first level, or else the second, could be started today: the one
+ * named, else the first other by id. A city that has the first level is offered its second.
+ */
+function siteFor<K extends BuildingKind>(
+  state: DeepReadonly<GameState>,
+  at: CityId | undefined,
+  kinds: readonly K[],
+): { city: DeepReadonly<City>; kind: K } | undefined {
   const own = Object.values(state.cities)
     .filter((city) => city.owner === state.player)
     .sort((a, b) => (a.id === at ? -1 : b.id === at ? 1 : a.id < b.id ? -1 : 1));
-  return own.find((city) => buildRefusal(state, city, 'barracks') === undefined);
+  for (const city of own) {
+    const kind = kinds.find((k) => buildRefusal(state, city, k) === undefined);
+    if (kind) return { city, kind };
+  }
+  return undefined;
 }
 
-/** The player's city where Canals could be started today: the one named, else the first other by id. */
-function canalSite(state: DeepReadonly<GameState>, at: CityId | undefined) {
-  const own = Object.values(state.cities)
-    .filter((city) => city.owner === state.player)
-    .sort((a, b) => (a.id === at ? -1 : b.id === at ? 1 : a.id < b.id ? -1 : 1));
-  return own.find((city) => buildRefusal(state, city, 'canals') === undefined);
-}
+const barracksSite = (state: DeepReadonly<GameState>, at: CityId | undefined) =>
+  siteFor(state, at, ['barracks', 'drillField'] as const);
+
+const canalSite = (state: DeepReadonly<GameState>, at: CityId | undefined) =>
+  siteFor(state, at, ['canals', 'reservoirs'] as const);
 
 /** The longest wait the warning names; a raise that needs longer waits for better income instead. */
 const MAX_WAIT = 3650;

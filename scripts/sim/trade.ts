@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { bestTrade } from '../../src/sim/ai/trade.ts';
 import { buildRefusal } from '../../src/sim/buildings/build.ts';
-import { BUILDING_KINDS, BUILDINGS } from '../../src/sim/buildings/buildings.ts';
+import { FIRST_LEVELS, BUILDINGS } from '../../src/sim/buildings/buildings.ts';
 import type { FactionId } from '../../src/sim/ids.ts';
 import { parseMap } from '../../src/sim/map.ts';
 import { newGame } from '../../src/sim/new-game.ts';
@@ -55,7 +55,7 @@ for (let seed = 1; seed <= seeds; seed++) {
       const buildings = Object.values(state.cities)
         .filter((c) => c.owner === rome)
         .flatMap((city) =>
-          BUILDING_KINDS.filter((kind) => !buildRefusal(state, city, kind)).map((building) => ({
+          FIRST_LEVELS.filter((kind) => !buildRefusal(state, city, kind)).map((building) => ({
             city: city.id,
             building,
           })),

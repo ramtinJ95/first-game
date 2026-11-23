@@ -10,7 +10,7 @@ import { dailyBalances, limitsOf } from '../systems/economy.ts';
 import { CITY_DEFENCES, fullDefences } from '../systems/sieges.ts';
 import { tick } from '../tick.ts';
 import { TROOPS } from '../troops.ts';
-import { BUILDINGS, CANCEL_REFUND, type BuildingKind } from './buildings.ts';
+import { BUILDINGS, CANCEL_REFUND, levelOf, type BuildingKind } from './buildings.ts';
 import { buildingGain } from './gains.ts';
 
 /** The value, or a thrown error naming what the test expected to exist. */
@@ -53,7 +53,7 @@ function playUntilBuilt(state: GameState, city = FIXTURE.roma) {
     events.push(...next.events);
     state = next.state;
     days += 1;
-    if (days > 400) throw new Error('the building never finished');
+    if (days > 1000) throw new Error('the building never finished');
   }
   return { state, events, days };
 }
@@ -273,13 +273,168 @@ describe('building', () => {
   });
 });
 
+describe('second levels and great works', () => {
+  test('Law courts and a Treasury hall each add their share of the base gold to the Forum', () => {
+    const state = withBuilt(rich(), FIXTURE.roma, 'forum');
+    const roma = need(state.cities[FIXTURE.roma]);
+    const base = buildingGain(state, roma, 'forum').daily.gold / BUILDINGS.forum.goldShare;
+    expect(buildingGain(state, roma, 'lawCourts').daily.gold).toBeCloseTo(
+      base * BUILDINGS.lawCourts.goldShare,
+      9,
+    );
+    expect(buildingGain(state, roma, 'treasuryHall').daily.gold).toBeCloseTo(
+      base * BUILDINGS.treasuryHall.goldShare,
+      9,
+    );
+  });
+
+  test('Reservoirs grow their food on top of the canals', () => {
+    const state = withBuilt(rich(), FIXTURE.capua, 'canals');
+    const gain = buildingGain(state, need(state.cities[FIXTURE.capua]), 'reservoirs');
+    expect(gain.daily.food).toBeCloseTo(BUILDINGS.reservoirs.food, 9);
+  });
+
+  test('a Drill field adds its share of the base manpower and levy to the Barracks', () => {
+    const state = withBuilt(rich(), FIXTURE.roma, 'barracks');
+    const roma = need(state.cities[FIXTURE.roma]);
+    const barracks = buildingGain(state, roma, 'barracks');
+    const drill = buildingGain(state, roma, 'drillField');
+    const ratio = BUILDINGS.drillField.extraLevyShare / (BUILDINGS.barracks.levyShare - 1);
+    expect(drill.daily.manpower).toBeCloseTo(barracks.daily.manpower * ratio, 9);
+    expect(drill.trainingShare).toBe(1);
+  });
+
+  test('Outer walls and a Stronghold add their shares of the base walls and garrison to the towers', () => {
+    const state = withBuilt(rich(), FIXTURE.roma, 'towers');
+    const roma = need(state.cities[FIXTURE.roma]);
+    const { walls, garrison } = CITY_DEFENCES.capital;
+    for (const kind of ['outerWalls', 'stronghold'] as const) {
+      const gain = buildingGain(state, roma, kind);
+      expect(gain.walls).toBeCloseTo(walls * BUILDINGS[kind].wallsShare, 9);
+      expect(gain.garrison).toBeCloseTo(garrison * BUILDINGS[kind].garrisonShare, 0);
+    }
+  });
+
+  test("a Sanctuary carries the temple's pace to its owner's cities within its longer reach", () => {
+    let state = withBuilt(rich(), FIXTURE.roma, 'temple');
+    const roma = need(state.cities[FIXTURE.roma]);
+    const carthago = need(state.cities[FIXTURE.carthago]);
+    const km = Math.hypot(
+      roma.position.x - carthago.position.x,
+      roma.position.y - carthago.position.y,
+    );
+    expect(km).toBeGreaterThan(BUILDINGS.temple.reachKm);
+    expect(km).toBeLessThanOrEqual(BUILDINGS.sanctuary.reachKm);
+    carthago.owner = FIXTURE.rome;
+    carthago.unrestDays = 90;
+    expect(buildingGain(state, roma, 'sanctuary').calmed).toEqual([FIXTURE.carthago]);
+    withBuilt(state, FIXTURE.roma, 'sanctuary');
+    state = tick(state, [], world).state;
+    expect(need(state.cities[FIXTURE.carthago]).unrestDays).toBe(90 - BUILDINGS.temple.unrestPace);
+  });
+
+  test('a second level starts only on its first, and finishes as the building at level 2', () => {
+    const state = rich();
+    const city = need(state.cities[FIXTURE.roma]);
+    const refused = tick(state, [build('lawCourts')], world);
+    expect(refused.rejected.map((r) => r.reason)).toEqual(['a lawCourts needs a forum first']);
+    withBuilt(state, FIXTURE.roma, 'forum');
+    const gold = need(state.factions[FIXTURE.rome]).stores.gold;
+    executeOrder(state, build('lawCourts'), world);
+    expect(need(state.factions[FIXTURE.rome]).stores.gold).toBe(gold - BUILDINGS.lawCourts.gold);
+    const { state: after, days } = playUntilBuilt(state);
+    expect(days).toBe(BUILDINGS.lawCourts.days);
+    expect(levelOf(need(after.cities[FIXTURE.roma]), 'forum')).toBe(2);
+    expect(levelOf(city, 'forum')).toBe(1);
+    expectConsistent(after);
+  });
+
+  test('a city holds one great work, and cancelling one gives back half its gold', () => {
+    const state = rich();
+    executeOrder(state, build('treasuryHall'), world);
+    const { state: built } = playUntilBuilt(state);
+    need(built.factions[FIXTURE.rome]).stores.gold = 50_000;
+    expect(tick(built, [build('merchantsQuarter')], world).rejected.map((r) => r.reason)).toEqual([
+      'city roma has a treasuryHall already',
+    ]);
+    const other = rich();
+    executeOrder(other, build('merchantsQuarter'), world);
+    executeOrder(other, cancel(), world);
+    expect(need(other.factions[FIXTURE.rome]).stores.gold).toBe(
+      50_000 - BUILDINGS.merchantsQuarter.gold * (1 - CANCEL_REFUND),
+    );
+    expectConsistent(built);
+    expectConsistent(other);
+  });
+
+  test('a great work that needs a building waits for it, and waits out unrest like any other', () => {
+    const state = rich();
+    expect(tick(state, [build('stronghold')], world).rejected.map((r) => r.reason)).toEqual([
+      'a stronghold needs a towers first',
+    ]);
+    withBuilt(state, FIXTURE.roma, 'towers');
+    need(state.cities[FIXTURE.roma]).unrestDays = 5;
+    expect(tick(state, [build('stronghold')], world).rejected.map((r) => r.reason)).toEqual([
+      'city roma is in unrest for 5 more days',
+    ]);
+  });
+
+  test('a conqueror keeps the levels and the work that stand, and a sack destroys them all', () => {
+    const { state } = capuaFallen(['canals', 'reservoirs', 'temple', 'treasuryHall'], 'towers');
+    expect(need(state.cities[FIXTURE.capua]).buildings).toEqual([
+      'canals',
+      'reservoirs',
+      'temple',
+      'treasuryHall',
+    ]);
+    const sack: Order = { kind: 'sack', faction: FIXTURE.carthage, city: FIXTURE.capua };
+    const { state: after, events } = tick(state, [sack], world);
+    expect(need(after.cities[FIXTURE.capua]).buildings).toEqual([]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        kind: 'buildingsLost',
+        buildings: ['canals', 'reservoirs', 'temple', 'treasuryHall'],
+        cause: 'sack',
+      }),
+    );
+    expectConsistent(after);
+  });
+
+  test('a save with a second level at work loads with it, and an older save loads at first levels', () => {
+    const state = withBuilt(rich(), FIXTURE.roma, 'forum');
+    executeOrder(state, build('lawCourts'), world);
+    const loaded = loadGame(saveGame(state));
+    expect(loaded.ok && loaded.state.cities[FIXTURE.roma]).toMatchObject({
+      buildings: ['forum'],
+      construction: { building: 'lawCourts', daysLeft: BUILDINGS.lawCourts.days },
+    });
+    const older = JSON.parse(saveGame(withBuilt(rich(), FIXTURE.roma, 'forum', 'canals'))) as {
+      format: string[];
+      state: GameState;
+    };
+    const old = loadGame(
+      JSON.stringify({ ...older, format: older.format.filter((c) => c !== 'city-projects') }),
+    );
+    expect(old.ok).toBe(true);
+    if (!old.ok) return;
+    const roma = need(old.state.cities[FIXTURE.roma]);
+    expect([levelOf(roma, 'forum'), levelOf(roma, 'canals')]).toEqual([1, 1]);
+    const played = tick(old.state, [build('reservoirs')], world);
+    expect(played.rejected).toEqual([]);
+    expectConsistent(played.state);
+  });
+});
+
 const NEAR_CAPUA = { x: 2641.8, y: 2448.3 };
 
 /** Carthage starves out Capua, which stands with towers and a temple and has canals at work, on day 2. */
-function capuaFallen(): { state: GameState; events: DayEvent[] } {
+function capuaFallen(
+  standing: BuildingKind[] = ['towers', 'temple'],
+  work: BuildingKind = 'canals',
+): { state: GameState; events: DayEvent[] } {
   let state = rich();
-  withBuilt(state, FIXTURE.capua, 'towers', 'temple');
-  need(state.cities[FIXTURE.capua]).construction = { building: 'canals', daysLeft: 10 };
+  withBuilt(state, FIXTURE.capua, ...standing);
+  need(state.cities[FIXTURE.capua]).construction = { building: work, daysLeft: 10 };
   executeOrder(
     state,
     { kind: 'declareWar', faction: FIXTURE.carthage, against: FIXTURE.rome },
@@ -361,12 +516,20 @@ describe('a captured city', () => {
 });
 
 describe('loading a save', () => {
-  test('refuses a city with a building twice, or at work on one it has finished', () => {
+  test('refuses a city with a building twice, at work on one it has finished, with a level or work without the building it needs, or with two great works', () => {
     for (const change of [
       (city: { buildings: BuildingKind[] }) => city.buildings.push('forum', 'forum'),
       (city: { buildings: BuildingKind[]; construction: unknown }) => {
         city.buildings.push('forum');
         city.construction = { building: 'forum', daysLeft: 3 };
+      },
+      (city: { buildings: BuildingKind[] }) => city.buildings.push('lawCourts'),
+      (city: { buildings: BuildingKind[]; construction: unknown }) => {
+        city.construction = { building: 'reservoirs', daysLeft: 3 };
+      },
+      (city: { buildings: BuildingKind[]; construction: unknown }) => {
+        city.buildings.push('treasuryHall');
+        city.construction = { building: 'merchantsQuarter', daysLeft: 3 };
       },
     ]) {
       const state = buildFixture();

@@ -1,5 +1,5 @@
 import * as v from 'valibot';
-import { BUILDING_KINDS } from '../buildings/buildings.ts';
+import { BUILDING_KINDS, isGreatWork, neededFirst } from '../buildings/buildings.ts';
 import { MAX_UNREST_DAYS } from '../cities.ts';
 import { CityIdSchema, FactionIdSchema, ProvinceIdSchema } from '../ids.ts';
 import { TroopSchema } from '../troops.ts';
@@ -62,6 +62,20 @@ export const CitySchema = v.pipe(
       new Set(city.buildings).size === city.buildings.length &&
       !(city.construction && city.buildings.includes(city.construction.building)),
     'a city has each building once, and works only on one it has not finished',
+  ),
+  v.check((city) => {
+    const at = city.construction?.building;
+    return [...city.buildings, ...(at ? [at] : [])].every((kind) => {
+      const first = neededFirst(kind);
+      return !first || city.buildings.includes(first);
+    });
+  }, 'a city builds a second level or a great work only on the building it needs'),
+  v.check(
+    (city) =>
+      [...city.buildings, ...(city.construction ? [city.construction.building] : [])].filter(
+        isGreatWork,
+      ).length <= 1,
+    'a city holds and works on one great work at most',
   ),
 );
 

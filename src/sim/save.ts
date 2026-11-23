@@ -24,7 +24,10 @@ function formatError(format: unknown): { refusal: Refusal; error: string } | und
   if (new Set(format).size !== format.length) {
     return { refusal: 'damaged', error: 'The save repeats a format change.' };
   }
-  const missing = changes.filter((change) => !format.includes(change.name));
+  // A change whose saved state an older save already holds in full, such as new values of a list, may be missing.
+  const missing = changes.filter(
+    (change) => !format.includes(change.name) && !('olderSavesLoad' in change),
+  );
   const unknown = format.filter((name) => !SAVE_FORMAT.includes(name)).sort();
   const differences = [
     ...(missing.length

@@ -32,7 +32,13 @@ export function generateRegistries(root = new URL('../', import.meta.url)): void
     ) {
       throw new Error(`${file} must describe what it adds`);
     }
-    return { name: file.slice(0, -5), adds: data.adds };
+    if ('olderSavesLoad' in data && data.olderSavesLoad !== true)
+      throw new Error(`${file} may set olderSavesLoad only to true`);
+    return {
+      name: file.slice(0, -5),
+      adds: data.adds,
+      ...('olderSavesLoad' in data ? { olderSavesLoad: true } : {}),
+    };
   });
   if (!changes.length) throw new Error('the save format must contain at least one change');
   writeChanged(

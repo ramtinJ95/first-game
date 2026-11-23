@@ -17,9 +17,18 @@ import type { Day } from '../state/day.ts';
 import { newWar, warKey } from '../state/war.ts';
 import { dailyBalances, economy, limitsOf } from '../systems/economy.ts';
 import { trade } from '../systems/trade.ts';
+import { BUILDINGS } from '../buildings/buildings.ts';
 import { tick } from '../tick.ts';
 import { openTrade, acceptTrade, closeTrade } from './orders.ts';
-import { freeSlots, routePoint, routeSlots, tradeForecast, tradeIncome } from './routes.ts';
+import {
+  freeSlots,
+  IMPROVE_STEP,
+  improvementGain,
+  routePoint,
+  routeSlots,
+  tradeForecast,
+  tradeIncome,
+} from './routes.ts';
 
 const world = fixtureWorld();
 const order = {
@@ -472,6 +481,35 @@ describe('caravans, interruption, and saves', () => {
     expect(route.returning).toBe(true);
     expect(route.deliveries).toBe(1);
     expectConsistent(state);
+  });
+
+  test("a Merchants' quarter raises what its own end earns, on arrival and in the income, and adds a slot", () => {
+    const { state, route } = opened();
+    const roma = state.cities[f.roma];
+    if (!roma) throw new Error('missing Roma');
+    const slots = routeSlots(roma, world);
+    const income = tradeIncome(state).get(f.rome) ?? 0;
+    roma.buildings.push('merchantsQuarter');
+    const share = BUILDINGS.merchantsQuarter.tradeShare;
+    expect(routeSlots(roma, world)).toBe(slots + BUILDINGS.merchantsQuarter.slots);
+    expect(tradeIncome(state).get(f.rome)).toBeCloseTo(income + route.daily * share);
+    const gold = state.factions[f.rome]?.stores.gold ?? 0;
+    for (let i = 0; i < route.days; i++) trade(state);
+    expect(state.factions[f.rome]?.stores.gold).toBeCloseTo(
+      gold + (2 + share) * route.daily * route.days,
+    );
+    expectConsistent(state);
+  });
+
+  test("an improvement adds its step at each of the realm's ends, more at a Merchants' quarter", () => {
+    const { state, route } = opened();
+    const step = route.daily * IMPROVE_STEP;
+    expect(improvementGain(state, route, f.rome)).toBeCloseTo(2 * step);
+    state.cities[f.roma]?.buildings.push('merchantsQuarter');
+    expect(improvementGain(state, route, f.rome)).toBeCloseTo(
+      (2 + BUILDINGS.merchantsQuarter.tradeShare) * step,
+    );
+    expect(improvementGain(state, route, f.carthage)).toBe(0);
   });
 
   test('forecast counts toward income and treasury but economy does not pay it a second time', () => {

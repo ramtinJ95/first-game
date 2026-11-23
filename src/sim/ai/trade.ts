@@ -18,6 +18,7 @@ import {
 import { distance } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import { adminShareOf } from '../systems/economy.ts';
+import { tradeShareOf } from '../buildings/buildings.ts';
 
 /** One affordable route with the greatest daily return per gold, ties by city id then land. */
 export function bestTrade(
@@ -58,11 +59,15 @@ export function bestTrade(
         // Distance cancels from return/cost, apart from the opening cost's ceiling.
         // Round the ratio bound upward in floating arithmetic; cap the income with
         // the same multiplication order as the forecast's 1,000 km maximum bonus.
+        const domestic = to.owner === faction;
+        const ends = domestic ? (tradeShareOf(from) + tradeShareOf(to)) / 2 : tradeShareOf(from);
         const upperWorth =
-          Math.round(((goods * share) / TRADE_PAYBACK_DAYS) * (1 + 8 * Number.EPSILON) * 1000000) /
-          1000000;
+          Math.round(
+            ((goods * share * ends) / TRADE_PAYBACK_DAYS) * (1 + 8 * Number.EPSILON) * 1000000,
+          ) / 1000000;
         const endpoint = TRADE_BASE * goods * 2 * share;
-        const upperIncome = endpoint + (to.owner === faction ? endpoint : 0);
+        const upperIncome =
+          endpoint * tradeShareOf(from) + (domestic ? endpoint * tradeShareOf(to) : 0);
         if (best.worth > upperWorth || (best.worth === upperWorth && best.income >= upperIncome))
           continue;
       }
