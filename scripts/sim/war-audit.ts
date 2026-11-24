@@ -8,7 +8,9 @@ import { guardRefusal, weighedGarrison } from '../../src/sim/guards.ts';
 import type { CityId, FactionId } from '../../src/sim/ids.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
 import { areAtWar } from '../../src/sim/wars.ts';
-import { playCautiousRome, rome, warnedPowers, world } from '../cautious-rome.ts';
+import { menOf } from '../../src/sim/systems/economy.ts';
+import { GREAT_WORKS, SECOND_LEVELS } from '../../src/sim/buildings/buildings.ts';
+import { panelBuilds, playCautiousRome, rome, warnedPowers, world } from '../cautious-rome.ts';
 
 const { values, positionals } = parseArgs({
   options: {
@@ -23,10 +25,18 @@ const { values, positionals } = parseArgs({
 });
 
 /** The Romes of `npm run sim -- slide`, which this audit plays war by war. */
+const FIRST_ONLY = { forbid: [...Object.values(SECOND_LEVELS), ...GREAT_WORKS] };
+const NOTHING = { builds: () => [] };
 const PLAYERS = {
   ignoring: { peaceful: true },
   answering: { peaceful: true, answer: true, guards: 'enough' },
   raising: { peaceful: true, answer: true },
+  'panel-ignoring': { peaceful: true, builds: panelBuilds },
+  'panel-answering': { peaceful: true, answer: true, guards: 'enough', builds: panelBuilds },
+  'first-ignoring': { peaceful: true, ...FIRST_ONLY },
+  'first-answering': { peaceful: true, answer: true, guards: 'enough', ...FIRST_ONLY },
+  'hoarding-ignoring': { peaceful: true, ...NOTHING },
+  'hoarding-answering': { peaceful: true, answer: true, guards: 'enough', ...NOTHING },
 } as const;
 type Player = keyof typeof PLAYERS;
 
@@ -87,6 +97,8 @@ function play(player: Player, seed: number, years: number) {
     recruits: number;
     manpower: number;
     gold: number;
+    /** Rome's men under arms on the warning's day. */
+    men: number;
     bands: number;
     refusal: string | null;
   }[] = [];
@@ -146,6 +158,9 @@ function play(player: Player, seed: number, years: number) {
           recruits: 0,
           manpower: after.factions[rome]?.stores.manpower ?? 0,
           gold: after.factions[rome]?.stores.gold ?? 0,
+          men: Object.values(after.armies)
+            .filter((a) => a.owner === rome)
+            .reduce((sum, a) => sum + menOf(after, a), 0),
           bands: city?.guards.length ?? 0,
           refusal: city ? (guardRefusal(after, city, rome) ?? null) : null,
         });
