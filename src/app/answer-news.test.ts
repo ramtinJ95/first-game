@@ -12,7 +12,7 @@ import { warKey } from '../sim/state/war.ts';
 import { makePeace } from '../sim/peace/make-peace.ts';
 import { tick } from '../sim/tick.ts';
 import type { Alert } from './alerts.ts';
-import { createAnswerNews } from './answer-news.ts';
+import { ANSWER_BACKLOG_DAYS, createAnswerNews } from './answer-news.ts';
 import { dateText } from './names.ts';
 import { share } from './threat-news.ts';
 
@@ -304,5 +304,24 @@ describe('the news of what an answer to a warning bought', () => {
       expect(decided).toBe(i + 1);
       state = result.state;
     }
+  });
+
+  it('gives up the game without the answer when the page falls too far behind, and claims nothing after', () => {
+    const start = carthageAt(2400);
+    const front = warReadiness(start, world, carthage, f.rome)?.front;
+    if (!front) throw new Error('Carthage weighs no city of Rome');
+    const news = createAnswerNews(world);
+    let state = start;
+    let most = 0;
+    for (let i = 0; i < ANSWER_BACKLOG_DAYS + 20; i++) {
+      const orders: Order[] = state.day === 100 ? [hireAt(front), hireAt(front)] : [];
+      const result = tick(state, [...orders, ...decideAll(state, world)], world);
+      news.onDay(state, result.state, result.events, orders);
+      most = Math.max(most, news.backlog);
+      state = result.state;
+    }
+    expect(most).toBe(ANSWER_BACKLOG_DAYS);
+    expect(news.waiting).toBe(false);
+    expect(news.next()).toEqual([]);
   });
 });

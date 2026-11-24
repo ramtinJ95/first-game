@@ -52,6 +52,9 @@ interface Watch {
   readonly until: number;
 }
 
+/** The most days the copy may fall behind the game before it is given up. */
+export const ANSWER_BACKLOG_DAYS = 30;
+
 /** The kinds of order that may answer a warning (`answerOf`). */
 const ANSWERS = new Set<Order['kind']>(['recruit', 'hireGuards', 'moveArmy']);
 
@@ -286,11 +289,20 @@ export function createAnswerNews(world: World, decide = (state: State) => decide
     onDay(before: State, after: State, events: readonly DayEvent[], orders: readonly Order[]) {
       const answering = orders.some((o) => o.faction === after.player && ANSWERS.has(o.kind));
       if (watch || queue.length > 0 || answering) queue.push({ before, after, events, orders });
+      // A page too slow to give the copy its frames lets it fall behind; it then claims nothing rather than tell old news.
+      if (queue.length > ANSWER_BACKLOG_DAYS) {
+        queue.length = 0;
+        watch = undefined;
+      }
     },
     /** Plays the oldest day waiting, if any, and gives its news. */
     next(): Alert[] {
       const day = queue.shift();
       return day ? play(day.before, day.after, day.events, day.orders) : [];
+    },
+    /** How many days wait for `next`. */
+    get backlog(): number {
+      return queue.length;
     },
     /** Whether a day waits for `next`. */
     get waiting(): boolean {
