@@ -11,6 +11,7 @@ import type { World } from '../world/world.ts';
 import { emit } from '../events.ts';
 import { removeRecord } from '../records.ts';
 import { mayWalkWithin } from '../world/land-reach.ts';
+import { marketShareOf } from '../advances/advances.ts';
 import { extraSlotsOf, tradeShareOf } from '../buildings/buildings.ts';
 
 type State = DeepReadonly<GameState>;
@@ -86,10 +87,15 @@ export function routeEnds(
   ];
 }
 
-/** Gold a day at one end, before administration: the route's rate, more at a Merchants' quarter. */
+/** What a route's rate is multiplied by at this end: more at a Merchants' quarter and with Market weights. */
+export function endShareOf(state: State, city: DeepReadonly<City>): number {
+  return tradeShareOf(city) * marketShareOf(state.factions[city.owner]);
+}
+
+/** Gold a day at one end, before administration: the route's rate times the end's share. */
 export function endRate(state: State, route: DeepReadonly<TradeRoute>, city: CityId): number {
   const end = state.cities[city];
-  return routeRate(route) * (end ? tradeShareOf(end) : 1);
+  return routeRate(route) * (end ? endShareOf(state, end) : 1);
 }
 
 /** The gold a day one more improvement adds to the faction's ends of the route, after administration. */
@@ -103,7 +109,7 @@ export function improvementGain(
       .filter((end) => end.faction === faction)
       .reduce((sum, end) => {
         const city = state.cities[end.city];
-        return sum + route.daily * IMPROVE_STEP * (city ? tradeShareOf(city) : 1);
+        return sum + route.daily * IMPROVE_STEP * (city ? endShareOf(state, city) : 1);
       }, 0) * adminShareOf(state, faction)
   );
 }
@@ -198,8 +204,8 @@ export function tradeForecast(
   const different = state.provinces[from.province]?.good !== state.provinces[to.province]?.good;
   const daily =
     TRADE_BASE * (different ? DIFFERENT_GOODS : 1) * (1 + Math.min(way.km, 1000) / 1000);
-  const fromDaily = daily * tradeShareOf(from) * adminShareOf(state, from.owner);
-  const toDaily = daily * tradeShareOf(to) * adminShareOf(state, to.owner);
+  const fromDaily = daily * endShareOf(state, from) * adminShareOf(state, from.owner);
+  const toDaily = daily * endShareOf(state, to) * adminShareOf(state, to.owner);
   const cost = routeOpeningCost(way.km, from.owner === to.owner);
   return {
     ...way,

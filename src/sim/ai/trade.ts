@@ -5,6 +5,7 @@ import type { GameState } from '../state/game-state.ts';
 import { afterSpending, tradeReserve } from './budget.ts';
 import { sorted } from './situation.ts';
 import {
+  endShareOf,
   routeSlots,
   routeOpeningCost,
   TRADE_RANGE,
@@ -18,7 +19,6 @@ import {
 import { distance } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
 import { adminShareOf } from '../systems/economy.ts';
-import { tradeShareOf } from '../buildings/buildings.ts';
 
 /** One affordable route with the greatest daily return per gold, ties by city id then land. */
 export function bestTrade(
@@ -60,14 +60,16 @@ export function bestTrade(
         // Round the ratio bound upward in floating arithmetic; cap the income with
         // the same multiplication order as the forecast's 1,000 km maximum bonus.
         const domestic = to.owner === faction;
-        const ends = domestic ? (tradeShareOf(from) + tradeShareOf(to)) / 2 : tradeShareOf(from);
+        const ends = domestic
+          ? (endShareOf(state, from) + endShareOf(state, to)) / 2
+          : endShareOf(state, from);
         const upperWorth =
           Math.round(
             ((goods * share * ends) / TRADE_PAYBACK_DAYS) * (1 + 8 * Number.EPSILON) * 1000000,
           ) / 1000000;
         const endpoint = TRADE_BASE * goods * 2 * share;
         const upperIncome =
-          endpoint * tradeShareOf(from) + (domestic ? endpoint * tradeShareOf(to) : 0);
+          endpoint * endShareOf(state, from) + (domestic ? endpoint * endShareOf(state, to) : 0);
         if (best.worth > upperWorth || (best.worth === upperWorth && best.income >= upperIncome))
           continue;
       }

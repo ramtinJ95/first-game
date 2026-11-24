@@ -1,3 +1,4 @@
+import { guardShareOf } from './advances/advances.ts';
 import type { DeepReadonly } from './deep-readonly.ts';
 import type { CityId, FactionId } from './ids.ts';
 import { ownedCity } from './orders/owned-city.ts';
@@ -30,9 +31,25 @@ export function guardMen(city: DeepReadonly<Pick<City, 'guards'>>): number {
   return city.guards.length * GUARD_BAND;
 }
 
+/** The day the band was hired. */
+export function hiredOn(band: DeepReadonly<GuardBand>): Day {
+  return (band.hiredOn ?? band.until - GUARD_DAYS) as Day;
+}
+
 /** The first day a great power no longer counts the band against a war. */
 export function deterrentUntil(band: DeepReadonly<GuardBand>): Day {
-  return (band.until - GUARD_DAYS + GUARD_DETER_DAYS) as Day;
+  return (hiredOn(band) + GUARD_DETER_DAYS) as Day;
+}
+
+/** The days a band the faction hires serves: longer with Long contracts. */
+export function guardDaysFor(state: DeepReadonly<GameState>, faction: FactionId): number {
+  return Math.round(GUARD_DAYS * guardShareOf(state.factions[faction]));
+}
+
+/** How long a band the faction hires serves, in words. */
+export function guardTermText(state: DeepReadonly<GameState>, faction: FactionId): string {
+  const days = guardDaysFor(state, faction);
+  return days === GUARD_DAYS ? 'a year' : `${Math.round((days / 365) * 12)} months`;
 }
 
 /** The garrison a great power weighs before it declares: the guards past GUARD_DETER_DAYS left out. */
@@ -72,7 +89,7 @@ export function guardRefusal(
   return undefined;
 }
 
-/** Pays for a band's year and puts it on the walls at once, raising the garrison and the full garrison. */
+/** Pays for a band's term and puts it on the walls at once, raising the garrison and the full garrison. */
 export function hireGuards(state: GameState, order: HireGuardsOrder): string | undefined {
   const city = ownedCity(state, order.faction, order.city);
   if (typeof city === 'string') return city;
@@ -84,7 +101,12 @@ export function hireGuards(state: GameState, order: HireGuardsOrder): string | u
   const old = guardMen(city) + GUARD_BAND > guardLimit(city) ? replaced(city, state.day) : -1;
   if (old >= 0) city.guards.splice(old, 1);
   else city.garrison += GUARD_BAND;
-  city.guards.push({ until: (state.day + GUARD_DAYS) as Day });
+  const days = guardDaysFor(state, order.faction);
+  city.guards.push(
+    days === GUARD_DAYS
+      ? { until: (state.day + days) as Day }
+      : { until: (state.day + days) as Day, hiredOn: state.day },
+  );
   return undefined;
 }
 
@@ -97,7 +119,8 @@ export function replaced(city: DeepReadonly<Pick<City, 'guards'>>, day: Day): nu
   let oldest = -1;
   city.guards.forEach((band, i) => {
     if (deterrentUntil(band) > day) return;
-    if (oldest < 0 || band.until < (city.guards[oldest]?.until ?? Infinity)) oldest = i;
+    const first = city.guards[oldest];
+    if (!first || hiredOn(band) < hiredOn(first)) oldest = i;
   });
   return oldest;
 }

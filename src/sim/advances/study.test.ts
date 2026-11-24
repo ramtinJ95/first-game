@@ -64,7 +64,9 @@ describe('studying an advance', () => {
   test('studies one advance at a time, each once', () => {
     const first = tick(rich(), [study('citizenRolls')], world).state;
     const second = tick(first, [study('standardCoin')], world);
-    expect(second.rejected.map((r) => r.reason)).toEqual([`${FIXTURE.rome} is studying citizenRolls`]);
+    expect(second.rejected.map((r) => r.reason)).toEqual([
+      `${FIXTURE.rome} is studying citizenRolls`,
+    ]);
     const done = play(second.state, ADVANCES.citizenRolls.days).state;
     const again = tick(done, [study('citizenRolls')], world);
     expect(again.rejected.map((r) => r.reason)).toEqual([

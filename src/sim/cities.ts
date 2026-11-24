@@ -1,3 +1,4 @@
+import { unrestShareOf } from './advances/advances.ts';
 import type { DeepReadonly } from './deep-readonly.ts';
 import { defeatFaction } from './defeat.ts';
 import { emit } from './events.ts';
@@ -46,6 +47,15 @@ export const MAX_UNREST_DAYS = Math.max(UNREST_DAYS, SACK.unrestDays, ENSLAVE.un
  * open after this alone: the siege that takes a city opens it. An old owner left without
  * a city is out of the game.
  */
+/** The days of unrest a city the faction takes, sacks or enslaves starts: fewer with Clemency. */
+export function unrestDaysFor(
+  state: DeepReadonly<GameState>,
+  faction: FactionId,
+  days: number,
+): number {
+  return Math.ceil(days * unrestShareOf(state.factions[faction]));
+}
+
 export function changeCityOwner(state: GameState, cityId: CityId, owner: FactionId): void {
   const city = Object.hasOwn(state.cities, cityId) ? state.cities[cityId] : undefined;
   if (!city) throw new Error(`city ${cityId} does not exist`);
@@ -53,7 +63,7 @@ export function changeCityOwner(state: GameState, cityId: CityId, owner: Faction
   const previous = city.owner;
   handRoutesOver(state, cityId, owner);
   city.owner = owner;
-  city.unrestDays = UNREST_DAYS;
+  city.unrestDays = unrestDaysFor(state, owner, UNREST_DAYS);
   city.recruits = [];
   city.fellOn = null;
   city.garrison = Math.max(0, city.garrison - guardMen(city));

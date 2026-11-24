@@ -21,8 +21,11 @@ export const ConstructionSchema = v.object({
 });
 export type Construction = v.InferOutput<typeof ConstructionSchema>;
 
-/** A band of `GUARD_BAND` men hired for gold, who hold the walls until their day. */
-export const GuardBandSchema = v.object({ until: DaySchema });
+/**
+ * A band of `GUARD_BAND` men hired for gold, who hold the walls until their day. A band
+ * that serves longer than `GUARD_DAYS`, under Long contracts, names the day it was hired.
+ */
+export const GuardBandSchema = v.object({ until: DaySchema, hiredOn: v.optional(DaySchema) });
 export type GuardBand = v.InferOutput<typeof GuardBandSchema>;
 
 export const CitySchema = v.pipe(

@@ -1,3 +1,10 @@
+import {
+  coinShareOf,
+  generalSkillOf,
+  harvestShareOf,
+  rationShareOf,
+  rollsShareOf,
+} from '../advances/advances.ts';
 import { extraFoodOf, goldShareOf, levyShareOf } from '../buildings/buildings.ts';
 import { nameNewArmy } from '../army-names.ts';
 import { SACK, UNREST_DAYS } from '../cities.ts';
@@ -101,17 +108,26 @@ export function limitsOf(state: DeepReadonly<GameState>): Map<FactionId, Stores>
     const limit = of(city.owner);
     limit.gold += TREASURY_DAYS * city.population * OUTPUT_PER_PERSON.gold;
     limit.food += GRANARY_DAYS * city.population * FOOD_PER_PERSON;
-    limit.manpower += MANPOWER_SHARE * city.population * levyShareOf(city);
+    limit.manpower +=
+      MANPOWER_SHARE *
+      city.population *
+      levyShareOf(city) *
+      rollsShareOf(state.factions[city.owner]);
     for (const recruit of city.recruits) limit.manpower -= TROOPS[recruit.troop].recruit.men;
   }
   for (const army of Object.values(state.armies)) {
     const men = menOf(state, army);
     const limit = of(army.owner);
-    limit.food += GRANARY_DAYS * men * UPKEEP_PER_MAN.food;
+    limit.food += GRANARY_DAYS * men * foodPerManOf(state, army.owner);
     limit.manpower -= men;
   }
   for (const [owner, income] of tradeIncome(state)) of(owner).gold += TREASURY_DAYS * income;
   return limits;
+}
+
+/** The food one man under arms of the faction eats each day. */
+export function foodPerManOf(state: DeepReadonly<GameState>, faction: FactionId): number {
+  return UPKEEP_PER_MAN.food * rationShareOf(state.factions[faction]);
 }
 
 /** Each faction's income less its upkeep for one day, with the state as it stands. */
@@ -134,16 +150,20 @@ export function dailyBalances(
     const balance = of(city.owner);
     const people = city.population * outputShare(city);
     const admin = governed.get(city.owner) ?? 1;
-    balance.gold += people * OUTPUT_PER_PERSON.gold * goldShare(state, city) * admin;
+    const realm = state.factions[city.owner];
+    balance.gold +=
+      people * OUTPUT_PER_PERSON.gold * goldShare(state, city) * coinShareOf(realm) * admin;
     balance.food +=
-      city.population * (OUTPUT_PER_PERSON.food - FOOD_PER_PERSON) + extraFoodOf(city);
-    balance.manpower += people * OUTPUT_PER_PERSON.manpower * levyShareOf(city) * admin;
+      city.population * (OUTPUT_PER_PERSON.food * harvestShareOf(realm) - FOOD_PER_PERSON) +
+      extraFoodOf(city);
+    balance.manpower +=
+      people * OUTPUT_PER_PERSON.manpower * levyShareOf(city) * rollsShareOf(realm) * admin;
   }
   for (const army of Object.values(state.armies)) {
     const balance = of(army.owner);
     const men = menOf(state, army);
     balance.gold -= men * UPKEEP_PER_MAN.gold;
-    balance.food -= men * UPKEEP_PER_MAN.food;
+    balance.food -= men * foodPerManOf(state, army.owner);
   }
   if (includeTrade) for (const [owner, income] of tradeIncome(state)) of(owner).gold += income;
   return balances;
@@ -228,7 +248,7 @@ function rallyArmy(state: GameState, city: City): Army {
     name: nameNewArmy(state, city.owner),
     formations: [],
     stance: 'holdTheLine',
-    generalSkill: STARTING_GENERAL_SKILL,
+    generalSkill: generalSkillOf(state.factions[city.owner], STARTING_GENERAL_SKILL),
     activity: { kind: 'idle', position: { x: city.position.x, y: city.position.y } },
   };
   state.armies[id] = army;

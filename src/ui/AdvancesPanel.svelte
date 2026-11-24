@@ -49,7 +49,8 @@
                   >{/if}
                 <span class="cost">{whole(row.gold)} gold · {row.days} days</span>
               </div>
-              <p class="does">{row.does}</p>
+              <p class="effect">{row.effect}</p>
+              <p class="does" data-testid="advance-{row.kind}-does">For you today: {row.does}</p>
               {#if row.status === 'studied'}
                 <p class="state">Studied</p>
               {:else if row.status === 'studying'}
@@ -158,6 +159,7 @@
     background: var(--good);
   }
 
+  .effect,
   .does,
   .payback,
   .state {

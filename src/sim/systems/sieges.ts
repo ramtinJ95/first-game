@@ -1,3 +1,4 @@
+import { wallWearShareOf } from '../advances/advances.ts';
 import { leaveSiege, removeArmy } from '../armies.ts';
 import { defenceSharesOf } from '../buildings/buildings.ts';
 import { changeCityOwner } from '../cities.ts';
@@ -16,7 +17,7 @@ import type { MapPoint } from '../state/map-point.ts';
 import type { Siege } from '../state/siege.ts';
 import { TROOPS } from '../troops.ts';
 import { areAtWar } from '../wars.ts';
-import { musterEarly } from './economy.ts';
+import { menOf as armyMen, musterEarly } from './economy.ts';
 
 /** An idle army this close to a city of a faction it is at war with, in kilometres, besieges it. */
 export const SIEGE_DISTANCE = 10;
@@ -76,6 +77,17 @@ export const TAKEN_WALLS_SHARE = 0.1;
 
 /** Points of wall that each thousand besieging men wear down a day. */
 export const WALL_WEAR_PER_THOUSAND_MEN = 2;
+/** The walls these besiegers wear down a day: more for a realm with Siege engineers. */
+export function wallWear(state: DeepReadonly<GameState>, armies: readonly DeepReadonly<Army>[]) {
+  return armies.reduce(
+    (sum, army) =>
+      sum +
+      (armyMen(state, army) / 1000) *
+        WALL_WEAR_PER_THOUSAND_MEN *
+        wallWearShareOf(state.factions[army.owner]),
+    0,
+  );
+}
 /** The share of its full garrison that a city without food loses to hunger each day, rounded up. */
 export const HUNGER_SHARE = 0.05;
 /** The chance each day that the garrison of a city whose walls are down gives up. */
@@ -166,7 +178,7 @@ function besiegeOneDay(state: GameState, id: SiegeId) {
   musterEarly(state, city);
   const armies = besiegersOf(state, siege);
   const men = armies.reduce((sum, army) => sum + menOf(state, army), 0);
-  city.walls = Math.max(0, city.walls - (men / 1000) * WALL_WEAR_PER_THOUSAND_MEN);
+  city.walls = Math.max(0, city.walls - wallWear(state, armies));
   if (men < BLOCKADE_ODDS * city.garrison) {
     killMen(state, armies, Math.ceil(city.garrison * SALLY_SHARE), 'sally');
     if (siege.besiegers.length === 0) removeRecord(state.sieges, id);

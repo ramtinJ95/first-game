@@ -1,7 +1,13 @@
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { dailyBalances, limitsOf, GRANARY_DAYS, UPKEEP_PER_MAN } from '../sim/systems/economy.ts';
+import {
+  dailyBalances,
+  foodPerManOf,
+  limitsOf,
+  GRANARY_DAYS,
+  UPKEEP_PER_MAN,
+} from '../sim/systems/economy.ts';
 import { TROOPS, type Troop } from '../sim/troops.ts';
 import { dateText, whole } from '../app/names.ts';
 import { afterWaiting } from './buildings-text.ts';
@@ -28,6 +34,7 @@ export function recruitForecast(
   const balance = dailyBalances(waiting).get(game.player);
   const stores = waiting.factions[game.player]?.stores;
   if (!balance || !stores) throw new Error('Recruit forecast needs the player faction');
+  const manFood = foodPerManOf(game, game.player);
   const cost = troop ? TROOPS[troop].recruit : { men: 0, gold: 0 };
   const schedule = Object.values(waiting.cities)
     .filter((city) => city.owner === game.player)
@@ -42,11 +49,11 @@ export function recruitForecast(
   schedule.sort((a, b) => a.inDays - b.inDays);
   const training = schedule.reduce((sum, recruit) => sum + recruit.men, 0);
   const upkeep = {
-    food: cost.men * UPKEEP_PER_MAN.food,
+    food: cost.men * manFood,
     gold: cost.men * UPKEEP_PER_MAN.gold,
   };
   const after = {
-    food: balance.food - training * UPKEEP_PER_MAN.food,
+    food: balance.food - training * manFood,
     gold: balance.gold - training * UPKEEP_PER_MAN.gold,
   };
   const limits = limitsOf(waiting).get(game.player);
@@ -69,8 +76,8 @@ export function recruitForecast(
       stores.food,
       balance.food,
       limits.food,
-      UPKEEP_PER_MAN.food,
-      GRANARY_DAYS * UPKEEP_PER_MAN.food,
+      manFood,
+      GRANARY_DAYS * manFood,
       byDay([...schedule, ...atToday(atWork.food)]),
     ),
     gold: daysUntilShort(
@@ -87,8 +94,8 @@ export function recruitForecast(
       stores.food,
       balance.food,
       limits.food,
-      UPKEEP_PER_MAN.food,
-      GRANARY_DAYS * UPKEEP_PER_MAN.food,
+      manFood,
+      GRANARY_DAYS * manFood,
       byDay([...plan, ...atWork.food]),
       yearly.food,
     ),
@@ -125,8 +132,8 @@ export function recruitForecast(
       stores.food,
       balance.food,
       limits.food,
-      UPKEEP_PER_MAN.food,
-      GRANARY_DAYS * UPKEEP_PER_MAN.food,
+      manFood,
+      GRANARY_DAYS * manFood,
       byDay([
         ...plan,
         ...atWork.food,
@@ -180,8 +187,8 @@ export function recruitForecast(
       stores.food,
       balance.food,
       limits.food,
-      UPKEEP_PER_MAN.food,
-      GRANARY_DAYS * UPKEEP_PER_MAN.food,
+      manFood,
+      GRANARY_DAYS * manFood,
       byDay([...queued, ...atWork.food]),
       yearly.food,
       MAX_WAIT,

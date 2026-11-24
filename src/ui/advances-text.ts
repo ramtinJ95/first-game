@@ -8,7 +8,11 @@ import {
 } from '../sim/advances/advances.ts';
 import { advanceGain } from '../sim/advances/gains.ts';
 import { studyRefund, type StudyOrder } from '../sim/advances/study.ts';
-import { bestStudy, studyPayback } from '../sim/ai/study.ts';
+import { bestStudy, nearestTarget, sharperMen, studyPayback } from '../sim/ai/study.ts';
+import { GARRISON_ODDS } from '../sim/ai/thresholds.ts';
+import { UNREST_DAYS, unrestDaysFor } from '../sim/cities.ts';
+import { GUARD_GOLD } from '../sim/guards.ts';
+import { fullDefences, WALL_WEAR_PER_THOUSAND_MEN } from '../sim/systems/sieges.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { FactionId } from '../sim/ids.ts';
 import type { Order } from '../sim/orders/orders.ts';
@@ -35,6 +39,8 @@ export interface AdvanceRowView {
   readonly days: number;
   /** What it would do for this realm today, in the realm's own numbers. */
   readonly does: string;
+  /** What the advance does in any realm, in a sentence. */
+  readonly effect: string;
   readonly payback: string;
   readonly status: 'studied' | 'studying' | 'ordered' | 'open';
   /** Why the realm cannot start it now, in words, while it is open. */
@@ -84,6 +90,7 @@ export function advancesView(
         gold,
         days,
         does: doesText(state, faction, kind),
+        effect: ADVANCE_EFFECTS[kind],
         payback: paybackText(state, faction, kind),
         status,
         ...(refusal ? { refusal } : {}),
@@ -93,10 +100,33 @@ export function advancesView(
   }));
 }
 
-/** What the advance would add to this realm today, from the rules' own sums. */
+/** What each advance does, in a sentence with its number. */
+export const ADVANCE_EFFECTS: Readonly<Record<AdvanceKind, string>> = {
+  drillmasters: `Every army's general rises to skill ${ADVANCES.drillmasters.generalSkill}, and each new army starts there.`,
+  marchingRations: `Each man under arms eats ${percent(1 - ADVANCES.marchingRations.foodShare)} less food.`,
+  siegeEngineers: `Your besiegers wear walls down ${times(ADVANCES.siegeEngineers.wallWearShare)} as fast.`,
+  standardCoin: `Every city yields ${percent(ADVANCES.standardCoin.goldShare - 1)} more gold.`,
+  fallowFields: `Every city's people grow ${percent(ADVANCES.fallowFields.foodShare - 1)} more food.`,
+  marketWeights: `Every trade route pays your ends ${percent(ADVANCES.marketWeights.tradeShare - 1)} more.`,
+  citizenRolls: `Every city gives ${percent(ADVANCES.citizenRolls.levyShare - 1)} more manpower, a day and to call up.`,
+  clemency: `A city you take, sack or enslave has ${percent(1 - ADVANCES.clemency.unrestShare)} fewer days of unrest.`,
+  longContracts: `A band of guards serves ${Math.round(12 * ADVANCES.longContracts.guardShare)} months instead of 12 for the same ${whole(GUARD_GOLD)} gold.`,
+};
+
+function percent(share: number): string {
+  return `${Math.round(share * 100)}%`;
+}
+
+function times(share: number): string {
+  return share === 1.5 ? 'half again' : `${share} times`;
+}
+
+/** What the advance would do for this realm today, from the rules' own sums. */
 export function doesText(state: State, faction: FactionId, kind: AdvanceKind): string {
   const { daily, limits } = advanceGain(state, faction, kind);
   const parts: string[] = [];
+  const extra = extraText(state, faction, kind);
+  if (extra) parts.push(extra);
   const add = (amount: number, what: string) => {
     if (Math.abs(amount) >= 0.05)
       parts.push(`${amount > 0 ? '+' : ''}${amount.toFixed(1)} ${what}`);
@@ -106,7 +136,47 @@ export function doesText(state: State, faction: FactionId, kind: AdvanceKind): s
   add(daily.manpower, 'manpower a day');
   if (Math.abs(limits.manpower) >= 1)
     parts.push(`${limits.manpower > 0 ? '+' : ''}${whole(limits.manpower)} men to call up`);
-  return parts.length > 0 ? parts.join(', ') : 'Nothing for your realm today';
+  return parts.length > 0 ? parts.join(', ') : 'nothing yet';
+}
+
+/** The realm's own numbers of the advances whose effect the daily sums do not show. */
+function extraText(state: State, faction: FactionId, kind: AdvanceKind): string | undefined {
+  if (kind === 'drillmasters') {
+    const men = sharperMen(state, faction);
+    return men >= 1 ? `Your armies strike as ${whole(men)} more men would` : undefined;
+  }
+  if (kind === 'siegeEngineers' || kind === 'clemency') {
+    const target = nearestTarget(state, faction);
+    if (!target) return undefined;
+    if (kind === 'clemency') {
+      const days = unrestDaysFor(
+        { ...state, factions: learned(state, faction, kind) },
+        faction,
+        UNREST_DAYS,
+      );
+      return `${target.name} would stay in unrest ${days} days instead of ${UNREST_DAYS}`;
+    }
+    const men = Math.ceil(GARRISON_ODDS * fullDefences(target).garrison);
+    const wear = (men / 1000) * WALL_WEAR_PER_THOUSAND_MEN;
+    const days = Math.ceil(fullDefences(target).walls / wear);
+    const faster = Math.ceil(days / ADVANCES.siegeEngineers.wallWearShare);
+    return `${whole(men)} men wear down the walls of ${target.name} in ${faster} days instead of ${days}`;
+  }
+  if (kind === 'longContracts') {
+    const bands = Object.values(state.cities)
+      .filter((city) => city.owner === faction)
+      .reduce((sum, city) => sum + city.guards.length, 0);
+    return bands > 0
+      ? `Your ${bands} ${bands === 1 ? 'band' : 'bands'} would cost a third less each year hired again`
+      : undefined;
+  }
+  return undefined;
+}
+
+function learned(state: State, faction: FactionId, kind: AdvanceKind): State['factions'] {
+  const record = state.factions[faction];
+  if (!record) return state.factions;
+  return { ...state.factions, [faction]: { ...record, advances: [...record.advances, kind] } };
 }
 
 function paybackText(state: State, faction: FactionId, kind: AdvanceKind): string {

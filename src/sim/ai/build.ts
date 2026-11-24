@@ -164,7 +164,7 @@ function onBorder(state: State, city: CityView): boolean {
 }
 
 /** The nearest city within `km` of another faction: of a great power or an enemy only, unless `any`. */
-function nearestForeign(
+export function nearestForeign(
   state: State,
   city: CityView,
   km: number,

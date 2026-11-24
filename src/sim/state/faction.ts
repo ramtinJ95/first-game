@@ -37,12 +37,12 @@ export const FactionSchema = v.pipe(
      * declare war on the player, and has stood there since; null while it does not.
      */
     noticeSince: v.optional(v.nullable(DaySchema), null),
-    /** How many armies the faction has raised, which numbers the next one's name. Absent is none. */
-    armiesRaised: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
     /** The advances the faction has studied, in the order it finished them. A save from before advances has none. */
     advances: v.optional(v.array(v.picklist(ADVANCE_KINDS)), []),
     /** The advance at study, or null. */
     study: v.optional(v.nullable(StudySchema), null),
+    /** How many armies the faction has raised, which numbers the next one's name. Absent is none. */
+    armiesRaised: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
   }),
   v.check(
     (faction) =>
