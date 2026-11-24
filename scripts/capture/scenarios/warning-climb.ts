@@ -1,0 +1,147 @@
+import { expect, type Page } from '@playwright/test';
+import { pageData } from '../../../src/app/page.ts';
+import { warReadiness } from '../../../src/sim/ai/war.ts';
+import { GUARD_BAND, GUARD_DAYS, GUARD_DETER_DAYS } from '../../../src/sim/guards.ts';
+import type { CityId, FormationId } from '../../../src/sim/ids.ts';
+import { saveGame } from '../../../src/sim/save.ts';
+import type { Day } from '../../../src/sim/state/day.ts';
+import {
+  armyOf,
+  carthage,
+  carthageNearsWar,
+  dropSave,
+  openGame,
+  pause,
+  resizeTo,
+  resume,
+  rome,
+  untilDrawn,
+} from '../../../e2e/support.ts';
+import { world } from '../../cautious-rome.ts';
+import { defineScenario } from '../scenario.ts';
+
+/**
+ * `carthageNearsWar` with 5,600 Carthaginians on day 100, on notice since day 60 and warned on
+ * day 70, when the game stopped for it at `stoppedAt` points below its share today, and Roma
+ * holding `bands` bands hired on day 11, which Carthage counts until day 101: saved with what
+ * the page was told. At 5,600 Carthage stands near 95% once the bands stop counting, so it does
+ * not declare in the days the scenario plays.
+ */
+function standing(stoppedAt: number, bands: number): string {
+  const state = carthageNearsWar();
+  state.day = 100 as Day;
+  const punic = state.factions[carthage];
+  const roma = state.cities['roma' as CityId];
+  if (!punic || !roma) throw new Error('no Carthage or Roma');
+  punic.noticeSince = 60 as Day;
+  const spearmen = state.formations[armyOf(state, carthage).formations[0] as FormationId];
+  if (!spearmen) throw new Error('no Carthaginian army');
+  spearmen.men = 5600;
+  roma.guards = Array.from({ length: bands }, () => ({
+    until: (101 - GUARD_DETER_DAYS + GUARD_DAYS) as Day,
+  }));
+  roma.garrison += bands * GUARD_BAND;
+  const after = structuredClone(state);
+  const bare = after.cities['roma' as CityId];
+  if (!bare) throw new Error('no Roma');
+  bare.guards = [];
+  bare.garrison -= bands * GUARD_BAND;
+  const share = Math.round(
+    Math.min(1, warReadiness(after, world, carthage, rome)?.readiness ?? 0) * 100,
+  );
+  return saveGame(
+    state,
+    pageData({
+      chronicle: [],
+      camera: undefined,
+      selection: undefined,
+      panel: undefined,
+      occupied: new Map(),
+      told: new Set(['threat:carthage:70', `threat-stop:carthage:70:${share - stoppedAt}:roma`]),
+      weakSieges: new Map(),
+    }),
+  );
+}
+
+const CASES = [
+  {
+    name: 'band',
+    title:
+      'guards Carthage counted at Roma stop counting while it stands on notice: told, and the game runs on',
+    save: () => standing(0, 2),
+    line: /The 1,000 guards at Roma no longer count against Carthage's war: it stands/,
+    stops: false,
+  },
+  {
+    name: 'climb',
+    title:
+      'Carthage stands 8 points above the share the game last stopped for: the game stops again',
+    save: () => standing(8, 0),
+    line: /Carthage stands higher than when the game last stopped for it/,
+    stops: true,
+  },
+  {
+    name: 'climb-band',
+    title: 'both on one day: one stop that tells the guards and the climb',
+    save: () => standing(8, 2),
+    line: /The 1,000 guards at Roma no longer count against Carthage's war\. Carthage stands higher/,
+    stops: true,
+  },
+] as const;
+
+/**
+ * The case's line stands whole inside the window and inside the list that clips it, once the
+ * list is scrolled to it: a line that runs the game on sinks below the news that comes after
+ * it, and the corner gives such news less room than news that stops the game.
+ */
+async function whole(page: Page, where: 'alerts' | 'chronicle', line: RegExp) {
+  const window = page.viewportSize();
+  const list = page.getByTestId(where);
+  const item = list.getByRole('listitem').filter({ hasText: line }).first();
+  await item.waitFor();
+  await item.scrollIntoViewIfNeeded();
+  const box = await item.boundingBox();
+  const room = await list.boundingBox();
+  expect(box).not.toBeNull();
+  expect(room).not.toBeNull();
+  if (!box || !room || !window) return;
+  expect(box.y).toBeGreaterThanOrEqual(Math.max(0, room.y) - 1);
+  expect(box.x + box.width).toBeLessThanOrEqual(window.width);
+  expect(box.y + box.height).toBeLessThanOrEqual(Math.min(window.height, room.y + room.height) + 1);
+}
+
+export default defineScenario({
+  name: 'warning-climb',
+  title:
+    'A power on notice whose guards stop counting is told of that day, and one that climbs 6 points or more above the share the game last stopped for stops it again',
+  async run({ page, shot }) {
+    await openGame(page, { pauses: true });
+    for (const width of [1280, 1024]) {
+      await resizeTo(page, { width, height: 720 });
+      for (const c of CASES) {
+        await pause(page);
+        await dropSave(page, c.save());
+        await expect(page.getByTestId('time-controls-day')).toHaveAttribute('data-day', '100');
+        await untilDrawn(page);
+        await resume(page);
+        const item = page.getByTestId('alerts').getByRole('listitem').filter({ hasText: c.line });
+        await item.first().waitFor();
+        if (c.stops) await expect(item.first().getByTestId('alert-paused')).toHaveCount(1);
+        else await expect(item.first().getByTestId('alert-paused')).toHaveCount(0);
+        await pause(page);
+        await untilDrawn(page);
+        await whole(page, 'alerts', c.line);
+        await shot(`warning-climb-${c.name}-${width}`, `${width} × 720: ${c.title}`);
+      }
+    }
+    await resizeTo(page, { width: 390, height: 844 });
+    await page.getByRole('button', { name: 'Chronicle' }).click();
+    const chronicle = page.getByTestId('chronicle');
+    await expect(chronicle).toBeVisible();
+    await untilDrawn(page);
+    await shot(
+      'warning-climb-chronicle-390',
+      'The last case, a climb and guards on one day, in the Chronicle at 390 px wide',
+    );
+  },
+});

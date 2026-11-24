@@ -139,6 +139,7 @@ function play(player: Player, seed: number, years: number) {
         }
       }
       for (const alert of threatNewsOfDay(before, after, world, told)) {
+        if (alert.kind !== 'warThreat') continue;
         const at = alert.focus?.at;
         const city = Object.values(after.cities).find(
           (c) => at && c.position.x === at.x && c.position.y === at.y,

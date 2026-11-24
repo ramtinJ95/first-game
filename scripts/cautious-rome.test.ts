@@ -6,7 +6,7 @@ import type { Order } from '../src/sim/orders/orders.ts';
 import type { Day } from '../src/sim/state/day.ts';
 import { warKey } from '../src/sim/state/war.ts';
 import { limitsOf } from '../src/sim/systems/economy.ts';
-import { map, playCautiousRome, rome } from './cautious-rome.ts';
+import { map, playCautiousRome, rome, warnedPowers } from './cautious-rome.ts';
 
 const carthage = 'carthage' as FactionId;
 const WEST = [
@@ -68,5 +68,25 @@ describe("the harness's word on which orders answered a warning", () => {
     const ignoring = played(false);
     expect(ignoring.flatMap((d) => d.accepted).some((o) => o.kind === 'recruit')).toBe(true);
     expect(ignoring.every((d) => d.answered.length === 0)).toBe(true);
+  });
+});
+
+describe('the powers a warning names', () => {
+  it('reads one power from a first warning, a reminder, a climb and a climb told with guards', () => {
+    for (const text of [
+      'Carthage could soon declare war on you: it has 82% of the strength it needs.',
+      'Carthage still stands near war with you, as warned on Year 9, day 141: it has 82%.',
+      'Carthage stands higher than when the game last stopped for it, on Year 1, day 70 at 87%: it has 95%.',
+      "The 1,000 guards at Roma no longer count against Carthage's war. Carthage stands higher than when the game last stopped for it, on Year 1, day 70 at 87%: it has 95%.",
+    ])
+      expect(warnedPowers(text)).toEqual(['Carthage']);
+  });
+
+  it('reads every power of a line that folds a day of warnings', () => {
+    expect(
+      warnedPowers(
+        'Carthage, Egypt and Macedon could soon declare war on you, with 82%, 90% and 81%.',
+      ),
+    ).toEqual(['Carthage', 'Egypt', 'Macedon']);
   });
 });
