@@ -2,10 +2,11 @@ import { expect, type Page } from '@playwright/test';
 import { pageData } from '../../../src/app/page.ts';
 import { warReadiness } from '../../../src/sim/ai/war.ts';
 import { GUARD_BAND, GUARD_DAYS, GUARD_DETER_DAYS } from '../../../src/sim/guards.ts';
-import type { CityId } from '../../../src/sim/ids.ts';
+import type { CityId, FormationId } from '../../../src/sim/ids.ts';
 import { saveGame } from '../../../src/sim/save.ts';
 import type { Day } from '../../../src/sim/state/day.ts';
 import {
+  armyOf,
   carthage,
   carthageNearsWar,
   dropSave,
@@ -20,9 +21,11 @@ import { world } from '../../cautious-rome.ts';
 import { defineScenario } from '../scenario.ts';
 
 /**
- * `carthageNearsWar` on day 100, Carthage on notice since day 60 and warned on day 70, when
- * the game stopped for it at `stoppedAt` points below its share today, and Roma holding `bands`
- * bands hired on day 11, which Carthage counts until day 101: saved with what the page was told.
+ * `carthageNearsWar` with 5,600 Carthaginians on day 100, on notice since day 60 and warned on
+ * day 70, when the game stopped for it at `stoppedAt` points below its share today, and Roma
+ * holding `bands` bands hired on day 11, which Carthage counts until day 101: saved with what
+ * the page was told. At 5,600 Carthage stands near 95% once the bands stop counting, so it does
+ * not declare in the days the scenario plays.
  */
 function standing(stoppedAt: number, bands: number): string {
   const state = carthageNearsWar();
@@ -31,6 +34,9 @@ function standing(stoppedAt: number, bands: number): string {
   const roma = state.cities['roma' as CityId];
   if (!punic || !roma) throw new Error('no Carthage or Roma');
   punic.noticeSince = 60 as Day;
+  const spearmen = state.formations[armyOf(state, carthage).formations[0] as FormationId];
+  if (!spearmen) throw new Error('no Carthaginian army');
+  spearmen.men = 5600;
   roma.guards = Array.from({ length: bands }, () => ({
     until: (101 - GUARD_DETER_DAYS + GUARD_DAYS) as Day,
   }));
@@ -63,7 +69,7 @@ const CASES = [
     title:
       'guards Carthage counted at Roma stop counting while it stands on notice: told, and the game runs on',
     save: () => standing(0, 2),
-    line: /^The 1,000 guards at Roma no longer count against Carthage's war/,
+    line: /The 1,000 guards at Roma no longer count against Carthage's war: it stands/,
     stops: false,
   },
   {
@@ -78,22 +84,30 @@ const CASES = [
     name: 'climb-band',
     title: 'both on one day: one stop that tells the guards and the climb',
     save: () => standing(8, 2),
-    line: /^.*The 1,000 guards at Roma no longer count against Carthage's war\. Carthage stands higher/,
+    line: /The 1,000 guards at Roma no longer count against Carthage's war\. Carthage stands higher/,
     stops: true,
   },
 ] as const;
 
-/** The case's line stands whole inside the window. */
+/**
+ * The case's line stands whole inside the window and inside the list that clips it, once the
+ * list is scrolled to it: a line that runs the game on sinks below the news that comes after
+ * it, and the corner gives such news less room than news that stops the game.
+ */
 async function whole(page: Page, where: 'alerts' | 'chronicle', line: RegExp) {
   const window = page.viewportSize();
-  const item = page.getByTestId(where).getByRole('listitem').filter({ hasText: line }).first();
+  const list = page.getByTestId(where);
+  const item = list.getByRole('listitem').filter({ hasText: line }).first();
   await item.waitFor();
+  await item.scrollIntoViewIfNeeded();
   const box = await item.boundingBox();
+  const room = await list.boundingBox();
   expect(box).not.toBeNull();
-  if (!box || !window) return;
-  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(room).not.toBeNull();
+  if (!box || !room || !window) return;
+  expect(box.y).toBeGreaterThanOrEqual(Math.max(0, room.y) - 1);
   expect(box.x + box.width).toBeLessThanOrEqual(window.width);
-  expect(box.y + box.height).toBeLessThanOrEqual(window.height);
+  expect(box.y + box.height).toBeLessThanOrEqual(Math.min(window.height, room.y + room.height) + 1);
 }
 
 export default defineScenario({
