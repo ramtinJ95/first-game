@@ -36,6 +36,22 @@ function carthageAt(men: number): GameState {
   return state;
 }
 
+/** Carthage pressing the fixture's Rome of 300 spearmen and 100 horse by field armies, on notice since day 90, so a raised troop answers it. */
+function pressedByField(): GameState {
+  const start = carthageAt(900);
+  const punic = start.factions[carthage];
+  const army = start.armies[f.romanArmy];
+  if (!punic || !army) throw new Error('no Carthage or Roman army');
+  punic.noticeSince = 90 as Day;
+  const [spears, horse] = army.formations.map((id) => start.formations[id]);
+  if (!spears || !horse) throw new Error('no Roman formations');
+  spears.men = 300;
+  horse.men = 100;
+  return start;
+}
+
+const raise: Order = { kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' };
+
 const hireAt = (city: CityId): Order => ({ kind: 'hireGuards', faction: f.rome, city });
 
 /**
@@ -47,6 +63,7 @@ function play(
   days: number,
   ordersOn: (day: number) => Order[],
   peaceOn?: number,
+  sees?: (state: GameState) => void,
 ) {
   const news = createAnswerNews(world);
   const told: Alert[] = [];
@@ -74,6 +91,7 @@ function play(
     const readiness = warReadiness(state, world, carthage, f.rome)?.readiness ?? 0;
     events.push({ day: state.day, events: day, owners, readiness });
     state = result.state;
+    sees?.(state);
   }
   return { state, told, events };
 }
@@ -169,17 +187,8 @@ describe('the news of what an answer to a warning bought', () => {
   });
 
   it('tells of a war a troop raised kept off, when the power weighs the field armies', () => {
-    const start = carthageAt(900);
-    const punic = start.factions[carthage];
-    const army = start.armies[f.romanArmy];
-    if (!punic || !army) throw new Error('no Carthage or Roman army');
-    punic.noticeSince = 90 as Day;
-    const [spears, horse] = army.formations.map((id) => start.formations[id]);
-    if (!spears || !horse) throw new Error('no Roman formations');
-    spears.men = 300;
-    horse.men = 100;
+    const start = pressedByField();
     expect(warReadiness(start, world, carthage, f.rome)?.pressed).toBe(true);
-    const raise: Order = { kind: 'recruit', faction: f.rome, city: f.roma, troop: 'spearmen' };
     const ignored = play(structuredClone(start), 25, () => []);
     const answered = play(structuredClone(start), 25, (day) => (day === 100 ? [raise] : []));
     expect(declaredOn(ignored, carthage)).toBe(120);
@@ -192,6 +201,40 @@ describe('the news of what an answer to a warning bought', () => {
         ),
       ],
     ]);
+  });
+
+  it('claims nothing once an order names a record made after the answer, whose id differs without it', () => {
+    const start = pressedByField();
+    const rome = start.factions[f.rome];
+    if (!rome) throw new Error('no Rome');
+    rome.stores.gold = 20_000;
+    const open: Order = {
+      kind: 'openTrade',
+      faction: f.rome,
+      from: f.roma,
+      to: f.capua,
+      mode: 'land',
+    };
+    let route: string | undefined;
+    const answered = play(
+      structuredClone(start),
+      25,
+      (day) => {
+        if (day === 100) return [raise];
+        if (day === 116) return [open];
+        return route && day === 118
+          ? [{ kind: 'closeTrade', faction: f.rome, route } as Order]
+          : [];
+      },
+      undefined,
+      (state) => {
+        route ??= Object.values(state.tradeRoutes).find((r) => r.owner === f.rome)?.id;
+      },
+    );
+    expect(route).toBeDefined();
+    expect(answered.state.tradeRoutes[route as never]).toBeUndefined();
+    expect(declaredOn(answered, carthage)).toBeUndefined();
+    expect(answered.told).toEqual([]);
   });
 
   it('keeps playing the game without the answer past the first day war may come', () => {
@@ -210,6 +253,33 @@ describe('the news of what an answer to a warning bought', () => {
     expect(later).toBeGreaterThan(200);
     expect(answered.told.at(-1)?.text).toBe(
       `Carthage declared war ${(later ?? 0) - 101} days later than it would have without the 2 bands of guards you hired at Capua, which held it off from ${dateText(101)}.`,
+    );
+  });
+
+  it('tells of a war put off and then of a peace without the city, which without the guards fell first', () => {
+    const start = carthageAt(2400);
+    const front = warReadiness(start, world, carthage, f.rome)?.front;
+    if (!front) throw new Error('Carthage weighs no city of Rome');
+    const ignored = play(structuredClone(start), 110, () => []);
+    const fell = fellOn(ignored, front);
+    expect(declaredOn(ignored, carthage)).toBe(110);
+    expect(fell).toBeDefined();
+    const answer = (day: number) => (day === 100 ? [hireAt(front), hireAt(front)] : []);
+    const war = declaredOn(play(structuredClone(start), 130, answer), carthage) ?? 0;
+    expect(war).toBeGreaterThan(110);
+    const peaceOn = Math.max(war, fell ?? 0) + 10;
+    const answered = play(structuredClone(start), peaceOn - 100 + 1, answer, peaceOn);
+    expect(answered.state.cities[front]?.owner).toBe(f.rome);
+    expect(answered.told.map((a) => [a.day, a.text.split('.')[0]])).toEqual([
+      [110, 'Carthage could have declared war on you today, as warned, and did not'],
+      [
+        war,
+        `Carthage declared war ${war - 110} days later than it would have without the 2 bands of guards you hired at Capua, which held it off from Year 1, day 110`,
+      ],
+      [peaceOn, 'Carthage made peace without taking Capua'],
+    ]);
+    expect(answered.told.at(-1)?.text).toContain(
+      `it would have taken Capua on ${dateText(fell ?? 0)}.`,
     );
   });
 });

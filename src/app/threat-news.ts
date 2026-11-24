@@ -517,7 +517,7 @@ export function treasuryAdvice(
   const why = decides
     ? `is what brings it this near: without that gold it would stand at ${share(without)}`
     : `takes ${Math.round(threat.hoard * 100)}% off the strength it needs`;
-  return ` Your treasury of ${whole(gold)} gold ${why}. ${name} at ${found.city.name}, ${whole(price)} gold, would take it to ${share(after)}.`;
+  return ` Your treasury of ${whole(gold)} gold ${why}. Building ${name} at ${found.city.name} for ${whole(price)} gold would take it to ${share(after)}.`;
 }
 
 /** Where the advice is read: the corner, with room for the warning's 12 lines, or the wars panel. */

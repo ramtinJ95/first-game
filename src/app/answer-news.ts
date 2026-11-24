@@ -3,7 +3,7 @@ import { NOTICE_DAYS, WAR_FRONT_KM } from '../sim/ai/thresholds.ts';
 import { warReadiness } from '../sim/ai/war.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { DayEvent } from '../sim/events.ts';
-import type { CityId, FactionId } from '../sim/ids.ts';
+import type { ArmyId, CityId, FactionId, TradeRouteId } from '../sim/ids.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { tick } from '../sim/tick.ts';
@@ -120,6 +120,30 @@ function answerText(state: State, answers: readonly Answer[]): string {
 const listed = (items: readonly string[]) =>
   items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 
+/**
+ * Whether every army and trade route the order names is the same record in the game and in the
+ * game without the answer: an army of the same owner and name, a route of the same owner and
+ * ends. Where one is not, the player's order would do something else in the copy, or nothing,
+ * so the copy no longer plays the game less the answer.
+ */
+function sameRecords(game: State, copy: State, order: Order): boolean {
+  const named = order as { army?: unknown; into?: unknown; route?: unknown };
+  for (const id of [named.army, named.into]) {
+    if (typeof id !== 'string') continue;
+    const real = game.armies[id as ArmyId];
+    const other = copy.armies[id as ArmyId];
+    if (!real || !other || real.owner !== other.owner || real.name !== other.name) return false;
+  }
+  if (typeof named.route === 'string') {
+    const real = game.tradeRoutes[named.route as TradeRouteId];
+    const other = copy.tradeRoutes[named.route as TradeRouteId];
+    if (!real || !other) return false;
+    if (real.owner !== other.owner || real.from !== other.from || real.to !== other.to)
+      return false;
+  }
+  return true;
+}
+
 const declaredBy = (events: readonly DayEvent[], power: FactionId, player: FactionId) =>
   events.some((e) => e.kind === 'warDeclared' && e.by === power && e.against === player);
 
@@ -166,6 +190,11 @@ export function createAnswerNews(world: World, decide = (state: State) => decide
       watch.answers.push(...answers.map((a) => a.answer));
       const kept = orders.filter((order) => !answers.some((a) => a.order === order));
       const without = watch.without;
+      // Ids are handed out from one counter, so a record made in one game may carry another id in the other.
+      if (!kept.every((order) => sameRecords(before, without, order))) {
+        watch = undefined;
+        return [];
+      }
       const played = tick(without, [...kept, ...decide(without)], world);
       watch.without = played.state;
       const news: Alert[] = [];
@@ -188,8 +217,17 @@ export function createAnswerNews(world: World, decide = (state: State) => decide
         }
         if (w.with === undefined && declaredBy(events, w.power, player)) w.with = before.day;
         // It declared before it would have without the answer: the answer held nothing off.
-        if (w.with !== undefined && w.without === undefined) w.done = true;
-        if (w.without === before.day && w.with === undefined) {
+        if (w.with !== undefined && w.without === undefined) {
+          w.done = true;
+          continue;
+        }
+        if (
+          w.fellWithout === undefined &&
+          watch.without.cities[w.front]?.owner === w.power &&
+          front?.owner === player
+        )
+          w.fellWithout = before.day;
+        if (w.without === before.day && w.with === undefined)
           news.push({
             kind: 'warAnswered',
             day: before.day,
@@ -197,10 +235,7 @@ export function createAnswerNews(world: World, decide = (state: State) => decide
             text: `${name} could have declared war on you today, as warned, and did not. Without ${said} it would have: it stands at ${share(w.shares?.with ?? 0)} of the strength it needs, not ${share(w.shares?.without ?? 0)}.`,
             ...focus,
           });
-          continue;
-        }
-        if (w.with === before.day && w.without !== undefined && w.without < w.with) {
-          w.done = true;
+        if (w.with === before.day && w.without !== undefined && w.without < w.with)
           news.push({
             kind: 'warAnswered',
             day: before.day,
@@ -208,15 +243,8 @@ export function createAnswerNews(world: World, decide = (state: State) => decide
             text: `${name} declared war ${whole(w.with - w.without)} days later than it would have without ${said}, which held it off from ${dateText(w.without)}.`,
             ...focus,
           });
-          continue;
-        }
-        if (w.with === undefined || w.without === undefined) continue;
-        if (
-          w.fellWithout === undefined &&
-          watch.without.cities[w.front]?.owner === w.power &&
-          front?.owner === player
-        )
-          w.fellWithout = before.day;
+        // Once at war in the game, what is left to tell is whether the named city outlives the war.
+        if (w.with === undefined) continue;
         if (front?.owner !== player) w.done = true;
         else if (peaceWith(w.power)) {
           w.done = true;

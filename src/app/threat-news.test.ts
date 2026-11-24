@@ -120,7 +120,7 @@ describe("the warning's word on a full treasury", () => {
   test('says when the gold is what brings the power near war, and what the building worth buying would do', () => {
     const { text, after } = warned(game(5300, 'full'));
     expect(text).toContain(
-      `Your treasury of 8,568 gold is what brings it this near: without that gold it would stand at 67%. Forum at Roma, 6,500 gold, would take it to ${after}%.`,
+      `Your treasury of 8,568 gold is what brings it this near: without that gold it would stand at 67%. Building Forum at Roma for 6,500 gold would take it to ${after}%.`,
     );
     expect(after).toBeLessThan(90);
   });
@@ -128,7 +128,7 @@ describe("the warning's word on a full treasury", () => {
   test('says how much the gold takes off when the power would stand near war without it', () => {
     const { text, after } = warned(game(7000, 'full'));
     expect(text).toContain(
-      `Your treasury of 8,568 gold takes 25% off the strength it needs. Forum at Roma, 6,500 gold, would take it to ${after}%.`,
+      `Your treasury of 8,568 gold takes 25% off the strength it needs. Building Forum at Roma for 6,500 gold would take it to ${after}%.`,
     );
   });
 
@@ -150,7 +150,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     const news = newsOf(state, told);
     expect(news.map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Your treasury of [\d,]+ gold is what brings it this near: without that gold it would stand at \d+%\. Forum at Roma, 6,500 gold, would take it to \d+%\. Your armies on land within 1,500 km count; more men, or guards at Roma for 90 days, lower it\. See At peace in Wars\.$/,
+        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Your treasury of [\d,]+ gold is what brings it this near: without that gold it would stand at \d+%\. Building Forum at Roma for 6,500 gold would take it to \d+%\. Your armies on land within 1,500 km count; more men, or guards at Roma for 90 days, lower it\. See At peace in Wars\.$/,
       ),
     ]);
     expect(news[0]?.tone).toBe('bad');
