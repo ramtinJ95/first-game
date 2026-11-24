@@ -28,13 +28,17 @@ const { values, positionals } = parseArgs({
 /**
  * The repository's test players: `cautious` is `playCautiousRome` as trade-judge plays it,
  * `ignoring` declares no war and does nothing about a warning, and `answering` declares no
- * war and answers each warning as it advises: the troop it names, as `threat-runup --answer`
- * plays it, and guards at the city it names until the power no longer stands on notice there.
- * `raising` is the answering Rome before it hired guards: the troop alone. Each of these builds
+ * war and answers each warning as it advises (`follows`): guards at the city it names until the
+ * power no longer stands on notice there, and the cheapest troop it can afford only when its food
+ * can feed it, the line does not say the men in training will come, and the line is no warning
+ * that ran the game on. `answering-every` is the answering Rome before it followed the advice:
+ * the troop on every line, fed or not. `raising` is the answering Rome before it hired guards:
+ * the troop alone. Each of these builds
  * by the AI's rule. The `panel-` Romes build as the city panel suggests (`panelBuilds`), the
  * `first-` Romes by the AI's rule but first levels only, so their gold sits at its limit as the
  * game before city projects left it, and the `hoarding-` Romes build nothing, as the thirteenth
- * play-through's tester did, each ignoring or answering as above.
+ * play-through's tester did, each ignoring or answering as above, and answering every line as
+ * `answering-every` does.
  */
 const FIRST_ONLY = { forbid: [...Object.values(SECOND_LEVELS), ...GREAT_WORKS] };
 const NOTHING = { builds: () => [] };
@@ -42,15 +46,37 @@ const climbs = !values['old-stops'];
 const PLAYERS = {
   cautious: {},
   ignoring: { peaceful: true },
-  answering: { peaceful: true, answer: true, guards: 'enough' },
+  answering: { peaceful: true, answer: true, follows: true, guards: 'enough' },
+  'answering-every': { peaceful: true, answer: true, guards: 'enough' },
   raising: { peaceful: true, answer: true },
   'panel-ignoring': { peaceful: true, builds: panelBuilds },
-  'panel-answering': { peaceful: true, answer: true, guards: 'enough', builds: panelBuilds },
+  'panel-answering': {
+    peaceful: true,
+    answer: true,
+    follows: true,
+    guards: 'enough',
+    builds: panelBuilds,
+  },
+  'panel-answering-every': { peaceful: true, answer: true, guards: 'enough', builds: panelBuilds },
   'first-ignoring': { peaceful: true, ...FIRST_ONLY },
-  'first-answering': { peaceful: true, answer: true, guards: 'enough', ...FIRST_ONLY },
+  'first-answering': {
+    peaceful: true,
+    answer: true,
+    follows: true,
+    guards: 'enough',
+    ...FIRST_ONLY,
+  },
+  'first-answering-every': { peaceful: true, answer: true, guards: 'enough', ...FIRST_ONLY },
   'first-raising': { peaceful: true, answer: true, ...FIRST_ONLY },
   'hoarding-ignoring': { peaceful: true, ...NOTHING },
-  'hoarding-answering': { peaceful: true, answer: true, guards: 'enough', ...NOTHING },
+  'hoarding-answering': {
+    peaceful: true,
+    answer: true,
+    follows: true,
+    guards: 'enough',
+    ...NOTHING,
+  },
+  'hoarding-answering-every': { peaceful: true, answer: true, guards: 'enough', ...NOTHING },
 } as const;
 type Player = keyof typeof PLAYERS;
 
@@ -74,6 +100,8 @@ interface Year {
   goldCapDays: number;
   /** Days of the year with the food store below zero, when cities shrink and men desert. */
   hungryDays: number;
+  /** Men of Rome's armies who deserted in the year, for want of food or gold. */
+  deserted?: number;
   men: number;
   /** Men under arms of the great power that fields the most, Rome aside. */
   rivalMen: number;
@@ -235,6 +263,9 @@ function play(player: Player, seed: number, years: number): Game {
       const cap = limitsOf(before).get(rome as FactionId)?.gold ?? Infinity;
       if (now.stores.gold >= cap - 1) year.goldCapDays++;
       if (now.stores.food < 0) year.hungryDays++;
+      for (const event of events)
+        if (event.kind === 'armyDeserted' && event.owner === rome)
+          year.deserted = (year.deserted ?? 0) + event.men;
       const training = Object.values(after.cities)
         .filter((c) => c.owner === rome)
         .flatMap((c) => c.recruits)

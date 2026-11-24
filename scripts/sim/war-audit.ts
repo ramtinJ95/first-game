@@ -29,14 +29,36 @@ const FIRST_ONLY = { forbid: [...Object.values(SECOND_LEVELS), ...GREAT_WORKS] }
 const NOTHING = { builds: () => [] };
 const PLAYERS = {
   ignoring: { peaceful: true },
-  answering: { peaceful: true, answer: true, guards: 'enough' },
+  answering: { peaceful: true, answer: true, follows: true, guards: 'enough' },
+  'answering-every': { peaceful: true, answer: true, guards: 'enough' },
   raising: { peaceful: true, answer: true },
   'panel-ignoring': { peaceful: true, builds: panelBuilds },
-  'panel-answering': { peaceful: true, answer: true, guards: 'enough', builds: panelBuilds },
+  'panel-answering': {
+    peaceful: true,
+    answer: true,
+    follows: true,
+    guards: 'enough',
+    builds: panelBuilds,
+  },
+  'panel-answering-every': { peaceful: true, answer: true, guards: 'enough', builds: panelBuilds },
   'first-ignoring': { peaceful: true, ...FIRST_ONLY },
-  'first-answering': { peaceful: true, answer: true, guards: 'enough', ...FIRST_ONLY },
+  'first-answering': {
+    peaceful: true,
+    answer: true,
+    follows: true,
+    guards: 'enough',
+    ...FIRST_ONLY,
+  },
+  'first-answering-every': { peaceful: true, answer: true, guards: 'enough', ...FIRST_ONLY },
   'hoarding-ignoring': { peaceful: true, ...NOTHING },
-  'hoarding-answering': { peaceful: true, answer: true, guards: 'enough', ...NOTHING },
+  'hoarding-answering': {
+    peaceful: true,
+    answer: true,
+    follows: true,
+    guards: 'enough',
+    ...NOTHING,
+  },
+  'hoarding-answering-every': { peaceful: true, answer: true, guards: 'enough', ...NOTHING },
 } as const;
 type Player = keyof typeof PLAYERS;
 

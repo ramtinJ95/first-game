@@ -43,15 +43,34 @@ function warnedTomorrow() {
   return state;
 }
 
-function played(answer: boolean) {
+function played(answer: boolean, follows = false, start = warnedTomorrow()) {
   const seen: { day: number; accepted: readonly Order[]; answered: readonly Order[] }[] = [];
   playCautiousRome(
     1,
     3 / 365,
     ({ before, accepted, answered }) => seen.push({ day: before.day, accepted, answered }),
-    { peaceful: true, answer, guards: answer ? 'enough' : 'never', start: warnedTomorrow() },
+    { peaceful: true, answer, follows, guards: answer ? 'enough' : 'never', start },
   );
   return seen;
+}
+
+/**
+ * `warnedTomorrow` with Rome's 4,000 men eating more than its land grows and 50 food in store,
+ * beside a Carthage of 9,000, which still warns.
+ */
+function hungryWarnedTomorrow() {
+  const state = warnedTomorrow();
+  const army = Object.values(state.armies).find((a) => a.owner === rome);
+  const spearmen = army && state.formations[army.formations[0] as never];
+  const romans = state.factions[rome];
+  if (!spearmen || !romans) throw new Error('no Rome');
+  spearmen.men = 4000;
+  romans.stores.food = 50;
+  const punic = Object.values(state.armies).find((a) => a.owner === carthage);
+  const theirs = punic && state.formations[punic.formations[0] as never];
+  if (!theirs) throw new Error('no Carthage');
+  theirs.men = 9000;
+  return state;
 }
 
 const kinds = (orders: readonly Order[]) =>
@@ -68,6 +87,18 @@ describe("the harness's word on which orders answered a warning", () => {
     const ignoring = played(false);
     expect(ignoring.flatMap((d) => d.accepted).some((o) => o.kind === 'recruit')).toBe(true);
     expect(ignoring.every((d) => d.answered.length === 0)).toBe(true);
+  });
+});
+
+describe('a Rome that follows the advice', () => {
+  it('raises no troop its food cannot feed, where a Rome that answers every line does', () => {
+    const recruits = (seen: ReturnType<typeof played>) =>
+      seen.flatMap((d) => kinds(d.answered)).filter((k) => k === 'recruit').length;
+    const every = played(true, false, hungryWarnedTomorrow());
+    const follows = played(true, true, hungryWarnedTomorrow());
+    expect(recruits(every)).toBe(1);
+    expect(recruits(follows)).toBe(0);
+    expect(follows.flatMap((d) => kinds(d.answered))).toContain('hireGuards');
   });
 });
 
