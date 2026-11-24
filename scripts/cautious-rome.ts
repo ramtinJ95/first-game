@@ -67,6 +67,8 @@ export interface CautiousDay {
   events: readonly DayEvent[];
   /** Rome's orders the rules took today, its trade and the AI's spending for it alike. */
   accepted: readonly Order[];
+  /** Of those, the orders it gave in answer to a warning or a war: the troop and the guards. */
+  answered: readonly Order[];
 }
 
 /**
@@ -89,6 +91,7 @@ export function playCautiousRome(
     builds,
     drops = [],
     forbid = [],
+    start,
   }: {
     peaceful?: boolean;
     guards?: GuardPlay;
@@ -99,6 +102,8 @@ export function playCautiousRome(
     drops?: readonly Order['kind'][];
     /** Buildings Rome's AI does not order, such as every second level and great work for a ruler who builds first levels only. */
     forbid?: readonly BuildingKind[];
+    /** The game to play from, in place of a new game of the seed. */
+    start?: GameState;
   } = {},
 ): GameState {
   const told = new Set<string>();
@@ -106,7 +111,7 @@ export function playCautiousRome(
   let warnedAt: CityId | undefined;
   const named = new Set<CityId>();
   let threatened: Threat[] = [];
-  let state: GameState = newGame(map, { seed, player: 'rome' });
+  let state: GameState = start ?? newGame(map, { seed, player: 'rome' });
   const ledger = new Map<TradeRouteId, { paid: number; received: number; deliveries: number }>();
   for (let day = 0; day < years * 365; day++) {
     const ai = decideAll(state, world, []);
@@ -223,7 +228,14 @@ export function playCautiousRome(
       if (guards === 'war' && reach[0]) threatened.push({ city: reach[0], until: 'three' });
       if (guards === 'warned') for (const city of reach) threatened.push({ city, until: 'full' });
     }
-    onDay({ before: state, after: next, events, accepted });
+    const given = new Set<Order>([...answers, ...hires]);
+    onDay({
+      before: state,
+      after: next,
+      events,
+      accepted,
+      answered: accepted.filter((order) => given.has(order)),
+    });
     state = next;
     if (state.factions[rome]?.defeatedOn !== null) break;
   }

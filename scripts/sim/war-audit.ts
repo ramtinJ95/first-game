@@ -106,10 +106,11 @@ function play(player: Player, seed: number, years: number) {
   const end = playCautiousRome(
     seed,
     years,
-    ({ before, after, events, accepted }) => {
+    ({ before, after, events, answered }) => {
+      // The harness answers a warning on the day after it, with the orders it marks as its answer.
       const last = warnings.at(-1);
-      if (last && after.day - last.day <= 2)
-        for (const order of accepted) {
+      if (last && last.day === before.day)
+        for (const order of answered) {
           if (order.kind === 'hireGuards') last.guards++;
           if (order.kind === 'recruit') last.recruits++;
         }
