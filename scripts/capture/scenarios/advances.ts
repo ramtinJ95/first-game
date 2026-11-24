@@ -9,12 +9,15 @@ import {
   startGame,
   untilDrawn,
 } from '../../../e2e/support.ts';
+import { HINT_SHARE } from '../../../src/app/advance-news.ts';
 import { changeCityOwner } from '../../../src/sim/cities.ts';
+import { limitsOf } from '../../../src/sim/systems/economy.ts';
 import type { CityId } from '../../../src/sim/ids.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
 import { defineScenario } from '../scenario.ts';
 
 const WIDE = { width: 1280, height: 720 };
+const NARROW = { width: 1024, height: 720 };
 const PHONE = { width: 390, height: 844 };
 
 async function load(page: Page, state: GameState) {
@@ -63,10 +66,30 @@ function largeRealm(): GameState {
   return state;
 }
 
+/** Rome on day 1 with a full purse and nothing studied. */
+function fresh(): GameState {
+  const state = startGame();
+  const realm = state.factions[rome];
+  if (!realm) throw new Error('no Rome');
+  realm.stores.gold = 15_000;
+  return state;
+}
+
+/** Rome just short of the treasury share that brings the hint, every city building, so the buildings' hint has none to name. */
+function hinted(): GameState {
+  const state = startGame();
+  const realm = state.factions[rome];
+  if (!realm) throw new Error('no Rome');
+  realm.stores.gold = HINT_SHARE * (limitsOf(state).get(rome)?.gold ?? 0) - 30;
+  for (const city of Object.values(state.cities))
+    if (city.owner === rome) city.construction = { building: 'temple', daysLeft: 300 };
+  return state;
+}
+
 export default defineScenario({
   name: 'advances',
   title:
-    "The Advances panel's three branches with what each advance would do for Rome today, the top bar's line of what is studied, and the news of an advance finished",
+    "The Advances panel's three branches with what each advance would do for Rome today, the line that names a building paying back sooner, the top bar's line of what is studied, the hint, and the news of an advance finished",
   viewport: WIDE,
   async run({ page, shot }) {
     await openGame(page);
@@ -76,6 +99,11 @@ export default defineScenario({
       'top-bar-1280',
       'The top bar names the advance studied and its days left, at 1280 by 720',
     );
+
+    await resize(page, NARROW);
+    await expect(page.getByTestId('study-days')).toHaveText('120 days');
+    await shot('top-bar-1024', 'At 1024 by 720 the top bar names only the days left');
+    await resize(page, WIDE);
 
     await page.getByTestId('advances-button').click();
     const panel = page.getByTestId('advances');
@@ -111,6 +139,36 @@ export default defineScenario({
     await shot('large-realm-390', 'The same panel for a Rome of 12 cities at 390 px wide');
     await resize(page, WIDE);
     await page.getByTestId('advances-button').click();
+
+    await load(page, fresh());
+    await page.getByTestId('advances-button').click();
+    await expect(page.getByTestId('advances-building-first')).toContainText(
+      'sooner than any advance you can start',
+    );
+    await expect(page.getByTestId('advance-suggested')).toHaveCount(0);
+    await shot(
+      'building-first-1280',
+      'Rome on day 1 with nothing studied: the panel names the building that would pay back sooner than any advance, and marks no advance',
+    );
+    await resize(page, PHONE);
+    await shot('building-first-390', 'The same line at 390 px wide');
+    await resize(page, WIDE);
+    await page.getByTestId('advances-button').click();
+
+    await load(page, hinted());
+    await resume(page);
+    const hint = page
+      .getByTestId('alerts')
+      .getByRole('button', { name: /nothing is being studied/ });
+    await expect(hint).toHaveCount(1);
+    await pause(page);
+    await shot(
+      'hint-1280',
+      'The hint, told once as the treasury nears its limit while nothing has been studied, that the Advances panel exists',
+    );
+    await resize(page, PHONE);
+    await shot('hint-390', 'The same hint at 390 px wide');
+    await resize(page, WIDE);
 
     await load(page, studying(2));
     await resume(page);
