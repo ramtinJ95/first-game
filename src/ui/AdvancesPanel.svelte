@@ -4,7 +4,13 @@
   import type { Order } from '../sim/orders/orders.ts';
   import type { GameState } from '../sim/state/game-state.ts';
   import type { Actions } from './actions.ts';
-  import { advancesView, cancelText, studyLine, ADVANCE_RULE } from './advances-text.ts';
+  import {
+    advancesView,
+    buildingFirstLine,
+    cancelText,
+    studyLine,
+    ADVANCE_RULE,
+  } from './advances-text.ts';
 
   let {
     game,
@@ -14,6 +20,7 @@
 
   const branches = $derived(advancesView(game, game.player, pending));
   const line = $derived(studyLine(game, game.player));
+  const first = $derived(buildingFirstLine(game, game.player));
   const study = $derived(game.factions[game.player]?.study ?? null);
   const cancelling = $derived(
     pending.some((order) => order.kind === 'cancelStudy' && order.faction === game.player),
@@ -35,6 +42,7 @@
       >
     {/if}
   </div>
+  {#if first}<p class="first" data-testid="advances-building-first">{first}</p>{/if}
   <div class="branches">
     {#each branches as branch (branch.branch)}
       <section class="branch" data-testid="branch-{branch.branch}" aria-label={branch.name}>
@@ -112,6 +120,12 @@
 
   .now p.idle {
     color: var(--bad);
+  }
+
+  .first {
+    margin: 0 0 6px;
+    padding: 4px 6px;
+    border-left: 3px solid var(--good);
   }
 
   .branch h3 {

@@ -104,6 +104,20 @@ export function construction(
   if (spare < CHEAPEST || record.stores.food < reserveOf(state, faction, 'food')) return [];
   const balance = balanceOf(state, faction);
   if (!balance || balance.gold < 0 || balance.food < 0) return [];
+  const best = nextBuilding(state, faction, spare);
+  return best ? [{ kind: 'build', faction, city: best.city.id, building: best.kind }] : [];
+}
+
+/**
+ * The building the power starts next with `spare` gold: the one that pays back its gold
+ * soonest among those its cities can start, if within its payback limit, a first level before
+ * any second level or great work. With no `spare`, the one it would start with gold enough.
+ */
+export function nextBuilding(
+  state: State,
+  faction: FactionId,
+  spare = Infinity,
+): { city: CityView; kind: BuildingKind; payback: number } | undefined {
   let best: { city: CityView; kind: BuildingKind; payback: number; first: boolean } | undefined;
   for (const city of sorted(state.cities)) {
     if (city.owner !== faction || city.construction) continue;
@@ -120,7 +134,7 @@ export function construction(
       }
     }
   }
-  return best ? [{ kind: 'build', faction, city: best.city.id, building: best.kind }] : [];
+  return best;
 }
 
 /** The city a new temple would calm when it is taken: the nearest foreign one in reach, unless another temple reaches it. */

@@ -19,6 +19,9 @@ import type { FactionId } from '../sim/ids.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { whole } from '../app/names.ts';
+import { worthBuilding } from '../app/building-hint.ts';
+import { BUILDINGS } from '../sim/buildings/buildings.ts';
+import { paybackBasis } from './buildings-text.ts';
 
 type State = DeepReadonly<GameState>;
 
@@ -69,7 +72,7 @@ export function advancesView(
   const ordered = pending.find(
     (order): order is StudyOrder => order.kind === 'study' && order.faction === faction,
   )?.advance;
-  const suggested = record ? bestStudy(state, faction, record.stores.gold)?.advance : undefined;
+  const suggested = marked(state, faction).advance;
   return ADVANCE_BRANCHES.map((branch) => ({
     branch,
     name: BRANCH_NAMES[branch],
@@ -105,6 +108,36 @@ export function advancesView(
       };
     }),
   }));
+}
+
+/**
+ * What the panel puts first: the advance that pays back soonest of those the realm can start
+ * with all its gold, unless one of the player's cities could start a building that pays back
+ * sooner, by the building hint's reckoning (`worthBuilding`). Then that building, and no advance,
+ * since an advance bought on such a day puts off a building that would pay sooner.
+ */
+export function marked(
+  state: State,
+  faction: FactionId,
+): {
+  advance?: AdvanceKind;
+  building?: NonNullable<ReturnType<typeof worthBuilding>>;
+  soonest?: { advance: AdvanceKind; payback: number };
+} {
+  const gold = state.factions[faction]?.stores.gold;
+  const soonest = gold === undefined ? undefined : bestStudy(state, faction, gold);
+  if (!soonest) return {};
+  const building = faction === state.player ? worthBuilding(state) : undefined;
+  if (building && building.years < soonest.payback) return { building, soonest };
+  return { advance: soonest.advance };
+}
+
+/** The line that names a building that would pay back sooner than any advance the realm can start, or undefined. */
+export function buildingFirstLine(state: State, faction: FactionId): string | undefined {
+  const { building, soonest } = marked(state, faction);
+  if (!building || !soonest) return undefined;
+  const { city, kind, years } = building;
+  return `Building ${BUILDINGS[kind].name} at ${city.name} would pay back in ${years.toFixed(1)} years${paybackBasis(kind)}, sooner than any advance you can start: the soonest, ${ADVANCES[soonest.advance].name}, takes ${soonest.payback.toFixed(1)}. Build first, and study with the gold left.`;
 }
 
 /** What each advance does, in a sentence with its number. */

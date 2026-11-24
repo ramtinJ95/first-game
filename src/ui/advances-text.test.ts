@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { ADVANCES } from '../sim/advances/advances.ts';
 import { buildFixture, FIXTURE, growRome } from '../sim/fixture.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { advancesView, studyLine } from './advances-text.ts';
+import { advancesView, buildingFirstLine, studyLine } from './advances-text.ts';
 
 function rome(state: GameState) {
   const record = state.factions[FIXTURE.rome];
@@ -77,5 +77,23 @@ describe('the advances panel', () => {
     expect(row(state, 'clemency')).toMatchObject({ gold: ADVANCES.clemency.gold });
     expect(row(state, 'clemency')?.why).toBeUndefined();
     expect(row(buildFixture(), 'standardCoin')?.why).toBeUndefined();
+  });
+
+  test('names a building that pays back sooner than any advance, and marks no advance, until no city could start one', () => {
+    const state = buildFixture();
+    rome(state).stores.gold = 50_000;
+    const marked = (s: GameState) =>
+      advancesView(s, FIXTURE.rome, [])
+        .flatMap((branch) => branch.rows)
+        .filter((r) => r.suggested)
+        .map((r) => r.kind);
+    expect(buildingFirstLine(state, FIXTURE.rome)).toBe(
+      'Building Forum at Roma would pay back in 2.1 years, sooner than any advance you can start: the soonest, Citizen rolls, takes 3.4. Build first, and study with the gold left.',
+    );
+    expect(marked(state)).toEqual([]);
+    for (const city of Object.values(state.cities))
+      if (city.owner === FIXTURE.rome) city.construction = { building: 'temple', daysLeft: 300 };
+    expect(buildingFirstLine(state, FIXTURE.rome)).toBeUndefined();
+    expect(marked(state)).toEqual(['citizenRolls']);
   });
 });

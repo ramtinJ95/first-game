@@ -4,6 +4,7 @@ import type { Order } from '../../src/sim/orders/orders.ts';
 import { ADVANCE_KINDS, type AdvanceKind } from '../../src/sim/advances/advances.ts';
 import { studyRefusal } from '../../src/sim/advances/study.ts';
 import { bestStudy, studyPayback } from '../../src/sim/ai/study.ts';
+import { marked } from '../../src/ui/advances-text.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
 import { dailyBalances, limitsOf, menOf } from '../../src/sim/systems/economy.ts';
 import { panelBuilds, playCautiousRome, rome, suggested } from '../cautious-rome.ts';
@@ -27,8 +28,9 @@ const { values } = parseArgs({
  * warning as it advises; both build and study by the AI's rules. `builder` answers, builds
  * as the panel suggests (`panelBuilds`, as `sim -- projects` plays it), and studies the
  * advance the panel suggests with the gold the day's buildings and the reserve for its men
- * leave. `stranger` answers, never builds, a player who has not found the buildings list,
- * and studies the advance the panel suggests with all its gold. Every other power plays the AI.
+ * leave, and nothing on a day the panel's line names a building that pays back sooner.
+ * `stranger` answers, never builds, a player who has not found the buildings list and
+ * passes over that line, and studies the soonest advance with all its gold. Every other power plays the AI.
  */
 const PLAYERS = ['ruler', 'answering', 'builder', 'stranger'] as const;
 /** The years at whose first day the run notes what the panel would build next. */
@@ -116,10 +118,15 @@ function withGold(state: GameState, gold: number): GameState {
   };
 }
 
-/** The panel's suggestion, on a day nothing is studied, with `gold` to spend. */
-function asThePanelSuggests(state: GameState, gold: number): Order[] {
+/**
+ * The panel's suggestion, on a day nothing is studied, with `gold` to spend. A player who
+ * heeds the panel's line studies nothing while a city could start a building that pays back
+ * sooner (`marked`).
+ */
+function asThePanelSuggests(state: GameState, gold: number, heedsLine: boolean): Order[] {
   const realm = state.factions[rome];
   if (!realm || realm.study) return [];
+  if (heedsLine && marked(state, rome).building) return [];
   const best = bestStudy(state, rome, gold);
   return best ? [{ kind: 'study', faction: rome, advance: best.advance }] : [];
 }
@@ -129,12 +136,15 @@ function playerOrders(player: Player, orders: Order[], state: GameState): Order[
   if (player === 'ruler' || player === 'answering') return orders;
   const kept = orders.filter((o) => o.faction !== rome || o.kind !== 'study');
   const gold = state.factions[rome]?.stores.gold ?? 0;
-  if (player === 'stranger') return [...kept, ...asThePanelSuggests(state, gold)];
+  if (player === 'stranger') return [...kept, ...asThePanelSuggests(state, gold, false)];
   const building = kept.reduce(
     (sum, o) => sum + (o.faction === rome && o.kind === 'build' ? BUILDINGS[o.building].gold : 0),
     0,
   );
-  return [...kept, ...asThePanelSuggests(state, gold - building - reserveOf(state, rome, 'gold'))];
+  return [
+    ...kept,
+    ...asThePanelSuggests(state, gold - building - reserveOf(state, rome, 'gold'), true),
+  ];
 }
 
 /** Rome on the first day of a year: its net gold a day, and the building the panel would start next. */

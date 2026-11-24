@@ -28,6 +28,7 @@ import {
   FOOD_PRICE,
   MANPOWER_PRICE,
   nearestForeign,
+  nextBuilding,
 } from './build.ts';
 import { balanceOf, reserveOf, sorted, type CityView, type State } from './situation.ts';
 import { GARRISON_ODDS } from './thresholds.ts';
@@ -113,13 +114,14 @@ export function studyPayback(state: State, faction: FactionId, kind: AdvanceKind
 
 /**
  * The advance the realm would do best to study today: of those it can start, the one that
- * pays back its gold soonest, if within STUDY_PAYBACK_YEARS, the first in the table on a tie.
- * `spare` is the gold the realm may spend on it.
+ * pays back its gold soonest, if within `years` (STUDY_PAYBACK_YEARS unless given), the first
+ * in the table on a tie. `spare` is the gold the realm may spend on it.
  */
 export function bestStudy(
   state: State,
   faction: FactionId,
   spare: number,
+  years = STUDY_PAYBACK_YEARS,
 ): { advance: AdvanceKind; payback: number } | undefined {
   let best: { advance: AdvanceKind; payback: number } | undefined;
   if (spare < CHEAPEST) return undefined;
@@ -127,7 +129,7 @@ export function bestStudy(
     if (studyPrice(state, faction, advance) > spare || studyRefusal(state, faction, advance))
       continue;
     const payback = studyPayback(state, faction, advance);
-    if (payback === undefined || payback > STUDY_PAYBACK_YEARS) continue;
+    if (payback === undefined || payback > Math.min(years, STUDY_PAYBACK_YEARS)) continue;
     if (!best || payback < best.payback) best = { advance, payback };
   }
   return best;
@@ -137,13 +139,16 @@ export function bestStudy(
  * Starts at most one advance, on a day the power raised no recruit and started no building:
  * the one that pays back soonest (`bestStudy`), with gold left over the reserve for its men
  * and the price of the recruit it would raise next, so study never stops it keeping or
- * growing an army.
+ * growing an army. It studies only an advance that pays back no later than the building it
+ * would start next with gold enough (`nextBuilding`), so an advance never puts off a building
+ * that would pay sooner, as slow advances bought on days a building was out of reach did.
  */
 export function studies(state: State, faction: FactionId, busy: boolean): Order[] {
   const record = state.factions[faction];
   if (!record || busy || record.study || record.kind !== 'greatPower') return [];
   const next = TROOPS[mostNeeded(state, faction)].recruit.gold;
   const spare = record.stores.gold - reserveOf(state, faction, 'gold') - next;
-  const best = bestStudy(state, faction, spare);
+  const building = nextBuilding(state, faction);
+  const best = bestStudy(state, faction, spare, building?.payback);
   return best ? [{ kind: 'study', faction, advance: best.advance }] : [];
 }
