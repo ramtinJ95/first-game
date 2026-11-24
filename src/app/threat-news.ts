@@ -251,7 +251,8 @@ function bandsStoppedCounting(
   power: FactionId,
 ): { city: CityId; men: number; threat: Threat } | undefined {
   const threat = readinessOf(after, world, power);
-  const city = threat && after.cities[threat.front];
+  // A power that presses the player's field armies weighs no guards, so none stopped counting for it.
+  const city = threat && !threat.pressed ? after.cities[threat.front] : undefined;
   if (!threat || !city || city.owner !== after.player) return undefined;
   const ended = city.guards.filter((band) => {
     const until = deterrentUntil(band);
@@ -292,8 +293,15 @@ function guardsHold(state: State, world: World, power: FactionId, threat: Threat
   walls.guards = walls.guards.filter((band) => deterrentUntil(band) <= state.day);
   walls.garrison = Math.max(0, walls.garrison - counted.length * GUARD_BAND);
   const bare = warReadiness(without, world, power, state.player)?.readiness;
-  const days = [...new Set(counted.map((band) => deterrentUntil(band)))].sort((a, b) => a - b);
-  return ` Guards at ${city.name} count until ${listed(days.map((day) => dateText(day)))} only${bare === undefined ? '' : `; without them it would stand at ${share(bare)}`}.`;
+  const days = counted.map((band) => deterrentUntil(band)).sort((a, b) => a - b);
+  const first = days[0] ?? state.day;
+  const last = days.at(-1) ?? first;
+  // Up to six bands each with its own day would not fit the corner, so the first and last stand for them.
+  const when =
+    first === last
+      ? `stop counting on ${dateText(first)}`
+      : `stop counting from ${dateText(first)} to ${dateText(last)}`;
+  return ` Guards at ${city.name} ${when}${bare === undefined ? '' : `; without them it would stand at ${share(bare)}`}.`;
 }
 
 /**

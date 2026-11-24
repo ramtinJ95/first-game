@@ -190,8 +190,44 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
     roma.guards = [];
     roma.garrison -= GUARD_BAND;
     expect(warning?.text).toContain(
-      `Guards at Roma count until ${dateText(180)} only; without them it would stand at ${shareOf(bare)}%.`,
+      `Guards at Roma stop counting on ${dateText(180)}; without them it would stand at ${shareOf(bare)}%.`,
     );
+  });
+  test('names the first and last day when its guards stop counting on different days', () => {
+    const { before, after } = standing(6500, 100, 2, 90);
+    const punic = after.factions[carthage];
+    const roma = after.cities['roma' as CityId];
+    if (!punic || !roma) throw new Error('no Carthage or Roma');
+    punic.noticeSince = 94 as Day;
+    const later = roma.guards[1];
+    if (later) later.until = (95 + GUARD_DAYS) as Day;
+    const [warning] = threatNewsOfDay(before, after, world, new Set<string>());
+    expect(warning?.text).toContain(
+      `Guards at Roma stop counting from ${dateText(180)} to ${dateText(185)}; without them it would stand at`,
+    );
+  });
+});
+
+describe('guards that stop counting against a power that presses your field armies', () => {
+  test('are not told, since such a power weighs no guards', () => {
+    const before = game(8000, 'empty', 100);
+    const roma = before.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    roma.garrison = 80_000;
+    roma.guards = Array.from({ length: 2 }, () => ({
+      until: (101 - GUARD_DETER_DAYS + GUARD_DAYS) as Day,
+    }));
+    notice(before, world);
+    const punic = before.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 60 as Day;
+    const after = structuredClone(before);
+    after.day = 101 as Day;
+    expect(warReadiness(after, world, carthage, rome)?.pressed).toBe(true);
+    const told = new Set([`threat:carthage:70`, `threat-stop:carthage:70:${shareOf(after)}:roma`]);
+    expect(
+      threatNewsOfDay(before, after, world, told).filter((a) => a.kind === 'guardsUncounted'),
+    ).toEqual([]);
   });
 });
 
