@@ -248,6 +248,7 @@ const clock = createClock({
     if (last) showNotice(refusalText(clock.state, last.reason));
   },
   onDay(before, after, events, orders) {
+    answerNews.onDay(before, after, events, orders);
     const saw = sightFor(before);
     const sees = sightFor(after);
     const weak = weakSiegeNews(before, after, weakSieges);
@@ -278,7 +279,6 @@ const clock = createClock({
           trainingThreats,
           newsPauses && pauses.warThreat,
         ),
-        ...answerNews.onDay(before, after, events, orders),
         ...guardNewsOfDay(before, after),
         ...hint,
       ]),
@@ -439,6 +439,14 @@ const meter = metering ? showFrameMeter(host) : undefined;
 function loop() {
   const shown = clock.state;
   clock.frame();
+  // The game without the player's answer plays its day on a frame that played none of the game's.
+  if (clock.state === shown && answerNews.waiting) {
+    const lines = answerNews.next();
+    if (lines.length > 0) {
+      chronicle = [...[...lines].reverse(), ...chronicle].slice(0, CHRONICLE_KEPT);
+      view.refresh();
+    }
+  }
   // The top bar shows a new day in the frame that draws it, so Space pauses on the
   // day the player reads, not one the panels have yet to show.
   if (clock.state !== shown) view.refresh();

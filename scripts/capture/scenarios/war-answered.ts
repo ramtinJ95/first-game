@@ -58,7 +58,8 @@ function answered(start: GameState, world: World, bands: number, days: number, p
         : [];
     const result = tick(state, [...orders, ...decideAll(state, world)], world);
     const taken = orders.filter((order) => !result.rejected.some((r) => r.order === order));
-    told.unshift(...news.onDay(state, result.state, [...made, ...result.events], taken));
+    news.onDay(state, result.state, [...made, ...result.events], taken);
+    while (news.waiting) told.unshift(...news.next());
     state = result.state;
   }
   return { state, told };

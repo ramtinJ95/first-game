@@ -159,116 +159,142 @@ const declaredBy = (events: readonly DayEvent[], power: FactionId, player: Facti
  */
 export function createAnswerNews(world: World, decide = (state: State) => decideAll(state, world)) {
   let watch: Watch | undefined;
-  return {
-    /** The day's news, given the day before its tick, the day after, its events, and the player's orders it played. */
-    onDay(
-      before: State,
-      after: State,
-      events: readonly DayEvent[],
-      orders: readonly Order[],
-    ): Alert[] {
-      const player = after.player;
-      // A day with no game played without an answer, and no order that could be one, reckons nothing.
-      if (!watch && !orders.some((o) => o.faction === player && ANSWERS.has(o.kind))) return [];
-      const warned = warnedOf(before, world);
-      const answers = orders.flatMap((order) => {
-        const answer = answerOf(before, order, [
-          ...warned,
-          ...(watch ? [...watch.warned.values()] : []),
-        ]);
-        return answer ? [{ order, answer }] : [];
-      });
-      if (!watch && answers.length > 0 && warned.length > 0)
-        watch = {
-          without: structuredClone(before) as GameState,
-          answers: [],
-          warned: new Map(warned.map((w) => [w.power, w])),
-          until: Math.max(...warned.map((w) => w.firstWar)) + ANSWER_WATCH_DAYS,
+  /** Days of the game the copy has yet to play, oldest first. */
+  const queue: {
+    before: State;
+    after: State;
+    events: readonly DayEvent[];
+    orders: readonly Order[];
+  }[] = [];
+
+  /** Plays one day of the game without the answer, and gives what it lets the news say. */
+  function play(
+    before: State,
+    after: State,
+    events: readonly DayEvent[],
+    orders: readonly Order[],
+  ): Alert[] {
+    const player = after.player;
+    const warned = warnedOf(before, world);
+    const answers = orders.flatMap((order) => {
+      const answer = answerOf(before, order, [
+        ...warned,
+        ...(watch ? [...watch.warned.values()] : []),
+      ]);
+      return answer ? [{ order, answer }] : [];
+    });
+    if (!watch && answers.length > 0 && warned.length > 0)
+      watch = {
+        // A tick copies the state it is given, so the day before serves as the copy as it is.
+        without: before as GameState,
+        answers: [],
+        warned: new Map(warned.map((w) => [w.power, w])),
+        until: Math.max(...warned.map((w) => w.firstWar)) + ANSWER_WATCH_DAYS,
+      };
+    if (!watch) return [];
+    for (const w of warned) if (!watch.warned.has(w.power)) watch.warned.set(w.power, w);
+    watch.answers.push(...answers.map((a) => a.answer));
+    const kept = orders.filter((order) => !answers.some((a) => a.order === order));
+    const without = watch.without;
+    // Ids are handed out from one counter, so a record made in one game may carry another id in the other.
+    if (!kept.every((order) => sameRecords(before, without, order))) {
+      watch = undefined;
+      return [];
+    }
+    const played = tick(without, [...kept, ...decide(without)], world);
+    watch.without = played.state;
+    const news: Alert[] = [];
+    const said = answerText(after, watch.answers);
+    const peaceWith = (power: FactionId) =>
+      events.some(
+        (e) => e.kind === 'peaceMade' && e.between.includes(power) && e.between.includes(player),
+      );
+    for (const w of watch.warned.values()) {
+      if (w.done) continue;
+      const name = factionName(after, w.power);
+      const front = after.cities[w.front];
+      const focus = front ? { focus: { at: front.position } } : {};
+      if (w.without === undefined && declaredBy(played.events, w.power, player)) {
+        w.without = before.day;
+        w.shares = {
+          without: warReadiness(without, world, w.power, player)?.readiness ?? 0,
+          with: warReadiness(before, world, w.power, player)?.readiness ?? 0,
         };
-      if (!watch) return [];
-      for (const w of warned) if (!watch.warned.has(w.power)) watch.warned.set(w.power, w);
-      watch.answers.push(...answers.map((a) => a.answer));
-      const kept = orders.filter((order) => !answers.some((a) => a.order === order));
-      const without = watch.without;
-      // Ids are handed out from one counter, so a record made in one game may carry another id in the other.
-      if (!kept.every((order) => sameRecords(before, without, order))) {
-        watch = undefined;
-        return [];
       }
-      const played = tick(without, [...kept, ...decide(without)], world);
-      watch.without = played.state;
-      const news: Alert[] = [];
-      const said = answerText(after, watch.answers);
-      const peaceWith = (power: FactionId) =>
-        events.some(
-          (e) => e.kind === 'peaceMade' && e.between.includes(power) && e.between.includes(player),
-        );
-      for (const w of watch.warned.values()) {
-        if (w.done) continue;
-        const name = factionName(after, w.power);
-        const front = after.cities[w.front];
-        const focus = front ? { focus: { at: front.position } } : {};
-        if (w.without === undefined && declaredBy(played.events, w.power, player)) {
-          w.without = before.day;
-          w.shares = {
-            without: warReadiness(without, world, w.power, player)?.readiness ?? 0,
-            with: warReadiness(before, world, w.power, player)?.readiness ?? 0,
-          };
-        }
-        if (w.with === undefined && declaredBy(events, w.power, player)) w.with = before.day;
-        // It declared before it would have without the answer: the answer held nothing off.
-        if (w.with !== undefined && w.without === undefined) {
-          w.done = true;
-          continue;
-        }
-        if (
-          w.fellWithout === undefined &&
-          watch.without.cities[w.front]?.owner === w.power &&
-          front?.owner === player
-        )
-          w.fellWithout = before.day;
-        if (w.without === before.day && w.with === undefined)
+      if (w.with === undefined && declaredBy(events, w.power, player)) w.with = before.day;
+      // It declared before it would have without the answer: the answer held nothing off.
+      if (w.with !== undefined && w.without === undefined) {
+        w.done = true;
+        continue;
+      }
+      if (
+        w.fellWithout === undefined &&
+        watch.without.cities[w.front]?.owner === w.power &&
+        front?.owner === player
+      )
+        w.fellWithout = before.day;
+      if (w.without === before.day && w.with === undefined)
+        news.push({
+          kind: 'warAnswered',
+          day: before.day,
+          tone: 'good',
+          text: `${name} could have declared war on you today, as warned, and did not. Without ${said} it would have: it stands at ${share(w.shares?.with ?? 0)} of the strength it needs, not ${share(w.shares?.without ?? 0)}.`,
+          ...focus,
+        });
+      if (w.with === before.day && w.without !== undefined && w.without < w.with)
+        news.push({
+          kind: 'warAnswered',
+          day: before.day,
+          tone: 'neutral',
+          text: `${name} declared war ${whole(w.with - w.without)} days later than it would have without ${said}, which held it off from ${dateText(w.without)}.`,
+          ...focus,
+        });
+      // Once at war in the game, what is left to tell is whether the named city outlives the war.
+      if (w.with === undefined) continue;
+      if (front?.owner !== player) w.done = true;
+      else if (peaceWith(w.power)) {
+        w.done = true;
+        if (w.fellWithout !== undefined)
           news.push({
             kind: 'warAnswered',
             day: before.day,
             tone: 'good',
-            text: `${name} could have declared war on you today, as warned, and did not. Without ${said} it would have: it stands at ${share(w.shares?.with ?? 0)} of the strength it needs, not ${share(w.shares?.without ?? 0)}.`,
+            text: `${name} made peace without taking ${front.name}. Without ${said} it would have taken ${front.name} on ${dateText(w.fellWithout)}.`,
             ...focus,
           });
-        if (w.with === before.day && w.without !== undefined && w.without < w.with)
-          news.push({
-            kind: 'warAnswered',
-            day: before.day,
-            tone: 'neutral',
-            text: `${name} declared war ${whole(w.with - w.without)} days later than it would have without ${said}, which held it off from ${dateText(w.without)}.`,
-            ...focus,
-          });
-        // Once at war in the game, what is left to tell is whether the named city outlives the war.
-        if (w.with === undefined) continue;
-        if (front?.owner !== player) w.done = true;
-        else if (peaceWith(w.power)) {
-          w.done = true;
-          if (w.fellWithout !== undefined)
-            news.push({
-              kind: 'warAnswered',
-              day: before.day,
-              tone: 'good',
-              text: `${name} made peace without taking ${front.name}. Without ${said} it would have taken ${front.name} on ${dateText(w.fellWithout)}.`,
-              ...focus,
-            });
-        }
       }
-      // A warning may still turn out either way while the power stands on notice or at war in the game without the answer.
-      const copy = watch.without;
-      const open = [...watch.warned.values()].some(
-        (w) =>
-          !w.done &&
-          (w.without !== undefined ||
-            copy.factions[w.power]?.noticeSince != null ||
-            areAtWar(copy, w.power, player)),
-      );
-      if (!open || before.day >= watch.until) watch = undefined;
-      return news;
+    }
+    // A warning may still turn out either way while the power stands on notice or at war in the game without the answer.
+    const copy = watch.without;
+    const open = [...watch.warned.values()].some(
+      (w) =>
+        !w.done &&
+        (w.without !== undefined ||
+          copy.factions[w.power]?.noticeSince != null ||
+          areAtWar(copy, w.power, player)),
+    );
+    if (!open || before.day >= watch.until) watch = undefined;
+    return news;
+  }
+
+  return {
+    /**
+     * Takes a day the clock played, with the player's orders the rules took. A day with no
+     * copy playing and no order that could answer a warning is let go at once; any other waits
+     * for `next`, so the copy's day costs a frame that plays no day of the game.
+     */
+    onDay(before: State, after: State, events: readonly DayEvent[], orders: readonly Order[]) {
+      const answering = orders.some((o) => o.faction === after.player && ANSWERS.has(o.kind));
+      if (watch || queue.length > 0 || answering) queue.push({ before, after, events, orders });
+    },
+    /** Plays the oldest day waiting, if any, and gives its news. */
+    next(): Alert[] {
+      const day = queue.shift();
+      return day ? play(day.before, day.after, day.events, day.orders) : [];
+    },
+    /** Whether a day waits for `next`. */
+    get waiting(): boolean {
+      return queue.length > 0;
     },
   };
 }

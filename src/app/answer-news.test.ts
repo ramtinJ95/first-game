@@ -86,7 +86,8 @@ function play(
     const result = tick(state, [...orders, ...decideAll(state, world)], world);
     const day = [...made, ...result.events];
     const taken = orders.filter((order) => !result.rejected.some((r) => r.order === order));
-    told.push(...news.onDay(state, result.state, day, taken));
+    news.onDay(state, result.state, day, taken);
+    while (news.waiting) told.push(...news.next());
     const owners = new Map(Object.values(result.state.cities).map((c) => [c.id, c.owner]));
     const readiness = warReadiness(state, world, carthage, f.rome)?.readiness ?? 0;
     events.push({ day: state.day, events: day, owners, readiness });
@@ -281,5 +282,27 @@ describe('the news of what an answer to a warning bought', () => {
     expect(answered.told.at(-1)?.text).toContain(
       `it would have taken Capua on ${dateText(fell ?? 0)}.`,
     );
+  });
+
+  it('plays the day without the answer only when asked, so the clock can give it a frame of its own', () => {
+    const start = carthageAt(2400);
+    const front = warReadiness(start, world, carthage, f.rome)?.front;
+    if (!front) throw new Error('Carthage weighs no city of Rome');
+    let decided = 0;
+    const news = createAnswerNews(world, (state) => {
+      decided++;
+      return decideAll(state, world);
+    });
+    let state = start;
+    for (let i = 0; i < 3; i++) {
+      const orders: Order[] = state.day === 100 ? [hireAt(front), hireAt(front)] : [];
+      const result = tick(state, [...orders, ...decideAll(state, world)], world);
+      news.onDay(state, result.state, result.events, orders);
+      expect(decided).toBe(i);
+      expect(news.waiting).toBe(true);
+      expect(news.next()).toEqual([]);
+      expect(decided).toBe(i + 1);
+      state = result.state;
+    }
   });
 });
