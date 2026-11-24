@@ -16,8 +16,7 @@ import * as routes from '../src/sim/trade/routes.ts';
 import { areAtWar } from '../src/sim/wars.ts';
 import { distance } from '../src/sim/world/find-path.ts';
 import { buildWorld, type World } from '../src/sim/world/world.ts';
-import { threatNewsOfDay } from '../src/app/threat-news.ts';
-import { recruitForecast } from '../src/ui/recruit-forecast.ts';
+import { menDesertIfRaised, threatNewsOfDay } from '../src/app/threat-news.ts';
 import { GUARD_GOLD, guardRefusal, hireGuards } from '../src/sim/guards.ts';
 import { warReadiness } from '../src/sim/ai/war.ts';
 import { THREAT_WARN } from '../src/app/threat-news.ts';
@@ -328,7 +327,7 @@ function answerOrders(state: GameState, city: CityId, raise: boolean, fed = fals
       .find(
         (t) => TROOPS[t].recruit.gold <= stores.gold && TROOPS[t].recruit.men <= stores.manpower,
       );
-    if (troop && !(fed && recruitForecast(state, [], world, troop).short.food !== undefined))
+    if (troop && !(fed && menDesertIfRaised(state, world, troop, capital.id)))
       orders.push({ kind: 'recruit', faction: rome, city: capital.id, troop });
   }
   for (const army of Object.values(state.armies)) {

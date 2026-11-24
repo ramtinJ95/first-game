@@ -859,13 +859,30 @@ function notCounted(army: DeepReadonly<Army>, point: MapPoint): { text: string; 
 }
 
 /**
+ * Whether `troop` raised at `city` now would leave the realm short of food, so that men desert,
+ * as the recruit card reckons it: with the days the troop trains at that city, which Barracks
+ * shorten, since men who muster sooner eat sooner.
+ */
+export function menDesertIfRaised(state: State, world: World, troop: Troop, city: CityId): boolean {
+  const at = state.cities[city];
+  if (!at) return false;
+  const days = trainingDaysAt(at, TROOPS[troop].recruit.days);
+  return recruitForecast(state, [], world, troop, days, city).short.food !== undefined;
+}
+
+/**
  * When `troop` raised now would leave the realm short of food, as the recruit card reckons it,
  * so that its men and others desert: what would feed them, the building the card names, its city,
  * price and the men it feeds, or nothing more when no city can build one. Undefined when they
  * are fed.
  */
 function unfed(state: State, world: World, troop: Troop): string | undefined {
-  if (recruitForecast(state, [], world, troop).short.food === undefined) return undefined;
+  const cities = Object.values(state.cities).filter(
+    (city) => city.owner === state.player && city.unrestDays === 0 && !beleaguered(state, city),
+  );
+  const days = (city: (typeof cities)[number]) => trainingDaysAt(city, TROOPS[troop].recruit.days);
+  const [fastest] = cities.sort((a, b) => days(a) - days(b));
+  if (!fastest || !menDesertIfRaised(state, world, troop, fastest.id)) return undefined;
   const site = canalSite(state, undefined);
   if (!site) return '';
   const { name, gold, food } = BUILDINGS[site.kind];

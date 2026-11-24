@@ -1,4 +1,7 @@
 import { readFileSync } from 'node:fs';
+import { buildFixture, FIXTURE } from '../sim/fixture.ts';
+import { recruitForecast } from '../ui/recruit-forecast.ts';
+import { trainingDaysAt } from '../sim/buildings/buildings.ts';
 import { describe, expect, test } from 'vitest';
 import { changeCityOwner } from '../sim/cities.ts';
 import { allocateId, type ArmyId, type CityId, type FactionId } from '../sim/ids.ts';
@@ -32,6 +35,7 @@ import {
   powersNearWar,
   standingThreats,
   threatFadedNewsOfDay,
+  menDesertIfRaised,
   threatNewsOfDay,
   weighedNotes,
 } from './threat-news.ts';
@@ -1536,5 +1540,30 @@ describe('the armies the At peace list names as counting against each power', ()
     const state = game(5300, 'full');
     const notes = weighedNotes(state, standingThreats(state, world));
     expect(notes.filter((note) => note.startsWith('Your treasury'))).toHaveLength(1);
+  });
+});
+
+describe('the food the warning reckons, as the recruit card does', () => {
+  test('counts the days a troop trains at a city with Barracks, since men who muster sooner eat sooner', () => {
+    const state = buildFixture();
+    for (const city of Object.values(state.cities))
+      if (city.owner === FIXTURE.rome) {
+        city.population = 20_000;
+        city.buildings = ['canals', 'barracks'];
+      }
+    const hastati = state.formations[FIXTURE.hastati];
+    const romans = state.factions[FIXTURE.rome];
+    const roma = state.cities[FIXTURE.roma];
+    if (!hastati || !romans || !roma) throw new Error('no fixture');
+    hastati.men = 1750;
+    Object.assign(romans.stores, { gold: 20_000, food: 0 });
+    const fixtureWorld = buildWorld(map);
+    const days = trainingDaysAt(roma, 15);
+    expect(days).toBeLessThan(15);
+    const card = recruitForecast(state, [], fixtureWorld, 'spearmen', days, FIXTURE.roma);
+    const untrained = recruitForecast(state, [], fixtureWorld, 'spearmen');
+    expect(card.short.food).toBeDefined();
+    expect(untrained.short.food).toBeUndefined();
+    expect(menDesertIfRaised(state, fixtureWorld, 'spearmen', FIXTURE.roma)).toBe(true);
   });
 });
