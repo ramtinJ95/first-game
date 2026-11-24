@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { factionName, whole } from '../app/names.ts';
+  import { factionName } from '../app/names.ts';
   import type { View } from '../app/view.svelte.ts';
   import type { Stores } from '../sim/state/faction.ts';
   import { dailyBalances, limitsOf } from '../sim/systems/economy.ts';
   import { warsOf } from './describe.ts';
   import { standingOffer } from '../sim/peace/offer.ts';
   import type { Actions } from './actions.ts';
-  import { cssColour, ordersWaitingText, signed, storeNote } from './describe.ts';
+  import { cssColour, ordersWaitingText, signed, storeAmount, storeNote } from './describe.ts';
   import type { FrameActions } from './frame-actions.ts';
   import FrameControls from './FrameControls.svelte';
   import TimeControls from './TimeControls.svelte';
@@ -70,7 +70,7 @@
             {#if note}<span class="note" data-testid="store-{key}-note">{note.text}</span>{/if}
           </span>
           <span class="line">
-            <strong data-testid="store-{key}-amount">{whole(stores[key])}</strong>
+            <strong data-testid="store-{key}-amount">{storeAmount(stores[key])}</strong>
             <span class="change" data-testid="store-{key}-change">{signed(balance[key])}/day</span>
           </span>
         </span>

@@ -83,6 +83,25 @@ test.describe('the panels', () => {
     await expect(bar.getByTestId('store-gold')).toContainText(/\d+ days left/);
   });
 
+  test('the top bar shows a store the rules let fall below nothing at nothing, with how much is short', async ({
+    page,
+  }) => {
+    const bar = page.getByTestId('top-bar');
+    const state = startGame();
+    const stores = state.factions[rome]?.stores;
+    if (!stores) throw new Error('no Roman stores');
+    stores.food = -154;
+    await pause(page);
+    await load(page, state);
+    await expect(bar.getByTestId('store-food-amount')).toHaveText('0');
+    await expect(bar.getByTestId('store-food-note')).toHaveText('Short 154');
+    await expect(bar.getByTestId('store-food')).toHaveClass(/falling/);
+    await expect(bar.getByTestId('store-food')).toHaveAttribute(
+      'title',
+      /^Ran out, and 154 food short: formations desert every day until it is made up/,
+    );
+  });
+
   test('a right click on land marches your selected army there with moveArmy, and Halt stops it', async ({
     page,
   }) => {

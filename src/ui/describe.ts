@@ -666,12 +666,32 @@ export interface StoreNote {
  * ran out, how many days it lasts while it falls, or that it stops growing at its limit
  * (`limitsOf`), today or with tomorrow's gain.
  */
+/**
+ * A store as the player reads it. The rules let gold and food fall below nothing, a shortfall
+ * the realm makes up before its men stop deserting; the bar shows such a store at nothing and
+ * the note says how much is short.
+ */
+export function storeAmount(amount: number): string {
+  return whole(Math.max(0, amount));
+}
+
 export function storeNote(
   store: keyof Stores,
   amount: number,
   change: number,
   limit: number | undefined,
 ): StoreNote | undefined {
+  if (store !== 'manpower' && Math.round(-amount) > 0) {
+    const short = `${whole(-amount)} ${store}`;
+    return {
+      text: `Short ${whole(-amount)}`,
+      why:
+        change > 0
+          ? `Ran out, and ${short} short: formations desert every day until it is made up, in ${whole(Math.ceil(-amount / change))} days at today's balance.`
+          : `Ran out, and ${short} short: formations desert every day until it is made up, and today's balance adds to it.`,
+      bad: true,
+    };
+  }
   if (store !== 'manpower' && amount <= 0) {
     return {
       text: 'Ran out',

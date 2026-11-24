@@ -17,6 +17,7 @@ import {
   armiesAt,
   cityFoodText,
   sackText,
+  storeAmount,
   storeNote,
   activityText,
   reformCostText,
@@ -419,6 +420,22 @@ describe('storeNote', () => {
       why: expect.stringMatching(/^Ran out: formations desert\./) as string,
       bad: true,
     });
+  });
+
+  it('shows a store the rules let fall below nothing at nothing, and says how much is short', () => {
+    expect(storeAmount(-154)).toBe('0');
+    expect(storeAmount(1234.4)).toBe('1,234');
+    expect(storeNote('food', -154, 2, 500)).toEqual({
+      text: 'Short 154',
+      why: "Ran out, and 154 food short: formations desert every day until it is made up, in 77 days at today's balance.",
+      bad: true,
+    });
+    expect(storeNote('gold', -40, -5, undefined)).toEqual({
+      text: 'Short 40',
+      why: "Ran out, and 40 gold short: formations desert every day until it is made up, and today's balance adds to it.",
+      bad: true,
+    });
+    expect(storeNote('food', -0.3, -5, 500)).toMatchObject({ text: 'Ran out' });
   });
 
   it('says when food or manpower stops growing at its limit, and nothing below it', () => {
