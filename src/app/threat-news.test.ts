@@ -18,6 +18,7 @@ import { limitsOf } from '../sim/systems/economy.ts';
 import { buildWorld } from '../sim/world/world.ts';
 import { dateText } from './names.ts';
 import { NOTICE_DAYS } from '../sim/ai/thresholds.ts';
+import { GUARD_BAND, GUARD_DAYS, GUARD_DETER_DAYS } from '../sim/guards.ts';
 import { notice } from '../sim/systems/notice.ts';
 import { recruitThreats, trainingThreats } from '../ui/recruit-threats.ts';
 import { decideOrders } from '../sim/ai/decide.ts';
@@ -100,6 +101,99 @@ function onNotice(state: GameState, since: number, told: Set<string>) {
     if (power.noticeSince !== null) power.noticeSince = since as Day;
   return threatNewsOfDay(state, state, world, told);
 }
+
+/**
+ * Carthage of `men` on notice since day 60 against a Rome whose Roma holds `bands` bands hired
+ * on `hiredOn`, the day before and the day of `day`, with the told keys `told` holds.
+ */
+function standing(men: number, day: number, bands = 0, hiredOn = 0) {
+  const before = game(men, 'full', day);
+  const roma = before.cities['roma' as CityId];
+  if (!roma) throw new Error('no Roma');
+  roma.guards = Array.from({ length: bands }, () => ({ until: (hiredOn + GUARD_DAYS) as Day }));
+  roma.garrison += bands * GUARD_BAND;
+  notice(before, world);
+  const punic = before.factions[carthage];
+  if (!punic) throw new Error('no Carthage');
+  punic.noticeSince = 60 as Day;
+  const after = structuredClone(before);
+  after.day = (day + 1) as Day;
+  return { before, after };
+}
+
+const shareOf = (state: GameState) =>
+  Math.round(Math.min(1, warReadiness(state, world, carthage, rome)?.readiness ?? 0) * 100);
+
+describe('a power on notice that climbs, and guards that stop counting', () => {
+  test('stops the game again when the power stands 6 points or more above its last stop, from that share on', () => {
+    const { before, after } = standing(5300, 100);
+    const now = shareOf(after);
+    const told = new Set([`threat:carthage:70`, `threat-stop:carthage:70:${now - 8}:roma`]);
+    const news = threatNewsOfDay(before, after, world, told);
+    expect(news).toHaveLength(1);
+    expect(news[0]?.pause).toEqual({ kind: 'warThreat' });
+    expect(news[0]?.text).toMatch(
+      new RegExp(
+        `^Carthage stands higher than when the game last stopped for it, on Year 1, day 70 at ${now - 8}%: it has ${now}% of the strength it needs against your forces near Roma`,
+      ),
+    );
+    expect([...told]).toContain(`threat-stop:carthage:100:${now}:roma`);
+    expect(threatNewsOfDay(after, after, world, told)).toEqual([]);
+  });
+
+  test('does not stop the game for a climb under 6 points', () => {
+    const { before, after } = standing(5300, 100);
+    const told = new Set([
+      `threat:carthage:70`,
+      `threat-stop:carthage:70:${shareOf(after) - 5}:roma`,
+    ]);
+    expect(threatNewsOfDay(before, after, world, told)).toEqual([]);
+  });
+
+  test('tells, without stopping, of guards that stop counting while the power stands on notice', () => {
+    const { before, after } = standing(5300, 100, 2, 101 - GUARD_DETER_DAYS);
+    const told = new Set([`threat:carthage:70`, `threat-stop:carthage:70:${shareOf(after)}:roma`]);
+    const news = threatNewsOfDay(before, after, world, told);
+    expect(news).toEqual([
+      expect.objectContaining({
+        kind: 'guardsUncounted',
+        day: 100,
+        text: `The 1,000 guards at Roma no longer count against Carthage's war: it now stands at ${shareOf(after)}% of the strength it needs, and may declare any day now if it holds it. A band hired in their place counts for 90 days, for 2,000 gold; men under arms count for good.`,
+      }),
+    ]);
+    expect(news[0]?.pause).toBeUndefined();
+  });
+
+  test('tells guards that stop counting on the day of a climb inside the one stop', () => {
+    const { before, after } = standing(5300, 100, 2, 101 - GUARD_DETER_DAYS);
+    const told = new Set([
+      `threat:carthage:70`,
+      `threat-stop:carthage:70:${shareOf(after) - 10}:roma`,
+    ]);
+    const news = threatNewsOfDay(before, after, world, told);
+    expect(news).toHaveLength(1);
+    expect(news[0]?.pause).toEqual({ kind: 'warThreat' });
+    expect(news[0]?.text).toMatch(
+      /^The 1,000 guards at Roma no longer count against Carthage's war\. Carthage stands higher than when the game last stopped for it/,
+    );
+  });
+
+  test("names the days a warning's guards stop counting, and the share without them", () => {
+    const { before, after } = standing(6500, 100, 1, 90);
+    const told = new Set<string>();
+    const punic = after.factions[carthage];
+    if (punic) punic.noticeSince = 94 as Day;
+    const [warning] = threatNewsOfDay(before, after, world, told);
+    const bare = structuredClone(after);
+    const roma = bare.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    roma.guards = [];
+    roma.garrison -= GUARD_BAND;
+    expect(warning?.text).toContain(
+      `Guards at Roma count until ${dateText(180)} only; without them it would stand at ${shareOf(bare)}%.`,
+    );
+  });
+});
 
 describe("the warning's word on a full treasury", () => {
   /** The warning's text, and Carthage's share on a copy of the day with Rome's Forum at Roma ordered. */

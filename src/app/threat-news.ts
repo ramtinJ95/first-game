@@ -19,7 +19,8 @@ import { trainingDaysAt } from '../sim/buildings/buildings.ts';
 import { TROOPS, type Troop } from '../sim/troops.ts';
 import { beleaguered } from '../sim/systems/sieges.ts';
 import type { Stores } from '../sim/state/faction.ts';
-import { GUARD_DETER_DAYS } from '../sim/guards.ts';
+import { deterrentUntil, GUARD_BAND, GUARD_DETER_DAYS, GUARD_GOLD } from '../sim/guards.ts';
+import type { Day } from '../sim/state/day.ts';
 import { NOTICE_DAYS, NOTICE_SHARE, WAR_FRONT_KM } from '../sim/ai/thresholds.ts';
 
 type State = DeepReadonly<GameState>;
@@ -133,6 +134,7 @@ export function threatNewsOfDay(
   training: (state: State, world: World) => ReadonlyMap<FactionId, TrainingMuster> = () =>
     new Map(),
   stopping = true,
+  climbs = true,
 ): Alert[] {
   const player = after.player;
   const warned: {
@@ -144,7 +146,10 @@ export function threatNewsOfDay(
     /** For a reminder, the day the player was last warned of this notice. */
     told: number | undefined;
     spared: Stop | undefined;
+    /** For a climb, the stop it stands THREAT_SPARE_RISE points or more above. */
+    climb: Stop | undefined;
   }[] = [];
+  const bands: { power: FactionId; city: CityId; men: number; threat: Threat; from: string }[] = [];
   for (const power of Object.values(after.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (power.id === player || power.kind !== 'greatPower' || power.defeatedOn !== null) continue;
     if (areAtWar(after, power.id, player) || truceBetween(after, power.id, player)) {
@@ -154,16 +159,23 @@ export function threatNewsOfDay(
     }
     const last = warnedOn(remembered, power.id);
     if (power.noticeSince === null) continue;
+    const lapsed = bandsStoppedCounting(before, after, world, power.id);
+    if (lapsed)
+      bands.push({ power: power.id, ...lapsed, from: mayDeclare(before, power.noticeSince) });
     if (before.day - power.noticeSince + 1 < THREAT_STAND_DAYS) continue;
-    if (
-      last !== undefined &&
-      last >= power.noticeSince &&
-      before.day - Math.max(last, power.noticeSince + NOTICE_DAYS) < THREAT_REMIND_DAYS
-    )
-      continue;
+    const told = last !== undefined && last >= power.noticeSince;
+    const stop = stopOf(remembered, power.id);
+    const climbing = (threat: Threat | undefined) =>
+      climbs && told && stopping && stop !== undefined && threat !== undefined
+        ? points(threat.readiness) - stop.share >= THREAT_SPARE_RISE
+        : false;
+    const due =
+      told && before.day - Math.max(last, power.noticeSince + NOTICE_DAYS) >= THREAT_REMIND_DAYS;
+    if (told && !due && !climbing(readinessOf(after, world, power.id))) continue;
     const threat = readinessOf(after, world, power.id);
     if (!threat) continue;
-    const reminder = last !== undefined && last >= power.noticeSince;
+    const reminder = told;
+    const climb = !due && climbing(threat) ? stop : undefined;
     forget(remembered, power.id);
     remembered.add(`${prefixOf(power.id)}${before.day}`);
     warned.push({
@@ -173,6 +185,7 @@ export function threatNewsOfDay(
       from: mayDeclare(before, power.noticeSince),
       by: dayToCome(before, power.noticeSince),
       told: reminder ? last : undefined,
+      climb,
       // A reminder says war may now come any day, so it stops the game as its warning did.
       spared: reminder
         ? undefined
@@ -185,7 +198,9 @@ export function threatNewsOfDay(
     });
   }
   const [first, ...others] = warned;
-  if (!first) return [];
+  const bandLines = (skip: FactionId | undefined) =>
+    bands.filter((b) => b.power !== skip).map((b) => bandAlert(after, b));
+  if (!first) return bandLines(undefined);
   // One line tells the day's powers, so it stops for all of them or for none.
   const stops = warned.some((w) => w.spared === undefined);
   // A stop the Game menu turned off is no stop the player answered, so it spares nothing later.
@@ -197,10 +212,16 @@ export function threatNewsOfDay(
       );
     }
   const front = after.cities[first.threat.front];
+  // A band that stopped counting on the day of a stop is told in it, so the player reads one stop whole.
+  const foldedBand =
+    stops && others.length === 0 ? bands.find((b) => b.power === first.power) : undefined;
+  const folded = foldedBand
+    ? `The ${whole(foldedBand.men)} guards at ${after.cities[foldedBand.city]?.name ?? foldedBand.city} no longer count against ${first.name}'s war. `
+    : '';
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
   const text = stops
     ? others.length === 0
-      ? `${first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat))} See At peace in Wars.`
+      ? `${folded}${first.climb ? `${first.name} stands higher than when the game last stopped for it, on ${dateText(first.climb.day)} at ${first.climb.share}%:` : first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), guardsHold(after, world, first.power, first.threat))} See At peace in Wars.`
       : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`
     : ranOnText(
         after,
@@ -215,7 +236,64 @@ export function threatNewsOfDay(
       text,
       ...(front ? { focus: { at: front.position } } : {}),
     },
+    ...bandLines(foldedBand?.power),
   ];
+}
+
+/**
+ * The bands of guards at the city a power on notice weighs that it counted yesterday and no
+ * longer counts today, GUARD_DETER_DAYS after their hire, with the power's share now.
+ */
+function bandsStoppedCounting(
+  before: State,
+  after: State,
+  world: World,
+  power: FactionId,
+): { city: CityId; men: number; threat: Threat } | undefined {
+  const threat = readinessOf(after, world, power);
+  const city = threat && after.cities[threat.front];
+  if (!threat || !city || city.owner !== after.player) return undefined;
+  const ended = city.guards.filter((band) => {
+    const until = deterrentUntil(band);
+    return until > before.day && until <= after.day;
+  }).length;
+  return ended > 0 ? { city: city.id, men: ended * GUARD_BAND, threat } : undefined;
+}
+
+/** The line of a day on which guards a power on notice counted stopped counting. It does not stop the game. */
+function bandAlert(
+  state: State,
+  band: { power: FactionId; city: CityId; men: number; threat: Threat; from: string },
+): Alert {
+  const city = state.cities[band.city];
+  return {
+    kind: 'guardsUncounted',
+    day: (state.day - 1) as Day,
+    tone: 'bad',
+    text: `The ${whole(band.men)} guards at ${city?.name ?? band.city} no longer count against ${factionName(state, band.power)}'s war: it now stands at ${share(band.threat.readiness)} of the strength it needs, and may declare ${band.from} if it holds it. A band hired in their place counts for ${GUARD_DETER_DAYS} days, for ${whole(GUARD_GOLD)} gold; men under arms count for good.`,
+    ...(city ? { focus: { at: city.position } } : {}),
+  };
+}
+
+/**
+ * When guards the power counts at the city it weighs hold its share down, the days they stop
+ * counting and the share it would stand at without them, reckoned on a copy of the day with
+ * those bands gone; nothing when it counts none.
+ */
+function guardsHold(state: State, world: World, power: FactionId, threat: Threat): string {
+  if (threat.pressed) return '';
+  const city = state.cities[threat.front];
+  if (!city || city.owner !== state.player) return '';
+  const counted = city.guards.filter((band) => deterrentUntil(band) > state.day);
+  if (counted.length === 0) return '';
+  const without = structuredClone(state) as GameState;
+  const walls = without.cities[city.id];
+  if (!walls) return '';
+  walls.guards = walls.guards.filter((band) => deterrentUntil(band) <= state.day);
+  walls.garrison = Math.max(0, walls.garrison - counted.length * GUARD_BAND);
+  const bare = warReadiness(without, world, power, state.player)?.readiness;
+  const days = [...new Set(counted.map((band) => deterrentUntil(band)))].sort((a, b) => a - b);
+  return ` Guards at ${city.name} count until ${listed(days.map((day) => dateText(day)))} only${bare === undefined ? '' : `; without them it would stand at ${share(bare)}`}.`;
 }
 
 /**
@@ -460,6 +538,7 @@ function whatCounts(
   where: Where = 'panel',
   muster?: TrainingMuster,
   treasury?: string,
+  guards = '',
 ): string {
   if (threat.pressed)
     return ` ${raiseAdvice(state, power, waiting, by, where, muster)}. It weighs you so only while you hold no more cities than at the start.`;
@@ -470,7 +549,7 @@ function whatCounts(
     (threat.hoard > 0
       ? ` Your treasury of ${whole(gold)} gold lowers the strength it needs by ${Math.round(threat.hoard * 100)}%, so more gold brings war nearer.`
       : '');
-  return `${hoard}${front ? ` Your armies on land within ${whole(WAR_FRONT_KM)} km count; more men, or guards at ${front.name} for ${GUARD_DETER_DAYS} days, lower it.` : ''}`;
+  return `${hoard}${front ? ` Your armies on land within ${whole(WAR_FRONT_KM)} km count; more men, or guards at ${front.name} for ${GUARD_DETER_DAYS} days, lower it.` : ''}${guards}`;
 }
 
 /** A share of the strength a power needs that the player's treasury takes off, below which the warning does not name a purchase. */
