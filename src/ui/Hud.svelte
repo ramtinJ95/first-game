@@ -234,8 +234,9 @@
       gap: 6px;
     }
 
+    /* The Chronicle button and one line of news of four lines, read whole. */
     .alerts {
-      max-height: 5.2rem;
+      max-height: 7.4rem;
     }
 
     .side {

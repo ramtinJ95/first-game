@@ -56,7 +56,7 @@ export default defineScenario({
     await resize(page, { width: 1024, height: 768 });
     await shot(
       'top-bar-1024',
-      'The top bar at 1024 px on one row with gold and food run out: "Ran out" on each, and why on hover',
+      'The top bar at 1024 px on one row with gold 120 and food 40 below nothing: each shows 0 and "Short 120" or "Short 40", and why on hover',
     );
 
     await resize(page, { width: 1280, height: 720 });
