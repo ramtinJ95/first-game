@@ -270,7 +270,7 @@ function bandAlert(
     kind: 'guardsUncounted',
     day: (state.day - 1) as Day,
     tone: 'bad',
-    text: `The ${whole(band.men)} guards at ${city?.name ?? band.city} no longer count against ${factionName(state, band.power)}'s war: it now stands at ${share(band.threat.readiness)} of the strength it needs, and may declare ${band.from} if it holds it. A band hired in their place counts for ${GUARD_DETER_DAYS} days, for ${whole(GUARD_GOLD)} gold; men under arms count for good.`,
+    text: `The ${whole(band.men)} guards at ${city?.name ?? band.city} no longer count against ${factionName(state, band.power)}'s war: it stands at ${share(band.threat.readiness)} of the strength it needs, and may declare ${band.from}. A new band counts ${GUARD_DETER_DAYS} days, for ${whole(GUARD_GOLD)} gold.`,
     ...(city ? { focus: { at: city.position } } : {}),
   };
 }

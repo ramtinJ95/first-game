@@ -158,7 +158,7 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
       expect.objectContaining({
         kind: 'guardsUncounted',
         day: 100,
-        text: `The 1,000 guards at Roma no longer count against Carthage's war: it now stands at ${shareOf(after)}% of the strength it needs, and may declare any day now if it holds it. A band hired in their place counts for 90 days, for 2,000 gold; men under arms count for good.`,
+        text: `The 1,000 guards at Roma no longer count against Carthage's war: it stands at ${shareOf(after)}% of the strength it needs, and may declare any day now. A new band counts 90 days, for 2,000 gold.`,
       }),
     ]);
     expect(news[0]?.pause).toBeUndefined();
