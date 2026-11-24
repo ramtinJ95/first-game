@@ -939,6 +939,13 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     );
   });
 
+  test('a field-army warning says the men would desert even when no city can build what would feed them', () => {
+    const [warning] = newsOf(starving(pressedWith({ gold: 2229, manpower: 5000 })), new Set());
+    expect(warning?.text).toContain(
+      'Men raised now would desert: food feeds no more. It weighs you so only',
+    );
+  });
+
   test('a warning by a city to a realm whose food feeds no more men says that guards eat nothing', () => {
     const [warning] = newsOf(starving(game(5300, 'full')), new Set());
     expect(warning?.text).toContain(

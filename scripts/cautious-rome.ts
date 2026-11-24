@@ -231,7 +231,7 @@ export function playCautiousRome(
           until: next.day + NOTICE_DAYS,
           raise:
             !follows ||
-            (alert.kind === 'warThreat' && !alert.text.includes('in training muster on')),
+            (alert.kind === 'warThreat' && !/ in training muster (on|by) /.test(alert.text)),
         };
       if (warnedAt) {
         named.delete(warnedAt);

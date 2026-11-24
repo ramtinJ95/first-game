@@ -925,7 +925,7 @@ function raiseAdvice(
   }
   const advice = orderAdvice(state, stores, by);
   const hungry = world && advice.kind !== 'none' ? unfed(waiting, world, advice.troop) : undefined;
-  if (hungry) return `Men raised now would desert: food feeds no more${hungry}`;
+  if (hungry !== undefined) return `Men raised now would desert: food feeds no more${hungry}`;
   if (advice.kind === 'none')
     return advice.text === ''
       ? 'More men lower it, not guards, but no city of yours may recruit now'

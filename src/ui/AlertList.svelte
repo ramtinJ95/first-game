@@ -22,7 +22,8 @@
     if (!item) return;
     const room = list.getBoundingClientRect();
     const line = item.getBoundingClientRect();
-    if (line.bottom > room.bottom)
+    if (line.top < room.top) list.scrollTop -= room.top - line.top;
+    else if (line.bottom > room.bottom)
       list.scrollTop += Math.min(line.top - room.top, line.bottom - room.bottom);
   });
 </script>

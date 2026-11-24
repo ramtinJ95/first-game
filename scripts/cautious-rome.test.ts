@@ -102,6 +102,21 @@ describe('a Rome that follows the advice', () => {
   });
 });
 
+describe('a Rome that follows the advice, with men of two troops in training', () => {
+  it('raises no more when the warning says the men in training will come', () => {
+    const start = warnedTomorrow();
+    const roma = start.cities['roma' as CityId];
+    const capua = start.cities['capua' as CityId];
+    if (!roma || !capua) throw new Error('no Roma or Capua');
+    roma.recruits.push({ troop: 'skirmishers', readyOn: 105 as Day });
+    capua.recruits.push({ troop: 'archers', readyOn: 108 as Day });
+    const recruits = (seen: ReturnType<typeof played>) =>
+      seen.flatMap((d) => kinds(d.answered)).filter((k) => k === 'recruit').length;
+    expect(recruits(played(true, false, structuredClone(start)))).toBe(1);
+    expect(recruits(played(true, true, structuredClone(start)))).toBe(0);
+  });
+});
+
 describe('the powers a warning names', () => {
   it('reads one power from a first warning, a reminder, a climb and a climb told with guards', () => {
     for (const text of [
