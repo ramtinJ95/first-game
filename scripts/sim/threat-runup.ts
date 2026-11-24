@@ -73,6 +73,7 @@ function play(seed: number, years: number): Record {
       for (const alert of threatFadedNewsOfDay(before, after, world, told))
         record.faded.push({ day, text: alert.text });
       for (const alert of threatNewsOfDay(before, after, world, told)) {
+        if (alert.kind !== 'warThreat') continue;
         if (alert.pause) record.stops++;
         for (const power of warnedPowers(alert.text)) {
           const since = Object.values(after.factions).find((f) => f.name === power)?.noticeSince;

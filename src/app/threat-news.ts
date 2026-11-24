@@ -7,6 +7,7 @@ import type { CityId, FactionId } from '../sim/ids.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { truceBetween } from '../sim/peace/truce.ts';
 import { areAtWar } from '../sim/wars.ts';
+import { warKey } from '../sim/state/war.ts';
 import { canFight, positionOf, standsWithin, strengthOf } from '../sim/ai/situation.ts';
 import { distance } from '../sim/world/find-path.ts';
 import { menOf } from '../sim/systems/economy.ts';
@@ -150,6 +151,8 @@ export function threatNewsOfDay(
     climb: Stop | undefined;
   }[] = [];
   const bands: { power: FactionId; city: CityId; men: number; threat: Threat; from: string }[] = [];
+  const freed: { power: FactionId; enemies: readonly FactionId[]; threat: Threat; from: string }[] =
+    [];
   for (const power of Object.values(after.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (power.id === player || power.kind !== 'greatPower' || power.defeatedOn !== null) continue;
     if (areAtWar(after, power.id, player) || truceBetween(after, power.id, player)) {
@@ -162,6 +165,9 @@ export function threatNewsOfDay(
     const lapsed = bandsStoppedCounting(before, after, world, power.id);
     if (lapsed)
       bands.push({ power: power.id, ...lapsed, from: mayDeclare(before, power.noticeSince) });
+    const ended = warsEnded(before, after, world, power.id);
+    if (ended)
+      freed.push({ power: power.id, ...ended, from: mayDeclare(before, power.noticeSince) });
     if (before.day - power.noticeSince + 1 < THREAT_STAND_DAYS) continue;
     const told = last !== undefined && last >= power.noticeSince;
     const stop = stopOf(remembered, power.id);
@@ -198,8 +204,10 @@ export function threatNewsOfDay(
     });
   }
   const [first, ...others] = warned;
-  const bandLines = (skip: FactionId | undefined) =>
-    bands.filter((b) => b.power !== skip).map((b) => bandAlert(after, b));
+  const bandLines = (skip: FactionId | undefined) => [
+    ...freed.filter((f) => f.power !== skip).map((f) => freedAlert(after, f)),
+    ...bands.filter((b) => b.power !== skip).map((b) => bandAlert(after, b)),
+  ];
   if (!first) return bandLines(undefined);
   // One line tells the day's powers, so it stops for all of them or for none.
   const stops = warned.some((w) => w.spared === undefined);
@@ -215,13 +223,17 @@ export function threatNewsOfDay(
   // A band that stopped counting on the day of a stop is told in it, so the player reads one stop whole.
   const foldedBand =
     stops && others.length === 0 ? bands.find((b) => b.power === first.power) : undefined;
-  const folded = foldedBand
-    ? `The ${whole(foldedBand.men)} guards at ${after.cities[foldedBand.city]?.name ?? foldedBand.city} no longer count against ${first.name}'s war. `
-    : '';
+  const foldedWar =
+    stops && others.length === 0 ? freed.find((f) => f.power === first.power) : undefined;
+  const folded = `${foldedWar ? `${first.name}'s war with ${listed(foldedWar.enemies.map((enemy) => factionName(after, enemy)))} has ended. ` : ''}${
+    foldedBand
+      ? `The ${whole(foldedBand.men)} guards at ${after.cities[foldedBand.city]?.name ?? foldedBand.city} no longer count against ${first.name}'s war. `
+      : ''
+  }`;
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
   const text = stops
     ? others.length === 0
-      ? `${folded}${first.climb ? `${first.name} stands higher than when the game last stopped for it, on ${dateText(first.climb.day)} at ${first.climb.share}%:` : first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), guardsHold(after, world, first.power, first.threat))} See At peace in Wars.`
+      ? `${folded}${first.climb ? `${first.name} stands higher than when the game last stopped for it, on ${dateText(first.climb.day)} at ${first.climb.share}%:` : first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), guardsHold(after, world, first.power, first.threat))}${heldBack(after, world, first.power, first.threat)} See At peace in Wars.`
       : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`
     : ranOnText(
         after,
@@ -236,8 +248,56 @@ export function threatNewsOfDay(
       text,
       ...(front ? { focus: { at: front.position } } : {}),
     },
-    ...bandLines(foldedBand?.power),
+    ...bandLines(foldedBand || foldedWar ? first.power : undefined),
   ];
+}
+
+/**
+ * The wars that held back part of a power's strength yesterday, and that it no longer fights
+ * today, with its share now: the share can leap on such a day, as Carthage's did from 86% to
+ * 100% the day Londinium fell in seed 5 of the measured panel Rome.
+ */
+function warsEnded(
+  before: State,
+  after: State,
+  world: World,
+  power: FactionId,
+): { enemies: readonly FactionId[]; threat: Threat } | undefined {
+  const held = readinessOf(before, world, power)?.heldBy ?? [];
+  const enemies = held.filter((enemy) => !areAtWar(after, power, enemy));
+  const threat = readinessOf(after, world, power);
+  return enemies.length > 0 && threat ? { enemies, threat } : undefined;
+}
+
+/** The line of a day on which a war that held back a power on notice ended. It does not stop the game. */
+function freedAlert(
+  state: State,
+  freed: { power: FactionId; enemies: readonly FactionId[]; threat: Threat; from: string },
+): Alert {
+  const name = factionName(state, freed.power);
+  const front = state.cities[freed.threat.front];
+  return {
+    kind: 'heldWarEnded',
+    day: (state.day - 1) as Day,
+    tone: 'bad',
+    text: `${name}'s war with ${listed(freed.enemies.map((enemy) => factionName(state, enemy)))} has ended, and no longer holds back its strength: it stands at ${share(freed.threat.readiness)} of the strength it needs, and may declare ${freed.from}.`,
+    ...(front ? { focus: { at: front.position } } : {}),
+  };
+}
+
+/**
+ * When wars the power fights hold back part of its strength, those wars and the share it would
+ * stand at once they end, reckoned on a copy of the day without them; nothing when ending them
+ * would not raise it.
+ */
+function heldBack(state: State, world: World, power: FactionId, threat: Threat): string {
+  if (threat.heldBy.length === 0) return '';
+  const free = structuredClone(state) as GameState;
+  for (const enemy of threat.heldBy) Reflect.deleteProperty(free.wars, warKey(power, enemy));
+  const freedOf = warReadiness(free, world, power, state.player)?.readiness;
+  if (freedOf === undefined || points(freedOf) <= points(threat.readiness)) return '';
+  const wars = listed(threat.heldBy.map((enemy) => factionName(state, enemy)));
+  return ` Its war with ${wars} holds back part of its strength: once ${threat.heldBy.length === 1 ? 'that war ends' : 'those wars end'}, it would stand at ${share(freedOf)}.`;
 }
 
 /**

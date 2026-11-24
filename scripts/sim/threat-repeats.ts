@@ -57,6 +57,7 @@ function play(player: Player, seed: number, years: number): Game {
     ({ before, after, events }) => {
       const day = before.day;
       for (const alert of threatNewsOfDay(before, after, world, told)) {
+        if (alert.kind !== 'warThreat') continue;
         if (alert.pause) game.stops.push(day);
         for (const power of Object.keys(after.factions)) {
           if (!told.has(`threat:${power}:${day}`)) continue;

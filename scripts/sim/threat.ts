@@ -155,6 +155,7 @@ function play(seed: number, years: number): Row {
     ({ before, after, events, accepted }) => {
       const day = before.day;
       for (const alert of threatNewsOfDay(before, after, world, told)) {
+        if (alert.kind !== 'warThreat') continue;
         row.warnings++;
         if (day < 3 * 365 + 180) row.warningsByY4d180++;
         for (const name of warnedPowers(alert.text)) {

@@ -207,6 +207,8 @@ export function playCautiousRome(
       if (!route || (route.owner !== rome && route.partner !== rome)) ledger.delete(id);
     }
     for (const alert of threatNewsOfDay(state, next, world, told, undefined, true, climbs)) {
+      // The end of a war that held a power back advises nothing; a climb it brings stops the game itself.
+      if (alert.kind === 'heldWarEnded') continue;
       const at = alert.focus?.at;
       warnedAt = Object.values(next.cities).find(
         (city) => at && city.owner === rome && city.position.x === at.x && city.position.y === at.y,
