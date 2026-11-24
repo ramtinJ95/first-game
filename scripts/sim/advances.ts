@@ -50,6 +50,8 @@ interface Year {
   choosing: number;
   /** Advances Rome had studied by the end of the year. */
   studied: number;
+  /** Days with nothing at work and nothing left Rome would study at any price it could pay. */
+  done: number;
   /** Men under arms at the end of the year: Rome's, and the most any other great power fields. */
   men: number;
   rivalMen: number;
@@ -64,6 +66,7 @@ const emptyYear = (): Year => ({
   studying: 0,
   choosing: 0,
   studied: 0,
+  done: 0,
   men: 0,
   rivalMen: 0,
 });
@@ -83,6 +86,7 @@ function count(years: Year[], before: GameState, after: GameState) {
   }
   const realm = after.factions[rome];
   if (realm?.study) year.studying++;
+  else if (realm && !bestStudy(withGold(after, 1e9), rome, Infinity)) year.done++;
   else if (ADVANCE_KINDS.some((kind) => !studyRefusal(after, rome, kind))) year.choosing++;
   year.studied = realm?.advances.length ?? 0;
   const men = new Map<FactionId, number>();
@@ -95,6 +99,16 @@ function count(years: Year[], before: GameState, after: GameState) {
       .filter((f) => f.kind === 'greatPower' && f.id !== rome)
       .map((f) => men.get(f.id) ?? 0),
   );
+}
+
+/** The state with Rome's treasury holding `gold`, to ask what Rome would buy with it. */
+function withGold(state: GameState, gold: number): GameState {
+  const realm = state.factions[rome];
+  if (!realm) return state;
+  return {
+    ...state,
+    factions: { ...state.factions, [rome]: { ...realm, stores: { ...realm.stores, gold } } },
+  };
 }
 
 /** The panel's suggestion, on a day nothing is studied, with `gold` to spend. */
@@ -220,10 +234,10 @@ for (const player of players) {
   const games = played.map((p) => p.years);
   console.log(`\n### ${player}\n`);
   console.log(
-    '| year | days at the limit | gold lost to the limit | treasury rise | spare | net income | limit | days studying | days with one to choose | advances studied | men | largest rival’s men |',
+    '| year | days at the limit | gold lost to the limit | treasury rise | spare | net income | limit | days studying | days with one to choose | advances studied | days with nothing left worth study | men | largest rival’s men |',
   );
   console.log(
-    '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+    '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
   );
   let spareSum = 0;
   let atLimitSum = 0;
@@ -233,11 +247,19 @@ for (const player of players) {
     spareSum += spare;
     atLimitSum += of((r) => r.atLimit);
     console.log(
-      `| ${y + 1} | ${of((r) => r.atLimit)} | ${whole(of((r) => r.lost))} | ${whole(of((r) => r.rise))} | ${whole(spare)} | ${whole(of((r) => r.net))} | ${whole(of((r) => r.limit))} | ${of((r) => r.studying)} | ${of((r) => r.choosing)} | ${of((r) => r.studied)} | ${whole(of((r) => r.men))} | ${whole(of((r) => r.rivalMen))} |`,
+      `| ${y + 1} | ${of((r) => r.atLimit)} | ${whole(of((r) => r.lost))} | ${whole(of((r) => r.rise))} | ${whole(spare)} | ${whole(of((r) => r.net))} | ${whole(of((r) => r.limit))} | ${of((r) => r.studying)} | ${of((r) => r.choosing)} | ${of((r) => r.studied)} | ${of((r) => r.done)} | ${whole(of((r) => r.men))} | ${whole(of((r) => r.rivalMen))} |`,
     );
   }
   const busyYears = games.map(
     (g) => g.slice(1).filter((r) => r.studying > 0 || r.choosing > 0).length,
+  );
+  const doneFrom = games.map((g) => {
+    const first = g.findIndex((r) => r.done > 0);
+    return first < 0 ? Infinity : first + 1;
+  });
+  const finished = doneFrom.filter(Number.isFinite);
+  console.log(
+    `\nYear Rome first has nothing left it would study: ${finished.length} of ${seeds} seeds, median Year ${finished.length ? median(finished) : '-'}, earliest Year ${finished.length ? Math.min(...finished) : '-'}.`,
   );
   console.log(
     `\nSummary: | ${player} | days at the limit, years 1–${years}, sum of yearly medians ${atLimitSum} | spare gold ${whole(spareSum)} | seeds with an advance at work or one to choose in every year from 2: ${busyYears.filter((n) => n === years - 1).length} of ${seeds} |`,
