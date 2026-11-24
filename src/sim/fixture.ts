@@ -1,3 +1,4 @@
+import { FIRST_LEVELS, SECOND_LEVELS } from './buildings/buildings.ts';
 import { NOTICE_DAYS } from './ai/thresholds.ts';
 import mapData from '../../data/map/map.json' with { type: 'json' };
 import type { ArmyId, CityId, FactionId, FormationId, ProvinceId } from './ids.ts';
@@ -207,4 +208,18 @@ export function onNotice(state: GameState, power: FactionId): void {
   const faction = state.factions[power];
   if (!faction) throw new Error(`no faction ${power}`);
   faction.noticeSince = (state.day - NOTICE_DAYS) as Day;
+}
+
+/**
+ * Every city of the power stands with every first and second level and a Treasury hall, so
+ * it has nothing left to build or save for. A test of another rule of its spending uses it.
+ */
+export function builtOut(state: GameState, power: FactionId): void {
+  for (const city of Object.values(state.cities))
+    if (city.owner === power)
+      city.buildings = [
+        ...FIRST_LEVELS,
+        ...FIRST_LEVELS.map((kind) => SECOND_LEVELS[kind]),
+        'treasuryHall',
+      ];
 }

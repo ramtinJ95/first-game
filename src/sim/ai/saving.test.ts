@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { BUILDINGS, FIRST_LEVELS } from '../buildings/buildings.ts';
+import { BUILDINGS, FIRST_LEVELS, SECOND_LEVELS } from '../buildings/buildings.ts';
 import { buildFixture, FIXTURE as f, fixtureWorld } from '../fixture.ts';
 import { executeOrder } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
@@ -23,11 +23,12 @@ function need<T>(value: T | undefined, what = 'a record'): T {
 
 const world = fixtureWorld();
 
-/** Rome at peace with every first level in its cities, men to call up, and `over` gold beyond its reserve. */
+/** Rome at peace with every first and second level in its cities, men to call up, and `over` gold beyond its reserve. */
 function grown(over: number): GameState {
   const state = buildFixture();
   for (const city of Object.values(state.cities))
-    if (city.owner === f.rome) city.buildings = [...FIRST_LEVELS];
+    if (city.owner === f.rome)
+      city.buildings = [...FIRST_LEVELS, ...FIRST_LEVELS.map((kind) => SECOND_LEVELS[kind])];
   const stores = need(state.factions[f.rome]).stores;
   stores.manpower = 10_000;
   stores.food = 10_000;
@@ -51,14 +52,14 @@ function men(state: GameState, owner: FactionId, count: number) {
   need(state.formations[need(army).formations[0] as FormationId]).men = count;
 }
 
-describe('a great power at peace saves for a great work', () => {
+describe('a great power at war with no great power saves for its next building', () => {
   test('it keeps the price of the work that pays back soonest and raises no recruit it would cut into', () => {
     const recruitGold = TROOPS[mostNeeded(grown(0), f.rome)].recruit.gold;
     const state = grown(recruitGold * 2);
     const saving = need(savingFor(state, world, f.rome), 'a saving');
     expect(saving).toEqual({
       city: f.roma,
-      work: 'treasuryHall',
+      building: 'treasuryHall',
       gold: BUILDINGS.treasuryHall.gold,
     });
     expect(recruitGold * 2).toBeLessThan(saving.gold);
@@ -82,13 +83,36 @@ describe('a great power at peace saves for a great work', () => {
     expectConsistent(state);
   });
 
-  test('it does not save while a first level that pays back within six years is left', () => {
+  test('it saves for a first level left before any great work', () => {
     const state = grown(TROOPS.spearmen.recruit.gold * 2);
-    need(state.cities[f.roma]).buildings = FIRST_LEVELS.filter((kind) => kind !== 'forum');
+    const roma = need(state.cities[f.roma]);
+    roma.buildings = roma.buildings.filter((kind) => kind !== 'forum' && kind !== 'lawCourts');
+    expect(savingFor(state, world, f.rome)).toEqual({
+      city: f.roma,
+      building: 'forum',
+      gold: BUILDINGS.forum.gold,
+    });
+  });
+
+  test('a war on a minor does not end the saving', () => {
+    const state = grown(TROOPS.spearmen.recruit.gold * 2);
+    const minor = need(
+      Object.values(state.factions).find((faction) => faction.kind === 'minor'),
+      'a minor',
+    );
+    expect(
+      executeOrder(state, { kind: 'declareWar', faction: f.rome, against: minor.id }, world),
+    ).toBeUndefined();
+    expect(savingFor(fresh(state), world, f.rome)?.building).toBe('treasuryHall');
+  });
+
+  test('it does not save while its gold falls, so it neither recruits nor builds for nothing', () => {
+    const state = grown(TROOPS.spearmen.recruit.gold * 2);
+    need(state.formations[f.hastati]).men = 5000;
     expect(savingFor(state, world, f.rome)).toBeUndefined();
   });
 
-  test('the saving ends the day a war comes', () => {
+  test('the saving ends the day a war with a great power comes', () => {
     const recruitGold = TROOPS[mostNeeded(grown(0), f.rome)].recruit.gold;
     const state = grown(recruitGold * 2);
     expect(recruits(state)).toEqual([]);
@@ -120,7 +144,7 @@ describe('a great power at peace saves for a great work', () => {
     stores.gold = reserveOf(state, rome, 'gold') + 2 * TROOPS.spearmen.recruit.gold;
     const calm = fresh(state);
     expect(need(warReadiness(calm, world, carthage, rome)).readiness).toBeLessThan(NOTICE_SHARE);
-    expect(savingFor(calm, world, rome)?.work).toBeDefined();
+    expect(savingFor(calm, world, rome)?.building).toBeDefined();
     expect(recruitsOf(calm, rome)).toEqual([]);
     men(state, carthage, 4000);
     const threatened = fresh(state);

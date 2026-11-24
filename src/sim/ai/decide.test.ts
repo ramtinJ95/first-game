@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld, builtOut } from '../fixture.ts';
 import type { ArmyId, CityId, FactionId, FormationId } from '../ids.ts';
 import { changeCityOwner } from '../cities.ts';
 import { landPath, marchDays, marchPath, MAX_MARCH_DAYS, startMarch } from '../march.ts';
@@ -108,7 +108,9 @@ describe('the decision function', () => {
 describe('a great power', () => {
   describe('budget', () => {
     test('raises a troop when the balance after its upkeep stays positive and gold covers the reserve', () => {
-      expect(only(decide(richRome(), f.rome), 'recruit')).toEqual([
+      const state = richRome();
+      builtOut(state, f.rome);
+      expect(only(decide(state, f.rome), 'recruit')).toEqual([
         { kind: 'recruit', faction: f.rome, city: f.roma, troop: 'swordsmen' },
       ]);
     });

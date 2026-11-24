@@ -6,7 +6,7 @@ import { changeCityOwner } from '../cities.ts';
 import { makePeace } from '../peace/make-peace.ts';
 import { recordEvents } from '../events.ts';
 import { NOTICE_DAYS } from '../ai/thresholds.ts';
-import { buildFixture, fixtureWorld, FIXTURE as f, onNotice } from '../fixture.ts';
+import { buildFixture, builtOut, fixtureWorld, FIXTURE as f, onNotice } from '../fixture.ts';
 import { newGame } from '../new-game.ts';
 import type { CityId, ProvinceId } from '../ids.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
@@ -170,6 +170,7 @@ describe('trade orders and consent', () => {
 
   test('AI offers reserve neither gold nor slots and require the player to accept', () => {
     const state = buildFixture();
+    builtOut(state, f.carthage);
     const payer = state.factions[f.carthage];
     if (!payer) throw new Error('missing trader');
     payer.stores.gold = 10000;
@@ -199,6 +200,7 @@ describe('trade orders and consent', () => {
 
   function invited() {
     const state = buildFixture();
+    builtOut(state, f.carthage);
     const payer = state.factions[f.carthage];
     if (!payer) throw new Error('missing trader');
     payer.stores.gold = 10000;
@@ -793,6 +795,7 @@ describe('caravans, interruption, and saves', () => {
     '%s trades deterministically without a random draw',
     (faction) => {
       const state = buildFixture();
+      builtOut(state, faction);
       const trader = state.factions[faction];
       if (!trader) throw new Error('missing trader');
       trader.stores.gold = 10000;

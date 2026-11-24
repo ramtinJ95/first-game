@@ -29,6 +29,9 @@ import { homeCapital } from '../src/sim/ai/situation.ts';
 import { NOTICE_DAYS, NOTICE_SHARE } from '../src/sim/ai/thresholds.ts';
 import { TROOPS, type Troop } from '../src/sim/troops.ts';
 
+/** The AI's saving rule, absent on a checkout from before it, which the measuring scripts also run. */
+const saving = await import('../src/sim/ai/saving.ts').catch(() => undefined);
+
 export const map = parseMap(
   JSON.parse(readFileSync(new URL('../data/map/map.json', import.meta.url), 'utf8')),
 );
@@ -92,6 +95,7 @@ export function playCautiousRome(
     drops = [],
     forbid = [],
     start,
+    saves = true,
   }: {
     peaceful?: boolean;
     guards?: GuardPlay;
@@ -104,6 +108,8 @@ export function playCautiousRome(
     forbid?: readonly BuildingKind[];
     /** The game to play from, in place of a new game of the seed. */
     start?: GameState;
+    /** Whether Rome's AI saves for its next building as the AI powers do (`savingFor`); a Rome that builds by its own rule does not. */
+    saves?: boolean;
   } = {},
 ): GameState {
   const told = new Set<string>();
@@ -114,6 +120,7 @@ export function playCautiousRome(
   let state: GameState = start ?? newGame(map, { seed, player: 'rome' });
   const ledger = new Map<TradeRouteId, { paid: number; received: number; deliveries: number }>();
   for (let day = 0; day < years * 365; day++) {
+    if (!saves) saving?.forgoSaving(state, rome);
     const ai = decideAll(state, world, []);
     const owing = (faction: FactionId) =>
       [...ledger].some(([id, entry]) => {

@@ -20,6 +20,8 @@ const { values, positionals } = parseArgs({
     json: { type: 'boolean', default: false },
     summarize: { type: 'boolean', default: false },
     label: { type: 'string', default: 'the game as it is' },
+    /** Rome saves for no building, whatever its player, while its rivals save by the AI's rule. */
+    'rome-forgoes': { type: 'boolean', default: false },
   },
 });
 
@@ -34,15 +36,21 @@ const { values, positionals } = parseArgs({
  * game before city projects left it, and the `hoarding-` Romes build nothing, as the thirteenth
  * play-through's tester did, each ignoring or answering as above.
  */
-const FIRST_ONLY = { forbid: [...Object.values(SECOND_LEVELS), ...GREAT_WORKS] };
-const NOTHING = { builds: () => [] };
+const FIRST_ONLY = { forbid: [...Object.values(SECOND_LEVELS), ...GREAT_WORKS], saves: false };
+const NOTHING = { builds: () => [], saves: false };
 const PLAYERS = {
   cautious: {},
   ignoring: { peaceful: true },
   answering: { peaceful: true, answer: true, guards: 'enough' },
   raising: { peaceful: true, answer: true },
-  'panel-ignoring': { peaceful: true, builds: panelBuilds },
-  'panel-answering': { peaceful: true, answer: true, guards: 'enough', builds: panelBuilds },
+  'panel-ignoring': { peaceful: true, builds: panelBuilds, saves: false },
+  'panel-answering': {
+    peaceful: true,
+    answer: true,
+    guards: 'enough',
+    builds: panelBuilds,
+    saves: false,
+  },
   'first-ignoring': { peaceful: true, ...FIRST_ONLY },
   'first-answering': { peaceful: true, answer: true, guards: 'enough', ...FIRST_ONLY },
   'first-raising': { peaceful: true, answer: true, ...FIRST_ONLY },
@@ -231,7 +239,7 @@ function play(player: Player, seed: number, years: number): Game {
           cities: now.cities,
         });
     },
-    PLAYERS[player],
+    values['rome-forgoes'] ? { ...PLAYERS[player], saves: false } : PLAYERS[player],
   );
   game.fellOn = end.factions[rome]?.defeatedOn ?? null;
   return game;

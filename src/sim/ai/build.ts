@@ -91,8 +91,8 @@ export function buildingWorth(state: State, city: CityView, kind: BuildingKind):
  * and only with gold left over the reserve for its men and the price of the recruit it
  * would raise next, so a building never stops it keeping or growing an army. A ruler
  * that never recruits, `keepsRecruits` false, keeps only the reserve for its men. While it
- * saves for a great work (`savingFor`), it orders the work once its gold over the reserve
- * pays for it, and starts nothing else with the gold kept for it.
+ * saves for a building (`savingFor`), it orders that building once its gold over the
+ * reserve pays for it, and starts nothing else with the gold kept for it.
  */
 export function construction(
   state: State,
@@ -108,7 +108,7 @@ export function construction(
   if (!balance || balance.gold < 0 || balance.food < 0) return [];
   const over = record.stores.gold - reserveOf(state, faction, 'gold');
   if (saving && over >= saving.gold) {
-    return [{ kind: 'build', faction, city: saving.city, building: saving.work }];
+    return [{ kind: 'build', faction, city: saving.city, building: saving.building }];
   }
   const next = keepsRecruits ? TROOPS[mostNeeded(state, faction)].recruit.gold : 0;
   const spare = over - next - (saving?.gold ?? 0);

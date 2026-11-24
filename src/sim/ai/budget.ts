@@ -23,7 +23,7 @@ import { MIN_BALANCE_SHARE, TROOP_MIX } from './thresholds.ts';
  * power waits for it rather than buying another. It recruits only when, after paying,
  * gold and food stay above the reserve for the new upkeep, and the daily balance of gold
  * and food after the upkeep of all its men and recruits stays at least
- * MIN_BALANCE_SHARE of the income. Gold `saved` for a great work stays above the reserve.
+ * MIN_BALANCE_SHARE of the income. Gold `saved` for a building stays above the reserve.
  */
 export function recruitment(
   state: State,
@@ -79,7 +79,7 @@ export function mostNeeded(state: State, faction: FactionId): Troop {
   return best;
 }
 
-/** Trade waits behind the military reserve, the next formation's purchase, and gold `saved` for a great work. */
+/** Trade waits behind the military reserve, the next formation's purchase, and gold `saved` for a building. */
 export function tradeReserve(state: State, faction: FactionId, saved = 0): number {
   const next =
     state.factions[faction]?.kind === 'greatPower'
