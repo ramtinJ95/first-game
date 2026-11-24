@@ -52,6 +52,8 @@ interface Year {
   studied: number;
   /** Days with nothing at work and nothing left Rome would study at any price it could pay. */
   done: number;
+  /** Of those, days with an advance Rome could still start, though it would not pay back within the AI's years. */
+  doneButOpen: number;
   /** Men under arms at the end of the year: Rome's, and the most any other great power fields. */
   men: number;
   rivalMen: number;
@@ -67,6 +69,7 @@ const emptyYear = (): Year => ({
   choosing: 0,
   studied: 0,
   done: 0,
+  doneButOpen: 0,
   men: 0,
   rivalMen: 0,
 });
@@ -86,8 +89,10 @@ function count(years: Year[], before: GameState, after: GameState) {
   }
   const realm = after.factions[rome];
   if (realm?.study) year.studying++;
-  else if (realm && !bestStudy(withGold(after, 1e9), rome, Infinity)) year.done++;
-  else if (ADVANCE_KINDS.some((kind) => !studyRefusal(after, rome, kind))) year.choosing++;
+  else if (realm && !bestStudy(withGold(after, 1e9), rome, Infinity)) {
+    year.done++;
+    if (ADVANCE_KINDS.some((kind) => !studyRefusal(after, rome, kind))) year.doneButOpen++;
+  } else if (ADVANCE_KINDS.some((kind) => !studyRefusal(after, rome, kind))) year.choosing++;
   year.studied = realm?.advances.length ?? 0;
   const men = new Map<FactionId, number>();
   for (const army of Object.values(after.armies))
@@ -258,11 +263,17 @@ for (const player of players) {
     return first < 0 ? Infinity : first + 1;
   });
   const finished = doneFrom.filter(Number.isFinite);
+  const openYears = games.map(
+    (g) => g.slice(1).filter((r) => r.studying > 0 || r.choosing > 0 || r.doneButOpen > 0).length,
+  );
+  console.log(
+    `\nSeeds with an advance at work or any advance Rome could start, worth it or not, in every year from 2: ${openYears.filter((n) => n === years - 1).length} of ${seeds}.`,
+  );
   console.log(
     `\nYear Rome first has nothing left it would study: ${finished.length} of ${seeds} seeds, median Year ${finished.length ? median(finished) : '-'}, earliest Year ${finished.length ? Math.min(...finished) : '-'}.`,
   );
   console.log(
-    `\nSummary: | ${player} | days at the limit, years 1–${years}, sum of yearly medians ${atLimitSum} | spare gold ${whole(spareSum)} | seeds with an advance at work or one to choose in every year from 2: ${busyYears.filter((n) => n === years - 1).length} of ${seeds} |`,
+    `\nSummary: | ${player} | days at the limit, years 1–${years}, sum of yearly medians ${atLimitSum} | spare gold ${whole(spareSum)} | seeds with an advance at work or one worth studying in every year from 2: ${busyYears.filter((n) => n === years - 1).length} of ${seeds} |`,
   );
   for (const year of SNAPSHOT_YEARS) {
     const shots = played.flatMap((p) => p.snapshots.get(year) ?? []);
