@@ -247,5 +247,10 @@
     .hud:has(.side > :global(*)) .latest {
       display: none;
     }
+
+    /* The open Chronicle holds the same news, and a phone has room for one of them read whole. */
+    .hud:has(.chronicle-toggle[aria-expanded='true']) .latest {
+      display: none;
+    }
   }
 </style>
