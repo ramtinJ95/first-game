@@ -148,7 +148,10 @@ export function studies(state: State, faction: FactionId, busy: boolean): Order[
   if (!record || busy || record.study || record.kind !== 'greatPower') return [];
   const next = TROOPS[mostNeeded(state, faction)].recruit.gold;
   const spare = record.stores.gold - reserveOf(state, faction, 'gold') - next;
+  const best = bestStudy(state, faction, spare);
+  if (!best) return [];
+  // The soonest advance is the one to beat, so the costlier reckoning of buildings waits for one.
   const building = nextBuilding(state, faction);
-  const best = bestStudy(state, faction, spare, building?.payback);
-  return best ? [{ kind: 'study', faction, advance: best.advance }] : [];
+  if (building && building.payback < best.payback) return [];
+  return [{ kind: 'study', faction, advance: best.advance }];
 }
