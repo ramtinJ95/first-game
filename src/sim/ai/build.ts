@@ -1,4 +1,4 @@
-import { buildRefusal } from '../buildings/build.ts';
+import { buildBarrier } from '../buildings/build.ts';
 import {
   BUILDING_KINDS,
   BUILDINGS,
@@ -111,7 +111,8 @@ export function construction(
 /**
  * The building the power starts next with `spare` gold: the one that pays back its gold
  * soonest among those its cities can start, if within its payback limit, a first level before
- * any second level or great work. With no `spare`, the one it would start with gold enough.
+ * any second level or great work. With no `spare`, the one it would start with gold enough,
+ * however little it holds today.
  */
 export function nextBuilding(
   state: State,
@@ -123,7 +124,7 @@ export function nextBuilding(
     if (city.owner !== faction || city.construction) continue;
     for (const kind of BUILDING_KINDS) {
       const { gold } = BUILDINGS[kind];
-      if (gold > spare || buildRefusal(state, city, kind)) continue;
+      if (gold > spare || buildBarrier(state, city, kind)) continue;
       const worth = buildingWorth(state, city, kind);
       if (worth <= 0) continue;
       const payback = gold / worth / 365;

@@ -90,7 +90,7 @@ export function tradeReserve(state: State, faction: FactionId): number {
 /** The same day's already chosen spending must settle before a trade commitment. */
 export function afterSpending(state: State, orders: readonly Order[], world: World): State {
   const spending = orders.filter((order) =>
-    ['recruit', 'build', 'cancelBuilding', 'sack', 'enslave', 'acceptPeace'].includes(order.kind),
+    ['recruit', 'build', 'cancelBuilding', 'study', 'sack', 'enslave', 'acceptPeace'].includes(order.kind),
   );
   if (!spending.length) return state;
   const copy = JSON.parse(JSON.stringify(state)) as GameState;

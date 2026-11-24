@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { ADVANCES, ADVANCE_KINDS, GROWING_ADVANCES } from '../advances/advances.ts';
-import { buildFixture, FIXTURE, growRome } from '../fixture.ts';
+import { buildRefusal } from '../buildings/build.ts';
+import { buildFixture, FIXTURE, fixtureWorld, growRome } from '../fixture.ts';
+import { afterSpending } from './budget.ts';
 import type { GameState } from '../state/game-state.ts';
-import { BUILDINGS } from '../buildings/buildings.ts';
 import { nextBuilding } from './build.ts';
-import { reserveOf } from './situation.ts';
 import { advanceWorth, studies, studyPayback, STUDY_PAYBACK_YEARS } from './study.ts';
 
 function rome(state: GameState) {
@@ -38,19 +38,32 @@ describe('the AI studies', () => {
     );
   });
 
-  test('no advance slower than the building it would start next, whether or not it can pay for that building', () => {
-    for (const gold of [50_000, BUILDINGS.forum.gold - 1]) {
-      const state = buildFixture();
-      rome(state).stores.gold = gold + reserveOf(state, FIXTURE.rome, 'gold') + 2_000;
-      const building = nextBuilding(state, FIXTURE.rome);
-      if (!building) throw new Error('expected a building');
-      const soonest = Math.min(
-        ...ADVANCE_KINDS.flatMap((kind) => studyPayback(state, FIXTURE.rome, kind) ?? []),
-      );
-      expect(building.payback).toBeLessThan(soonest);
-      expect(studies(state, FIXTURE.rome, false)).toEqual([]);
-      expect(studies(busy(state), FIXTURE.rome, false)).toHaveLength(1);
-    }
+  test('no advance slower than the building it would start next, which it reckons whether or not it can pay for it', () => {
+    const broke = buildFixture();
+    rome(broke).stores.gold = 0;
+    const roma = broke.cities[FIXTURE.roma];
+    if (!roma) throw new Error('expected Roma');
+    expect(buildRefusal(broke, roma, 'forum')).toMatch(/costs/);
+    expect(nextBuilding(broke, FIXTURE.rome)?.kind).toBe('forum');
+
+    const state = rich();
+    const building = nextBuilding(state, FIXTURE.rome);
+    const soonest = Math.min(
+      ...ADVANCE_KINDS.flatMap((kind) => studyPayback(state, FIXTURE.rome, kind) ?? []),
+    );
+    expect(building?.payback).toBeLessThan(soonest);
+    expect(studies(state, FIXTURE.rome, false)).toEqual([]);
+    expect(studies(busy(state), FIXTURE.rome, false)).toHaveLength(1);
+  });
+
+  test("the gold of a study it orders is spent before the day's trade is weighed", () => {
+    const state = busy(rich());
+    const [order] = studies(state, FIXTURE.rome, false);
+    if (order?.kind !== 'study') throw new Error('expected a study');
+    const after = afterSpending(state, [order], fixtureWorld());
+    expect(rome(state).stores.gold - (after.factions[FIXTURE.rome]?.stores.gold ?? 0)).toBe(
+      ADVANCES[order.advance].gold,
+    );
   });
 
   test('nothing that pays nothing: no route, no Market weights; no band, no Long contracts', () => {

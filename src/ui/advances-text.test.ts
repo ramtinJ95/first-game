@@ -79,7 +79,7 @@ describe('the advances panel', () => {
     expect(row(buildFixture(), 'standardCoin')?.why).toBeUndefined();
   });
 
-  test('names a building that pays back sooner than any advance, and marks no advance, until no city could start one', () => {
+  test('names a building that pays back sooner than any advance, though the treasury cannot pay for it yet, and marks no advance, until no city could start one', () => {
     const state = buildFixture();
     rome(state).stores.gold = 50_000;
     const marked = (s: GameState) =>
@@ -89,6 +89,11 @@ describe('the advances panel', () => {
         .map((r) => r.kind);
     expect(buildingFirstLine(state, FIXTURE.rome)).toBe(
       'Building Forum at Roma would pay back in 2.1 years, sooner than any advance you can start: the soonest, Citizen rolls, takes 3.4. Build first, and study with the gold left.',
+    );
+    expect(marked(state)).toEqual([]);
+    rome(state).stores.gold = 3_500;
+    expect(buildingFirstLine(state, FIXTURE.rome)).toMatch(
+      /^Building Forum at Roma would pay back/,
     );
     expect(marked(state)).toEqual([]);
     for (const city of Object.values(state.cities))

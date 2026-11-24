@@ -113,7 +113,8 @@ export function advancesView(
 /**
  * What the panel puts first: the advance that pays back soonest of those the realm can start
  * with all its gold, unless one of the player's cities could start a building that pays back
- * sooner, by the building hint's reckoning (`worthBuilding`). Then that building, and no advance,
+ * sooner, by the building hint's reckoning (`worthBuilding`), whether or not the treasury pays
+ * for it today, since study would only put it off. Then that building, and no advance,
  * since an advance bought on such a day puts off a building that would pay sooner.
  */
 export function marked(
@@ -127,7 +128,7 @@ export function marked(
   const gold = state.factions[faction]?.stores.gold;
   const soonest = gold === undefined ? undefined : bestStudy(state, faction, gold);
   if (!soonest) return {};
-  const building = faction === state.player ? worthBuilding(state) : undefined;
+  const building = faction === state.player ? worthBuilding(state, true) : undefined;
   if (building && building.years < soonest.payback) return { building, soonest };
   return { advance: soonest.advance };
 }
