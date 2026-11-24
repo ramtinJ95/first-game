@@ -123,15 +123,17 @@ test.describe('advances', () => {
   });
 
   for (const width of [1280, 1024])
-    test(`the top bar keeps one row at ${width}px while the longest advance is studied`, async ({
+    test(`the top bar keeps one row at ${width}px while the longest advance is studied and a store is short`, async ({
       page,
     }) => {
       await openGame(page);
       await resizeTo(page, { width, height: 768 });
       const state = discoveryGame();
       romeOf(state).study = { advance: 'marchingRations', daysLeft: 240, paid: 3000 };
+      romeOf(state).stores.food = -15_400;
       await loadDiscovery(page, state);
       const bar = page.getByTestId('top-bar');
+      await expect(bar.getByTestId('store-food-note')).toHaveText('Short 15,400');
       await expect(bar.getByTestId(width >= 1280 ? 'study-line' : 'study-days')).toHaveText(
         width >= 1280 ? 'Marching rations · 240 days' : '240 days',
       );
