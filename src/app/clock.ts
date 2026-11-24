@@ -39,11 +39,12 @@ export interface ClockOptions {
   now: () => number;
   maxTicksPerFrame?: number;
   onRejected?: (rejected: RejectedOrder[]) => void;
-  /** Called after every tick with the day before, the day after it, and what happened between. */
+  /** Called after every tick with the day before, the day after it, what happened between, and the player's orders the rules took. */
   onDay?: (
     before: DeepReadonly<GameState>,
     after: DeepReadonly<GameState>,
     events: readonly DayEvent[],
+    orders: readonly Order[],
   ) => void;
   /** Tests replace the day's systems. The game runs the default list. */
   systems?: readonly System[];
@@ -89,6 +90,7 @@ export function createClock({
   let pending: Order[] = [];
 
   function runTick() {
+    const played = pending;
     const orders = decide ? [...pending, ...decide(state)] : pending;
     const result = tick(state, orders, world, systems);
     pending = [];
@@ -101,7 +103,8 @@ export function createClock({
       }
     }
     if (result.rejected.length > 0) onRejected?.(result.rejected);
-    onDay?.(previous, state, result.events);
+    const taken = played.filter((order) => !result.rejected.some((r) => r.order === order));
+    onDay?.(previous, state, result.events, taken);
   }
 
   // Runs the days that the time since the last call has earned, at the rate it passed

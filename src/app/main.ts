@@ -56,6 +56,7 @@ import {
 } from './saves.ts';
 import { turningPoints } from './turning-points.ts';
 import { threatFadedNewsOfDay, threatNewsOfDay } from './threat-news.ts';
+import { createAnswerNews } from './answer-news.ts';
 import { trainingThreats } from '../ui/recruit-threats.ts';
 import { leaderNews, leadingPower, worldNewsOfDay } from './world-news.ts';
 import {
@@ -178,6 +179,8 @@ let desertion: Desertion | undefined;
 let tradeTroubles: readonly TradeTrouble[] = [];
 /** The leading power the player was last told of. A save keeps it; a new game or an older save starts from the one that leads. */
 let leaderTold: FactionId | undefined;
+/** The game played without the player's answer to a warning, while one may still turn out either way. */
+let answerNews = createAnswerNews(world);
 
 function fateOpen(state: DeepReadonly<GameState>, id: CityId): boolean {
   const city = state.cities[id];
@@ -244,7 +247,7 @@ const clock = createClock({
     const last = own.at(-1);
     if (last) showNotice(refusalText(clock.state, last.reason));
   },
-  onDay(before, after, events) {
+  onDay(before, after, events, orders) {
     const saw = sightFor(before);
     const sees = sightFor(after);
     const weak = weakSiegeNews(before, after, weakSieges);
@@ -275,6 +278,7 @@ const clock = createClock({
           trainingThreats,
           newsPauses && pauses.warThreat,
         ),
+        ...answerNews.onDay(before, after, events, orders),
         ...guardNewsOfDay(before, after),
         ...hint,
       ]),
@@ -517,6 +521,7 @@ function enter(
   renderer.leaveGame();
   forgetNamedWaits();
   clock.load(state, page?.pendingPeace);
+  answerNews = createAnswerNews(world);
   chronicle = page?.chronicle ?? [];
   toldOnce = new Set(page?.told);
   occupied = new Map(page?.occupied);
