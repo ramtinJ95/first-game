@@ -270,6 +270,22 @@ describe('a war that holds back a power on notice', () => {
     );
   });
 
+  test('a warning of two powers names the war that holds one of them back', () => {
+    const state = heldBySyracusae();
+    const punic = state.factions[carthage];
+    const macedonians = state.factions[macedon];
+    if (!punic || !macedonians) throw new Error('no Carthage or Macedon');
+    punic.noticeSince = 93 as Day;
+    macedonians.noticeSince = 93 as Day;
+    spearmenOf(state, macedon).men = 30_000;
+    const freed = shareOf(warOver(state));
+    const [warning] = threatNewsOfDay(state, state, world, new Set());
+    expect(warning?.text).toMatch(/^Carthage and Macedon could soon declare war on you/);
+    expect(warning?.text).toContain(
+      `Carthage's war with Syracusae holds back part of its strength: once that war ends, it would stand at ${freed}%. What lowers each`,
+    );
+  });
+
   test('the day the war ends is told without a stop', () => {
     const before = heldBySyracusae();
     const after = warOver(before);

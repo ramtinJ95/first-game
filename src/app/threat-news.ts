@@ -234,7 +234,7 @@ export function threatNewsOfDay(
   const text = stops
     ? others.length === 0
       ? `${folded}${first.climb ? `${first.name} stands higher than when the game last stopped for it, on ${dateText(first.climb.day)} at ${first.climb.share}%:` : first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), guardsHold(after, world, first.power, first.threat))}${heldBack(after, world, first.power, first.threat)} See At peace in Wars.`
-      : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`
+      : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}.${warned.map((w) => heldBack(after, world, w.power, w.threat, `${w.name}'s`)).join('')} What lowers each is under At peace in Wars.`
     : ranOnText(
         after,
         warned.flatMap((w) => (w.spared ? [{ ...w, stop: w.spared }] : [])),
@@ -290,14 +290,20 @@ function freedAlert(
  * stand at once they end, reckoned on a copy of the day without them; nothing when ending them
  * would not raise it.
  */
-function heldBack(state: State, world: World, power: FactionId, threat: Threat): string {
+function heldBack(
+  state: State,
+  world: World,
+  power: FactionId,
+  threat: Threat,
+  whose = 'Its',
+): string {
   if (threat.heldBy.length === 0) return '';
   const free = structuredClone(state) as GameState;
   for (const enemy of threat.heldBy) Reflect.deleteProperty(free.wars, warKey(power, enemy));
   const freedOf = warReadiness(free, world, power, state.player)?.readiness;
   if (freedOf === undefined || points(freedOf) <= points(threat.readiness)) return '';
   const wars = listed(threat.heldBy.map((enemy) => factionName(state, enemy)));
-  return ` Its war with ${wars} holds back part of its strength: once ${threat.heldBy.length === 1 ? 'that war ends' : 'those wars end'}, it would stand at ${share(freedOf)}.`;
+  return ` ${whose} war with ${wars} holds back part of its strength: once ${threat.heldBy.length === 1 ? 'that war ends' : 'those wars end'}, it would stand at ${share(freedOf)}.`;
 }
 
 /**
