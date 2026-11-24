@@ -231,6 +231,92 @@ describe('guards that stop counting against a power that presses your field armi
   });
 });
 
+describe('a war that holds back a power on notice', () => {
+  const syracusae = 'syracusae' as FactionId;
+
+  /**
+   * Carthage of 8,000 at war with Syracusae on day 100, its army before the city, on notice
+   * against Rome since day 60: the war holds it at 85%, and without it it stands at 105%.
+   */
+  function heldBySyracusae(): GameState {
+    const state = game(8000, 'full', 100);
+    Reflect.deleteProperty(state.truces, warKey(carthage, syracusae));
+    state.wars[warKey(carthage, syracusae)] = newWar(carthage, syracusae, 90 as Day);
+    const army = Object.values(state.armies).find((a) => a.owner === carthage);
+    const city = state.cities['syracusae' as CityId];
+    const punic = state.factions[carthage];
+    if (!army || !city || !punic) throw new Error('no Carthaginian army, Syracusae or Carthage');
+    army.activity = { kind: 'idle', position: { ...city.position } };
+    punic.noticeSince = 60 as Day;
+    return state;
+  }
+
+  /** The day after `before` with the war on Syracusae over. */
+  function warOver(before: GameState): GameState {
+    const after = structuredClone(before);
+    Reflect.deleteProperty(after.wars, warKey(carthage, syracusae));
+    after.day = (before.day + 1) as Day;
+    return after;
+  }
+
+  test('a warning names the war and the share the power would stand at once it ends', () => {
+    const state = heldBySyracusae();
+    expect(warReadiness(state, world, carthage, rome)?.heldBy).toEqual([syracusae]);
+    const freed = shareOf(warOver(state));
+    expect(freed).toBeGreaterThan(shareOf(state));
+    const [warning] = threatNewsOfDay(state, state, world, new Set());
+    expect(warning?.text).toContain(
+      `Its war with Syracusae holds back part of its strength: once that war ends, it would stand at ${freed}%.`,
+    );
+  });
+
+  test('a warning of two powers names the war that holds one of them back', () => {
+    const state = heldBySyracusae();
+    const punic = state.factions[carthage];
+    const macedonians = state.factions[macedon];
+    if (!punic || !macedonians) throw new Error('no Carthage or Macedon');
+    punic.noticeSince = 93 as Day;
+    macedonians.noticeSince = 93 as Day;
+    spearmenOf(state, macedon).men = 30_000;
+    const freed = shareOf(warOver(state));
+    const [warning] = threatNewsOfDay(state, state, world, new Set());
+    expect(warning?.text).toMatch(/^Carthage and Macedon could soon declare war on you/);
+    expect(warning?.text).toContain(
+      `Carthage's war with Syracusae holds back part of its strength: once that war ends, it would stand at ${freed}%. What lowers each`,
+    );
+  });
+
+  test('the day the war ends is told without a stop', () => {
+    const before = heldBySyracusae();
+    const after = warOver(before);
+    const told = new Set([`threat:carthage:70`, `threat-stop:carthage:70:${shareOf(after)}:field`]);
+    const news = threatNewsOfDay(before, after, world, told);
+    expect(news).toEqual([
+      expect.objectContaining({
+        kind: 'heldWarEnded',
+        day: 100,
+        text: `Carthage's war with Syracusae has ended, and no longer holds back its strength: it stands at ${shareOf(after)}% of the strength it needs, and may declare any day now.`,
+      }),
+    ]);
+    expect(news[0]?.pause).toBeUndefined();
+  });
+
+  test('on a day it climbs 6 points above its last stop, the end of the war opens the stop', () => {
+    const before = heldBySyracusae();
+    const after = warOver(before);
+    const told = new Set([
+      `threat:carthage:70`,
+      `threat-stop:carthage:70:${shareOf(before)}:field`,
+    ]);
+    const news = threatNewsOfDay(before, after, world, told);
+    expect(news).toHaveLength(1);
+    expect(news[0]?.pause).toEqual({ kind: 'warThreat' });
+    expect(news[0]?.text).toMatch(
+      /^Carthage's war with Syracusae has ended\. Carthage stands higher than when the game last stopped for it, on Year 1, day 70 at \d+%/,
+    );
+  });
+});
+
 describe("the warning's word on a full treasury", () => {
   /** The warning's text, and Carthage's share on a copy of the day with Rome's Forum at Roma ordered. */
   function warned(state: GameState) {

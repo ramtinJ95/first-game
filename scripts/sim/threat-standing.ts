@@ -38,7 +38,9 @@ function play(seed: number, years: number): Row {
     seed,
     years,
     ({ before, after, events }) => {
-      row.warnings += threatNewsOfDay(before, after, world, told).length;
+      row.warnings += threatNewsOfDay(before, after, world, told).filter(
+        (alert) => alert.kind === 'warThreat',
+      ).length;
       const start = performance.now();
       const threats = standingThreats(after, world);
       row.costs.push(performance.now() - start);
