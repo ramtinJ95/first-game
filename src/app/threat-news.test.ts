@@ -942,7 +942,7 @@ describe('how near each power at peace stands to declaring war, as the wars pane
   test('a warning by a city to a realm whose food feeds no more men says that guards eat nothing', () => {
     const [warning] = newsOf(starving(game(5300, 'full')), new Set());
     expect(warning?.text).toContain(
-      'more men, or guards at Roma for 90 days, lower it; your food feeds no more men, and guards eat nothing.',
+      'Guards at Roma for 90 days lower it and eat nothing; your food feeds no more men. See At peace',
     );
     const [fed] = newsOf(game(5300, 'full'), new Set());
     expect(fed?.text).toContain('more men, or guards at Roma for 90 days, lower it. See At peace');

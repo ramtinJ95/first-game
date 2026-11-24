@@ -626,11 +626,17 @@ function whatCounts(
       ? ` Your treasury of ${whole(gold)} gold lowers the strength it needs by ${Math.round(threat.hoard * 100)}%, so more gold brings war nearer.`
       : '');
   const advice = orderAdvice(state, waiting.factions[state.player]?.stores, by);
+  // Men the realm cannot feed would desert, so the advice names the guards alone, which eat nothing.
   const hungry =
-    world && advice.kind !== 'none' && unfed(waiting, world, advice.troop) !== undefined
-      ? '; your food feeds no more men, and guards eat nothing'
-      : '';
-  return `${hoard}${front ? ` Your armies on land within ${whole(WAR_FRONT_KM)} km count; more men, or guards at ${front.name} for ${GUARD_DETER_DAYS} days, lower it${hungry}.` : ''}${guards}`;
+    world !== undefined &&
+    advice.kind !== 'none' &&
+    unfed(waiting, world, advice.troop) !== undefined;
+  const lowers = !front
+    ? ''
+    : hungry
+      ? ` Guards at ${front.name} for ${GUARD_DETER_DAYS} days lower it and eat nothing; your food feeds no more men.`
+      : ` Your armies on land within ${whole(WAR_FRONT_KM)} km count; more men, or guards at ${front.name} for ${GUARD_DETER_DAYS} days, lower it.`;
+  return `${hoard}${lowers}${guards}`;
 }
 
 /** A share of the strength a power needs that the player's treasury takes off, below which the warning does not name a purchase. */
