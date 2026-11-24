@@ -106,6 +106,9 @@ test.describe('advances', () => {
     const state = startGame();
     const limit = limitsOf(state).get(rome)?.gold ?? 0;
     romeOf(state).stores.gold = HINT_SHARE * limit - 30;
+    // Every city has a building at work, so the buildings' hint has none to name and this one is told at once.
+    for (const city of Object.values(state.cities))
+      if (city.owner === rome) city.construction = { building: 'temple', daysLeft: 300 };
     await load(page, state);
     await resume(page);
     const news = page.getByTestId('alerts');
