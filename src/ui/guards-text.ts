@@ -4,11 +4,13 @@ import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import {
   deterrentUntil,
   GUARD_BAND,
+  GUARD_DAYS,
   GUARD_DETER_DAYS,
   GUARD_GOLD,
   guardLimit,
   guardMen,
   guardRefusal,
+  replaced,
 } from '../sim/guards.ts';
 import { executeOrder, type Order } from '../sim/orders/orders.ts';
 import type { City, GuardBand } from '../sim/state/city.ts';
@@ -67,8 +69,12 @@ export function cityGuards(
   const why = guardRefusal(waiting, next, state.player);
   const short = why !== undefined && !guardRefusal(withGold(waiting, next), next, state.player);
   const open = why === undefined || short;
+  // A band that takes the place of an old one leaves the count as it was, so a waiting hire is a band of the day's term.
+  const ofToday = (bands: readonly DeepReadonly<GuardBand>[]) =>
+    bands.filter((band) => band.until >= state.day + GUARD_DAYS).length;
+  const hired = ofToday(next.guards) - ofToday(city.guards);
   return {
-    line: guardsLine(city.guards, next.guards.length - city.guards.length),
+    line: guardsLine(city.guards, hired),
     weighed: weighedLine(city.guards, state.day),
     hire: {
       threats: hireThreats(
@@ -76,8 +82,8 @@ export function cityGuards(
         open ? (short ? withGold(waiting, next) : waiting) : undefined,
         next,
         world,
-        next.guards.length - city.guards.length,
-        guardMen(next) + GUARD_BAND > guardLimit(next),
+        hired,
+        guardMen(next) + GUARD_BAND > guardLimit(next) && replaced(next, waiting.day) < 0,
       ),
       gold: GUARD_GOLD,
       change: open ? hireChange(short ? withGold(waiting, next) : waiting, next, world) : undefined,
@@ -86,8 +92,18 @@ export function cityGuards(
   };
 }
 
-/** A hire played through the rules' own handler on a copy of the day. */
+/**
+ * A hire played through the rules' own handler on a copy of the day. At a city full of guards
+ * the new band takes the place of one no great power still counts, which leaves the garrison
+ * as it is, so the change names that band instead.
+ */
 function hireChange(state: State, city: DeepReadonly<City>, world: World): string {
+  const old =
+    guardMen(city) + GUARD_BAND > guardLimit(city)
+      ? city.guards[replaced(city, state.day)]
+      : undefined;
+  if (old)
+    return `Takes the place of the ${whole(GUARD_BAND)} who leave ${dateText(old.until)}, whom no great power still counts`;
   const hired = structuredClone(state) as GameState;
   executeOrder(hired, { kind: 'hireGuards', faction: city.owner, city: city.id }, world);
   const garrison = hired.cities[city.id]?.garrison ?? city.garrison;

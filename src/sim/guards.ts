@@ -62,7 +62,7 @@ export function guardRefusal(
   if (city.owner !== faction) return `${city.id} belongs to ${city.owner}, not ${faction}`;
   if (city.unrestDays > 0) return `${city.id} is in unrest for ${city.unrestDays} more days`;
   if (beleaguered(state, city)) return `an enemy stands at the walls of ${city.id}`;
-  if (guardMen(city) + GUARD_BAND > guardLimit(city)) {
+  if (guardMen(city) + GUARD_BAND > guardLimit(city) && replaced(city, state.day) < 0) {
     return `${city.id} holds ${guardMen(city)} guards, and ${guardLimit(city)} is the most it can`;
   }
   const gold = state.factions[faction]?.stores.gold ?? 0;
@@ -81,7 +81,23 @@ export function hireGuards(state: GameState, order: HireGuardsOrder): string | u
   const stores = state.factions[order.faction]?.stores;
   if (!stores) return `faction ${order.faction} does not exist`;
   stores.gold -= GUARD_GOLD;
+  const old = guardMen(city) + GUARD_BAND > guardLimit(city) ? replaced(city, state.day) : -1;
+  if (old >= 0) city.guards.splice(old, 1);
+  else city.garrison += GUARD_BAND;
   city.guards.push({ until: (state.day + GUARD_DAYS) as Day });
-  city.garrison += GUARD_BAND;
   return undefined;
+}
+
+/**
+ * The band a hire at a city full of guards sends home: the one hired first of those great
+ * powers no longer count against a war, or -1 for none. Its place goes to the new band, so a
+ * warning can still be answered with gold at a city whose guards were hired for an older one.
+ */
+export function replaced(city: DeepReadonly<Pick<City, 'guards'>>, day: Day): number {
+  let oldest = -1;
+  city.guards.forEach((band, i) => {
+    if (deterrentUntil(band) > day) return;
+    if (oldest < 0 || band.until < (city.guards[oldest]?.until ?? Infinity)) oldest = i;
+  });
+  return oldest;
 }

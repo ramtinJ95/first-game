@@ -1,11 +1,14 @@
+import { BUILD_PAYBACK_YEARS, buildingWorth } from '../src/sim/ai/build.ts';
+import { reserveOf, sorted } from '../src/sim/ai/situation.ts';
+import { buildRefusal } from '../src/sim/buildings/build.ts';
+import { BUILDING_KINDS, BUILDINGS, type BuildingKind } from '../src/sim/buildings/buildings.ts';
 import { readFileSync } from 'node:fs';
 import { decideAll } from '../src/sim/ai/decide.ts';
 import type { CityId, FactionId, TradeRouteId } from '../src/sim/ids.ts';
 import { parseMap } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
-import type { Order } from '../src/sim/orders/orders.ts';
+import { executeOrder, type Order } from '../src/sim/orders/orders.ts';
 import type { DayEvent } from '../src/sim/events.ts';
-import type { Day } from '../src/sim/state/day.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { adminShareOf } from '../src/sim/systems/economy.ts';
 import { tick } from '../src/sim/tick.ts';
@@ -14,7 +17,7 @@ import { areAtWar } from '../src/sim/wars.ts';
 import { distance } from '../src/sim/world/find-path.ts';
 import { buildWorld, type World } from '../src/sim/world/world.ts';
 import { threatNewsOfDay } from '../src/app/threat-news.ts';
-import { GUARD_BAND, GUARD_GOLD, guardRefusal } from '../src/sim/guards.ts';
+import { GUARD_GOLD, guardRefusal, hireGuards } from '../src/sim/guards.ts';
 import { warReadiness } from '../src/sim/ai/war.ts';
 import { THREAT_WARN } from '../src/app/threat-news.ts';
 
@@ -23,7 +26,7 @@ const THREAT_CLEAR = 0.6;
 import { WAR_REACH_KM } from '../src/sim/ai/thresholds.ts';
 import { limitsOf } from '../src/sim/systems/economy.ts';
 import { homeCapital } from '../src/sim/ai/situation.ts';
-import { NOTICE_DAYS } from '../src/sim/ai/thresholds.ts';
+import { NOTICE_DAYS, NOTICE_SHARE } from '../src/sim/ai/thresholds.ts';
 import { TROOPS, type Troop } from '../src/sim/troops.ts';
 
 export const map = parseMap(
@@ -39,7 +42,7 @@ const GUARD_CHECK_DAYS = 45;
 /** A city to hire at tomorrow: until no great power stands at THREAT_CLEAR there, or until it is full. */
 interface Threat {
   city: CityId;
-  until: 'calm' | 'full' | 'three';
+  until: 'calm' | 'full' | 'three' | 'enough';
 }
 
 /**
@@ -52,9 +55,11 @@ interface Threat {
  * great power stands at THREAT_CLEAR there, keeping the same quarter of its limit; the day after a great power declares, it fills
  * each of Rome's cities in that power's reach, nearest first. `war` is the seventh
  * play-through's Ariminum: three bands at Rome's city nearest a great power the day after
- * it declares, and none at peace.
+ * it declares, and none at peace. `enough` answers a warning as it advises: the day after it
+ * names a city, it hires there until no great power stands at NOTICE_SHARE of what it needs
+ * there, with all the gold it has, since war is what it buys off.
  */
-export type GuardPlay = 'never' | 'monthly' | 'every' | 'warned' | 'war';
+export type GuardPlay = 'never' | 'monthly' | 'every' | 'warned' | 'war' | 'enough';
 
 export interface CautiousDay {
   before: GameState;
@@ -62,6 +67,8 @@ export interface CautiousDay {
   events: readonly DayEvent[];
   /** Rome's orders the rules took today, its trade and the AI's spending for it alike. */
   accepted: readonly Order[];
+  /** Of those, the orders it gave in answer to a warning or a war: the troop and the guards. */
+  answered: readonly Order[];
 }
 
 /**
@@ -83,6 +90,8 @@ export function playCautiousRome(
     answer = false,
     builds,
     drops = [],
+    forbid = [],
+    start,
   }: {
     peaceful?: boolean;
     guards?: GuardPlay;
@@ -91,6 +100,10 @@ export function playCautiousRome(
     builds?: (state: GameState) => Order[];
     /** Kinds of Rome's AI orders it does not give, such as `recruit` for a ruler who raises men only to answer a warning. */
     drops?: readonly Order['kind'][];
+    /** Buildings Rome's AI does not order, such as every second level and great work for a ruler who builds first levels only. */
+    forbid?: readonly BuildingKind[];
+    /** The game to play from, in place of a new game of the seed. */
+    start?: GameState;
   } = {},
 ): GameState {
   const told = new Set<string>();
@@ -98,7 +111,7 @@ export function playCautiousRome(
   let warnedAt: CityId | undefined;
   const named = new Set<CityId>();
   let threatened: Threat[] = [];
-  let state: GameState = newGame(map, { seed, player: 'rome' });
+  let state: GameState = start ?? newGame(map, { seed, player: 'rome' });
   const ledger = new Map<TradeRouteId, { paid: number; received: number; deliveries: number }>();
   for (let day = 0; day < years * 365; day++) {
     const ai = decideAll(state, world, []);
@@ -114,6 +127,7 @@ export function playCautiousRome(
       (o) =>
         !held(o) &&
         !(o.faction === rome && ((builds && o.kind === 'build') || drops.includes(o.kind))) &&
+        !(o.faction === rome && o.kind === 'build' && forbid.includes(o.building)) &&
         (o.faction !== rome ||
           !['openTrade', 'acceptTrade', 'closeTrade', 'improveTrade'].includes(o.kind)),
     );
@@ -121,25 +135,28 @@ export function playCautiousRome(
       state,
       ai.filter((o) => o.faction === rome && !held(o)),
     );
+    if (answering && state.day >= answering.until) answering = undefined;
+    const answers = answering ? answerOrders(state, answering.city, answering.raise) : [];
+    if (answering) answering.raise = false;
+    // The reader plans its hires on the day as the answer and the trade before them leave it.
+    const earlier = [...answers, ...trade];
     const hires =
       guards === 'monthly' && trade.length === 0
         ? guardOrders(state, warnedAt)
         : guards === 'every' && state.day % GUARD_CHECK_DAYS === 0
           ? hiresAt(state, [...named].reverse(), guardFloor(state))
-          : guards === 'war'
-            ? readerHires(state, threatened)
+          : guards === 'war' || guards === 'enough'
+            ? readerHires(state, threatened, earlier)
             : guards === 'warned'
-              ? readerHires(state, [
-                  ...threatened,
-                  ...(state.day % GUARD_CHECK_DAYS === 0 ? nearWar(state) : []),
-                ])
+              ? readerHires(
+                  state,
+                  [...threatened, ...(state.day % GUARD_CHECK_DAYS === 0 ? nearWar(state) : [])],
+                  earlier,
+                )
               : [];
     threatened = [];
     orders.unshift(...trade, ...hires, ...(builds?.(state) ?? []));
-    if (answering && state.day >= answering.until) answering = undefined;
     if (answering) {
-      const answers = answerOrders(state, answering.city, answering.raise);
-      answering.raise = false;
       // Every army of Rome is held at the warned city, so no order of the AI moves one away.
       for (let i = orders.length - 1; i >= 0; i--) {
         const order = orders[i];
@@ -201,6 +218,7 @@ export function playCautiousRome(
         named.delete(warnedAt);
         named.add(warnedAt);
         if (guards === 'warned') threatened.push({ city: warnedAt, until: 'calm' });
+        if (guards === 'enough') threatened.push({ city: warnedAt, until: 'enough' });
       }
     }
     for (const event of events) {
@@ -210,11 +228,57 @@ export function playCautiousRome(
       if (guards === 'war' && reach[0]) threatened.push({ city: reach[0], until: 'three' });
       if (guards === 'warned') for (const city of reach) threatened.push({ city, until: 'full' });
     }
-    onDay({ before: state, after: next, events, accepted });
+    const given = new Set<Order>([...answers, ...hires]);
+    onDay({
+      before: state,
+      after: next,
+      events,
+      accepted,
+      answered: accepted.filter((order) => given.has(order)),
+    });
     state = next;
     if (state.factions[rome]?.defeatedOn !== null) break;
   }
   return state;
+}
+
+/**
+ * The building that pays back soonest in the city, within BUILD_PAYBACK_YEARS, among those
+ * it could start with `gold`: what the panel puts first and the news names.
+ */
+export function suggested(
+  state: GameState,
+  city: GameState['cities'][CityId] | undefined,
+  gold: number,
+) {
+  let best: { kind: BuildingKind; payback: number } | undefined;
+  if (!city || city.construction) return undefined;
+  for (const kind of BUILDING_KINDS) {
+    if (BUILDINGS[kind].gold > gold || buildRefusal(state, city, kind)) continue;
+    const worth = buildingWorth(state, city, kind);
+    const payback = worth > 0 ? BUILDINGS[kind].gold / worth / 365 : Infinity;
+    if (payback <= BUILD_PAYBACK_YEARS && (!best || payback < best.payback))
+      best = { kind, payback };
+  }
+  return best;
+}
+
+/**
+ * The player who builds as the panel suggests: in each of Rome's cities with nothing at
+ * work, the building that repays soonest, while the gold after it stays above the AI's
+ * reserve for Rome's men.
+ */
+export function panelBuilds(state: GameState): Order[] {
+  let gold = (state.factions[rome]?.stores.gold ?? 0) - reserveOf(state, rome, 'gold');
+  const orders: Order[] = [];
+  for (const city of sorted(state.cities)) {
+    if (city.owner !== rome) continue;
+    const best = suggested(state, state.cities[city.id], gold);
+    if (!best) continue;
+    gold -= BUILDINGS[best.kind].gold;
+    orders.push({ kind: 'build', faction: rome, city: city.id, building: best.kind });
+  }
+  return orders;
 }
 
 /** The powers a warning names: one, or several in a line that folds one day's warnings. */
@@ -285,10 +349,7 @@ function hiresAt(state: GameState, cities: readonly CityId[], floor: number): Or
     const order: Order = { kind: 'hireGuards', faction: rome, city: id };
     const city = hired.cities[id];
     const stores = hired.factions[rome]?.stores;
-    if (!city || !stores || guardRefusal(hired, city, rome) || stores.gold - GUARD_GOLD < floor)
-      continue;
-    stores.gold -= GUARD_GOLD;
-    city.guards.push({ until: Infinity as Day });
+    if (!city || !stores || stores.gold - GUARD_GOLD < floor || hireGuards(hired, order)) continue;
     orders.push(order);
   }
   return orders;
@@ -300,17 +361,28 @@ function guardFloor(state: GameState): number {
 }
 
 /** The reader's hires, each band weighed on a copy of the day as the warning would weigh it. */
-function readerHires(state: GameState, threats: readonly Threat[]): Order[] {
+function readerHires(
+  state: GameState,
+  threats: readonly Threat[],
+  earlier: readonly Order[] = [],
+): Order[] {
   if (threats.length === 0) return [];
   const hired = structuredClone(state);
+  for (const order of earlier) executeOrder(hired, order, world);
   const orders: Order[] = [];
   const powers = Object.values(hired.factions).filter(
     (f) => f.kind === 'greatPower' && f.id !== rome && f.defeatedOn === null,
   );
-  const calm = (id: CityId) =>
+  // A power that weighs only field armies is not held back by guards, as its warning says.
+  const calm = (id: CityId, below: number, passPressed: boolean) =>
     powers.every((p) => {
       const threat = warReadiness(hired, world, p.id, rome);
-      return !threat || threat.front !== id || threat.readiness < THREAT_CLEAR;
+      return (
+        !threat ||
+        threat.front !== id ||
+        threat.readiness < below ||
+        (passPressed && threat.pressed)
+      );
     });
   const floor = guardFloor(state);
   for (const { city: id, until } of threats) {
@@ -319,16 +391,17 @@ function readerHires(state: GameState, threats: readonly Threat[]): Order[] {
       const stores = hired.factions[rome]?.stores;
       if (!city || !stores || guardRefusal(hired, city, rome)) break;
       if (until === 'calm' && stores.gold - GUARD_GOLD < floor) break;
-      if (until === 'calm' && calm(id)) break;
+      if (until === 'calm' && calm(id, THREAT_CLEAR, false)) break;
+      if (until === 'enough' && calm(id, NOTICE_SHARE, true)) break;
       if (
         until === 'three' &&
         orders.filter((o) => o.kind === 'hireGuards' && o.city === id).length >= 3
       )
         break;
-      stores.gold -= GUARD_GOLD;
-      city.guards.push({ until: Infinity as Day });
-      city.garrison += GUARD_BAND;
-      orders.push({ kind: 'hireGuards', faction: rome, city: id });
+      const order: Order = { kind: 'hireGuards', faction: rome, city: id };
+      // The rules' own handler, so a band that takes the place of one no longer counted is weighed as the rules weigh it.
+      if (hireGuards(hired, order)) break;
+      orders.push(order);
     }
   }
   return orders;
