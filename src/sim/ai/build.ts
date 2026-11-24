@@ -14,6 +14,7 @@ import { OUTPUT_PER_PERSON, UNREST_OUTPUT, UPKEEP_PER_MAN } from '../systems/eco
 import { TROOPS } from '../troops.ts';
 import { areAtWar } from '../wars.ts';
 import { mostNeeded } from './budget.ts';
+import type { Saving } from './saving.ts';
 import { balanceOf, reserveOf, sorted, type CityView, type State } from './situation.ts';
 
 /** Gold a day that one food and one manpower are worth: what the same people yield of each. */
@@ -89,21 +90,29 @@ export function buildingWorth(state: State, city: CityView, kind: BuildingKind):
  * great work. A first level it can start comes before any second level or great work. It builds only while its gold and food balances are not falling
  * and only with gold left over the reserve for its men and the price of the recruit it
  * would raise next, so a building never stops it keeping or growing an army. A ruler
- * that never recruits, `keepsRecruits` false, keeps only the reserve for its men.
+ * that never recruits, `keepsRecruits` false, keeps only the reserve for its men. While it
+ * saves for a great work (`savingFor`), it orders the work once its gold over the reserve
+ * pays for it, and starts nothing else with the gold kept for it.
  */
 export function construction(
   state: State,
   faction: FactionId,
   recruiting: boolean,
   keepsRecruits = true,
+  saving?: Saving,
 ): Order[] {
   const record = state.factions[faction];
   if (!record || recruiting) return [];
-  const next = keepsRecruits ? TROOPS[mostNeeded(state, faction)].recruit.gold : 0;
-  const spare = record.stores.gold - reserveOf(state, faction, 'gold') - next;
-  if (spare < CHEAPEST || record.stores.food < reserveOf(state, faction, 'food')) return [];
+  if (record.stores.food < reserveOf(state, faction, 'food')) return [];
   const balance = balanceOf(state, faction);
   if (!balance || balance.gold < 0 || balance.food < 0) return [];
+  const over = record.stores.gold - reserveOf(state, faction, 'gold');
+  if (saving && over >= saving.gold) {
+    return [{ kind: 'build', faction, city: saving.city, building: saving.work }];
+  }
+  const next = keepsRecruits ? TROOPS[mostNeeded(state, faction)].recruit.gold : 0;
+  const spare = over - next - (saving?.gold ?? 0);
+  if (spare < CHEAPEST) return [];
   let best: { city: CityView; kind: BuildingKind; payback: number; first: boolean } | undefined;
   for (const city of sorted(state.cities)) {
     if (city.owner !== faction || city.construction) continue;

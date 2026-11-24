@@ -3,6 +3,7 @@ import type { FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import type { GameState } from '../state/game-state.ts';
 import { afterSpending, tradeReserve } from './budget.ts';
+import { savingFor } from './saving.ts';
 import { sorted } from './situation.ts';
 import {
   routeSlots,
@@ -125,6 +126,7 @@ export function trading(
   state = afterSpending(current, prior, world);
   if (Object.values(state.tradeRoutes).some((r) => r.owner === faction && r.status === 'offered'))
     return [];
-  const order = bestTrade(state, world, faction, tradeReserve(state, faction));
+  const saved = savingFor(state, world, faction)?.gold;
+  const order = bestTrade(state, world, faction, tradeReserve(state, faction, saved));
   return order ? [order] : [];
 }

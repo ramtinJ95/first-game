@@ -17,6 +17,7 @@ import {
 } from './armies.ts';
 import { recruitment } from './budget.ts';
 import { construction } from './build.ts';
+import { savingFor } from './saving.ts';
 import { minorOrders } from './minor.ts';
 import { peaceOrders } from './peace.ts';
 import { createRouter } from './routes.ts';
@@ -54,7 +55,8 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
     return withJoins(context, [...orders, ...trading(state, world, faction, orders)]);
   }
   const muster = musterCity(context);
-  const recruits = recruitment(state, faction, muster);
+  const saving = savingFor(state, world, faction);
+  const recruits = recruitment(state, faction, muster, saving?.gold);
   const orders = [
     ...peaceOrders(context),
     ...stances(context),
@@ -64,7 +66,7 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
     ...storms(context),
     ...movements(context, muster),
     ...recruits,
-    ...construction(state, faction, recruits.length > 0),
+    ...construction(state, faction, recruits.length > 0, true, saving),
     ...warDeclaration(context),
   ];
   return withJoins(context, [...orders, ...trading(state, world, faction, orders)]);

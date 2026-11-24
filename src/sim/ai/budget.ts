@@ -23,12 +23,13 @@ import { MIN_BALANCE_SHARE, TROOP_MIX } from './thresholds.ts';
  * power waits for it rather than buying another. It recruits only when, after paying,
  * gold and food stay above the reserve for the new upkeep, and the daily balance of gold
  * and food after the upkeep of all its men and recruits stays at least
- * MIN_BALANCE_SHARE of the income.
+ * MIN_BALANCE_SHARE of the income. Gold `saved` for a great work stays above the reserve.
  */
 export function recruitment(
   state: State,
   faction: FactionId,
   muster: CityView | undefined,
+  saved = 0,
 ): Order[] {
   const record = state.factions[faction];
   if (!record || !muster || muster.owner !== faction || muster.unrestDays > 0) return [];
@@ -37,7 +38,7 @@ export function recruitment(
   const { men, gold } = TROOPS[troop].recruit;
   const { stores } = record;
   if (stores.manpower < men) return [];
-  if (stores.gold - gold < reserveOf(state, faction, 'gold', men)) return [];
+  if (stores.gold - gold < reserveOf(state, faction, 'gold', men) + saved) return [];
   if (stores.food < reserveOf(state, faction, 'food', men)) return [];
 
   const balance = balanceOf(state, faction);
@@ -78,13 +79,13 @@ export function mostNeeded(state: State, faction: FactionId): Troop {
   return best;
 }
 
-/** Trade waits behind the military reserve and the next formation's purchase. */
-export function tradeReserve(state: State, faction: FactionId): number {
+/** Trade waits behind the military reserve, the next formation's purchase, and gold `saved` for a great work. */
+export function tradeReserve(state: State, faction: FactionId, saved = 0): number {
   const next =
     state.factions[faction]?.kind === 'greatPower'
       ? TROOPS[mostNeeded(state, faction)].recruit.gold
       : Math.min(...Object.values(TROOPS).map((troop) => troop.recruit.gold));
-  return Math.max(600, reserveOf(state, faction, 'gold')) + next;
+  return Math.max(600, reserveOf(state, faction, 'gold')) + next + saved;
 }
 
 /** The same day's already chosen spending must settle before a trade commitment. */

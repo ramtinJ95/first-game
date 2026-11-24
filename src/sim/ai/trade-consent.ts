@@ -5,6 +5,7 @@ import type { GameState } from '../state/game-state.ts';
 import type { TradeRoute } from '../state/trade-route.ts';
 import type { World } from '../world/world.ts';
 import { tradeReserve } from './budget.ts';
+import { savingFor } from './saving.ts';
 import { createRouter } from './routes.ts';
 import { enemiesOf } from './situation.ts';
 import { warDeclaration } from './war.ts';
@@ -21,7 +22,8 @@ export function invitationProblem(
   // Order handlers receive a mutable tick copy; AI collection caches require a snapshot.
   const state = JSON.parse(JSON.stringify(current)) as GameState;
   const gold = state.factions[route.owner]?.stores.gold ?? 0;
-  if (gold - route.cost < tradeReserve(state, route.owner))
+  const saved = savingFor(state, world, route.owner)?.gold;
+  if (gold - route.cost < tradeReserve(state, route.owner, saved))
     return 'the inviter must keep its military reserve';
   const policy = state.factions[route.owner]?.kind === 'minor' ? minorOrders : warDeclaration;
   const declares = (current: DeepReadonly<GameState>) =>
