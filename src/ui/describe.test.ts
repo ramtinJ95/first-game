@@ -435,6 +435,9 @@ describe('storeNote', () => {
       why: "Ran out, and 40 gold short: formations desert every day until it is made up, and today's balance adds to it.",
       bad: true,
     });
+    expect(storeNote('food', -60, 0, 500)?.why).toBe(
+      "Ran out, and 60 food short: formations desert every day until it is made up, and today's balance makes up none of it.",
+    );
     expect(storeNote('food', -0.3, -5, 500)).toMatchObject({ text: 'Ran out' });
   });
 

@@ -184,8 +184,13 @@ test.describe('the corner at 390 × 844', () => {
       expect(list.y + list.height, 'the corner ends inside the window').toBeLessThanOrEqual(
         window.y + window.height,
       );
-      const scrolls = await corner.evaluate((el) => el.scrollHeight > el.clientHeight + 1);
-      if (!scrolls) await readWhole(page, corner, told, 'the line in the corner');
+      await corner.evaluate((el) => el.scrollTo(0, 0));
+      await readWhole(
+        page,
+        corner,
+        corner.getByRole('listitem').first(),
+        'the newest line in the corner',
+      );
 
       await page.getByRole('button', { name: 'Chronicle' }).click();
       const chronicle = page.getByTestId('chronicle');

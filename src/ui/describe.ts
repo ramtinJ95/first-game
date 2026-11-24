@@ -688,7 +688,9 @@ export function storeNote(
       why:
         change > 0
           ? `Ran out, and ${short} short: formations desert every day until it is made up, in ${whole(Math.ceil(-amount / change))} days at today's balance.`
-          : `Ran out, and ${short} short: formations desert every day until it is made up, and today's balance adds to it.`,
+          : change < 0
+            ? `Ran out, and ${short} short: formations desert every day until it is made up, and today's balance adds to it.`
+            : `Ran out, and ${short} short: formations desert every day until it is made up, and today's balance makes up none of it.`,
       bad: true,
     };
   }
