@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { GameState } from '../src/sim/state/game-state.ts';
+import { carthageClimbs } from './climb-game.ts';
 import {
   camera,
   cityPoint,
@@ -137,6 +138,73 @@ for (const width of [1024, 1280, 1600]) {
     });
   });
 }
+
+/** The box of `item` inside the window and inside `room`, which clips it, once scrolled to. */
+async function readWhole(page: Page, room: Locator, item: Locator, what: string) {
+  await item.scrollIntoViewIfNeeded();
+  const line = await box(what, item);
+  const clip = await box(`what holds ${what}`, room);
+  const window = page.viewportSize();
+  if (!window) throw new Error('no window');
+  expect(line.y, `${what} starts inside what holds it`).toBeGreaterThanOrEqual(clip.y - 0.5);
+  expect(line.y + line.height, `${what} ends inside what holds it`).toBeLessThanOrEqual(
+    clip.y + clip.height + 0.5,
+  );
+  expect(line.y + line.height, `${what} ends inside the window`).toBeLessThanOrEqual(window.height);
+}
+
+test.describe('the corner at 390 × 844', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  for (const { name, save, line } of [
+    {
+      name: 'the longest line the game tells, a climb that stops the game with guards that stop counting',
+      save: () => carthageClimbs(8, 2),
+      line: /no longer count against Carthage's war\. Carthage stands higher/,
+    },
+    {
+      name: 'a line that runs the game on, guards that stop counting',
+      save: () => carthageClimbs(0, 2),
+      line: /no longer count against Carthage's war: it stands/,
+    },
+  ])
+    test(`reads ${name} whole, with the Chronicle shut and open`, async ({ page }) => {
+      await openGame(page, { pauses: true });
+      await pause(page);
+      await dropSave(page, save());
+      await expect(page.getByTestId('time-controls-day')).toHaveAttribute('data-day', '100');
+      await untilDrawn(page);
+      await resume(page);
+      const corner = page.getByTestId('alerts');
+      const told = corner.getByRole('listitem').filter({ hasText: line }).first();
+      await told.waitFor();
+      await pause(page);
+      const window = await box('the window', page.locator('.hud'));
+      const list = await box('the corner', corner);
+      expect(list.y + list.height, 'the corner ends inside the window').toBeLessThanOrEqual(
+        window.y + window.height,
+      );
+      await corner.evaluate((el) => el.scrollTo(0, 0));
+      await readWhole(
+        page,
+        corner,
+        corner.getByRole('listitem').first(),
+        'the newest line in the corner',
+      );
+
+      await page.getByRole('button', { name: 'Chronicle' }).click();
+      const chronicle = page.getByTestId('chronicle');
+      await expect(chronicle).toBeVisible();
+      await expect(corner, 'the corner gives way to the open Chronicle').toBeHidden();
+      await readWhole(
+        page,
+        chronicle.getByRole('list'),
+        chronicle.getByRole('listitem').filter({ hasText: line }).first(),
+        'the line in the Chronicle',
+      );
+      await expect(page.getByRole('button', { name: 'Chronicle' })).toBeInViewport();
+    });
+});
 
 test.describe('the frame readout', () => {
   test.use({ viewport: { width: 1280, height: 720 } });

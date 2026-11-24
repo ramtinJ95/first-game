@@ -234,8 +234,9 @@
       gap: 6px;
     }
 
+    /* The Chronicle button and one line of news of four lines, read whole. */
     .alerts {
-      max-height: 5.2rem;
+      max-height: 7.4rem;
     }
 
     .side {
@@ -245,6 +246,11 @@
 
     /* The open sheet takes the bottom of a phone. The latest news waits in the chronicle. */
     .hud:has(.side > :global(*)) .latest {
+      display: none;
+    }
+
+    /* The open Chronicle holds the same news, and a phone has room for one of them read whole. */
+    .hud:has(.chronicle-toggle[aria-expanded='true']) .latest {
       display: none;
     }
   }
