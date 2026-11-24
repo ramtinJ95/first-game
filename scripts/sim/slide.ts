@@ -7,7 +7,8 @@ import type { GameState } from '../../src/sim/state/game-state.ts';
 import { dailyBalances, limitsOf, menOf, UPKEEP_PER_MAN } from '../../src/sim/systems/economy.ts';
 import { TROOPS } from '../../src/sim/troops.ts';
 import { recruitForecast } from '../../src/ui/recruit-forecast.ts';
-import { playCautiousRome, rome, warnedPowers, world } from '../cautious-rome.ts';
+import { GREAT_WORKS, SECOND_LEVELS } from '../../src/sim/buildings/buildings.ts';
+import { panelBuilds, playCautiousRome, rome, warnedPowers, world } from '../cautious-rome.ts';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -25,12 +26,28 @@ const { values, positionals } = parseArgs({
 /**
  * The repository's test players: `cautious` is `playCautiousRome` as trade-judge plays it,
  * `ignoring` declares no war and does nothing about a warning, and `answering` declares no
- * war and answers each warning as it advises, as `threat-runup --answer` plays it.
+ * war and answers each warning as it advises: the troop it names, as `threat-runup --answer`
+ * plays it, and guards at the city it names until the power no longer stands on notice there.
+ * `raising` is the answering Rome before it hired guards: the troop alone. Each of these builds
+ * by the AI's rule. The `panel-` Romes build as the city panel suggests (`panelBuilds`), the
+ * `first-` Romes by the AI's rule but first levels only, so their gold sits at its limit as the
+ * game before city projects left it, and the `hoarding-` Romes build nothing, as the thirteenth
+ * play-through's tester did, each ignoring or answering as above.
  */
+const FIRST_ONLY = { forbid: [...Object.values(SECOND_LEVELS), ...GREAT_WORKS] };
+const NOTHING = { builds: () => [] };
 const PLAYERS = {
   cautious: {},
   ignoring: { peaceful: true },
-  answering: { peaceful: true, answer: true },
+  answering: { peaceful: true, answer: true, guards: 'enough' },
+  raising: { peaceful: true, answer: true },
+  'panel-ignoring': { peaceful: true, builds: panelBuilds },
+  'panel-answering': { peaceful: true, answer: true, guards: 'enough', builds: panelBuilds },
+  'first-ignoring': { peaceful: true, ...FIRST_ONLY },
+  'first-answering': { peaceful: true, answer: true, guards: 'enough', ...FIRST_ONLY },
+  'first-raising': { peaceful: true, answer: true, ...FIRST_ONLY },
+  'hoarding-ignoring': { peaceful: true, ...NOTHING },
+  'hoarding-answering': { peaceful: true, answer: true, guards: 'enough', ...NOTHING },
 } as const;
 type Player = keyof typeof PLAYERS;
 
@@ -63,6 +80,9 @@ interface Year {
   barracks: number;
   /** Days of the year on which the cheapest troop could not be raised for want of each store. */
   shortDays: Record<Store, number>;
+  /** Warnings of the year, and those that came with too little manpower for the cheapest troop. */
+  warnings?: number;
+  warnedShort?: number;
 }
 
 interface Game {
@@ -159,7 +179,11 @@ function play(player: Player, seed: number, years: number): Game {
       if (!year) return;
       for (const alert of threatNewsOfDay(before, after, world, told)) {
         if (alert.pause) game.stops++;
-        game.warnings += warnedPowers(alert.text).length;
+        const named = warnedPowers(alert.text).length;
+        game.warnings += named;
+        year.warnings = (year.warnings ?? 0) + named;
+        if ((after.factions[rome]?.stores.manpower ?? 0) < CHEAPEST_MEN)
+          year.warnedShort = (year.warnedShort ?? 0) + named;
       }
       for (const event of events)
         if (
@@ -236,17 +260,17 @@ function print(games: readonly Game[]) {
     if (mine.length === 0) continue;
     console.log(`\n### ${player}, ${mine.length} seeds\n`);
     console.log(
-      '| year | cities | people | men under arms | largest rival’s men | canals / barracks | food a day | food stored / limit | days food below 0 | manpower / limit | gold / limit | days gold at limit | days short of manpower | of food | of gold |',
+      '| year | cities | people | men under arms | largest rival’s men | canals / barracks | food a day | food stored / limit | days food below 0 | manpower / limit | gold / limit | days gold at limit | days short of manpower | of food | of gold | warnings, with too few men for the cheapest troop |',
     );
     console.log(
-      '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+      '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
     );
     const years = Math.max(...mine.map((g) => g.years.length));
     for (let y = 0; y < years; y++) {
       const rows = mine.map((g) => g.years[y] ?? emptyYear());
       const of = (f: (r: Year) => number, digits = 0) => spread(rows.map(f), digits);
       console.log(
-        `| ${y + 1} | ${of((r) => r.cities)} | ${of((r) => r.people)} | ${of((r) => r.men)} | ${of((r) => r.rivalMen)} | ${of((r) => r.canals)} / ${of((r) => r.barracks)} | ${of((r) => r.foodDay, 1)} | ${of((r) => r.food)} / ${of((r) => r.foodLimit)} | ${of((r) => r.hungryDays)} | ${of((r) => r.manpower)} / ${of((r) => r.manpowerLimit)} | ${of((r) => r.gold)} / ${of((r) => r.goldLimit)} | ${of((r) => r.goldCapDays)} | ${of((r) => r.shortDays.manpower)} | ${of((r) => r.shortDays.food)} | ${of((r) => r.shortDays.gold)} |`,
+        `| ${y + 1} | ${of((r) => r.cities)} | ${of((r) => r.people)} | ${of((r) => r.men)} | ${of((r) => r.rivalMen)} | ${of((r) => r.canals)} / ${of((r) => r.barracks)} | ${of((r) => r.foodDay, 1)} | ${of((r) => r.food)} / ${of((r) => r.foodLimit)} | ${of((r) => r.hungryDays)} | ${of((r) => r.manpower)} / ${of((r) => r.manpowerLimit)} | ${of((r) => r.gold)} / ${of((r) => r.goldLimit)} | ${of((r) => r.goldCapDays)} | ${of((r) => r.shortDays.manpower)} | ${of((r) => r.shortDays.food)} | ${of((r) => r.shortDays.gold)} | ${rows.reduce((n, r) => n + (r.warnings ?? 0), 0)}, ${rows.reduce((n, r) => n + (r.warnedShort ?? 0), 0)} |`,
       );
     }
     const firsts = STORES.map((store) => {

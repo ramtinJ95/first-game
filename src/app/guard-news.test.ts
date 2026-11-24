@@ -66,4 +66,29 @@ describe('the news of guards who served their year', () => {
     );
     expectConsistent(after);
   });
+
+  test('tells of a band that left before its day to make room for one hired in its place', () => {
+    const state = buildFixture();
+    state.day = 200 as Day;
+    const capua = state.cities[FIXTURE.capua];
+    const rome = state.factions[FIXTURE.rome];
+    if (!capua || !rome) throw new Error('no Capua or Rome');
+    rome.stores.gold = 5000;
+    capua.guards = [{ until: 400 as Day }, { until: 480 as Day }, { until: 560 as Day }];
+    const after = tick(
+      state,
+      [{ kind: 'hireGuards', faction: FIXTURE.rome, city: FIXTURE.capua }],
+      world,
+    ).state;
+    expect(after.cities[FIXTURE.capua]?.guards).toHaveLength(3);
+    expect(guardNewsOfDay(state, after)).toMatchObject([
+      {
+        kind: 'guardsLeft',
+        day: 200,
+        text: 'The 500 guards hired at Capua on Year 1, day 35, whom no great power still counted, left today to make room for the band you hired in their place, counted against a war until Year 1, day 290.',
+        focus: { at: capua.position },
+      },
+    ]);
+    expectConsistent(after);
+  });
 });

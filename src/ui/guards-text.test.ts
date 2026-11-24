@@ -174,7 +174,7 @@ describe('a band that does not take a power off notice', () => {
   it('still says the band you hired is not enough when no more can be hired', () => {
     const state = carthageAt(8000);
     const city = roma(state);
-    city.guards = Array.from({ length: 5 }, () => band(374));
+    city.guards = Array.from({ length: 5 }, () => band(465));
     const shown = cityGuards(state, [hireAtRoma], city, atlas);
     expect(shown.hire.why).toBe('Roma holds 3,000 guards, and 3,000 is the most it can');
     expect(shown.hire.threats).toEqual([
@@ -201,13 +201,26 @@ describe('a band that does not take a power off notice', () => {
       'Carthage, with the band you hired: 100% of the strength it needs to declare war, still at 80% or more, so it may still declare from Year 1, day 110. One more band, counted until Year 1, day 190, takes it to 100%, and all 5 bands Roma may still hire, 10,000 gold, take it to 97%: guards alone cannot take it below 80%.',
     ]);
     const full = carthageAt(8000);
-    roma(full).guards = Array.from({ length: 4 }, () => band(374));
+    roma(full).guards = Array.from({ length: 4 }, () => band(465));
 
     expect(cityGuards(full, [hireAtRoma], roma(full), atlas).hire.threats).toEqual([
       expect.stringMatching(
         /^Carthage, with the band you hired: 100% .*\. One more band, counted until Year 1, day 190 and the last Roma may hold, takes it to 100%: guards alone cannot take it below 80%\.$/,
       ),
     ]);
+  });
+
+  it('counts the bands a full city may hire in place of those no great power counts', () => {
+    const state = carthageAt(8000);
+    roma(state).guards = Array.from({ length: 6 }, () => band(300));
+    const tail = (bands: number) =>
+      `and all ${bands} bands Roma may still hire, ${(bands * 2).toLocaleString('en-GB')},000 gold, take it no lower: guards alone cannot take it below 80%.`;
+    const [now] = cityGuards(state, [], roma(state), atlas).hire.threats;
+    expect(now?.endsWith(tail(6))).toBe(true);
+    expect(now).not.toContain('holds the most guards it may');
+    const [hired] = cityGuards(state, [hireAtRoma], roma(state), atlas).hire.threats;
+    expect(hired).toMatch(/^Carthage, with the band you hired: /);
+    expect(hired?.endsWith(tail(5))).toBe(true);
   });
 
   it('says no lower when the bands a city may still hire leave the share where one more takes it', () => {
@@ -341,6 +354,23 @@ describe('cityGuards', () => {
     expect(after.line).toBe('No guards hired · 500 more hired for the next day');
     expect(after.hire.change).toBe('Garrison 3,500 → 4,000');
     expect(after.hire.why).toBe('Needs 1,000 more gold');
+  });
+
+  it('offers a full city a band in the place of one no great power still counts', () => {
+    const state = withGold(5000);
+    const roma = state.cities[f.roma];
+    if (!roma) throw new Error('no Roma');
+    roma.guards = [
+      band(state.day + 200),
+      ...Array.from({ length: 5 }, () => band(state.day + 360)),
+    ];
+    expect(shown(state).hire).toMatchObject({
+      why: undefined,
+      change: `Takes the place of the 500 who leave ${dateText(state.day + 200)}, whom no great power still counts`,
+    });
+    expect(shown(state, [hire]).line).toBe(
+      `3,000 guards · 500 leave ${dateText(state.day + 200)}, 2,500 leave ${dateText(state.day + 360)} · 500 more hired for the next day`,
+    );
   });
 
   it('says in words why a hire is refused', () => {

@@ -1,13 +1,9 @@
 import { parseArgs } from 'node:util';
-import { BUILD_PAYBACK_YEARS, buildingWorth } from '../../src/sim/ai/build.ts';
-import { reserveOf, sorted } from '../../src/sim/ai/situation.ts';
-import { buildRefusal } from '../../src/sim/buildings/build.ts';
-import { BUILDING_KINDS, BUILDINGS, type BuildingKind } from '../../src/sim/buildings/buildings.ts';
+import { BUILDINGS } from '../../src/sim/buildings/buildings.ts';
 import type { CityId, FactionId } from '../../src/sim/ids.ts';
-import type { Order } from '../../src/sim/orders/orders.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
 import { dailyBalances, limitsOf } from '../../src/sim/systems/economy.ts';
-import { playCautiousRome, rome } from '../cautious-rome.ts';
+import { panelBuilds, playCautiousRome, rome, suggested } from '../cautious-rome.ts';
 
 const { values } = parseArgs({
   options: {
@@ -19,41 +15,6 @@ const { values } = parseArgs({
     prices: { type: 'string', default: '11000,12000' },
   },
 });
-
-/**
- * The building that pays back soonest in the city, within BUILD_PAYBACK_YEARS, among those
- * it could start with `gold`: what the panel puts first and the news names.
- */
-function suggested(state: GameState, city: GameState['cities'][CityId] | undefined, gold: number) {
-  let best: { kind: BuildingKind; payback: number } | undefined;
-  if (!city || city.construction) return undefined;
-  for (const kind of BUILDING_KINDS) {
-    if (BUILDINGS[kind].gold > gold || buildRefusal(state, city, kind)) continue;
-    const worth = buildingWorth(state, city, kind);
-    const payback = worth > 0 ? BUILDINGS[kind].gold / worth / 365 : Infinity;
-    if (payback <= BUILD_PAYBACK_YEARS && (!best || payback < best.payback))
-      best = { kind, payback };
-  }
-  return best;
-}
-
-/**
- * The player who builds as the panel suggests: in each of Rome's cities with nothing at
- * work, the building that repays soonest, while the gold after it stays above the AI's
- * reserve for Rome's men.
- */
-function panelBuilds(state: GameState): Order[] {
-  let gold = (state.factions[rome]?.stores.gold ?? 0) - reserveOf(state, rome, 'gold');
-  const orders: Order[] = [];
-  for (const city of sorted(state.cities)) {
-    if (city.owner !== rome) continue;
-    const best = suggested(state, state.cities[city.id], gold);
-    if (!best) continue;
-    gold -= BUILDINGS[best.kind].gold;
-    orders.push({ kind: 'build', faction: rome, city: city.id, building: best.kind });
-  }
-  return orders;
-}
 
 /** One year of a peaceful Rome that answers its warnings. */
 interface Year {

@@ -2,7 +2,15 @@ import { describe, expect, test } from 'vitest';
 import { leaveSiege } from './armies.ts';
 import { changeCityOwner } from './cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from './fixture.ts';
-import { GUARD_BAND, GUARD_DAYS, GUARD_GOLD, guardMen, guardRefusal } from './guards.ts';
+import {
+  GUARD_BAND,
+  GUARD_DAYS,
+  GUARD_DETER_DAYS,
+  GUARD_GOLD,
+  guardMen,
+  guardRefusal,
+  weighedGarrison,
+} from './guards.ts';
 import type { CityId } from './ids.ts';
 import { executeOrder, type Order } from './orders/orders.ts';
 import { expectConsistent } from './references.ts';
@@ -84,6 +92,29 @@ describe('hiring guards', () => {
     city(state, FIXTURE.capua).guards = bands(1000);
     expect(executeOrder(state, hire(FIXTURE.capua), world)).toBeUndefined();
     expect(guardRefusal(state, city(state, FIXTURE.capua), FIXTURE.rome)).toBe(
+      'capua holds 1500 guards, and 1500 is the most it can',
+    );
+    expectConsistent(state);
+  });
+
+  test('a full city takes a new band in the place of its oldest band that no great power still counts', () => {
+    const state = withGold(50_000);
+    const capua = city(state, FIXTURE.capua);
+    const hiredOn = (day: number) => ({ until: (day + GUARD_DAYS) as Day });
+    const stale = hiredOn(state.day - GUARD_DETER_DAYS - 10);
+    const older = hiredOn(state.day - GUARD_DETER_DAYS - 20);
+    const counted = hiredOn(state.day - 10);
+    capua.guards = [stale, older, counted];
+    const garrison = capua.garrison;
+    expect(weighedGarrison(capua, state.day)).toBe(garrison - 2 * GUARD_BAND);
+    expect(executeOrder(state, hire(FIXTURE.capua), world)).toBeUndefined();
+    expect(gold(state)).toBe(50_000 - GUARD_GOLD);
+    expect(capua.guards).toEqual([stale, counted, hiredOn(state.day)]);
+    expect(capua.garrison).toBe(garrison);
+    expect(weighedGarrison(capua, state.day)).toBe(garrison - GUARD_BAND);
+    expect(executeOrder(state, hire(FIXTURE.capua), world)).toBeUndefined();
+    expect(weighedGarrison(capua, state.day)).toBe(garrison);
+    expect(guardRefusal(state, capua, FIXTURE.rome)).toBe(
       'capua holds 1500 guards, and 1500 is the most it can',
     );
     expectConsistent(state);
