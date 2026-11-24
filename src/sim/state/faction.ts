@@ -15,10 +15,12 @@ export const StoresSchema = v.object({
 });
 export type Stores = v.InferOutput<typeof StoresSchema>;
 
-/** The advance a faction studies and the days of study left, of which today is one. */
+/** The advance a faction studies, the days of study left, of which today is one, and what it paid. */
 const StudySchema = v.object({
   advance: v.picklist(ADVANCE_KINDS),
   daysLeft: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  /** The gold paid when study started, of which giving up returns half. */
+  paid: v.pipe(v.number(), v.finite(), v.minValue(0)),
 });
 
 export const FactionSchema = v.pipe(

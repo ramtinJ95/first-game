@@ -10,7 +10,7 @@ import { GUARD_DAYS, GUARD_GOLD } from '../guards.ts';
 import { GENERAL_EFFECT } from '../systems/battles.ts';
 import { fullDefences, WALL_WEAR_PER_THOUSAND_MEN } from '../systems/sieges.ts';
 import { advanceGain } from '../advances/gains.ts';
-import { studyRefusal } from '../advances/study.ts';
+import { studyPrice, studyRefusal } from '../advances/study.ts';
 import type { FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import {
@@ -105,10 +105,10 @@ export function nearestTarget(state: State, faction: FactionId): CityView | unde
   return best?.city;
 }
 
-/** The years an advance takes to pay back its gold in the realm today, or undefined if never. */
+/** The years an advance takes to pay back the price the realm pays today, or undefined if never. */
 export function studyPayback(state: State, faction: FactionId, kind: AdvanceKind) {
   const worth = advanceWorth(state, faction, kind);
-  return worth > 0 ? ADVANCES[kind].gold / worth / 365 : undefined;
+  return worth > 0 ? studyPrice(state, faction, kind) / worth / 365 : undefined;
 }
 
 /**
@@ -124,7 +124,8 @@ export function bestStudy(
   let best: { advance: AdvanceKind; payback: number } | undefined;
   if (spare < CHEAPEST) return undefined;
   for (const advance of ADVANCE_KINDS) {
-    if (ADVANCES[advance].gold > spare || studyRefusal(state, faction, advance)) continue;
+    if (studyPrice(state, faction, advance) > spare || studyRefusal(state, faction, advance))
+      continue;
     const payback = studyPayback(state, faction, advance);
     if (payback === undefined || payback > STUDY_PAYBACK_YEARS) continue;
     if (!best || payback < best.payback) best = { advance, payback };

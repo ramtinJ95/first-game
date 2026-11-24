@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { ADVANCES, ADVANCE_KINDS } from '../advances/advances.ts';
-import { buildFixture, FIXTURE } from '../fixture.ts';
+import { ADVANCES, ADVANCE_KINDS, GROWING_ADVANCES } from '../advances/advances.ts';
+import { buildFixture, FIXTURE, growRome } from '../fixture.ts';
 import type { GameState } from '../state/game-state.ts';
-import { studies, studyPayback, STUDY_PAYBACK_YEARS } from './study.ts';
+import { advanceWorth, studies, studyPayback, STUDY_PAYBACK_YEARS } from './study.ts';
 
 function rome(state: GameState) {
   const record = state.factions[FIXTURE.rome];
@@ -36,7 +36,7 @@ describe('the AI studies', () => {
 
   test('nothing while it studies, on a day it recruits or builds, or without the gold', () => {
     const studying = rich();
-    rome(studying).study = { advance: 'clemency', daysLeft: 9 };
+    rome(studying).study = { advance: 'clemency', daysLeft: 9, paid: 1500 };
     expect(studies(studying, FIXTURE.rome, false)).toEqual([]);
     expect(studies(rich(), FIXTURE.rome, true)).toEqual([]);
     const poor = buildFixture();
@@ -50,5 +50,25 @@ describe('the AI studies', () => {
     if (!minor) throw new Error('expected the minor');
     minor.stores.gold = 50_000;
     expect(studies(state, FIXTURE.syracusaeFaction, false)).toEqual([]);
+  });
+
+  test('its payback counts the price its realm pays: twice the listed gold at 16 cities', () => {
+    const small = rich();
+    const large = rich();
+    growRome(large, 16);
+    for (const kind of ['standardCoin', 'citizenRolls'] as const) {
+      const years = (state: GameState) => studyPayback(state, FIXTURE.rome, kind) ?? Infinity;
+      const worth = (state: GameState) => advanceWorth(state, FIXTURE.rome, kind);
+      expect(years(small) * worth(small) * 365).toBeCloseTo(ADVANCES[kind].gold, 6);
+      expect(years(large) * worth(large) * 365).toBeCloseTo(2 * ADVANCES[kind].gold, 6);
+    }
+  });
+
+  test('a large realm whose gold covers the listed price but not its own studies none of the four', () => {
+    const state = buildFixture();
+    growRome(state, 16);
+    rome(state).stores.gold = 9_000;
+    const [order] = studies(state, FIXTURE.rome, false);
+    if (order?.kind === 'study') expect(GROWING_ADVANCES).not.toContain(order.advance);
   });
 });

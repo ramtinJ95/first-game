@@ -75,7 +75,7 @@ test.describe('advances', () => {
     await openGame(page, { pauses: true });
     const state = startGame();
     romeOf(state).advances = ['standardCoin'];
-    romeOf(state).study = { advance: 'marchingRations', daysLeft: 3 };
+    romeOf(state).study = { advance: 'marchingRations', daysLeft: 3, paid: 3000 };
     await load(page, state);
     await expect(page.getByTestId('study-line')).toHaveText('Marching rations · 3 days');
     await page.getByTestId('advances-button').click();
@@ -129,7 +129,7 @@ test.describe('advances', () => {
       await openGame(page);
       await resizeTo(page, { width, height: 768 });
       const state = discoveryGame();
-      romeOf(state).study = { advance: 'marchingRations', daysLeft: 240 };
+      romeOf(state).study = { advance: 'marchingRations', daysLeft: 240, paid: 3000 };
       await loadDiscovery(page, state);
       const bar = page.getByTestId('top-bar');
       await expect(bar.getByTestId(width >= 1280 ? 'study-line' : 'study-days')).toHaveText(

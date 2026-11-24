@@ -122,12 +122,12 @@ describe('save and load', () => {
     const rome = state.factions[FIXTURE.rome];
     if (!rome) throw new Error('no Rome');
     rome.advances = ['standardCoin'];
-    rome.study = { advance: 'citizenRolls', daysLeft: 40 };
+    rome.study = { advance: 'citizenRolls', daysLeft: 40, paid: 3000 };
     const result = loadGame(saveGame(state));
     if (!result.ok) throw new Error(result.error);
     expect(result.state.factions[FIXTURE.rome]).toMatchObject({
       advances: ['standardCoin'],
-      study: { advance: 'citizenRolls', daysLeft: 40 },
+      study: { advance: 'citizenRolls', daysLeft: 40, paid: 3000 },
     });
   });
 
@@ -136,7 +136,7 @@ describe('save and load', () => {
     const rome = state.factions[FIXTURE.rome];
     if (!rome) throw new Error('no Rome');
     rome.advances = ['citizenRolls'];
-    rome.study = { advance: 'citizenRolls', daysLeft: 40 };
+    rome.study = { advance: 'citizenRolls', daysLeft: 40, paid: 3000 };
     expect(loadGame(saveGame(state))).toMatchObject({ ok: false, refusal: 'damaged' });
   });
 

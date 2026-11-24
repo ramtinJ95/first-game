@@ -2,12 +2,13 @@ import {
   ADVANCE_BRANCHES,
   ADVANCES,
   advancesOf,
+  PRICED_CITIES,
   hasStudied,
   type AdvanceBranch,
   type AdvanceKind,
 } from '../sim/advances/advances.ts';
 import { advanceGain } from '../sim/advances/gains.ts';
-import { studyRefund, type StudyOrder } from '../sim/advances/study.ts';
+import { citiesOf, studyPrice, studyRefund, type StudyOrder } from '../sim/advances/study.ts';
 import { bestStudy, nearestTarget, sharperMen, studyPayback } from '../sim/ai/study.ts';
 import { GARRISON_ODDS } from '../sim/ai/thresholds.ts';
 import { UNREST_DAYS, unrestDaysFor } from '../sim/cities.ts';
@@ -35,7 +36,10 @@ export const ADVANCE_RULE =
 export interface AdvanceRowView {
   readonly kind: AdvanceKind;
   readonly name: string;
+  /** The gold the realm pays to start it today. */
   readonly gold: number;
+  /** Why that is more than the listed price, in words, when it is. */
+  readonly why?: string;
   readonly days: number;
   /** What it would do for this realm today, in the realm's own numbers. */
   readonly does: string;
@@ -70,7 +74,9 @@ export function advancesView(
     branch,
     name: BRANCH_NAMES[branch],
     rows: advancesOf(branch).map((kind) => {
-      const { name, gold, days } = ADVANCES[kind];
+      const { name, days } = ADVANCES[kind];
+      const gold = studyPrice(state, faction, kind);
+      const why = priceWhy(state, faction, kind);
       const status = hasStudied(record, kind)
         ? 'studied'
         : record?.study?.advance === kind
@@ -88,6 +94,7 @@ export function advancesView(
         kind,
         name,
         gold,
+        ...(why ? { why } : {}),
         days,
         does: doesText(state, faction, kind),
         effect: ADVANCE_EFFECTS[kind],
@@ -179,6 +186,14 @@ function learned(state: State, faction: FactionId, kind: AdvanceKind): State['fa
   return { ...state.factions, [faction]: { ...record, advances: [...record.advances, kind] } };
 }
 
+/** Why the realm pays more than the listed price, or undefined when it pays the listed price. */
+export function priceWhy(state: State, faction: FactionId, kind: AdvanceKind): string | undefined {
+  const listed = ADVANCES[kind].gold;
+  if (studyPrice(state, faction, kind) <= listed) return undefined;
+  const cities = citiesOf(state, faction);
+  return `Listed at ${whole(listed)} gold for a realm of up to ${PRICED_CITIES} cities. It adds to every city, so your ${cities} cities pay ${whole(listed)} × ${cities} ÷ ${PRICED_CITIES}.`;
+}
+
 function paybackText(state: State, faction: FactionId, kind: AdvanceKind): string {
   const years = studyPayback(state, faction, kind);
   if (years === undefined) return 'Pays nothing back today';
@@ -190,7 +205,7 @@ function refusalText(state: State, faction: FactionId, kind: AdvanceKind): strin
   if (!record) return 'Your realm has fallen';
   if (record.defeatedOn !== null) return 'Your realm has fallen';
   if (record.study) return `Studying ${ADVANCES[record.study.advance].name}; one at a time`;
-  const { gold } = ADVANCES[kind];
+  const gold = studyPrice(state, faction, kind);
   if (record.stores.gold < gold) return `Needs ${whole(gold - record.stores.gold)} more gold`;
   return undefined;
 }
@@ -215,6 +230,6 @@ export function studyLine(
 }
 
 /** The words of the cancel button: the gold that giving up the study gives back. */
-export function cancelText(advance: AdvanceKind): string {
-  return `Give up (${whole(studyRefund(advance))} gold back)`;
+export function cancelText(paid: number): string {
+  return `Give up (${whole(studyRefund(paid))} gold back)`;
 }

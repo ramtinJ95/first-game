@@ -9,6 +9,8 @@ import {
   startGame,
   untilDrawn,
 } from '../../../e2e/support.ts';
+import { changeCityOwner } from '../../../src/sim/cities.ts';
+import type { CityId } from '../../../src/sim/ids.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
 import { defineScenario } from '../scenario.ts';
 
@@ -37,7 +39,27 @@ function studying(daysLeft: number): GameState {
   if (!realm) throw new Error('no Rome');
   realm.stores.gold = 15_000;
   realm.advances = ['standardCoin'];
-  realm.study = { advance: 'fallowFields', daysLeft };
+  realm.study = { advance: 'fallowFields', daysLeft, paid: 6000 };
+  return state;
+}
+
+/** Rome on day 1 with the eight cities nearest Roma besides its own, twelve in all, and nothing studied. */
+function largeRealm(): GameState {
+  const state = startGame();
+  const roma = state.cities['roma' as CityId];
+  const realm = state.factions[rome];
+  if (!roma || !realm) throw new Error('no Roma');
+  realm.stores.gold = 15_000;
+  const km = (c: { position: { x: number; y: number } }) =>
+    Math.hypot(c.position.x - roma.position.x, c.position.y - roma.position.y);
+  const nearest = Object.values(state.cities)
+    .filter((c) => c.owner !== rome)
+    .sort((a, b) => km(a) - km(b))
+    .slice(0, 8);
+  for (const city of nearest) {
+    changeCityOwner(state, city.id, rome);
+    city.unrestDays = 0;
+  }
   return state;
 }
 
@@ -72,6 +94,21 @@ export default defineScenario({
       'panel-390',
       'The Advances panel at 390 px wide, with the top bar naming the days left',
     );
+    await resize(page, WIDE);
+    await page.getByTestId('advances-button').click();
+
+    await load(page, largeRealm());
+    await page.getByTestId('advances-button').click();
+    await expect(page.getByTestId('advance-standardCoin-price')).toContainText(
+      'your 12 cities pay',
+    );
+    await shot(
+      'large-realm-1280',
+      'The Advances panel for a Rome of 12 cities at 1280 by 720: the four advances that pay every city cost 12 eighths of their listed price, and each says why',
+    );
+    await resize(page, PHONE);
+    await page.getByTestId('advance-standardCoin-price').scrollIntoViewIfNeeded();
+    await shot('large-realm-390', 'The same panel for a Rome of 12 cities at 390 px wide');
     await resize(page, WIDE);
     await page.getByTestId('advances-button').click();
 

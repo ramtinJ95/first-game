@@ -1,4 +1,4 @@
 {
-  "adds": "Each faction's advances: those it has studied, and the one it studies with its days left; the page may keep the Advances panel open, and an alert may name the panel a click opens. A save from before advances loads with nothing studied and nothing at study.",
+  "adds": "Each faction's advances: those it has studied, and the one it studies with its days left and the gold paid for it; the page may keep the Advances panel open, and an alert may name the panel a click opens. A save from before advances loads with nothing studied and nothing at study.",
   "olderSavesLoad": true
 }

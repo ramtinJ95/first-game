@@ -25,7 +25,7 @@ function withGold(share: number): GameState {
 describe('the news of advances', () => {
   test('tells the player of an advance its realm finished, without stopping the game', () => {
     const before = buildFixture();
-    rome(before).study = { advance: 'standardCoin', daysLeft: 1 };
+    rome(before).study = { advance: 'standardCoin', daysLeft: 1, paid: 6000 };
     const { state: after, events } = tick(before, [], world);
     const news = advanceNewsOfDay(before, after, events, new Set([HINT_TOLD]));
     expect(news).toEqual([
@@ -45,7 +45,7 @@ describe('the news of advances', () => {
     const before = buildFixture();
     const carthage = before.factions[FIXTURE.carthage];
     if (!carthage) throw new Error('expected Carthage');
-    carthage.study = { advance: 'citizenRolls', daysLeft: 1 };
+    carthage.study = { advance: 'citizenRolls', daysLeft: 1, paid: 3000 };
     const { state: after, events } = tick(before, [], world);
     expect(events.some((event) => event.kind === 'advanceFinished')).toBe(true);
     expect(advanceNewsOfDay(before, after, events, new Set([HINT_TOLD]))).toEqual([]);
@@ -71,7 +71,7 @@ describe('the news of advances', () => {
 
   test('gives no hint to a realm that studies or has studied an advance', () => {
     const studying = withGold(1);
-    rome(studying).study = { advance: 'citizenRolls', daysLeft: 50 };
+    rome(studying).study = { advance: 'citizenRolls', daysLeft: 50, paid: 3000 };
     const one = tick(studying, [], world);
     expect(advanceNewsOfDay(studying, one.state, one.events, new Set())).toEqual([]);
 

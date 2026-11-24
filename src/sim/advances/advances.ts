@@ -74,9 +74,9 @@ export const ADVANCES = {
   citizenRolls: {
     name: 'Citizen rolls',
     branch: 'statecraft',
-    gold: 6000,
+    gold: 3000,
     days: 300,
-    levyShare: 1.2,
+    levyShare: 1.1,
   },
   clemency: { name: 'Clemency', branch: 'statecraft', gold: 1500, days: 120, unrestShare: 0.5 },
   longContracts: {
@@ -87,6 +87,19 @@ export const ADVANCES = {
     guardShare: 1.5,
   },
 } as const satisfies Record<AdvanceKind, AdvanceRow & { readonly [effect: string]: unknown }>;
+
+/**
+ * The advances whose gain grows with every city of the realm. Past PRICED_CITIES cities a
+ * realm pays their listed gold times its cities over PRICED_CITIES, so a large realm buys
+ * them back no sooner than a small one.
+ */
+export const GROWING_ADVANCES: readonly AdvanceKind[] = [
+  'standardCoin',
+  'fallowFields',
+  'marketWeights',
+  'citizenRolls',
+];
+export const PRICED_CITIES = 8;
 
 /** The share of an advance's gold that giving up its study gives back. The rest is spent. */
 export const STUDY_REFUND = 0.5;

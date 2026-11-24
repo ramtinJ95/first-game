@@ -214,3 +214,30 @@ export function onNotice(state: GameState, power: FactionId): void {
   if (!faction) throw new Error(`no faction ${power}`);
   faction.noticeSince = (state.day - NOTICE_DAYS) as Day;
 }
+
+/**
+ * Gives Rome copies of Capua, each a city and province of its own, until it holds `cities`
+ * cities, for a test of a realm past the cost of governing.
+ */
+export function growRome(state: GameState, cities: number): void {
+  const capua = state.cities[FIXTURE.capua];
+  const province = capua && state.provinces[capua.province];
+  if (!capua || !province) throw new Error('expected Capua');
+  let held = Object.values(state.cities).filter((city) => city.owner === FIXTURE.rome).length;
+  for (let i = 0; held < cities; i++) {
+    const id = `${capua.id}${String.fromCharCode(97 + i)}` as CityId;
+    if (Object.hasOwn(state.cities, id)) continue;
+    const provinceId = `${province.id}${String.fromCharCode(97 + i)}` as ProvinceId;
+    state.cities[id] = {
+      ...(JSON.parse(JSON.stringify(capua)) as typeof capua),
+      id,
+      province: provinceId,
+    };
+    state.provinces[provinceId] = {
+      ...(JSON.parse(JSON.stringify(province)) as typeof province),
+      id: provinceId,
+      city: id,
+    };
+    held++;
+  }
+}

@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import type { DayEvent } from '../events.ts';
-import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld, growRome } from '../fixture.ts';
 import type { Order } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
 import type { GameState } from '../state/game-state.ts';
 import { tick } from '../tick.ts';
-import { ADVANCES, STUDY_REFUND, type AdvanceKind } from './advances.ts';
+import { ADVANCES, GROWING_ADVANCES, STUDY_REFUND, type AdvanceKind } from './advances.ts';
+import { citiesOf, studyPrice } from './study.ts';
 
 const world = fixtureWorld();
 
@@ -44,7 +45,11 @@ describe('studying an advance', () => {
     const { gold, days } = ADVANCES.standardCoin;
     const ordered = tick(rich(), [study('standardCoin')], world);
     expect(ordered.rejected).toEqual([]);
-    expect(rome(ordered.state).study).toEqual({ advance: 'standardCoin', daysLeft: days - 1 });
+    expect(rome(ordered.state).study).toEqual({
+      advance: 'standardCoin',
+      daysLeft: days - 1,
+      paid: gold,
+    });
     const before = rome(rich()).stores.gold;
     expect(rome(ordered.state).stores.gold).toBeLessThan(before - gold + 100);
 
@@ -101,5 +106,44 @@ describe('studying an advance', () => {
     const result = tick(rich(), [cancel], world);
     expect(result.rejected.map((r) => r.reason)).toEqual([`${FIXTURE.rome} is studying nothing`]);
     expectConsistent(result.state);
+  });
+
+  test("a realm past 8 cities pays the growing advances' price times its cities over 8, and the others as listed", () => {
+    const state = rich();
+    expect(studyPrice(state, FIXTURE.rome, 'standardCoin')).toBe(ADVANCES.standardCoin.gold);
+    growRome(state, 12);
+    expect(citiesOf(state, FIXTURE.rome)).toBe(12);
+    for (const kind of GROWING_ADVANCES)
+      expect(studyPrice(state, FIXTURE.rome, kind)).toBe((ADVANCES[kind].gold * 12) / 8);
+    expect(studyPrice(state, FIXTURE.rome, 'clemency')).toBe(ADVANCES.clemency.gold);
+    const before = rome(state).stores.gold;
+    const ordered = tick(state, [study('standardCoin')], world).state;
+    expect(rome(ordered).study?.paid).toBe(9000);
+    expect(rome(ordered).stores.gold).toBeLessThan(before - 9000 + 100);
+    expectConsistent(ordered);
+  });
+
+  test('the price is fixed on the day study starts, and giving up returns half of what was paid', () => {
+    const state = rich();
+    const ordered = tick(state, [study('citizenRolls')], world).state;
+    expect(rome(ordered).study?.paid).toBe(ADVANCES.citizenRolls.gold);
+    growRome(ordered, 16);
+    expect(studyPrice(ordered, FIXTURE.rome, 'citizenRolls')).toBe(ADVANCES.citizenRolls.gold * 2);
+    expect(rome(ordered).study?.paid).toBe(ADVANCES.citizenRolls.gold);
+    const gold = rome(ordered).stores.gold;
+    const cancelled = tick(ordered, [cancel], world).state;
+    const back = rome(cancelled).stores.gold - gold;
+    expect(back).toBeGreaterThan(ADVANCES.citizenRolls.gold / 2 - 100);
+    expect(back).toBeLessThan(ADVANCES.citizenRolls.gold / 2 + 100);
+    expectConsistent(cancelled);
+  });
+
+  test('a realm past 8 cities that holds the listed gold but not its price is refused', () => {
+    const state = buildFixture();
+    growRome(state, 16);
+    rome(state).stores.gold = ADVANCES.standardCoin.gold + 100;
+    const result = tick(state, [study('standardCoin')], world);
+    expect(result.rejected).toHaveLength(1);
+    expect(rome(result.state).study).toBeNull();
   });
 });

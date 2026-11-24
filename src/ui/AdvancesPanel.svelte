@@ -31,7 +31,7 @@
         data-testid="advances-cancel"
         disabled={cancelling}
         onclick={() => actions.issue({ kind: 'cancelStudy', faction: game.player })}
-        >{cancelling ? 'Giving up ordered' : cancelText(study.advance)}</button
+        >{cancelling ? 'Giving up ordered' : cancelText(study.paid)}</button
       >
     {/if}
   </div>
@@ -49,6 +49,9 @@
                   >{/if}
                 <span class="cost">{whole(row.gold)} gold · {row.days} days</span>
               </div>
+              {#if row.why}<p class="why muted" data-testid="advance-{row.kind}-price">
+                  {row.why}
+                </p>{/if}
               <p class="effect">{row.effect}</p>
               <p class="does" data-testid="advance-{row.kind}-does">For you today: {row.does}</p>
               {#if row.status === 'studied'}
@@ -159,6 +162,7 @@
     background: var(--good);
   }
 
+  .why,
   .effect,
   .does,
   .payback,

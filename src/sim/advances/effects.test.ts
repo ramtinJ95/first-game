@@ -79,13 +79,13 @@ describe('what each advance does', () => {
     );
   });
 
-  test('Citizen rolls: a fifth more manpower a day and a fifth more to call up', () => {
+  test('Citizen rolls: a tenth more manpower a day and a tenth more to call up', () => {
     const state = citiesAlone();
     const before = limitsOf(state).get(FIXTURE.rome)?.manpower ?? 0;
     const daily = dailyBalances(state).get(FIXTURE.rome)?.manpower ?? 0;
     const gain = advanceGain(state, FIXTURE.rome, 'citizenRolls');
-    expect(gain.daily.manpower).toBeCloseTo(daily * 0.2, 6);
-    expect(gain.limits.manpower).toBeCloseTo(before * 0.2, 6);
+    expect(gain.daily.manpower).toBeCloseTo(daily * 0.1, 6);
+    expect(gain.limits.manpower).toBeCloseTo(before * 0.1, 6);
   });
 
   test('Marching rations: each man under arms eats a tenth less', () => {
@@ -182,7 +182,7 @@ describe('what each advance does', () => {
 
   test('Drillmasters: generals rise to 5 when study ends, none falls, and new armies start at 5', () => {
     const state = buildFixture();
-    rome(state).study = { advance: 'drillmasters', daysLeft: 1 };
+    rome(state).study = { advance: 'drillmasters', daysLeft: 1, paid: 3000 };
     const [first, second] = Object.values(state.armies).filter((a) => a.owner === FIXTURE.rome);
     if (!first) throw new Error('expected a Roman army');
     first.generalSkill = 3;

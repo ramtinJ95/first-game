@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ADVANCES } from '../sim/advances/advances.ts';
-import { buildFixture, FIXTURE } from '../sim/fixture.ts';
+import { buildFixture, FIXTURE, growRome } from '../sim/fixture.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { advancesView, studyLine } from './advances-text.ts';
 
@@ -37,7 +37,7 @@ describe('the advances panel', () => {
 
     const busy = buildFixture();
     rome(busy).stores.gold = 50_000;
-    rome(busy).study = { advance: 'citizenRolls', daysLeft: 12 };
+    rome(busy).study = { advance: 'citizenRolls', daysLeft: 12, paid: 3000 };
     expect(row(busy, 'citizenRolls')?.status).toBe('studying');
     expect(row(busy, 'clemency')?.refusal).toBe('Studying Citizen rolls; one at a time');
   });
@@ -59,11 +59,23 @@ describe('the advances panel', () => {
       days: 'None',
       full: 'Nothing is being studied.',
     });
-    rome(state).study = { advance: 'fallowFields', daysLeft: 1 };
+    rome(state).study = { advance: 'fallowFields', daysLeft: 1, paid: 6000 };
     expect(studyLine(state, FIXTURE.rome)).toEqual({
       short: 'Fallow fields · 1 day',
       days: '1 day',
       full: 'Studying Fallow fields: 1 day left.',
     });
+  });
+
+  test('a realm past 8 cities reads the price it pays, and why it is above the listed price', () => {
+    const state = buildFixture();
+    growRome(state, 12);
+    expect(row(state, 'standardCoin')?.gold).toBe(9000);
+    expect(row(state, 'standardCoin')?.why).toBe(
+      'Listed at 6,000 gold for a realm of up to 8 cities. It adds to every city, so your 12 cities pay 6,000 × 12 ÷ 8.',
+    );
+    expect(row(state, 'clemency')).toMatchObject({ gold: ADVANCES.clemency.gold });
+    expect(row(state, 'clemency')?.why).toBeUndefined();
+    expect(row(buildFixture(), 'standardCoin')?.why).toBeUndefined();
   });
 });
