@@ -240,7 +240,7 @@ describe('a war that holds back a power on notice', () => {
    */
   function heldBySyracusae(): GameState {
     const state = game(8000, 'full', 100);
-    delete state.truces[warKey(carthage, syracusae)];
+    Reflect.deleteProperty(state.truces, warKey(carthage, syracusae));
     state.wars[warKey(carthage, syracusae)] = newWar(carthage, syracusae, 90 as Day);
     const army = Object.values(state.armies).find((a) => a.owner === carthage);
     const city = state.cities['syracusae' as CityId];
@@ -254,7 +254,7 @@ describe('a war that holds back a power on notice', () => {
   /** The day after `before` with the war on Syracusae over. */
   function warOver(before: GameState): GameState {
     const after = structuredClone(before);
-    delete after.wars[warKey(carthage, syracusae)];
+    Reflect.deleteProperty(after.wars, warKey(carthage, syracusae));
     after.day = (before.day + 1) as Day;
     return after;
   }
