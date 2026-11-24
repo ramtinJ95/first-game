@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { threatNewsOfDay } from '../../src/app/threat-news.ts';
+import { THREAT_SPARE_RISE, threatNewsOfDay } from '../../src/app/threat-news.ts';
+import { warReadiness } from '../../src/sim/ai/war.ts';
 import { dateText } from '../../src/app/names.ts';
 import type { FactionId } from '../../src/sim/ids.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
@@ -19,6 +20,7 @@ const { values, positionals } = parseArgs({
     players: { type: 'string', default: 'cautious,ignoring,answering' },
     json: { type: 'boolean', default: false },
     summarize: { type: 'boolean', default: false },
+    'old-stops': { type: 'boolean', default: false },
     label: { type: 'string', default: 'the game as it is' },
   },
 });
@@ -36,6 +38,7 @@ const { values, positionals } = parseArgs({
  */
 const FIRST_ONLY = { forbid: [...Object.values(SECOND_LEVELS), ...GREAT_WORKS] };
 const NOTHING = { builds: () => [] };
+const climbs = !values['old-stops'];
 const PLAYERS = {
   cautious: {},
   ignoring: { peaceful: true },
@@ -99,6 +102,14 @@ interface Game {
   lossDays: number[];
   warnings: number;
   stops: number;
+  /** Wars on Rome declared THREAT_SPARE_RISE points or more above the share Rome was last stopped for. */
+  warsAboveStop: number;
+  /**
+   * The same two counts by the rule before a climb stopped the game, told beside the game as it
+   * is played: the game itself is the same only for a Rome that does nothing about a warning.
+   */
+  stopsOld: number;
+  warsAboveStopOld: number;
 }
 
 function romeNow(state: GameState) {
@@ -168,7 +179,11 @@ function play(player: Player, seed: number, years: number): Game {
     lossDays: [],
     warnings: 0,
     stops: 0,
+    warsAboveStop: 0,
+    stopsOld: 0,
+    warsAboveStopOld: 0,
   };
+  const toldOld = new Set<string>();
   const told = new Set<string>();
   const end = playCautiousRome(
     seed,
@@ -177,7 +192,23 @@ function play(player: Player, seed: number, years: number): Game {
       const day = before.day;
       const year = game.years[Math.floor((day - 1) / 365)];
       if (!year) return;
-      for (const alert of threatNewsOfDay(before, after, world, told)) {
+      // A war counts above its stop when declared at THREAT_SPARE_RISE points or more over the share Rome was last stopped for.
+      const above = (keys: ReadonlySet<string>, by: FactionId) => {
+        const stop = [...keys].find((key) => key.startsWith(`threat-stop:${by}:`));
+        const readiness = warReadiness(before, world, by, rome)?.readiness;
+        if (!stop || readiness === undefined) return 0;
+        const share = Number(stop.split(':')[3]);
+        return Math.round(Math.min(1, readiness) * 100) - share >= THREAT_SPARE_RISE ? 1 : 0;
+      };
+      for (const event of events)
+        if (event.kind === 'warDeclared' && event.against === rome) {
+          game.warsAboveStop += above(told, event.by);
+          game.warsAboveStopOld += above(toldOld, event.by);
+        }
+      for (const alert of threatNewsOfDay(before, after, world, toldOld, undefined, true, false))
+        if (alert.kind === 'warThreat' && alert.pause) game.stopsOld++;
+      for (const alert of threatNewsOfDay(before, after, world, told, undefined, true, climbs)) {
+        if (alert.kind !== 'warThreat') continue;
         if (alert.pause) game.stops++;
         const named = warnedPowers(alert.text).length;
         game.warnings += named;
@@ -231,7 +262,7 @@ function play(player: Player, seed: number, years: number): Game {
           cities: now.cities,
         });
     },
-    PLAYERS[player],
+    { ...PLAYERS[player], climbs },
   );
   game.fellOn = end.factions[rome]?.defeatedOn ?? null;
   return game;
@@ -288,7 +319,7 @@ function print(games: readonly Game[]) {
       `By period: wars on Rome in years 1–5 ${sum((g) => early(g.warDays))}, in years 6–10 ${sum((g) => late(g.warDays))}; cities lost in years 1–5 ${sum((g) => early(g.lossDays))}, in years 6–10 ${sum((g) => late(g.lossDays))}.`,
     );
     console.log(
-      `Summary: | ${values.label} | ${player} | cities lost ${sum((g) => g.citiesLost)} (median ${median(mine.map((g) => g.citiesLost))}) | falls ${mine.filter((g) => g.fellOn !== null).length} | wars on Rome ${sum((g) => g.wars)} | warnings a game ${(sum((g) => g.warnings) / mine.length).toFixed(1)} | stops a game ${(sum((g) => g.stops) / mine.length).toFixed(1)} | cities at end ${spread(mine.map((g) => g.years.at(-1)?.cities ?? 0))} | men at end ${spread(mine.map((g) => g.years.at(-1)?.men ?? 0))} | gold at end ${spread(mine.map((g) => g.years.at(-1)?.gold ?? 0))} |`,
+      `Summary: | ${values.label} | ${player} | cities lost ${sum((g) => g.citiesLost)} (median ${median(mine.map((g) => g.citiesLost))}) | falls ${mine.filter((g) => g.fellOn !== null).length} | wars on Rome ${sum((g) => g.wars)} | warnings a game ${(sum((g) => g.warnings) / mine.length).toFixed(1)} | stops a game ${(sum((g) => g.stops) / mine.length).toFixed(1)} | wars above the last stop ${sum((g) => g.warsAboveStop ?? 0)} | by the rule before, beside it: stops a game ${(sum((g) => g.stopsOld ?? 0) / mine.length).toFixed(1)}, wars above the last stop ${sum((g) => g.warsAboveStopOld ?? 0)} | cities at end ${spread(mine.map((g) => g.years.at(-1)?.cities ?? 0))} | men at end ${spread(mine.map((g) => g.years.at(-1)?.men ?? 0))} | gold at end ${spread(mine.map((g) => g.years.at(-1)?.gold ?? 0))} |`,
     );
   }
 }

@@ -88,6 +88,7 @@ export function playCautiousRome(
     peaceful = false,
     guards = 'never',
     answer = false,
+    climbs = true,
     builds,
     drops = [],
     forbid = [],
@@ -96,6 +97,8 @@ export function playCautiousRome(
     peaceful?: boolean;
     guards?: GuardPlay;
     answer?: boolean;
+    /** Whether a power that climbs THREAT_SPARE_RISE points above its last stop stops the game again (`threatNewsOfDay`); false plays the rule before it. */
+    climbs?: boolean;
     /** Rome's building orders for the day, in place of the AI's. */
     builds?: (state: GameState) => Order[];
     /** Kinds of Rome's AI orders it does not give, such as `recruit` for a ruler who raises men only to answer a warning. */
@@ -203,7 +206,7 @@ export function playCautiousRome(
       }
       if (!route || (route.owner !== rome && route.partner !== rome)) ledger.delete(id);
     }
-    for (const alert of threatNewsOfDay(state, next, world, told)) {
+    for (const alert of threatNewsOfDay(state, next, world, told, undefined, true, climbs)) {
       const at = alert.focus?.at;
       warnedAt = Object.values(next.cities).find(
         (city) => at && city.owner === rome && city.position.x === at.x && city.position.y === at.y,
