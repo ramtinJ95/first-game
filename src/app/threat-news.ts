@@ -1,4 +1,7 @@
 import { warReadiness } from '../sim/ai/war.ts';
+import { BUILDINGS } from '../sim/buildings/buildings.ts';
+import { executeOrder, type Order } from '../sim/orders/orders.ts';
+import { worthBuilding } from './building-hint.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { CityId, FactionId } from '../sim/ids.ts';
 import type { GameState } from '../sim/state/game-state.ts';
@@ -197,7 +200,7 @@ export function threatNewsOfDay(
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
   const text = stops
     ? others.length === 0
-      ? `${first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined)} See At peace in Wars.`
+      ? `${first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat))} See At peace in Wars.`
       : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}. What lowers each is under At peace in Wars.`
     : ranOnText(
         after,
@@ -456,16 +459,65 @@ function whatCounts(
   by: number | undefined,
   where: Where = 'panel',
   muster?: TrainingMuster,
+  treasury?: string,
 ): string {
   if (threat.pressed)
     return ` ${raiseAdvice(state, power, waiting, by, where, muster)}. It weighs you so only while you hold no more cities than at the start.`;
   const front = state.cities[threat.front];
   const gold = state.factions[state.player]?.stores.gold ?? 0;
   const hoard =
-    threat.hoard > 0
+    treasury ??
+    (threat.hoard > 0
       ? ` Your treasury of ${whole(gold)} gold lowers the strength it needs by ${Math.round(threat.hoard * 100)}%, so more gold brings war nearer.`
-      : '';
+      : '');
   return `${hoard}${front ? ` Your armies on land within ${whole(WAR_FRONT_KM)} km count; more men, or guards at ${front.name} for ${GUARD_DETER_DAYS} days, lower it.` : ''}`;
+}
+
+/** A share of the strength a power needs that the player's treasury takes off, below which the warning does not name a purchase. */
+export const CLEAR_HOARD = 0.1;
+
+/**
+ * What the player's treasury does to the warning, said plainly for a stranger who sits on gold,
+ * with what spending it would do: the building that repays soonest in a city that builds nothing
+ * (`worthBuilding`, as the building hint names it), ordered on a copy of the day through the
+ * rules' own handler, and the share the power would stand at with that gold spent. Said when the
+ * treasury is what takes the power to NOTICE_SHARE, or takes CLEAR_HOARD or more off the
+ * strength it needs, and nothing when no building is worth buying or the purchase leaves the
+ * share as it reads now. The wars panel keeps the plain hoard sentence, which it reckons on every
+ * refresh without a copy of the day.
+ */
+export function treasuryAdvice(
+  state: State,
+  world: World,
+  power: FactionId,
+  threat: Threat,
+): string | undefined {
+  if (threat.pressed || threat.hoard <= 0) return undefined;
+  const empty = structuredClone(state) as GameState;
+  const stores = empty.factions[state.player]?.stores;
+  if (stores) stores.gold = 0;
+  // Reckoned again, not scaled: with the treasury empty the power may weigh the player another way.
+  const without = warReadiness(empty, world, power, state.player)?.readiness ?? 0;
+  const decides = threat.readiness >= NOTICE_SHARE && without < NOTICE_SHARE;
+  if (!decides && threat.hoard < CLEAR_HOARD) return undefined;
+  const found = worthBuilding(state);
+  if (!found) return undefined;
+  const spent = structuredClone(state) as GameState;
+  const order: Order = {
+    kind: 'build',
+    faction: state.player,
+    city: found.city.id,
+    building: found.kind,
+  };
+  if (executeOrder(spent, order, world)) return undefined;
+  const after = warReadiness(spent, world, power, state.player)?.readiness;
+  if (after === undefined || share(after) === share(threat.readiness)) return undefined;
+  const gold = state.factions[state.player]?.stores.gold ?? 0;
+  const { name, gold: price } = BUILDINGS[found.kind];
+  const why = decides
+    ? `is what brings it this near: without that gold it would stand at ${share(without)}`
+    : `takes ${Math.round(threat.hoard * 100)}% off the strength it needs`;
+  return ` Your treasury of ${whole(gold)} gold ${why}. Building ${name} at ${found.city.name} for ${whole(price)} gold would take it to ${share(after)}.`;
 }
 
 /** Where the advice is read: the corner, with room for the warning's 12 lines, or the wars panel. */

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import type { System } from '../sim/systems.ts';
+import type { Order } from '../sim/orders/orders.ts';
+import { decideAll } from '../sim/ai/decide.ts';
 import { createClock, type Speed } from './clock.ts';
 
 const world = fixtureWorld();
@@ -401,5 +403,26 @@ describe('clock', () => {
       [2, 3],
     ]);
     expect(clock.pending).toEqual([]);
+  });
+
+  it("hands onDay the player's orders that day's tick played, and none the AI gave", () => {
+    const time = fakeTime();
+    const played: Order[][] = [];
+    const clock = createClock({
+      world,
+      state: buildFixture(),
+      now: time.now,
+      decide: (state) => decideAll(state, world),
+      onDay: (_before, _after, _events, orders) => played.push([...orders]),
+    });
+    const order = {
+      kind: 'setStance',
+      faction: FIXTURE.rome,
+      army: FIXTURE.romanArmy,
+      stance: 'allOutAssault',
+    } as const;
+    clock.issue(order);
+    run(clock, time, 2000);
+    expect(played).toEqual([[order], []]);
   });
 });

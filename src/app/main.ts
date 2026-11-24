@@ -56,6 +56,7 @@ import {
 } from './saves.ts';
 import { turningPoints } from './turning-points.ts';
 import { threatFadedNewsOfDay, threatNewsOfDay } from './threat-news.ts';
+import { createAnswerNews } from './answer-news.ts';
 import { trainingThreats } from '../ui/recruit-threats.ts';
 import { leaderNews, leadingPower, worldNewsOfDay } from './world-news.ts';
 import {
@@ -178,6 +179,8 @@ let desertion: Desertion | undefined;
 let tradeTroubles: readonly TradeTrouble[] = [];
 /** The leading power the player was last told of. A save keeps it; a new game or an older save starts from the one that leads. */
 let leaderTold: FactionId | undefined;
+/** The game played without the player's answer to a warning, while one may still turn out either way. */
+let answerNews = createAnswerNews(world);
 
 function fateOpen(state: DeepReadonly<GameState>, id: CityId): boolean {
   const city = state.cities[id];
@@ -244,7 +247,8 @@ const clock = createClock({
     const last = own.at(-1);
     if (last) showNotice(refusalText(clock.state, last.reason));
   },
-  onDay(before, after, events) {
+  onDay(before, after, events, orders) {
+    answerNews.onDay(before, after, events, orders);
     const saw = sightFor(before);
     const sees = sightFor(after);
     const weak = weakSiegeNews(before, after, weakSieges);
@@ -435,6 +439,14 @@ const meter = metering ? showFrameMeter(host) : undefined;
 function loop() {
   const shown = clock.state;
   clock.frame();
+  // The game without the player's answer plays its day on a frame that played none of the game's.
+  if (clock.state === shown && answerNews.waiting) {
+    const lines = answerNews.next();
+    if (lines.length > 0) {
+      chronicle = [...[...lines].reverse(), ...chronicle].slice(0, CHRONICLE_KEPT);
+      view.refresh();
+    }
+  }
   // The top bar shows a new day in the frame that draws it, so Space pauses on the
   // day the player reads, not one the panels have yet to show.
   if (clock.state !== shown) view.refresh();
@@ -517,6 +529,7 @@ function enter(
   renderer.leaveGame();
   forgetNamedWaits();
   clock.load(state, page?.pendingPeace);
+  answerNews = createAnswerNews(world);
   chronicle = page?.chronicle ?? [];
   toldOnce = new Set(page?.told);
   occupied = new Map(page?.occupied);

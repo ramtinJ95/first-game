@@ -21,6 +21,7 @@ import { NOTICE_DAYS } from '../sim/ai/thresholds.ts';
 import { notice } from '../sim/systems/notice.ts';
 import { recruitThreats, trainingThreats } from '../ui/recruit-threats.ts';
 import { decideOrders } from '../sim/ai/decide.ts';
+import { warReadiness } from '../sim/ai/war.ts';
 import { areAtWar } from '../sim/wars.ts';
 import { ALL_PAUSES, stopsOfDay } from './pauses.ts';
 import type { Alert } from './alerts.ts';
@@ -100,6 +101,48 @@ function onNotice(state: GameState, since: number, told: Set<string>) {
   return threatNewsOfDay(state, state, world, told);
 }
 
+describe("the warning's word on a full treasury", () => {
+  /** The warning's text, and Carthage's share on a copy of the day with Rome's Forum at Roma ordered. */
+  function warned(state: GameState) {
+    const [alert] = newsOf(state, new Set());
+    const spent = structuredClone(state);
+    expect(
+      executeOrder(
+        spent,
+        { kind: 'build', faction: rome, city: 'roma' as CityId, building: 'forum' },
+        world,
+      ),
+    ).toBeUndefined();
+    const after = Math.round((warReadiness(spent, world, carthage, rome)?.readiness ?? 0) * 100);
+    return { text: alert?.text ?? '', after };
+  }
+
+  test('says when the gold is what brings the power near war, and what the building worth buying would do', () => {
+    const { text, after } = warned(game(5300, 'full'));
+    expect(text).toContain(
+      `Your treasury of 8,568 gold is what brings it this near: without that gold it would stand at 67%. Building Forum at Roma for 6,500 gold would take it to ${after}%.`,
+    );
+    expect(after).toBeLessThan(90);
+  });
+
+  test('says how much the gold takes off when the power would stand near war without it', () => {
+    const { text, after } = warned(game(7000, 'full'));
+    expect(text).toContain(
+      `Your treasury of 8,568 gold takes 25% off the strength it needs. Building Forum at Roma for 6,500 gold would take it to ${after}%.`,
+    );
+  });
+
+  test('names no purchase when no city of the player may start one', () => {
+    const state = game(5300, 'full');
+    for (const city of Object.values(state.cities))
+      if (city.owner === rome) city.construction = { building: 'temple', daysLeft: 100 };
+    const [alert] = newsOf(state, new Set());
+    expect(alert?.text).toContain(
+      'Your treasury of 8,568 gold lowers the strength it needs by 25%, so more gold brings war nearer.',
+    );
+  });
+});
+
 describe('the news of a power that could soon declare war on the player', () => {
   test('tells once when a power nears the odds it needs, with what the treasury takes off', () => {
     const told = new Set<string>();
@@ -107,7 +150,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     const news = newsOf(state, told);
     expect(news.map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Your treasury of [\d,]+ gold lowers the strength it needs by 25%, so more gold brings war nearer\. Your armies on land within 1,500 km count; more men, or guards at Roma for 90 days, lower it\. See At peace in Wars\.$/,
+        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Your treasury of [\d,]+ gold is what brings it this near: without that gold it would stand at \d+%\. Building Forum at Roma for 6,500 gold would take it to \d+%\. Your armies on land within 1,500 km count; more men, or guards at Roma for 90 days, lower it\. See At peace in Wars\.$/,
       ),
     ]);
     expect(news[0]?.tone).toBe('bad');
