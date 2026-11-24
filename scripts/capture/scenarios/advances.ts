@@ -130,9 +130,10 @@ export default defineScenario({
     await expect(page.getByTestId('advance-standardCoin-price')).toContainText(
       'your 12 cities pay',
     );
+    await page.getByTestId('branch-economy').scrollIntoViewIfNeeded();
     await shot(
       'large-realm-1280',
-      'The Advances panel for a Rome of 12 cities at 1280 by 720: the four advances that pay every city cost 12 eighths of their listed price, and each says why',
+      "The Advances panel for a Rome of 12 cities at 1280 by 720, scrolled to Economy: the advances that pay every city cost 12 eighths of their listed price, and each says why, and the top bar's None studied reads on the open panel's button",
     );
     await resize(page, PHONE);
     await page.getByTestId('advance-standardCoin-price').scrollIntoViewIfNeeded();

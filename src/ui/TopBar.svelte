@@ -156,6 +156,11 @@
     color: var(--bad);
   }
 
+  /* The open panel's button is drawn dark, where the warning colour cannot be read. */
+  .study.idle[aria-expanded='true'] .study-note {
+    color: inherit;
+  }
+
   /* Below 1280 px only the days fit beside the other buttons; the tooltip names the advance. */
   .study-note.narrow {
     display: none;

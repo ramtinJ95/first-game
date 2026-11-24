@@ -48,6 +48,9 @@ test.describe('advances', () => {
     await button.click();
     const panel = page.getByTestId('advances');
     await expect(panel.getByTestId('advances-now')).toContainText('Nothing is being studied.');
+    // The open panel's button is drawn dark, so its note takes the button's own light colour.
+    const ink = await button.evaluate((element) => getComputedStyle(element).color);
+    await expect(page.getByTestId('study-line')).toHaveCSS('color', ink);
     for (const branch of ['military', 'economy', 'statecraft'])
       await expect(panel.getByTestId(`branch-${branch}`).getByRole('listitem')).toHaveCount(3);
     const clemency = panel.getByTestId('advance-clemency');

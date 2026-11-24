@@ -38,6 +38,11 @@ export const STUDY_PAYBACK_YEARS = 6;
 
 const CHEAPEST = Math.min(...ADVANCE_KINDS.map((kind) => ADVANCES[kind].gold));
 
+/** The men the realm's daily food surplus would feed besides its own; food counts as worth only below FOOD_MARGIN_MEN. */
+export function spareFoodMen(state: State, faction: FactionId): number {
+  return (balanceOf(state, faction)?.food ?? 0) / UPKEEP_PER_MAN.food;
+}
+
 /**
  * What an advance is worth to the realm in gold a day, priced as a building is: gold as it
  * is, manpower at MANPOWER_PRICE, and food at FOOD_PRICE while the realm's harvest feeds
@@ -50,7 +55,7 @@ const CHEAPEST = Math.min(...ADVANCE_KINDS.map((kind) => ADVANCES[kind].gold));
  */
 export function advanceWorth(state: State, faction: FactionId, kind: AdvanceKind): number {
   const { gold, food, manpower } = advanceGain(state, faction, kind).daily;
-  const fed = (balanceOf(state, faction)?.food ?? 0) / UPKEEP_PER_MAN.food;
+  const fed = spareFoodMen(state, faction);
   const manDay = UPKEEP_PER_MAN.gold + foodPerManOf(state, faction) * FOOD_PRICE;
   let worth = gold + (fed < FOOD_MARGIN_MEN ? food * FOOD_PRICE : 0) + manpower * MANPOWER_PRICE;
   if (kind === 'drillmasters') worth += sharperMen(state, faction) * manDay;

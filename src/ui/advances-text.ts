@@ -9,7 +9,14 @@ import {
 } from '../sim/advances/advances.ts';
 import { advanceGain } from '../sim/advances/gains.ts';
 import { citiesOf, studyPrice, studyRefund, type StudyOrder } from '../sim/advances/study.ts';
-import { bestStudy, nearestTarget, sharperMen, studyPayback } from '../sim/ai/study.ts';
+import { FOOD_MARGIN_MEN } from '../sim/ai/build.ts';
+import {
+  bestStudy,
+  nearestTarget,
+  sharperMen,
+  spareFoodMen,
+  studyPayback,
+} from '../sim/ai/study.ts';
 import { GARRISON_ODDS } from '../sim/ai/thresholds.ts';
 import { UNREST_DAYS, unrestDaysFor } from '../sim/cities.ts';
 import { GUARD_GOLD } from '../sim/guards.ts';
@@ -230,7 +237,13 @@ export function priceWhy(state: State, faction: FactionId, kind: AdvanceKind): s
 
 function paybackText(state: State, faction: FactionId, kind: AdvanceKind): string {
   const years = studyPayback(state, faction, kind);
-  if (years === undefined) return 'Pays nothing back today';
+  if (years === undefined) {
+    const food = advanceGain(state, faction, kind).daily.food;
+    // Food counts at its gold price only while the harvest's surplus is thin, as for buildings.
+    if (food > 0 && spareFoodMen(state, faction) >= FOOD_MARGIN_MEN)
+      return `Pays nothing back today: your food already feeds ${whole(FOOD_MARGIN_MEN)} more men than you keep`;
+    return 'Pays nothing back today';
+  }
   return years > 20 ? 'Pays back in over 20 years' : `Pays back in ${years.toFixed(1)} years`;
 }
 

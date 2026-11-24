@@ -101,4 +101,16 @@ describe('the advances panel', () => {
     expect(buildingFirstLine(state, FIXTURE.rome)).toBeUndefined();
     expect(marked(state)).toEqual(['citizenRolls']);
   });
+
+  test('a food advance pays nothing while the food already feeds 2,000 more men, and says so', () => {
+    const thin = buildFixture();
+    expect(row(thin, 'marchingRations')?.payback).toMatch(/^Pays back in \d+\.\d years$/);
+    const full = buildFixture();
+    growRome(full, 16);
+    for (const kind of ['marchingRations', 'fallowFields'])
+      expect(row(full, kind)?.payback).toBe(
+        'Pays nothing back today: your food already feeds 2,000 more men than you keep',
+      );
+    expect(row(full, 'longContracts')?.payback).toBe('Pays nothing back today');
+  });
 });
