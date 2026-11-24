@@ -1,11 +1,11 @@
 import { parseArgs } from 'node:util';
 import type { FactionId } from '../../src/sim/ids.ts';
 import type { Order } from '../../src/sim/orders/orders.ts';
-import { ADVANCE_KINDS } from '../../src/sim/advances/advances.ts';
+import { ADVANCE_KINDS, type AdvanceKind } from '../../src/sim/advances/advances.ts';
 import { studyRefusal } from '../../src/sim/advances/study.ts';
-import { bestStudy } from '../../src/sim/ai/study.ts';
+import { bestStudy, studyPayback } from '../../src/sim/ai/study.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
-import { dailyBalances, limitsOf } from '../../src/sim/systems/economy.ts';
+import { dailyBalances, limitsOf, menOf } from '../../src/sim/systems/economy.ts';
 import { panelBuilds, playCautiousRome, rome, suggested } from '../cautious-rome.ts';
 import { buildingWorth } from '../../src/sim/ai/build.ts';
 import { reserveOf } from '../../src/sim/ai/situation.ts';
@@ -50,6 +50,9 @@ interface Year {
   choosing: number;
   /** Advances Rome had studied by the end of the year. */
   studied: number;
+  /** Men under arms at the end of the year: Rome's, and the most any other great power fields. */
+  men: number;
+  rivalMen: number;
 }
 
 const emptyYear = (): Year => ({
@@ -61,6 +64,8 @@ const emptyYear = (): Year => ({
   studying: 0,
   choosing: 0,
   studied: 0,
+  men: 0,
+  rivalMen: 0,
 });
 
 function count(years: Year[], before: GameState, after: GameState) {
@@ -80,6 +85,16 @@ function count(years: Year[], before: GameState, after: GameState) {
   if (realm?.study) year.studying++;
   else if (ADVANCE_KINDS.some((kind) => !studyRefusal(after, rome, kind))) year.choosing++;
   year.studied = realm?.advances.length ?? 0;
+  const men = new Map<FactionId, number>();
+  for (const army of Object.values(after.armies))
+    men.set(army.owner, (men.get(army.owner) ?? 0) + menOf(after, army));
+  year.men = men.get(rome as FactionId) ?? 0;
+  year.rivalMen = Math.max(
+    0,
+    ...Object.values(after.factions)
+      .filter((f) => f.kind === 'greatPower' && f.id !== rome)
+      .map((f) => men.get(f.id) ?? 0),
+  );
 }
 
 /** The panel's suggestion, on a day nothing is studied, with `gold` to spend. */
@@ -109,6 +124,9 @@ interface Snapshot {
   gold: number;
   /** Rome's cities with a building at work. */
   busy: number;
+  /** Each advance's payback in years for Rome, and for the great power with the most cities. */
+  paybacks: Partial<Record<AdvanceKind, number>>;
+  largest: Partial<Record<AdvanceKind, number>>;
   building?: { kind: BuildingKind; price: number; worth: number };
 }
 
@@ -139,10 +157,24 @@ function snapshot(state: GameState): Snapshot {
     if (!building || price / worth < building.price / building.worth)
       building = { kind: best.kind, price, worth };
   }
+  const paybacksOf = (faction: FactionId) =>
+    Object.fromEntries(
+      ADVANCE_KINDS.flatMap((kind) => {
+        const years = studyPayback(state, faction, kind);
+        return years === undefined ? [] : [[kind, years]];
+      }),
+    );
+  const counts = new Map<FactionId, number>();
+  for (const city of Object.values(state.cities))
+    if (state.factions[city.owner]?.kind === 'greatPower')
+      counts.set(city.owner, (counts.get(city.owner) ?? 0) + 1);
+  const [largest] = [...counts].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
   return {
     net,
     gold: state.factions[rome]?.stores.gold ?? 0,
     busy,
+    paybacks: paybacksOf(rome as FactionId),
+    largest: largest ? paybacksOf(largest[0]) : {},
     ...(building ? { building } : {}),
   };
 }
@@ -188,9 +220,11 @@ for (const player of players) {
   const games = played.map((p) => p.years);
   console.log(`\n### ${player}\n`);
   console.log(
-    '| year | days at the limit | gold lost to the limit | treasury rise | spare | net income | limit | days studying | days with one to choose | advances studied |',
+    '| year | days at the limit | gold lost to the limit | treasury rise | spare | net income | limit | days studying | days with one to choose | advances studied | men | largest rival’s men |',
   );
-  console.log('| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
+  console.log(
+    '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+  );
   let spareSum = 0;
   let atLimitSum = 0;
   for (let y = 0; y < years; y++) {
@@ -199,7 +233,7 @@ for (const player of players) {
     spareSum += spare;
     atLimitSum += of((r) => r.atLimit);
     console.log(
-      `| ${y + 1} | ${of((r) => r.atLimit)} | ${whole(of((r) => r.lost))} | ${whole(of((r) => r.rise))} | ${whole(spare)} | ${whole(of((r) => r.net))} | ${whole(of((r) => r.limit))} | ${of((r) => r.studying)} | ${of((r) => r.choosing)} | ${of((r) => r.studied)} |`,
+      `| ${y + 1} | ${of((r) => r.atLimit)} | ${whole(of((r) => r.lost))} | ${whole(of((r) => r.rise))} | ${whole(spare)} | ${whole(of((r) => r.net))} | ${whole(of((r) => r.limit))} | ${of((r) => r.studying)} | ${of((r) => r.choosing)} | ${of((r) => r.studied)} | ${whole(of((r) => r.men))} | ${whole(of((r) => r.rivalMen))} |`,
     );
   }
   const busyYears = games.map(
@@ -223,6 +257,18 @@ for (const player of players) {
         const days = ADVANCES[kind].gold / Math.max(net, 1);
         return `${ADVANCES[kind].name} ${whole(ADVANCES[kind].gold)}: ${Math.round(days)} days, ${whole(days * worth)} gold`;
       }).join('; ') + '.',
+    );
+    const payback = (
+      pick: (s: Snapshot) => Partial<Record<AdvanceKind, number>>,
+      kind: AdvanceKind,
+    ) => {
+      const years = shots.map((s) => pick(s)[kind] ?? Infinity);
+      const paying = years.filter(Number.isFinite).length;
+      const mid = median(years);
+      return `${Number.isFinite(mid) ? mid.toFixed(1) : 'never'} (pays in ${paying} of ${shots.length})`;
+    };
+    console.log(
+      `Payback in years, median over seeds, for Rome and for the great power with the most cities: ${ADVANCE_KINDS.map((kind) => `${ADVANCES[kind].name} ${payback((s) => s.paybacks, kind)} / ${payback((s) => s.largest, kind)}`).join('; ')}.`,
     );
   }
 }
