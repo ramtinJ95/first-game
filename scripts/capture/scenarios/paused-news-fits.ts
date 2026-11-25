@@ -17,6 +17,11 @@ import {
 } from '../../../e2e/support.ts';
 import { ownCityInDangerTomorrow } from '../../../e2e/warnings-game.ts';
 import { carthageClimbs } from '../../../e2e/climb-game.ts';
+import { carthageHeldByLepcis } from '../../../e2e/held-war-game.ts';
+import { warReadiness } from '../../../src/sim/ai/war.ts';
+import { GUARD_BAND, GUARD_DAYS, GUARD_DETER_DAYS } from '../../../src/sim/guards.ts';
+import { buildWorld } from '../../../src/sim/world/world.ts';
+import { map } from '../../../e2e/support.ts';
 import { loadGame } from '../../../src/sim/save.ts';
 import type { CityId, FactionId, FormationId } from '../../../src/sim/ids.ts';
 
@@ -187,6 +192,30 @@ function fromSave(text: string): { state: GameState; told: readonly string[] } {
  */
 const longest = fromSave(carthageClimbs(8, 2));
 
+/**
+ * The longest stop of all: Carthage of 6,000 held back by its war with Lepcis Magna
+ * (`carthageHeldByLepcis`), on notice since day 60, with two bands at Roma that stop counting on
+ * day 101 and its last stop on day 70 8 points below its share without them, so the day's stop is
+ * a climb told with the lapsed guards, the treasury, the food and the war that holds it back.
+ */
+function heldClimb(): { state: GameState; told: readonly string[] } {
+  const { state } = fromSave(carthageHeldByLepcis('warning'));
+  const punic = state.factions[carthage];
+  const spearmen = state.formations[armyOf(state, carthage).formations[0] as FormationId];
+  const roma = state.cities['roma' as CityId];
+  if (!punic || !spearmen || !roma) throw new Error('no Carthage or Roma');
+  punic.noticeSince = 60 as Day;
+  spearmen.men = 6000;
+  const bare = structuredClone(state);
+  roma.guards = [0, 1].map(() => ({ until: (101 - GUARD_DETER_DAYS + GUARD_DAYS) as Day }));
+  roma.garrison += 2 * GUARD_BAND;
+  const share = Math.round(
+    Math.min(1, warReadiness(bare, buildWorld(map), carthage, rome)?.readiness ?? 0) * 100,
+  );
+  return { state, told: ['threat:carthage:70', `threat-stop:carthage:70:${share - 8}:roma`] };
+}
+const held = heldClimb();
+
 /** The news of each kind that stops the game, with its longest text the saves give. */
 const STOPS: readonly {
   name: string;
@@ -199,6 +228,8 @@ const STOPS: readonly {
   atPeaceAt?: number;
   /** What Carthage's At peace line then says. */
   atPeace?: string;
+  /** The most lines its text may take in the corner, so a player who read it once can skim it after. */
+  lines?: number;
 }[] = [
   {
     name: 'a warning by a city',
@@ -265,8 +296,17 @@ const STOPS: readonly {
     name: 'the longest warning, a climb told with guards that stop counting',
     make: () => structuredClone(longest.state),
     told: longest.told,
-    line: /no longer count against Carthage's war\. Carthage stands higher.*Guards at Roma for 90 days lower it and eat nothing; your food feeds no more men/,
+    line: /no longer count\. Carthage has climbed.*Guards at Roma for 90 days lower it and eat nothing; food feeds no more men/,
     shot: 'longest-warning',
+    lines: 13,
+  },
+  {
+    name: 'the longest warning with a war that holds the power back',
+    make: () => structuredClone(held.state),
+    told: held.told,
+    line: /no longer count\. Carthage has climbed.*Your gold tempts it.*eat nothing; food feeds no more men\. Once its war with Lepcis Magna ends, it would stand at/,
+    shot: 'longest-held-warning',
+    lines: 13,
   },
   { name: 'a city in danger', make: alone(ownCityInDangerTomorrow), line: /is in danger/ },
   { name: 'fleets sighted', make: alone(fiveFleetsOnRoma), line: /sail|march/ },
@@ -280,7 +320,13 @@ const STOPS: readonly {
   },
 ];
 
-async function stopOn(page: Page, state: GameState, line: RegExp, told?: readonly string[]) {
+async function stopOn(
+  page: Page,
+  state: GameState,
+  line: RegExp,
+  told?: readonly string[],
+  lines?: number,
+) {
   await pause(page);
   await dropSave(
     page,
@@ -325,6 +371,14 @@ async function stopOn(page: Page, state: GameState, line: RegExp, told?: readonl
   expect(box.y + box.height, 'the stopped line ends inside the window').toBeLessThanOrEqual(
     window.height,
   );
+  if (lines === undefined) return;
+  const read = await item.locator('.text').evaluate((text) => {
+    const range = document.createRange();
+    // The words alone, since the Paused badge beside them sits on another baseline.
+    range.selectNodeContents(text.lastChild ?? text);
+    return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+  });
+  expect(read, `the stopped line takes ${lines} lines or fewer`).toBeLessThanOrEqual(lines);
 }
 
 export default defineScenario({
@@ -337,7 +391,7 @@ export default defineScenario({
       await resizeTo(page, { width, height: 720 });
       for (const stop of STOPS) {
         if (stop.atPeaceAt !== undefined && stop.atPeaceAt !== width) continue;
-        await stopOn(page, stop.make(), stop.line, stop.told);
+        await stopOn(page, stop.make(), stop.line, stop.told, stop.lines);
         if (stop.shot)
           await shot(
             `${stop.shot}-${width}`,

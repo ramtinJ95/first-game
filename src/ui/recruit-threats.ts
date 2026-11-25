@@ -3,7 +3,7 @@ import {
   musterVerdict,
   powersNearWar,
   share,
-  standingThreats,
+  nearWarPowers,
   THREAT_WARN,
   verdictText,
   trainingKey,
@@ -350,7 +350,5 @@ function threatText(
 
 /** While the clock runs, the cards say to pause instead of reckoning every troop each day: the names of the powers near war. */
 export function nearWarNames(state: State, world: World): string[] {
-  return standingThreats(state, world)
-    .filter((threat) => (threat.readiness ?? 0) >= THREAT_WARN)
-    .map((threat) => threat.name);
+  return nearWarPowers(state, world).map((power) => factionName(state, power));
 }

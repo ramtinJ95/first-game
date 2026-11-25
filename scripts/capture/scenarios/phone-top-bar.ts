@@ -33,7 +33,7 @@ export default defineScenario({
     await page
       .getByTestId('alerts')
       .getByRole('listitem')
-      .filter({ hasText: /Carthage stands higher/ })
+      .filter({ hasText: /Carthage has climbed/ })
       .waitFor();
     await page.getByTestId('advances-button').click();
     await expect(page.getByTestId('advances')).toBeVisible();

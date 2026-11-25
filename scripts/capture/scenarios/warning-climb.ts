@@ -25,14 +25,14 @@ const CASES = [
     title:
       'Carthage stands 8 points above the share the game last stopped for: the game stops again',
     save: () => carthageClimbs(8, 0),
-    line: /Carthage stands higher than when the game last stopped for it/,
+    line: /Carthage has climbed to \d+% near Roma, from \d+% at its last stop/,
     stops: true,
   },
   {
     name: 'climb-band',
     title: 'both on one day: one stop that tells the guards and the climb',
     save: () => carthageClimbs(8, 2),
-    line: /The 1,000 guards at Roma no longer count against Carthage's war\. Carthage stands higher/,
+    line: /The 1,000 guards at Roma no longer count\. Carthage has climbed/,
     stops: true,
   },
 ] as const;

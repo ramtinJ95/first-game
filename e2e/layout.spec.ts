@@ -162,7 +162,7 @@ test.describe('the corner at 390 × 844', () => {
     {
       name: 'the longest line the game tells, a climb that stops the game with guards that stop counting',
       save: () => carthageClimbs(8, 2),
-      line: /no longer count against Carthage's war\. Carthage stands higher/,
+      line: /no longer count\. Carthage has climbed/,
     },
     {
       name: 'a line that runs the game on, guards that stop counting',
@@ -383,7 +383,7 @@ test.describe('the top bar and the Game menu at 390 × 844', () => {
     await page
       .getByTestId('alerts')
       .getByRole('listitem')
-      .filter({ hasText: /no longer count against Carthage's war\. Carthage stands higher/ })
+      .filter({ hasText: /no longer count\. Carthage has climbed/ })
       .waitFor();
     await page.getByTestId('advances-button').click();
     const panel = page.getByTestId('advances');
