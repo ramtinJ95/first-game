@@ -159,7 +159,7 @@ export const GOLD_STEP = 50;
  * Prototype, measuring only: against a rival great power with fewer cities, the odds a power
  * needs are multiplied by (the rival's cities over its own) raised to this power; 0 leaves them.
  */
-export const SIZE_EXPONENT = 0.5;
+export const SIZE_EXPONENT = 0.2;
 /**
  * Prototype, measuring only: against a rival great power that holds no more cities than the
  * map gave it, the odds a power needs fall by this share for each year of the game, to at most
