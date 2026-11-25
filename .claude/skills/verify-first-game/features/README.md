@@ -7,7 +7,7 @@ This folder is the maintained source for verifying what a player can do in the g
 - `node $D up` has printed a run, with `D=.claude/skills/verify-first-game/drive.ts`, from the root of this checkout.
 - `node $D doctor` ends `OK` and names the commit under test.
 - The run's browser is the one `up` started. Never drive the pylon's `web` service or a tester's browser.
-- A recipe starts from its own `open`, which replaces whatever the page showed.
+- A recipe starts from its own `open`, which replaces whatever the page showed. The browser's `localStorage` (saves, autosave, pause settings) outlasts `open`; only `down` and `up` clear it.
 
 ## Driving conventions
 
@@ -35,7 +35,7 @@ Files marked _from tests_ hold recipes taken from the browser tests and capture 
 
 - [Start screen and guide](./start-and-guide.md) covers choosing a power, Continue, and the guide.
 - [Time and stores](./time-and-stores.md) covers pause, speed, Space, the date, and the gold, food and manpower readings with their short and full states.
-- [Map and fog](./map-and-fog.md) covers zoom, pan, map clicks and fog of war. _from tests_
+- [Map and fog](./map-and-fog.md) covers zoom, pan, map clicks and fog of war; fog is _from tests_.
 - [Armies and orders](./armies-and-orders.md) covers selecting armies, marching, sailing, joining, halting, stances, battles, sieges and storms. _from tests_
 - [City panel](./city-panel.md) covers a city's facts, evacuation, declaring war, and the fate of a taken city. _from tests_
 - [Recruit cards](./recruit.md) covers the Raise cards, their forecast, and the threat each card reckons.
@@ -48,5 +48,5 @@ Files marked _from tests_ hold recipes taken from the browser tests and capture 
 - [Chronicle and news corner](./chronicle-and-news.md) covers the corner's lines, the Chronicle, and the notice toast.
 - [Overview](./overview.md) covers the realm's cities, armies and wars in one panel.
 - [Saves](./saves.md) covers the Game menu's save, load, export and import, the autosave, Continue, dropped files, and leaving for the start screen.
-- [Ending](./ending.md) covers defeat and victory. _from tests_
+- [Ending](./ending.md) covers defeat and victory; victory is _from tests_.
 - [Phone layout](./phone-layout.md) covers the page at 390 × 844.

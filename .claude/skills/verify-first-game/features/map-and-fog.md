@@ -19,8 +19,7 @@ Preconditions:
 
 - `open`, at the widest zoom.
 
-- **Zoom on Roma.** `act "const cam = support.camera(page); await cam.zoom(cam.city('roma'), 4); return cam.camera"`. The returned camera is zoomed in, and a `shot` shows Italy filling the view.
-- **Pick a city after zooming.** With the same `cam` in one `act`, click `cam.screen({ x: support.cityPoint('roma').x, y: support.cityPoint('roma').y + 10 })` and expect `city-name` `Roma`.
+- **Zoom on Roma and pick it.** `act "const cam = support.camera(page); await cam.zoom(cam.city('roma'), 4); const at = support.cityPoint('roma'); const p = cam.screen({ x: at.x, y: at.y + 10 }); await page.mouse.click(p.x, p.y); return { city: await page.getByTestId('city-name').textContent() }"`. `city` is `Roma`, and a `shot` shows Italy filling the view.
 - **Fog** _from tests_. `open --moment e2e/fog-game.ts:romeWithPunicArmyAt` and follow `e2e/fog.spec.ts`: a click where the hidden army stands selects the province, not the army.
 - **Proof.** `shot` before and after the zoom.
 

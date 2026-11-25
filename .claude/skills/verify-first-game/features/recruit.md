@@ -22,7 +22,7 @@ Preconditions:
 - `open --moment carthageNearsWar`, then `play --until-text 'could soon declare war on you'`.
 
 - **Open Roma and read.** `act "await support.untilDrawn(page); const at = support.cityPoint('roma'); const p = support.camera(page).screen({ x: at.x, y: at.y + 40 }); await page.mouse.click(p.x, p.y); const f = page.getByTestId('recruit-forecast'); await f.scrollIntoViewIfNeeded(); return { forecast: await f.innerText(), cards: await page.getByTestId('recruit-cards').ariaSnapshot() }"`. The forecast names food and gold a day and the runways. Six cards, each with `Carthage <n>% now, <n>% once paid, <n>% once they muster on <date>`.
-- **Raise.** `act "await page.getByTestId('recruit-cards').getByRole('button', { name: /^Spearmen/ }).click(); const anyway = page.getByRole('button', { name: /^Raise/ }); if (await anyway.isVisible()) await anyway.click(); return await page.getByTestId('city-raising').textContent()"`. `Raising` lists Spearmen; the gold falls by 2,400.
+- **Raise.** `act "await page.getByTestId('recruit-cards').getByRole('button', { name: /^Spearmen/ }).click(); const anyway = page.getByRole('button', { name: /^Raise/ }); if (await anyway.isVisible()) await anyway.click(); return await page.getByTestId('city-raising').textContent()"`. `Raising` reads `Spearmen · ordered for the next day`, and the gold is still the same until that day.
 - **Proof.** `shot recruit-forecast` before the raise and `shot recruit-raising` after.
 
 ## Gotchas
