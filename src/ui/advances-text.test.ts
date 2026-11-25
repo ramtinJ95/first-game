@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import { ADVANCES } from '../sim/advances/advances.ts';
+import { ADVANCE_KINDS, ADVANCES } from '../sim/advances/advances.ts';
 import { buildFixture, FIXTURE, growRome } from '../sim/fixture.ts';
+import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { advancesView, buildingFirstLine, studyLine } from './advances-text.ts';
 
@@ -111,6 +112,21 @@ describe('the advances panel', () => {
       expect(row(full, kind)?.payback).toBe(
         'Pays nothing back today: your food already feeds 2,000 more men than you keep',
       );
-    expect(row(full, 'longContracts')?.payback).toBe('Pays nothing back today');
+  });
+
+  test('Long contracts gives no payback in years, says where it saves gold, and is never marked', () => {
+    const state = buildFixture();
+    rome(state).stores.gold = 50_000;
+    for (const city of Object.values(state.cities))
+      if (city.owner === FIXTURE.rome) {
+        city.guards = [{ until: (state.day + 300) as Day }];
+        city.construction = { building: 'temple', daysLeft: 300 };
+      }
+    rome(state).advances = ADVANCE_KINDS.filter((kind) => kind !== 'longContracts');
+    expect(row(state, 'longContracts')).toMatchObject({
+      payback:
+        'No payback in years: it saves gold only on guards kept to defend a city, and a band still counts 90 days against a threat whatever its term',
+      suggested: false,
+    });
   });
 });

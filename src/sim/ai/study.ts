@@ -6,7 +6,6 @@ import {
   type AdvanceKind,
 } from '../advances/advances.ts';
 import { UNREST_DAYS } from '../cities.ts';
-import { GUARD_DAYS, GUARD_GOLD } from '../guards.ts';
 import { GENERAL_EFFECT } from '../systems/battles.ts';
 import { fullDefences, WALL_WEAR_PER_THOUSAND_MEN } from '../systems/sieges.ts';
 import { advanceGain } from '../advances/gains.ts';
@@ -50,8 +49,9 @@ export function spareFoodMen(state: State, faction: FactionId): number {
  * harder blows stand for. Siege engineers are worth the besiegers' upkeep over the days
  * they save in CONQUESTS_A_YEAR sieges of a city like the nearest foreign one, blockaded
  * at GARRISON_ODDS and walled at its full walls, and Clemency the output it saves in as
- * many conquests of it, as a temple is. Long contracts are worth the gold the realm's
- * bands would save if hired again on the longer term.
+ * many conquests of it, as a temple is. Long contracts are worth nothing: a band counts
+ * GUARD_DETER_DAYS against a threat whatever its term, so a band hired to deter saves nothing
+ * on the longer one, and a band kept to defend a city cannot be told from it.
  */
 export function advanceWorth(state: State, faction: FactionId, kind: AdvanceKind): number {
   const { gold, food, manpower } = advanceGain(state, faction, kind).daily;
@@ -73,12 +73,6 @@ export function advanceWorth(state: State, faction: FactionId, kind: AdvanceKind
       const saved = ((1 - UNREST_OUTPUT) / 2) * UNREST_DAYS * (1 - ADVANCES.clemency.unrestShare);
       worth += (CONQUESTS_A_YEAR / 365) * saved * output;
     }
-  }
-  if (kind === 'longContracts') {
-    const bands = sorted(state.cities)
-      .filter((city) => city.owner === faction)
-      .reduce((sum, city) => sum + city.guards.length, 0);
-    worth += bands * (GUARD_GOLD / GUARD_DAYS) * (1 - 1 / ADVANCES.longContracts.guardShare);
   }
   return worth;
 }

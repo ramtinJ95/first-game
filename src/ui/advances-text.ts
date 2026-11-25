@@ -19,7 +19,7 @@ import {
 } from '../sim/ai/study.ts';
 import { GARRISON_ODDS } from '../sim/ai/thresholds.ts';
 import { UNREST_DAYS, unrestDaysFor } from '../sim/cities.ts';
-import { GUARD_GOLD } from '../sim/guards.ts';
+import { GUARD_DETER_DAYS, GUARD_GOLD } from '../sim/guards.ts';
 import { fullDefences, WALL_WEAR_PER_THOUSAND_MEN } from '../sim/systems/sieges.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { FactionId } from '../sim/ids.ts';
@@ -236,6 +236,8 @@ export function priceWhy(state: State, faction: FactionId, kind: AdvanceKind): s
 }
 
 function paybackText(state: State, faction: FactionId, kind: AdvanceKind): string {
+  if (kind === 'longContracts')
+    return `No payback in years: it saves gold only on guards kept to defend a city, and a band still counts ${GUARD_DETER_DAYS} days against a threat whatever its term`;
   const years = studyPayback(state, faction, kind);
   if (years === undefined) {
     const food = advanceGain(state, faction, kind).daily.food;

@@ -3,6 +3,7 @@ import { ADVANCES, ADVANCE_KINDS, GROWING_ADVANCES } from '../advances/advances.
 import { buildRefusal } from '../buildings/build.ts';
 import { buildFixture, FIXTURE, fixtureWorld, growRome } from '../fixture.ts';
 import { afterSpending } from './budget.ts';
+import type { Day } from '../state/day.ts';
 import type { GameState } from '../state/game-state.ts';
 import { nextBuilding } from './build.ts';
 import { advanceWorth, studies, studyPayback, STUDY_PAYBACK_YEARS } from './study.ts';
@@ -108,5 +109,17 @@ describe('the AI studies', () => {
     rome(state).stores.gold = 9_000;
     const [order] = studies(state, FIXTURE.rome, false);
     if (order?.kind === 'study') expect(GROWING_ADVANCES).not.toContain(order.advance);
+  });
+
+  test('Long contracts is worth nothing to a Rome whose guards were hired to answer warnings, and it never studies it', () => {
+    const state = busy(rich());
+    for (const city of Object.values(state.cities))
+      if (city.owner === FIXTURE.rome)
+        city.guards = [{ until: (state.day + 300) as Day }, { until: (state.day + 320) as Day }];
+    expect(advanceWorth(state, FIXTURE.rome, 'longContracts')).toBe(0);
+    expect(studyPayback(state, FIXTURE.rome, 'longContracts')).toBeUndefined();
+    for (const advance of ADVANCE_KINDS.filter((kind) => kind !== 'longContracts'))
+      rome(state).advances.push(advance);
+    expect(studies(state, FIXTURE.rome, false)).toEqual([]);
   });
 });
