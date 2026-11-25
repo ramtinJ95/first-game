@@ -91,5 +91,31 @@ export default defineScenario({
       'warning-climb-chronicle-390',
       'The last case, a climb and guards on one day, in the Chronicle at 390 px wide',
     );
+    const ahead = CASES.find((c) => c.name === 'ahead');
+    if (!ahead) throw new Error('no ahead case');
+    await page.getByRole('button', { name: 'Chronicle' }).click();
+    await pause(page);
+    await dropSave(page, ahead.save());
+    await expect(page.getByTestId('time-controls-day')).toHaveAttribute('data-day', '100');
+    await untilDrawn(page);
+    await resume(page);
+    await page
+      .getByTestId('alerts')
+      .getByRole('listitem')
+      .filter({ hasText: ahead.line })
+      .first()
+      .waitFor();
+    await pause(page);
+    await page.getByRole('button', { name: 'Chronicle' }).click();
+    await expect(chronicle).toBeVisible();
+    await whole(page, 'chronicle', ahead.line);
+    await expect(
+      chronicle.getByRole('listitem').filter({ hasText: ahead.line }).first(),
+    ).toContainText('A new band counts 90 days, for 2,000 gold.');
+    await untilDrawn(page);
+    await shot(
+      'warning-climb-ahead-chronicle-390',
+      'The line ten days before guards stop counting, whole in the Chronicle at 390 px wide',
+    );
   },
 });
