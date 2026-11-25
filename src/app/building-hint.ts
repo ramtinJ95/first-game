@@ -19,10 +19,13 @@ export const BUILDING_HINT_KEY = 'buildingWorthGold';
 /**
  * The building that pays back soonest in a city of the player's that builds nothing, within
  * the AI's years: of those the treasury pays for today, or with `anyGold` of all it could start.
+ * With `noConquests` it leaves out the Temple and the Sanctuary, whose payback is reckoned from
+ * a city taken each year.
  */
 export function worthBuilding(
   state: State,
   anyGold = false,
+  noConquests = false,
 ): { city: DeepReadonly<City>; kind: BuildingKind; years: number } | undefined {
   let best: { city: DeepReadonly<City>; kind: BuildingKind; years: number } | undefined;
   const cities = Object.values(state.cities)
@@ -31,6 +34,7 @@ export function worthBuilding(
   for (const city of cities) {
     for (const kind of BUILDING_KINDS) {
       if ((anyGold ? buildBarrier : buildRefusal)(state, city, kind)) continue;
+      if (noConquests && (kind === 'temple' || kind === 'sanctuary')) continue;
       const worth = buildingWorth(state, city, kind);
       if (worth <= 0) continue;
       const years = BUILDINGS[kind].gold / worth / 365;

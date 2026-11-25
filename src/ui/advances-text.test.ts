@@ -1,9 +1,24 @@
 import { describe, expect, test } from 'vitest';
 import { ADVANCE_KINDS, ADVANCES } from '../sim/advances/advances.ts';
-import { buildFixture, FIXTURE, growRome } from '../sim/fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld, growRome } from '../sim/fixture.ts';
 import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { advancesView, buildingFirstLine, studyLine } from './advances-text.ts';
+import { readFileSync } from 'node:fs';
+import { worthBuilding } from '../app/building-hint.ts';
+import { BUILDING_KINDS } from '../sim/buildings/buildings.ts';
+import { changeCityOwner } from '../sim/cities.ts';
+import type { FactionId } from '../sim/ids.ts';
+import { parseMap } from '../sim/map.ts';
+import { newGame } from '../sim/new-game.ts';
+import { dailyBalances } from '../sim/systems/economy.ts';
+import { buildWorld } from '../sim/world/world.ts';
+import {
+  advancesView,
+  buildingFirstLine,
+  hasConquered,
+  markedLine,
+  studyLine,
+} from './advances-text.ts';
 
 function rome(state: GameState) {
   const record = state.factions[FIXTURE.rome];
@@ -11,14 +26,16 @@ function rome(state: GameState) {
   return record;
 }
 
-const row = (state: GameState, kind: string, pending = [] as Parameters<typeof advancesView>[2]) =>
-  advancesView(state, FIXTURE.rome, pending)
+const world = fixtureWorld();
+
+const row = (state: GameState, kind: string, pending = [] as Parameters<typeof advancesView>[3]) =>
+  advancesView(state, world, FIXTURE.rome, pending)
     .flatMap((branch) => branch.rows)
     .find((r) => r.kind === kind);
 
 describe('the advances panel', () => {
   test('shows three branches of three, each with its price and days', () => {
-    const view = advancesView(buildFixture(), FIXTURE.rome, []);
+    const view = advancesView(buildFixture(), world, FIXTURE.rome, []);
     expect(view.map((branch) => [branch.name, branch.rows.length])).toEqual([
       ['Military', 3],
       ['Economy', 3],
@@ -84,22 +101,22 @@ describe('the advances panel', () => {
     const state = buildFixture();
     rome(state).stores.gold = 50_000;
     const marked = (s: GameState) =>
-      advancesView(s, FIXTURE.rome, [])
+      advancesView(s, world, FIXTURE.rome, [])
         .flatMap((branch) => branch.rows)
         .filter((r) => r.suggested)
         .map((r) => r.kind);
-    expect(buildingFirstLine(state, FIXTURE.rome)).toBe(
+    expect(buildingFirstLine(state, world, FIXTURE.rome)).toBe(
       'Building Forum at Roma would pay back in 2.1 years, sooner than any advance you can start: the soonest, Citizen rolls, takes 3.4. Build first, and study with the gold left.',
     );
     expect(marked(state)).toEqual([]);
     rome(state).stores.gold = 3_500;
-    expect(buildingFirstLine(state, FIXTURE.rome)).toMatch(
+    expect(buildingFirstLine(state, world, FIXTURE.rome)).toMatch(
       /^Building Forum at Roma would pay back/,
     );
     expect(marked(state)).toEqual([]);
     for (const city of Object.values(state.cities))
       if (city.owner === FIXTURE.rome) city.construction = { building: 'temple', daysLeft: 300 };
-    expect(buildingFirstLine(state, FIXTURE.rome)).toBeUndefined();
+    expect(buildingFirstLine(state, world, FIXTURE.rome)).toBeUndefined();
     expect(marked(state)).toEqual(['citizenRolls']);
   });
 
@@ -128,5 +145,62 @@ describe('the advances panel', () => {
         'No payback in years: it saves gold only on guards kept to defend a city, and a band still counts 90 days against a threat whatever its term',
       suggested: false,
     });
+  });
+
+  test('a studied advance says what it gives the realm now, not "nothing yet"', () => {
+    const state = buildFixture();
+    rome(state).advances = ['drillmasters', 'standardCoin'];
+    for (const army of Object.values(state.armies))
+      if (army.owner === FIXTURE.rome) army.generalSkill = ADVANCES.drillmasters.generalSkill;
+    expect(row(state, 'drillmasters')?.does).toMatch(
+      /^Your armies strike as [\d,]+ more men would than under generals of skill 3, and each new army starts at skill 5$/,
+    );
+    expect(row(state, 'standardCoin')?.does).toMatch(/^\+\d+\.\d gold a day$/);
+  });
+
+  test('names the marked advance at the top, so it is seen without scrolling', () => {
+    const state = buildFixture();
+    rome(state).stores.gold = 50_000;
+    for (const city of Object.values(state.cities))
+      if (city.owner === FIXTURE.rome) city.construction = { building: 'temple', daysLeft: 300 };
+    expect(markedLine(state, world, FIXTURE.rome)).toEqual({
+      advance: 'citizenRolls',
+      text: expect.stringMatching(
+        /^Pays back soonest of what you can start: Citizen rolls, in \d+\.\d years\.$/,
+      ),
+    });
+  });
+
+  test("says how much gold a building first lacks, and in how many days today's income brings it", () => {
+    const state = buildFixture();
+    rome(state).stores.gold = 3_500;
+    const net = dailyBalances(state).get(FIXTURE.rome)?.gold ?? 0;
+    expect(net).toBeGreaterThan(0);
+    expect(buildingFirstLine(state, world, FIXTURE.rome)).toContain(
+      `It costs 6,500 gold, 3,000 more than you hold, which today's income brings in ${Math.ceil(3000 / net)} days.`,
+    );
+  });
+
+  test('holds no Temple against the advances for a realm that has taken no city, as its payback assumes one taken a year', () => {
+    const map = parseMap(
+      JSON.parse(readFileSync(new URL('../../data/map/map.json', import.meta.url), 'utf8')),
+    );
+    const atlas = buildWorld(map);
+    const state = newGame(map, { seed: 1, player: 'rome' });
+    const realm = state.factions[state.player];
+    if (!realm) throw new Error('no Rome');
+    for (const city of Object.values(state.cities))
+      if (city.owner === state.player)
+        city.buildings = BUILDING_KINDS.filter((kind) => kind !== 'temple' && kind !== 'sanctuary');
+    realm.advances = ADVANCE_KINDS.filter((kind) => kind !== 'clemency');
+    realm.stores.gold = 20_000;
+    expect(worthBuilding(state, true)?.kind).toBe('temple');
+    expect(buildingFirstLine(state, atlas, state.player) ?? '').not.toMatch(/Temple|Sanctuary/);
+    const taken = Object.values(state.cities).find(
+      (city) => city.owner === ('carthage' as FactionId),
+    );
+    if (!taken) throw new Error('no Carthaginian city');
+    changeCityOwner(state, taken.id, state.player);
+    expect(hasConquered(state, atlas, state.player)).toBe(true);
   });
 });

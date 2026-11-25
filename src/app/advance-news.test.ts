@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ADVANCES } from '../sim/advances/advances.ts';
+import { ADVANCE_KINDS, ADVANCES } from '../sim/advances/advances.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../sim/fixture.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
@@ -23,7 +23,7 @@ function withGold(share: number): GameState {
 }
 
 describe('the news of advances', () => {
-  test('tells the player of an advance its realm finished, without stopping the game', () => {
+  test('stops the game when an advance finishes and nothing else is studied, and says to choose the next', () => {
     const before = buildFixture();
     rome(before).study = { advance: 'standardCoin', daysLeft: 1, paid: 6000 };
     const { state: after, events } = tick(before, [], world);
@@ -33,12 +33,24 @@ describe('the news of advances', () => {
         kind: 'advanceFinished',
         day: before.day,
         tone: 'good',
-        text: `${ADVANCES.standardCoin.name} is studied, for good. The Advances panel offers the next.`,
+        text: `${ADVANCES.standardCoin.name} is studied, for good. Nothing is being studied now: choose the next advance in the Advances panel.`,
         opens: 'advances',
+        pause: { kind: 'advance' },
       },
     ]);
-    expect(news[0]?.pause).toBeUndefined();
     expectConsistent(after);
+  });
+
+  test('the last advance does not stop the game, as nothing is left to choose', () => {
+    const before = buildFixture();
+    rome(before).advances = ADVANCE_KINDS.filter((kind) => kind !== 'standardCoin');
+    rome(before).study = { advance: 'standardCoin', daysLeft: 1, paid: 6000 };
+    const { state: after, events } = tick(before, [], world);
+    const [line] = advanceNewsOfDay(before, after, events, new Set([HINT_TOLD]));
+    expect(line?.text).toBe(
+      `${ADVANCES.standardCoin.name} is studied, for good. Every advance is studied.`,
+    );
+    expect(line?.pause).toBeUndefined();
   });
 
   test("tells nothing of another realm's advance", () => {

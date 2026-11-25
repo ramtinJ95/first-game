@@ -3,10 +3,12 @@
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
   import type { Order } from '../sim/orders/orders.ts';
   import type { GameState } from '../sim/state/game-state.ts';
+  import type { World } from '../sim/world/world.ts';
   import type { Actions } from './actions.ts';
   import {
     advancesView,
     buildingFirstLine,
+    markedLine,
     cancelText,
     studyLine,
     ADVANCE_RULE,
@@ -14,20 +16,39 @@
 
   let {
     game,
+    world,
     pending,
     actions,
-  }: { game: DeepReadonly<GameState>; pending: readonly Order[]; actions: Actions } = $props();
+  }: {
+    game: DeepReadonly<GameState>;
+    world: World;
+    pending: readonly Order[];
+    actions: Actions;
+  } = $props();
 
-  const branches = $derived(advancesView(game, game.player, pending));
+  const branches = $derived(advancesView(game, world, game.player, pending));
   const line = $derived(studyLine(game, game.player));
-  const first = $derived(buildingFirstLine(game, game.player));
+  const first = $derived(buildingFirstLine(game, world, game.player));
+  const mark = $derived(markedLine(game, world, game.player));
+  let root: HTMLElement | undefined = $state();
+
+  /** Brings the marked advance's card into view, wherever its branch sits in the panel. */
+  function showMarked(kind: string) {
+    root?.querySelector(`[data-testid="advance-${kind}"]`)?.scrollIntoView({ block: 'center' });
+  }
   const study = $derived(game.factions[game.player]?.study ?? null);
   const cancelling = $derived(
     pending.some((order) => order.kind === 'cancelStudy' && order.faction === game.player),
   );
 </script>
 
-<section class="panel advances" id="advances" data-testid="advances" aria-label="Advances">
+<section
+  class="panel advances"
+  id="advances"
+  data-testid="advances"
+  aria-label="Advances"
+  bind:this={root}
+>
   <h2>Advances</h2>
   <p class="rule">{ADVANCE_RULE}</p>
   <div class="now" data-testid="advances-now">
@@ -43,6 +64,16 @@
     {/if}
   </div>
   {#if first}<p class="first" data-testid="advances-building-first">{first}</p>{/if}
+  {#if mark}
+    <p class="first" data-testid="advances-marked">
+      {mark.text}
+      <button
+        type="button"
+        data-testid="advances-show-marked"
+        onclick={() => showMarked(mark.advance)}>Show it</button
+      >
+    </p>
+  {/if}
   <div class="branches">
     {#each branches as branch (branch.branch)}
       <section class="branch" data-testid="branch-{branch.branch}" aria-label={branch.name}>

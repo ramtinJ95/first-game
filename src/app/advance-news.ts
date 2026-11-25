@@ -1,4 +1,4 @@
-import { ADVANCES } from '../sim/advances/advances.ts';
+import { ADVANCE_KINDS, ADVANCES, hasStudied } from '../sim/advances/advances.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { DayEvent } from '../sim/events.ts';
 import type { GameState } from '../sim/state/game-state.ts';
@@ -18,7 +18,9 @@ const WAIT_PREFIX = 'advance-hint-after:';
 /**
  * The player's news of advances on a day: each advance the realm finished, and once a game
  * the hint that the Advances panel exists, on the first day the treasury nears its limit
- * while the realm has studied nothing and studies nothing. Neither stops the game. The hint's key goes into `told`.
+ * while the realm has studied nothing and studies nothing. A finished advance with nothing
+ * else studied and an advance still open stops the game (the `advance` setting), at most nine
+ * times a game; the hint does not. The hint's key goes into `told`.
  * On a day the buildings' hint is told (`buildingHint`), this one waits HINT_WAIT_DAYS and
  * comes on the first day after that the treasury still stands near its limit.
  */
@@ -32,12 +34,19 @@ export function advanceNewsOfDay(
   const news: Alert[] = [];
   for (const event of events) {
     if (event.kind !== 'advanceFinished' || event.faction !== after.player) continue;
+    const realm = after.factions[after.player];
+    // With every advance studied there is nothing left to choose, so the last one does not stop.
+    const open = realm ? ADVANCE_KINDS.some((kind) => !hasStudied(realm, kind)) : false;
+    const idle = realm !== undefined && realm.study === null && open;
     news.push({
       kind: 'advanceFinished',
       day: before.day,
       tone: 'good',
-      text: `${ADVANCES[event.advance].name} is studied, for good. The Advances panel offers the next.`,
+      text: idle
+        ? `${ADVANCES[event.advance].name} is studied, for good. Nothing is being studied now: choose the next advance in the Advances panel.`
+        : `${ADVANCES[event.advance].name} is studied, for good.${open ? ' The Advances panel offers the next.' : ' Every advance is studied.'}`,
       opens: 'advances',
+      ...(idle ? { pause: { kind: 'advance' as const } } : {}),
     });
   }
   const faction = after.factions[after.player];
