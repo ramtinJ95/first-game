@@ -30,6 +30,7 @@ import { areAtWar } from '../sim/wars.ts';
 import { ALL_PAUSES, stopsOfDay } from './pauses.ts';
 import type { Alert } from './alerts.ts';
 import {
+  GUARDS_AHEAD_DAYS,
   THREAT_SPARE_DAYS,
   THREAT_STAND_DAYS,
   powersNearWar,
@@ -293,6 +294,21 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
     const [warning] = threatNewsOfDay(before, after, world, new Set<string>());
     expect(warning?.kind).toBe('warThreat');
     expect(warning?.text).not.toContain('stop counting');
+  });
+
+  test('tells guards that stop counting within ten days in a line of their own on the day of a stop', () => {
+    const { before, after } = standing(6500, 100, 1, 101 + GUARDS_AHEAD_DAYS - GUARD_DETER_DAYS);
+    const punic = after.factions[carthage];
+    if (punic) punic.noticeSince = 94 as Day;
+    const told = new Set<string>();
+    const news = threatNewsOfDay(before, after, world, told);
+    expect(news.map((alert) => [alert.kind, alert.pause !== undefined])).toEqual([
+      ['warThreat', true],
+      ['guardsStopSoon', false],
+    ]);
+    expect(news[1]?.text).toMatch(
+      /^The 500 guards at Roma stop counting against Carthage's war in/,
+    );
   });
 });
 

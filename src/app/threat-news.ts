@@ -209,7 +209,7 @@ export function threatNewsOfDay(
   }
   const [first, ...others] = warned;
   const bandLines = (skip: FactionId | undefined) => [
-    ...ahead.filter((a) => a.power !== skip).map((a) => aheadAlert(after, a)),
+    ...ahead.map((a) => aheadAlert(after, a)),
     ...freed.filter((f) => f.power !== skip).map((f) => freedAlert(after, f)),
     ...bands.filter((b) => b.power !== skip).map((b) => bandAlert(after, b)),
   ];
@@ -258,7 +258,7 @@ export function threatNewsOfDay(
       text,
       ...(front ? { focus: { at: front.position } } : {}),
     },
-    // One power's stop tells its guards and its war, and names the day its guards stop counting.
+    // One power's stop tells its guards and its war that ended today.
     ...bandLines(stops && others.length === 0 ? first.power : undefined),
   ];
 }
