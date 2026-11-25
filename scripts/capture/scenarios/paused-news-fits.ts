@@ -133,6 +133,15 @@ function battleTomorrow(): GameState {
   return state;
 }
 
+/** Rome with Marching rations one day from done and nothing else to study after it. */
+function advanceDoneTomorrow(): GameState {
+  const state = startGame();
+  const realm = state.factions[rome];
+  if (!realm) throw new Error('no Rome');
+  realm.study = { advance: 'marchingRations', daysLeft: 1, paid: 3000 };
+  return state;
+}
+
 /**
  * The save with every great power that is not at war with the player bound by a truce, so
  * the news that stops the game is the save's own and no war warning comes before it.
@@ -303,6 +312,12 @@ const STOPS: readonly {
   { name: 'fleets sighted', make: alone(fiveFleetsOnRoma), line: /sail|march/ },
   { name: 'a weak siege', make: alone(weakSiegeOfMediolanum), line: /Too few|too weak/ },
   { name: 'a battle', make: alone(battleTomorrow), line: /Battle at Roma/ },
+  {
+    name: 'an advance finished with nothing else studied',
+    make: alone(advanceDoneTomorrow),
+    line: /Nothing is being studied now: choose the next advance/,
+    shot: 'advance-finished',
+  },
 ];
 
 async function stopOn(
@@ -369,7 +384,7 @@ async function stopOn(
 export default defineScenario({
   name: 'paused-news-fits',
   title:
-    'News that stops the game is read whole in the corner at 1280 × 720 and 1024 × 720: the war warnings and a reminder, a city in danger, fleets sighted, a weak siege, and a battle',
+    'News that stops the game is read whole in the corner at 1280 × 720 and 1024 × 720: the war warnings and a reminder, a city in danger, fleets sighted, a weak siege, a battle, and an advance finished with nothing else studied',
   async run({ page, shot }) {
     await openGame(page, { pauses: true });
     for (const width of [1280, 1024]) {

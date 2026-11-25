@@ -72,15 +72,15 @@ test.describe('advances', () => {
     );
   });
 
-  test('a save with an advance at work loads with it, and its end is news that does not stop the game', async ({
+  test('a save with an advance one day from done loads with it, and its end stops the game with a line that opens the panel', async ({
     page,
   }) => {
     await openGame(page, { pauses: true });
     const state = startGame();
     romeOf(state).advances = ['standardCoin'];
-    romeOf(state).study = { advance: 'marchingRations', daysLeft: 3, paid: 3000 };
+    romeOf(state).study = { advance: 'marchingRations', daysLeft: 1, paid: 3000 };
     await load(page, state);
-    await expect(page.getByTestId('study-line')).toHaveText('Marching rations · 3 days');
+    await expect(page.getByTestId('study-line')).toHaveText('Marching rations · 1 day');
     await page.getByTestId('advances-button').click();
     const panel = page.getByTestId('advances');
     await expect(panel.getByTestId('advance-standardCoin')).toContainText('Studied');
@@ -88,18 +88,68 @@ test.describe('advances', () => {
     await expect(panel.getByTestId('advances-cancel')).toHaveText(
       `Give up (${(ADVANCES.marchingRations.gold / 2).toLocaleString('en-GB')} gold back)`,
     );
+    await page.getByTestId('advances-button').click();
 
     await resume(page);
-    const news = page.getByTestId('alerts');
-    await expect(news).toContainText('Marching rations is studied, for good.');
-    await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
-    await untilDay(page, state.day + 5);
-    await pause(page);
+    const line = page
+      .getByTestId('alerts')
+      .getByRole('listitem')
+      .filter({ has: page.getByTestId('alert-paused') })
+      .filter({
+        hasText:
+          'Marching rations is studied, for good. Nothing is being studied now: choose the next advance in the Advances panel.',
+      });
+    await expect(line).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible();
     await expect(page.getByTestId('study-line')).toHaveText('None studied');
+    await line.getByRole('button').first().click();
+    await expect(page.getByTestId('advances')).toBeVisible();
     await page.getByRole('button', { name: 'Chronicle' }).click();
     await expect(page.getByTestId('chronicle')).toContainText(
       'Marching rations is studied, for good.',
     );
+  });
+
+  test('with its switch off in the Game menu, an advance that finishes does not stop the game', async ({
+    page,
+  }) => {
+    await openGame(page, { pauses: true });
+    await page.getByRole('button', { name: 'Game' }).click();
+    const box = page.getByTestId('pause-advance');
+    await expect(box).toBeChecked();
+    await box.uncheck();
+    await page.getByRole('button', { name: 'Game' }).click();
+    const state = startGame();
+    romeOf(state).study = { advance: 'marchingRations', daysLeft: 1, paid: 3000 };
+    await load(page, state);
+    await resume(page);
+    await expect(page.getByTestId('alerts')).toContainText(
+      'Marching rations is studied, for good.',
+    );
+    await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+    await untilDay(page, state.day + 3);
+    await pause(page);
+  });
+
+  test('the panel names the advance it marks at its top, and Show it brings that card into view', async ({
+    page,
+  }) => {
+    await openGame(page);
+    const state = startGame();
+    romeOf(state).stores.gold = 15_000;
+    for (const city of Object.values(state.cities))
+      if (city.owner === rome) city.construction = { building: 'temple', daysLeft: 300 };
+    await load(page, state);
+    await page.getByTestId('advances-button').click();
+    const panel = page.getByTestId('advances');
+    const line = panel.getByTestId('advances-marked');
+    await expect(line).toContainText(/^Pays back soonest of what you can start: (.+), in/);
+    const name = (await line.textContent())?.match(/start: (.+?), in/)?.[1] ?? '';
+    const card = panel.locator('li').filter({ has: page.getByTestId('advance-suggested') });
+    await expect(card).toContainText(name);
+    await expect(line).toBeInViewport();
+    await panel.getByTestId('advances-show-marked').click();
+    await expect(card).toBeInViewport({ ratio: 0.9 });
   });
 
   test('a realm that studies nothing is told once, as its treasury nears its limit, that the panel exists', async ({

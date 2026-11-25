@@ -96,6 +96,7 @@ const NO_PAUSES: PauseSettings = {
   sighted: false,
   ownCity: false,
   warThreat: false,
+  advance: false,
 };
 
 const host = document.getElementById('app');

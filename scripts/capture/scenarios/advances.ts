@@ -35,13 +35,15 @@ async function resize(page: Page, size: { width: number; height: number }) {
   await page.locator('canvas[data-terrain="ready"]').waitFor();
 }
 
-/** Rome on day 1 with a full purse, Standard coin studied and Fallow fields at work. */
+/** Rome on day 1 with a full purse, Standard coin and Drillmasters studied and Fallow fields at work. */
 function studying(daysLeft: number): GameState {
   const state = startGame();
   const realm = state.factions[rome];
   if (!realm) throw new Error('no Rome');
   realm.stores.gold = 15_000;
-  realm.advances = ['standardCoin'];
+  realm.advances = ['standardCoin', 'drillmasters'];
+  for (const army of Object.values(state.armies))
+    if (army.owner === rome) army.generalSkill = Math.max(army.generalSkill, 5);
   realm.study = { advance: 'fallowFields', daysLeft, paid: 6000 };
   return state;
 }
@@ -66,12 +68,23 @@ function largeRealm(): GameState {
   return state;
 }
 
-/** Rome on day 1 with a full purse and nothing studied. */
+/** Rome on day 1 with nothing studied and 4,000 gold, short of the Forum the panel names first. */
 function fresh(): GameState {
   const state = startGame();
   const realm = state.factions[rome];
   if (!realm) throw new Error('no Rome');
+  realm.stores.gold = 4_000;
+  return state;
+}
+
+/** Rome on day 1 with a full purse, nothing studied, and every city building, so an advance is marked. */
+function building(): GameState {
+  const state = startGame();
+  const realm = state.factions[rome];
+  if (!realm) throw new Error('no Rome');
   realm.stores.gold = 15_000;
+  for (const city of Object.values(state.cities))
+    if (city.owner === rome) city.construction = { building: 'temple', daysLeft: 300 };
   return state;
 }
 
@@ -89,7 +102,7 @@ function hinted(): GameState {
 export default defineScenario({
   name: 'advances',
   title:
-    "The Advances panel's three branches with what each advance would do for Rome today, the line that names a building paying back sooner, the top bar's line of what is studied, the hint, and the news of an advance finished",
+    "The Advances panel's three branches with what each advance would do for Rome today, the advance it marks named at its top, the line that names a building paying back sooner and the gold it lacks, the top bar's line of what is studied, the hint, and the stop when an advance finishes with nothing else studied",
   viewport: WIDE,
   async run({ page, shot }) {
     await openGame(page);
@@ -147,12 +160,28 @@ export default defineScenario({
       'sooner than any advance you can start',
     );
     await expect(page.getByTestId('advance-suggested')).toHaveCount(0);
+    await expect(page.getByTestId('advances-building-first')).toContainText('more than you hold');
     await shot(
       'building-first-1280',
-      'Rome on day 1 with nothing studied: the panel names the building that would pay back sooner than any advance, and marks no advance',
+      'Rome on day 1 with 4,000 gold and nothing studied: the panel names the building that would pay back sooner than any advance, the gold it lacks and the days to it, and marks no advance',
     );
     await resize(page, PHONE);
     await shot('building-first-390', 'The same line at 390 px wide');
+    await resize(page, WIDE);
+    await page.getByTestId('advances-button').click();
+
+    await load(page, building());
+    await page.getByTestId('advances-button').click();
+    await expect(page.getByTestId('advances-marked')).toContainText('Pays back soonest');
+    await shot(
+      'marked-1280',
+      'Every city building: the panel names the advance it marks at its top, with Show it',
+    );
+    await page.getByTestId('advances-show-marked').click();
+    await shot('marked-shown-1280', 'Show it brings the marked card into view');
+    await resize(page, PHONE);
+    await page.getByTestId('advances').evaluate((el) => el.scrollTo(0, 0));
+    await shot('marked-390', 'The marked advance named at the top at 390 px wide');
     await resize(page, WIDE);
     await page.getByTestId('advances-button').click();
 
@@ -171,16 +200,27 @@ export default defineScenario({
     await shot('hint-390', 'The same hint at 390 px wide');
     await resize(page, WIDE);
 
+    await openGame(page, { pauses: true });
     await load(page, studying(2));
     await resume(page);
-    await expect(page.getByTestId('alerts')).toContainText('Fallow fields is studied, for good.');
-    await pause(page);
+    const stopped = page
+      .getByTestId('alerts')
+      .getByRole('listitem')
+      .filter({ has: page.getByTestId('alert-paused') })
+      .filter({ hasText: 'Nothing is being studied now' });
+    await expect(stopped).toHaveCount(1);
     await expect(page.getByTestId('study-line')).toHaveText('None studied');
     await shot(
       'finished-1280',
-      'The news of Fallow fields finished, in the corner, with the game still running until paused, and the top bar saying nothing is studied',
+      'Fallow fields finished with nothing else studied: the game stops, and the line in the corner says to choose the next advance',
     );
     await resize(page, PHONE);
-    await shot('finished-390', 'The same news at 390 px wide, the top bar saying None');
+    await shot('finished-390', 'The same stop at 390 px wide, the top bar saying None');
+    await stopped.getByRole('button').first().click();
+    await expect(page.getByTestId('advances')).toBeVisible();
+    await shot(
+      'finished-opens-390',
+      'A click on the line opens the Advances panel, which takes the middle of the screen while the stop waits in the Chronicle',
+    );
   },
 });

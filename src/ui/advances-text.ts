@@ -12,6 +12,7 @@ import { citiesOf, studyPrice, studyRefund, type StudyOrder } from '../sim/advan
 import { FOOD_MARGIN_MEN } from '../sim/ai/build.ts';
 import {
   bestStudy,
+  drilledMen,
   nearestTarget,
   sharperMen,
   spareFoodMen,
@@ -22,10 +23,13 @@ import { UNREST_DAYS, unrestDaysFor } from '../sim/cities.ts';
 import { GUARD_DETER_DAYS, GUARD_GOLD } from '../sim/guards.ts';
 import { fullDefences, WALL_WEAR_PER_THOUSAND_MEN } from '../sim/systems/sieges.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
-import type { FactionId } from '../sim/ids.ts';
+import type { CityId, FactionId } from '../sim/ids.ts';
+import { dailyBalances, limitsOf } from '../sim/systems/economy.ts';
+import type { World } from '../sim/world/world.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { whole } from '../app/names.ts';
+import { STARTING_GENERAL_SKILL } from '../sim/new-game.ts';
 import { worthBuilding } from '../app/building-hint.ts';
 import { BUILDINGS } from '../sim/buildings/buildings.ts';
 import { paybackBasis } from './buildings-text.ts';
@@ -72,6 +76,7 @@ export interface BranchView {
 /** The three branches with each advance, as the realm stands today and with the orders waiting. */
 export function advancesView(
   state: State,
+  world: World,
   faction: FactionId,
   pending: readonly Order[],
 ): BranchView[] {
@@ -79,7 +84,7 @@ export function advancesView(
   const ordered = pending.find(
     (order): order is StudyOrder => order.kind === 'study' && order.faction === faction,
   )?.advance;
-  const suggested = marked(state, faction).advance;
+  const suggested = marked(state, world, faction).advance;
   return ADVANCE_BRANCHES.map((branch) => ({
     branch,
     name: BRANCH_NAMES[branch],
@@ -121,11 +126,14 @@ export function advancesView(
  * What the panel puts first: the advance that pays back soonest of those the realm can start
  * with all its gold, unless one of the player's cities could start a building that pays back
  * sooner, by the building hint's reckoning (`worthBuilding`), whether or not the treasury pays
- * for it today, since study would only put it off. Then that building, and no advance,
- * since an advance bought on such a day puts off a building that would pay sooner.
+ * for it today, since study would only put it off. Then that building, and no advance.
+ * A Temple or a Sanctuary is weighed only by a realm that holds a city the map gave another,
+ * since its payback is reckoned from a city taken each year, which a realm that has never
+ * taken one does not earn.
  */
 export function marked(
   state: State,
+  world: World,
   faction: FactionId,
 ): {
   advance?: AdvanceKind;
@@ -135,17 +143,62 @@ export function marked(
   const gold = state.factions[faction]?.stores.gold;
   const soonest = gold === undefined ? undefined : bestStudy(state, faction, gold);
   if (!soonest) return {};
-  const building = faction === state.player ? worthBuilding(state, true) : undefined;
+  const building =
+    faction === state.player
+      ? worthBuilding(state, true, !hasConquered(state, world, faction))
+      : undefined;
   if (building && building.years < soonest.payback) return { building, soonest };
-  return { advance: soonest.advance };
+  return { advance: soonest.advance, soonest };
+}
+
+/** Whether the realm holds a city the map gave another owner: it has taken a city and kept it. */
+export function hasConquered(state: State, world: World, faction: FactionId): boolean {
+  return world.map.provinces.some(
+    (province) =>
+      (province.owner as string) !== (faction as string) &&
+      state.cities[province.id as string as CityId]?.owner === faction,
+  );
+}
+
+/** The panel's opening line naming the advance it marks, so it is seen without scrolling. */
+export function markedLine(
+  state: State,
+  world: World,
+  faction: FactionId,
+): { advance: AdvanceKind; text: string } | undefined {
+  const { advance, soonest } = marked(state, world, faction);
+  if (!advance || !soonest) return undefined;
+  return {
+    advance,
+    text: `Pays back soonest of what you can start: ${ADVANCES[advance].name}, in ${soonest.payback.toFixed(1)} years.`,
+  };
 }
 
 /** The line that names a building that would pay back sooner than any advance the realm can start, or undefined. */
-export function buildingFirstLine(state: State, faction: FactionId): string | undefined {
-  const { building, soonest } = marked(state, faction);
+export function buildingFirstLine(
+  state: State,
+  world: World,
+  faction: FactionId,
+): string | undefined {
+  const { building, soonest } = marked(state, world, faction);
   if (!building || !soonest) return undefined;
   const { city, kind, years } = building;
-  return `Building ${BUILDINGS[kind].name} at ${city.name} would pay back in ${years.toFixed(1)} years${paybackBasis(kind)}, sooner than any advance you can start: the soonest, ${ADVANCES[soonest.advance].name}, takes ${soonest.payback.toFixed(1)}. Build first, and study with the gold left.`;
+  const { name, gold: price } = BUILDINGS[kind];
+  const gold = state.factions[faction]?.stores.gold ?? 0;
+  const net = dailyBalances(state).get(faction)?.gold ?? 0;
+  const missing = price - gold;
+  const limit = limitsOf(state).get(faction)?.gold ?? Infinity;
+  const costs = `It costs ${whole(price)} gold, ${whole(Math.ceil(missing))} more than you hold`;
+  // Gold stops at the treasury's limit, so a price above it is never saved up.
+  const short =
+    missing <= 0
+      ? ''
+      : price > limit
+        ? ` ${costs}, and more than your treasury holds at its limit of ${whole(Math.floor(limit))}, so it waits until the limit grows.`
+        : net > 0
+          ? ` ${costs}, which today's income brings in ${whole(Math.ceil(missing / net))} days.`
+          : ` ${costs}, and today's income does not bring it in.`;
+  return `Building ${name} at ${city.name} would pay back in ${years.toFixed(1)} years${paybackBasis(kind)}, sooner than any advance you can start: the soonest, ${ADVANCES[soonest.advance].name}, takes ${soonest.payback.toFixed(1)}.${short} Build first, and study with the gold left.`;
 }
 
 /** What each advance does, in a sentence with its number. */
@@ -190,6 +243,12 @@ export function doesText(state: State, faction: FactionId, kind: AdvanceKind): s
 /** The realm's own numbers of the advances whose effect the daily sums do not show. */
 function extraText(state: State, faction: FactionId, kind: AdvanceKind): string | undefined {
   if (kind === 'drillmasters') {
+    if (hasStudied(state.factions[faction], kind)) {
+      const men = drilledMen(state, faction);
+      return men >= 1
+        ? `Your armies strike as ${whole(men)} more men would than under generals of skill ${STARTING_GENERAL_SKILL}, and each new army starts at skill ${ADVANCES.drillmasters.generalSkill}`
+        : `Each new army starts at skill ${ADVANCES.drillmasters.generalSkill}`;
+    }
     const men = sharperMen(state, faction);
     return men >= 1 ? `Your armies strike as ${whole(men)} more men would` : undefined;
   }
@@ -214,9 +273,11 @@ function extraText(state: State, faction: FactionId, kind: AdvanceKind): string 
     const bands = Object.values(state.cities)
       .filter((city) => city.owner === faction)
       .reduce((sum, city) => sum + city.guards.length, 0);
-    return bands > 0
-      ? `Your ${bands} ${bands === 1 ? 'band' : 'bands'} would cost a third less each year hired again`
-      : undefined;
+    if (bands === 0) return undefined;
+    const named = `${bands} ${bands === 1 ? 'band' : 'bands'}`;
+    return hasStudied(state.factions[faction], kind)
+      ? `Each band you hire serves ${Math.round(12 * ADVANCES.longContracts.guardShare)} months; you hold ${named}`
+      : `Your ${named} would cost a third less each year hired again`;
   }
   return undefined;
 }
