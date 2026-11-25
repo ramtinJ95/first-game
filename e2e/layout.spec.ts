@@ -161,7 +161,7 @@ test.describe('the corner at 390 × 844', () => {
     {
       name: 'the longest line the game tells, a climb that stops the game with guards that stop counting',
       save: () => carthageClimbs(8, 2),
-      line: /no longer count against Carthage's war\. Carthage stands higher/,
+      line: /no longer count\. Carthage has climbed/,
     },
     {
       name: 'a line that runs the game on, guards that stop counting',

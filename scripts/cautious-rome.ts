@@ -305,8 +305,8 @@ export function panelBuilds(state: GameState): Order[] {
 
 /** The powers a warning names: one, or several in a line that folds one day's warnings. */
 export function warnedPowers(text: string): string[] {
-  const told = text.replace(/^The [\d,]+ guards at .+? no longer count against .+?'s war\. /, '');
-  return (told.split(/ could soon| still stands near war| stands higher than/)[0] ?? '').split(
+  const told = text.replace(/^The [\d,]+ guards at .+? no longer count\. /, '');
+  return (told.split(/ could soon| still stands near war| has climbed to/)[0] ?? '').split(
     /, | and /,
   );
 }

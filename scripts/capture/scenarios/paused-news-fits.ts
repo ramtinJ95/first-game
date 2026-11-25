@@ -190,6 +190,8 @@ const STOPS: readonly {
   atPeaceAt?: number;
   /** What Carthage's At peace line then says. */
   atPeace?: string;
+  /** The most lines its text may take in the corner, so a player who read it once can skim it after. */
+  lines?: number;
 }[] = [
   {
     name: 'a warning by a city',
@@ -256,8 +258,9 @@ const STOPS: readonly {
     name: 'the longest warning, a climb told with guards that stop counting',
     make: () => structuredClone(longest.state),
     told: longest.told,
-    line: /no longer count against Carthage's war\. Carthage stands higher.*Guards at Roma for 90 days lower it and eat nothing; your food feeds no more men/,
+    line: /no longer count\. Carthage has climbed.*Guards at Roma for 90 days lower it and eat nothing; food feeds no more men/,
     shot: 'longest-warning',
+    lines: 13,
   },
   { name: 'a city in danger', make: alone(ownCityInDangerTomorrow), line: /is in danger/ },
   { name: 'fleets sighted', make: alone(fiveFleetsOnRoma), line: /sail|march/ },
@@ -265,7 +268,13 @@ const STOPS: readonly {
   { name: 'a battle', make: alone(battleTomorrow), line: /Battle at Roma/ },
 ];
 
-async function stopOn(page: Page, state: GameState, line: RegExp, told?: readonly string[]) {
+async function stopOn(
+  page: Page,
+  state: GameState,
+  line: RegExp,
+  told?: readonly string[],
+  lines?: number,
+) {
   await pause(page);
   await dropSave(
     page,
@@ -310,6 +319,14 @@ async function stopOn(page: Page, state: GameState, line: RegExp, told?: readonl
   expect(box.y + box.height, 'the stopped line ends inside the window').toBeLessThanOrEqual(
     window.height,
   );
+  if (lines === undefined) return;
+  const read = await item.locator('.text').evaluate((text) => {
+    const range = document.createRange();
+    // The words alone, since the Paused badge beside them sits on another baseline.
+    range.selectNodeContents(text.lastChild ?? text);
+    return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+  });
+  expect(read, `the stopped line takes ${lines} lines or fewer`).toBeLessThanOrEqual(lines);
 }
 
 export default defineScenario({
@@ -322,7 +339,7 @@ export default defineScenario({
       await resizeTo(page, { width, height: 720 });
       for (const stop of STOPS) {
         if (stop.atPeaceAt !== undefined && stop.atPeaceAt !== width) continue;
-        await stopOn(page, stop.make(), stop.line, stop.told);
+        await stopOn(page, stop.make(), stop.line, stop.told, stop.lines);
         if (stop.shot)
           await shot(
             `${stop.shot}-${width}`,

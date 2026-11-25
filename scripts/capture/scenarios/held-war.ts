@@ -9,7 +9,7 @@ const CASES = [
     title:
       'a warning of Carthage, held back by its war with Lepcis Magna, names the war and the share it would stand at once it ends',
     play: 'warning',
-    line: /Its war with Lepcis Magna holds back part of its strength: once that war ends, it would stand at \d+%/,
+    line: /Once its war with Lepcis Magna ends, it would stand at \d+%/,
     stops: true,
   },
   {
@@ -25,7 +25,7 @@ const CASES = [
     title:
       'the war ends and Carthage climbs more than 6 points above its last stop: one stop that tells both',
     play: 'climbs',
-    line: /Carthage's war with Lepcis Magna has ended\. Carthage stands higher than when the game last stopped for it/,
+    line: /Carthage's war with Lepcis Magna has ended\. Carthage has climbed to \d+%.* at its last stop/,
     stops: true,
   },
 ] as const;

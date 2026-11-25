@@ -232,13 +232,18 @@ export function threatNewsOfDay(
     stops && others.length === 0 ? freed.find((f) => f.power === first.power) : undefined;
   const folded = `${foldedWar ? `${first.name}'s war with ${listed(foldedWar.enemies.map((enemy) => factionName(after, enemy)))} has ended. ` : ''}${
     foldedBand
-      ? `The ${whole(foldedBand.men)} guards at ${after.cities[foldedBand.city]?.name ?? foldedBand.city} no longer count against ${first.name}'s war. `
+      ? `The ${whole(foldedBand.men)} guards at ${after.cities[foldedBand.city]?.name ?? foldedBand.city} no longer count. `
       : ''
   }`;
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
   const text = stops
     ? others.length === 0
-      ? `${folded}${first.climb ? `${first.name} stands higher than when the game last stopped for it, on ${dateText(first.climb.day)} at ${first.climb.share}%:` : first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), guardsHold(after, world, first.power, first.threat), world)}${heldBack(after, world, first.power, first.threat)} See At peace in Wars.`
+      ? `${folded}${
+          first.climb
+            ? // A climb repeats a stop the player read whole, so it says least of the warnings that stop.
+              `${first.name} has climbed to ${share(first.threat.readiness)} of the strength it needs ${near(after, first.threat)}, from ${first.climb.share}% at its last stop on ${dateText(first.climb.day)}, and may declare ${first.from}.`
+            : `${first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.`
+        }${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), world)}${heldBack(after, world, first.power, first.threat)} See At peace in Wars.`
       : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}.${warned.map((w) => heldBack(after, world, w.power, w.threat, `${w.name}'s`)).join('')} What lowers each is under At peace in Wars.`
     : ranOnText(
         after,
@@ -301,7 +306,7 @@ function heldBack(
   world: World,
   power: FactionId,
   threat: Threat,
-  whose = 'Its',
+  whose = 'its',
 ): string {
   if (threat.heldBy.length === 0) return '';
   const free = structuredClone(state) as GameState;
@@ -309,7 +314,8 @@ function heldBack(
   const freedOf = warReadiness(free, world, power, state.player)?.readiness;
   if (freedOf === undefined || points(freedOf) <= points(threat.readiness)) return '';
   const wars = listed(threat.heldBy.map((enemy) => factionName(state, enemy)));
-  return ` ${whose} war with ${wars} holds back part of its strength: once ${threat.heldBy.length === 1 ? 'that war ends' : 'those wars end'}, it would stand at ${share(freedOf)}.`;
+  const many = threat.heldBy.length > 1;
+  return ` Once ${whose} war${many ? 's' : ''} with ${wars} end${many ? '' : 's'}, it would stand at ${share(freedOf)}.`;
 }
 
 /** The days before guards stop counting that the player is told of it, so a band hired in their place counts from the day they stop. */
@@ -410,34 +416,6 @@ function bandAlert(
 }
 
 /**
- * When guards the power counts at the city it weighs hold its share down, the days they stop
- * counting and the share it would stand at without them, reckoned on a copy of the day with
- * those bands gone; nothing when it counts none.
- */
-function guardsHold(state: State, world: World, power: FactionId, threat: Threat): string {
-  if (threat.pressed) return '';
-  const city = state.cities[threat.front];
-  if (!city || city.owner !== state.player) return '';
-  const counted = city.guards.filter((band) => deterrentUntil(band) > state.day);
-  if (counted.length === 0) return '';
-  const without = structuredClone(state) as GameState;
-  const walls = without.cities[city.id];
-  if (!walls) return '';
-  walls.guards = walls.guards.filter((band) => deterrentUntil(band) <= state.day);
-  walls.garrison = Math.max(0, walls.garrison - counted.length * GUARD_BAND);
-  const bare = warReadiness(without, world, power, state.player)?.readiness;
-  const days = counted.map((band) => deterrentUntil(band)).sort((a, b) => a - b);
-  const first = days[0] ?? state.day;
-  const last = days.at(-1) ?? first;
-  // Up to six bands each with its own day would not fit the corner, so the first and last stand for them.
-  const when =
-    first === last
-      ? `stop counting on ${dateText(first)}`
-      : `stop counting from ${dateText(first)} to ${dateText(last)}`;
-  return ` Guards at ${city.name} ${when}${bare === undefined ? '' : `; without them it would stand at ${share(bare)}`}.`;
-}
-
-/**
  * A warning that runs the game on, told short, since only news that stops the game gets the
  * corner's larger room: each power's share, the front it weighs, when it may declare, and the
  * stop it repeats, standing no higher or only a few points higher. What lowers each threat is
@@ -454,17 +432,19 @@ function ranOnText(
 ): string {
   const [one, ...others] = spared;
   if (!one) return '';
-  const near = (threat: Threat) =>
-    threat.pressed
-      ? 'against your field armies'
-      : `near ${state.cities[threat.front]?.name ?? 'your land'}`;
   // Each power's day of war and stop would not fit the corner, so the At peace rows give them.
   if (others.length > 0)
     return `${listed(spared.map((w) => w.name))} could soon declare war on you, with ${listed(spared.map((w) => share(w.threat.readiness)))} of the strength each needs. The game ran on: none stands ${THREAT_SPARE_RISE} points above its last stop. See At peace in Wars.`;
   const rise = points(one.threat.readiness) - one.stop.share;
   const higher = rise > 0 ? `only ${rise} ${rise === 1 ? 'point' : 'points'} higher` : 'no higher';
-  return `${one.name} could soon declare war on you: ${share(one.threat.readiness)} of the strength it needs ${near(one.threat)}, ${one.from}. The game ran on: its stop on ${dateText(one.stop.day)} was at ${one.stop.share}%, and it stands ${higher}. See At peace in Wars.`;
+  return `${one.name} could soon declare war on you: ${share(one.threat.readiness)} of the strength it needs ${near(state, one.threat)}, ${one.from}. The game ran on: its stop on ${dateText(one.stop.day)} was at ${one.stop.share}%, and it stands ${higher}. See At peace in Wars.`;
 }
+
+/** What the power weighs, in the corner's fewest words. */
+const near = (state: State, threat: Threat) =>
+  threat.pressed
+    ? 'against your field armies'
+    : `near ${state.cities[threat.front]?.name ?? 'your land'}`;
 
 /** The first day a power on the notice that began on `since` may declare war, while it is still to come. */
 const dayToCome = (state: State, since: number | null) =>
@@ -679,7 +659,6 @@ function whatCounts(
   where: Where = 'panel',
   muster?: TrainingMuster,
   treasury?: string,
-  guards = '',
   world?: World,
 ): string {
   if (threat.pressed)
@@ -700,9 +679,9 @@ function whatCounts(
   const lowers = !front
     ? ''
     : hungry
-      ? ` Guards at ${front.name} for ${GUARD_DETER_DAYS} days lower it and eat nothing; your food feeds no more men.`
-      : ` Your armies on land within ${whole(WAR_FRONT_KM)} km count; more men, or guards at ${front.name} for ${GUARD_DETER_DAYS} days, lower it.`;
-  return `${hoard}${lowers}${guards}`;
+      ? ` Guards at ${front.name} for ${GUARD_DETER_DAYS} days lower it and eat nothing; food feeds no more men.`
+      : ` More men, or guards at ${front.name} for ${GUARD_DETER_DAYS} days, lower it.`;
+  return `${hoard}${lowers}`;
 }
 
 /** A share of the strength a power needs that the player's treasury takes off, below which the warning does not name a purchase. */
@@ -747,9 +726,9 @@ export function treasuryAdvice(
   const gold = state.factions[state.player]?.stores.gold ?? 0;
   const { name, gold: price } = BUILDINGS[found.kind];
   const why = decides
-    ? `is what brings it this near: without that gold it would stand at ${share(without)}`
-    : `takes ${Math.round(threat.hoard * 100)}% off the strength it needs`;
-  return ` Your treasury of ${whole(gold)} gold ${why}. Building ${name} at ${found.city.name} for ${whole(price)} gold would take it to ${share(after)}.`;
+    ? `Without your ${whole(gold)} gold it would stand at ${share(without)}`
+    : `Your ${whole(gold)} gold takes ${Math.round(threat.hoard * 100)}% off the strength it needs`;
+  return ` ${why}; ${name} at ${found.city.name}, ${whole(price)} gold, would take it to ${share(after)}.`;
 }
 
 /** Where the advice is read: the corner, with room for the warning's 12 lines, or the wars panel. */
@@ -813,6 +792,8 @@ export function standingThreats(
             dayToCome(state, power.noticeSince),
             'panel',
             training?.get(power.id),
+            undefined,
+            threat.readiness >= THREAT_WARN ? world : undefined,
           )
         : '';
       return {
@@ -834,11 +815,28 @@ function ranOnRow(told: ReadonlySet<string>, power: FactionId, since: number): s
   return ` It warned again on ${dateText(last)} and the game ran on: its stop on ${dateText(stop.day)} was at ${stop.share}%.`;
 }
 
-/** How many great powers at peace with the player stand at THREAT_WARN or nearer today, as the top bar counts them. */
-export function powersNearWar(state: State, world: World): number {
-  return standingThreats(state, world).filter((threat) => (threat.readiness ?? 0) >= THREAT_WARN)
-    .length;
+/**
+ * The great powers at peace with the player that stand at THREAT_WARN or nearer today, by id, as
+ * the top bar counts them. It builds no row, so a row's recruit forecast costs only the open panel.
+ */
+export function nearWarPowers(state: State, world: World): FactionId[] {
+  const player = state.player;
+  return Object.values(state.factions)
+    .filter(
+      (power) =>
+        power.id !== player &&
+        power.kind === 'greatPower' &&
+        power.defeatedOn === null &&
+        !areAtWar(state, power.id, player) &&
+        !truceBetween(state, power.id, player) &&
+        (readinessOf(state, world, power.id)?.readiness ?? 0) >= THREAT_WARN,
+    )
+    .map((power) => power.id)
+    .sort();
 }
+
+/** How many great powers at peace with the player stand at THREAT_WARN or nearer today, as the top bar counts them. */
+export const powersNearWar = (state: State, world: World) => nearWarPowers(state, world).length;
 
 /** Armies named one by one in a note; the rest are counted together, so a large realm's note still fits the panel. */
 export const NAMED_ARMIES = 3;
