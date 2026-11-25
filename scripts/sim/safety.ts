@@ -37,7 +37,7 @@ const { values } = parseArgs({
   },
 });
 
-const SAMPLE_DAYS = 5;
+const SAMPLE_DAYS = 15;
 const TERM_YEARS = [3, 5, 10];
 const WORLD_YEARS = [5, 10];
 type State = GameState;
