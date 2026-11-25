@@ -24,11 +24,13 @@ Preconditions:
 - **Pause with Space.** `act "await page.locator('body').press('Space'); await expect(page.getByTestId('time-controls-speed')).toHaveText('Paused'); return await page.getByTestId('time-controls-day').getAttribute('data-day')"`. The day stops.
 - **Speed 3.** `act "await page.getByRole('button', { name: 'Speed 3' }).click(); await page.getByRole('button', { name: 'Resume', exact: true }).click(); const from = Number(await page.getByTestId('time-controls-day').getAttribute('data-day')); await page.waitForTimeout(3000); return { from, to: Number(await page.getByTestId('time-controls-day').getAttribute('data-day')), pressed: await page.getByRole('button', { name: 'Speed 3' }).getAttribute('aria-pressed'), speed: await page.getByTestId('time-controls-speed').textContent() }"`. `speed` is `Speed 3`, `pressed` is `true`, and `to` is about 15 days past `from`.
 - **Stores.** `act "return Object.fromEntries(await Promise.all(['gold','food','manpower'].map(async k => [k, { amount: await page.getByTestId('store-' + k + '-amount').textContent(), change: await page.getByTestId('store-' + k + '-change').textContent(), why: await page.getByTestId('store-' + k).getAttribute('title') }])))"`.
-- **Short.** `open --moment carthageNearsWar`, then `play --until-day 88`. Food reads `0`, its note `Short <n>`, and the desertion line appears.
+- **Short.** `open --moment e2e/crowded-bar.ts:crowdedBar`. Food reads `0`, its note `Short 15,400`, its `title` starts `Ran out, and 15,400 food short`, and `desertion-standing` reads `Men desert each day: hunger. …` at once. `carthageNearsWar` runs short too, by day 69.
 - **Proof.** `shot` paused and at speed 3, with the date in view.
 
 ## Gotchas
 
 - Picking a speed while paused keeps the game paused; resume it as well.
 - Pausing on a stop and pausing by hand look the same in the top bar; the corner's `Paused` mark tells them apart.
-- Capture scenarios: `time-controls`, `speed`, `threat-top-bar`, `news`.
+- Pause, Resume and Space do nothing while a fate, leave, defeat or victory dialog is open.
+- A store's `title` is empty while it has no note.
+- Capture scenarios: `time-controls`, `speed`, `threat-top-bar`, `news`, `phone-top-bar`.
