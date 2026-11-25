@@ -13,6 +13,14 @@ const CASES = [
     stops: false,
   },
   {
+    name: 'ahead',
+    title:
+      'ten days before guards Carthage counts at Roma stop counting: told, with the day and the share it would then stand at, and the game runs on',
+    save: () => carthageClimbs(0, 2, [], 111),
+    line: /The 1,000 guards at Roma stop counting against Carthage's war in 10 days/,
+    stops: false,
+  },
+  {
     name: 'climb',
     title:
       'Carthage stands 8 points above the share the game last stopped for: the game stops again',
@@ -53,7 +61,7 @@ async function whole(page: Page, where: 'alerts' | 'chronicle', line: RegExp) {
 export default defineScenario({
   name: 'warning-climb',
   title:
-    'A power on notice whose guards stop counting is told of that day, and one that climbs 6 points or more above the share the game last stopped for stops it again',
+    'A power on notice whose guards stop counting is told ten days ahead and on that day, and one that climbs 6 points or more above the share the game last stopped for stops it again',
   async run({ page, shot }) {
     await openGame(page, { pauses: true });
     for (const width of [1280, 1024]) {
@@ -82,6 +90,32 @@ export default defineScenario({
     await shot(
       'warning-climb-chronicle-390',
       'The last case, a climb and guards on one day, in the Chronicle at 390 px wide',
+    );
+    const ahead = CASES.find((c) => c.name === 'ahead');
+    if (!ahead) throw new Error('no ahead case');
+    await page.getByRole('button', { name: 'Chronicle' }).click();
+    await pause(page);
+    await dropSave(page, ahead.save());
+    await expect(page.getByTestId('time-controls-day')).toHaveAttribute('data-day', '100');
+    await untilDrawn(page);
+    await resume(page);
+    await page
+      .getByTestId('alerts')
+      .getByRole('listitem')
+      .filter({ hasText: ahead.line })
+      .first()
+      .waitFor();
+    await pause(page);
+    await page.getByRole('button', { name: 'Chronicle' }).click();
+    await expect(chronicle).toBeVisible();
+    await whole(page, 'chronicle', ahead.line);
+    await expect(
+      chronicle.getByRole('listitem').filter({ hasText: ahead.line }).first(),
+    ).toContainText('A new band counts 90 days, for 2,000 gold.');
+    await untilDrawn(page);
+    await shot(
+      'warning-climb-ahead-chronicle-390',
+      'The line ten days before guards stop counting, whole in the Chronicle at 390 px wide',
     );
   },
 });

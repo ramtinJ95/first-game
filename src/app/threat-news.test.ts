@@ -179,6 +179,67 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
     expect(news[0]?.pause).toBeUndefined();
   });
 
+  test('tells, without stopping, ten days ahead of the day guards stop counting, and the share it would then stand at', () => {
+    const { before, after } = standing(5300, 100, 2, 111 - GUARD_DETER_DAYS);
+    const bare = structuredClone(after);
+    const roma = bare.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    roma.guards = [];
+    roma.garrison -= 2 * GUARD_BAND;
+    const told = new Set([`threat:carthage:70`, `threat-stop:carthage:70:${shareOf(after)}:roma`]);
+    const news = threatNewsOfDay(before, after, world, told);
+    expect(news).toEqual([
+      expect.objectContaining({
+        kind: 'guardsStopSoon',
+        day: 100,
+        text: `The 1,000 guards at Roma stop counting against Carthage's war in 10 days, on ${dateText(111)}: it would then stand at ${shareOf(bare)}%. A new band counts 90 days, for 2,000 gold.`,
+      }),
+    ]);
+    expect(news[0]?.pause).toBeUndefined();
+    expect(threatNewsOfDay(after, after, world, told)).toEqual([]);
+  });
+
+  test('tells each day bands stop counting once, and the share on that day without every band gone by then', () => {
+    const { before, after } = standing(5300, 100);
+    const roma = after.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    roma.guards = [105, 111].map((day) => ({
+      until: (day - GUARD_DETER_DAYS + GUARD_DAYS) as Day,
+    }));
+    roma.garrison += 2 * GUARD_BAND;
+    const without = (gone: number) => {
+      const bare = structuredClone(after);
+      const walls = bare.cities['roma' as CityId];
+      if (!walls) throw new Error('no Roma');
+      walls.guards = walls.guards.slice(gone);
+      walls.garrison -= gone * GUARD_BAND;
+      return shareOf(bare);
+    };
+    const told = new Set([`threat:carthage:70`, `threat-stop:carthage:70:${without(2)}:roma`]);
+    const soon = (news: Alert[]) =>
+      news.filter((a) => a.kind === 'guardsStopSoon').map((a) => a.text);
+    expect(soon(threatNewsOfDay(before, after, world, told))).toEqual([
+      `The 500 guards at Roma stop counting against Carthage's war in 4 days, on ${dateText(105)}: it would then stand at ${without(1)}%. A new band counts 90 days, for 2,000 gold.`,
+    ]);
+    expect(soon(threatNewsOfDay(after, after, world, told))).toEqual([
+      `The 500 guards at Roma stop counting against Carthage's war in 10 days, on ${dateText(111)}: it would then stand at ${without(2)}%. A new band counts 90 days, for 2,000 gold.`,
+    ]);
+    expect(soon(threatNewsOfDay(after, after, world, told))).toEqual([]);
+  });
+
+  test('tells a power that comes on notice inside the ten days at once, with the days left', () => {
+    const { before, after } = standing(5300, 100, 2, 106 - GUARD_DETER_DAYS);
+    const punic = after.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 101 as Day;
+    const news = threatNewsOfDay(before, after, world, new Set());
+    expect(news.filter((a) => a.kind === 'guardsStopSoon').map((a) => a.text)).toEqual([
+      expect.stringMatching(
+        /^The 1,000 guards at Roma stop counting against Carthage's war in 5 days, on /,
+      ),
+    ]);
+  });
+
   test('tells guards that stop counting on the day of a climb inside the one stop', () => {
     const { before, after } = standing(5300, 100, 2, 101 - GUARD_DETER_DAYS);
     const told = new Set([

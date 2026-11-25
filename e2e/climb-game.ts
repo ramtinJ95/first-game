@@ -11,14 +11,15 @@ import { armyOf, carthage, carthageNearsWar, map, rome } from './support.ts';
 /**
  * `carthageNearsWar` with 5,600 Carthaginians on day 100, on notice since day 60 and warned on
  * day 70, when the game stopped for it at `stoppedAt` points below its share today, and Roma
- * holding `bands` bands hired on day 11, which Carthage counts until day 101: saved with what
- * the page was told. At 5,600 Carthage stands near 95% once the bands stop counting, so it does
+ * holding `bands` bands which Carthage counts until day `lapse`, 101 unless given: saved with
+ * what the page was told. At 5,600 Carthage stands near 95% once the bands stop counting, so it does
  * not declare in the days the scenario plays.
  */
 export function carthageClimbs(
   stoppedAt: number,
   bands: number,
   chronicle: readonly Alert[] = [],
+  lapse = 101,
 ): string {
   const state = carthageNearsWar();
   state.day = 100 as Day;
@@ -30,7 +31,7 @@ export function carthageClimbs(
   if (!spearmen) throw new Error('no Carthaginian army');
   spearmen.men = 5600;
   roma.guards = Array.from({ length: bands }, () => ({
-    until: (101 - GUARD_DETER_DAYS + GUARD_DAYS) as Day,
+    until: (lapse - GUARD_DETER_DAYS + GUARD_DAYS) as Day,
   }));
   roma.garrison += bands * GUARD_BAND;
   const after = structuredClone(state);

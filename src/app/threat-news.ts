@@ -152,6 +152,7 @@ export function threatNewsOfDay(
     climb: Stop | undefined;
   }[] = [];
   const bands: { power: FactionId; city: CityId; men: number; threat: Threat; from: string }[] = [];
+  const ahead: { power: FactionId; city: CityId; men: number; on: number; bare: number }[] = [];
   const freed: { power: FactionId; enemies: readonly FactionId[]; threat: Threat; from: string }[] =
     [];
   for (const power of Object.values(after.factions).sort((a, b) => (a.id < b.id ? -1 : 1))) {
@@ -166,6 +167,8 @@ export function threatNewsOfDay(
     const lapsed = bandsStoppedCounting(before, after, world, power.id);
     if (lapsed)
       bands.push({ power: power.id, ...lapsed, from: mayDeclare(before, power.noticeSince) });
+    const soon = bandsStopSoon(after, world, power.id, remembered);
+    if (soon) ahead.push({ power: power.id, ...soon });
     const ended = warsEnded(before, after, world, power.id);
     if (ended)
       freed.push({ power: power.id, ...ended, from: mayDeclare(before, power.noticeSince) });
@@ -206,6 +209,7 @@ export function threatNewsOfDay(
   }
   const [first, ...others] = warned;
   const bandLines = (skip: FactionId | undefined) => [
+    ...ahead.filter((a) => a.power !== skip).map((a) => aheadAlert(after, a)),
     ...freed.filter((f) => f.power !== skip).map((f) => freedAlert(after, f)),
     ...bands.filter((b) => b.power !== skip).map((b) => bandAlert(after, b)),
   ];
@@ -249,7 +253,8 @@ export function threatNewsOfDay(
       text,
       ...(front ? { focus: { at: front.position } } : {}),
     },
-    ...bandLines(foldedBand || foldedWar ? first.power : undefined),
+    // One power's stop tells its guards and its war, and names the day its guards stop counting.
+    ...bandLines(stops && others.length === 0 ? first.power : undefined),
   ];
 }
 
@@ -305,6 +310,67 @@ function heldBack(
   if (freedOf === undefined || points(freedOf) <= points(threat.readiness)) return '';
   const wars = listed(threat.heldBy.map((enemy) => factionName(state, enemy)));
   return ` ${whose} war with ${wars} holds back part of its strength: once ${threat.heldBy.length === 1 ? 'that war ends' : 'those wars end'}, it would stand at ${share(freedOf)}.`;
+}
+
+/** The days before guards stop counting that the player is told of it, so a band hired in their place counts from the day they stop. */
+export const GUARDS_AHEAD_DAYS = 10;
+
+const SOON = 'guards-soon:';
+
+/**
+ * The next bands of guards at the city a power on notice weighs that stop counting within
+ * GUARDS_AHEAD_DAYS, told once for each day they stop, kept in the told keys: the day, and the
+ * share the power would stand at on it, without every band that stops counting by then,
+ * reckoned on a copy of the day. A power that comes on notice inside the days is told at once.
+ */
+function bandsStopSoon(
+  after: State,
+  world: World,
+  power: FactionId,
+  remembered: Set<string>,
+): { city: CityId; men: number; on: number; bare: number } | undefined {
+  const prefix = `${SOON}${power}:`;
+  for (const key of [...remembered])
+    if (key.startsWith(prefix) && Number(key.slice(key.lastIndexOf(':') + 1)) <= after.day)
+      remembered.delete(key);
+  const threat = readinessOf(after, world, power);
+  const city = threat && !threat.pressed ? after.cities[threat.front] : undefined;
+  if (!threat || !city || city.owner !== after.player) return undefined;
+  const lapses = city.guards
+    .map((band) => deterrentUntil(band))
+    .filter((until) => until > after.day && until <= after.day + GUARDS_AHEAD_DAYS)
+    .sort((a, b) => a - b);
+  const on = lapses.find((day) => !remembered.has(`${prefix}${city.id}:${day}`));
+  if (on === undefined) return undefined;
+  remembered.add(`${prefix}${city.id}:${on}`);
+  const gone = lapses.filter((day) => day <= on).length;
+  const without = structuredClone(after) as GameState;
+  const walls = without.cities[city.id];
+  if (!walls) return undefined;
+  walls.guards = walls.guards.filter((band) => {
+    const until = deterrentUntil(band);
+    return until <= after.day || until > on;
+  });
+  walls.garrison = Math.max(0, walls.garrison - gone * GUARD_BAND);
+  const bare = warReadiness(without, world, power, after.player)?.readiness ?? threat.readiness;
+  return { city: city.id, men: lapses.filter((day) => day === on).length * GUARD_BAND, on, bare };
+}
+
+const daysText = (days: number) => `${days} ${days === 1 ? 'day' : 'days'}`;
+
+/** The line, up to GUARDS_AHEAD_DAYS before guards a power on notice counts stop counting, of that day. It does not stop the game. */
+function aheadAlert(
+  state: State,
+  ahead: { power: FactionId; city: CityId; men: number; on: number; bare: number },
+): Alert {
+  const city = state.cities[ahead.city];
+  return {
+    kind: 'guardsStopSoon',
+    day: (state.day - 1) as Day,
+    tone: 'bad',
+    text: `The ${whole(ahead.men)} guards at ${city?.name ?? ahead.city} stop counting against ${factionName(state, ahead.power)}'s war in ${daysText(ahead.on - state.day)}, on ${dateText(ahead.on)}: it would then stand at ${share(ahead.bare)}. A new band counts ${GUARD_DETER_DAYS} days, for ${whole(GUARD_GOLD)} gold.`,
+    ...(city ? { focus: { at: city.position } } : {}),
+  };
 }
 
 /**
