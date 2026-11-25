@@ -263,6 +263,14 @@ async function moment(name: string, file: string, root = here(), json = '[]') {
   console.log(resolve(file));
 }
 
+function textOf(error: unknown) {
+  try {
+    return String(error);
+  } catch {
+    return 'an error that cannot be shown as text';
+  }
+}
+
 function nextShot(dir: string, name: string) {
   const count = readdirSync(dir).filter((f) => f.endsWith('.png')).length + 1;
   return join(dir, `${String(count).padStart(2, '0')}-${name.replace(/[^\w-]/g, '_')}`);
@@ -419,7 +427,7 @@ async function serve(port: number, url: string) {
         try {
           res.end(JSON.stringify(body));
         } catch (error) {
-          res.end(JSON.stringify({ ok: false, error: `not sendable as JSON: ${String(error)}` }));
+          res.end(JSON.stringify({ ok: false, error: `not sendable as JSON: ${textOf(error)}` }));
         }
       };
       let parsed: unknown;
@@ -433,15 +441,15 @@ async function serve(port: number, url: string) {
       const command = parsed as Command;
       if (req.method !== 'POST' || !token || command['token'] !== token)
         return reply({ ok: false, error: "not this run's driver" });
-      const name = command.op;
-      const op = typeof name === 'string' && Object.hasOwn(ops, name) ? ops[name] : undefined;
-      if (typeof op !== 'function')
-        return reply({ ok: false, error: `unknown op ${String(name)}` });
+      const name: unknown = command.op;
+      if (typeof name !== 'string') return reply({ ok: false, error: 'op is not a string' });
+      const op = Object.hasOwn(ops, name) ? ops[name] : undefined;
+      if (typeof op !== 'function') return reply({ ok: false, error: `unknown op ${name}` });
       Promise.resolve()
         .then(() => op(command))
         .then(
           (value) => reply({ ok: true, value: value ?? null }),
-          (error: unknown) => reply({ ok: false, error: String(error) }),
+          (error: unknown) => reply({ ok: false, error: textOf(error) }),
         );
     });
   }).listen(port, '127.0.0.1');
