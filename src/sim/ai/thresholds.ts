@@ -168,4 +168,4 @@ export const SIZE_EXPONENT = 0;
 export const STAY_HOME_PER_YEAR = 0;
 export const STAY_HOME_CAP = 0.5;
 /** Prototype, measuring only: the share of a city's garrison the reckoning of a war weighs. */
-export const GARRISON_WEIGHT = 1;
+export const GARRISON_WEIGHT = 0.5;
