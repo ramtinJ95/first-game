@@ -504,6 +504,11 @@ describe('a war that holds back a power on notice', () => {
     const next = structuredClone(after);
     next.day = (after.day + 1) as Day;
     expect(threatNewsOfDay(after, next, world, told).filter((a) => a.pause)).toEqual([]);
+    const later = structuredClone(after);
+    later.day = 131 as Day;
+    const day132 = structuredClone(later);
+    day132.day = 132 as Day;
+    expect(threatNewsOfDay(later, day132, world, told).filter((a) => a.pause)).toEqual([]);
   });
 
   test('a climb the end of a named war brings more than 30 days after the stop stops the game', () => {
