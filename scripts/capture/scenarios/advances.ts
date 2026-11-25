@@ -68,12 +68,12 @@ function largeRealm(): GameState {
   return state;
 }
 
-/** Rome on day 1 with nothing studied and 4,000 gold, short of the Forum the panel names first. */
-function fresh(): GameState {
+/** Rome on day 1 with nothing studied and `gold`, short of the Forum's 6,500. */
+function fresh(gold: number): GameState {
   const state = startGame();
   const realm = state.factions[rome];
   if (!realm) throw new Error('no Rome');
-  realm.stores.gold = 4_000;
+  realm.stores.gold = gold;
   return state;
 }
 
@@ -154,19 +154,29 @@ export default defineScenario({
     await resize(page, WIDE);
     await page.getByTestId('advances-button').click();
 
-    await load(page, fresh());
+    await load(page, fresh(6_000));
     await page.getByTestId('advances-button').click();
-    await expect(page.getByTestId('advances-building-first')).toContainText(
-      'sooner than any advance you can start',
-    );
+    await expect(page.getByTestId('advances-building-first')).toContainText('still sooner');
     await expect(page.getByTestId('advance-suggested')).toHaveCount(0);
-    await expect(page.getByTestId('advances-building-first')).toContainText('more than you hold');
     await shot(
       'building-first-1280',
-      'Rome on day 1 with 4,000 gold and nothing studied: the panel names the building that would pay back sooner than any advance, the gold it lacks and the days to it, and marks no advance',
+      'Rome with 6,000 gold: the Forum it lacks 500 gold for, counted from today, still pays back sooner than any advance, so the panel names it and marks no advance',
     );
     await resize(page, PHONE);
     await shot('building-first-390', 'The same line at 390 px wide');
+    await resize(page, WIDE);
+    await page.getByTestId('advances-button').click();
+
+    await load(page, fresh(4_000));
+    await page.getByTestId('advances-button').click();
+    await expect(page.getByTestId('advances-building-first')).toContainText('You choose.');
+    await expect(page.getByTestId('advance-suggested')).toHaveCount(1);
+    await shot(
+      'counted-from-today-1280',
+      'Rome with 4,000 gold: counted from today the Forum pays back later than Citizen rolls, which it can pay for now, so the panel marks Citizen rolls and gives both sides and how far it puts the Forum off',
+    );
+    await resize(page, PHONE);
+    await shot('counted-from-today-390', 'The same line at 390 px wide');
     await resize(page, WIDE);
     await page.getByTestId('advances-button').click();
 
