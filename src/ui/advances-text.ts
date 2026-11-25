@@ -122,14 +122,35 @@ export function advancesView(
   }));
 }
 
+/** How long today's income takes to raise a price: no day when it is above the treasury's limit or nothing comes in. */
+interface Wait {
+  readonly price: number;
+  readonly missing: number;
+  readonly net: number;
+  readonly limit: number;
+  /** Days from today, or undefined when no day can be promised. */
+  readonly days: number | undefined;
+}
+
+function waitFor(state: State, faction: FactionId, price: number): Wait {
+  const gold = state.factions[faction]?.stores.gold ?? 0;
+  const net = dailyBalances(state).get(faction)?.gold ?? 0;
+  const limit = limitsOf(state).get(faction)?.gold ?? Infinity;
+  const missing = price - gold;
+  const days = missing <= 0 ? 0 : price > limit || net <= 0 ? undefined : Math.ceil(missing / net);
+  return { price, missing, net, limit, days };
+}
+
 /**
  * What the panel puts first: the advance that pays back soonest of those the realm can start
  * with all its gold, unless one of the player's cities could start a building that pays back
- * sooner, by the building hint's reckoning (`worthBuilding`), whether or not the treasury pays
- * for it today, since study would only put it off. Then that building, and no advance.
- * A Temple or a Sanctuary is weighed only by a realm that holds a city the map gave another,
- * since its payback is reckoned from a city taken each year, which a realm that has never
- * taken one does not earn.
+ * sooner, by the building hint's reckoning (`worthBuilding`). Then that building, and no
+ * advance. A building the treasury cannot pay for yet has its payback counted from today: the
+ * days today's income takes to raise its price, plus its payback. An advance the realm can pay
+ * for now that pays back sooner than that is marked after all, and with no day to promise any
+ * such advance is (`bestStudy` keeps it within STUDY_PAYBACK_YEARS). A Temple or a Sanctuary is
+ * weighed only by a realm that holds a city the map gave another, since its payback is
+ * reckoned from a city taken each year, which a realm that has never taken one does not earn.
  */
 export function marked(
   state: State,
@@ -139,6 +160,9 @@ export function marked(
   advance?: AdvanceKind;
   building?: NonNullable<ReturnType<typeof worthBuilding>>;
   soonest?: { advance: AdvanceKind; payback: number };
+  wait?: Wait;
+  /** The building's payback counted from today, in years: Infinity with no day to promise. */
+  fromToday?: number;
 } {
   const gold = state.factions[faction]?.stores.gold;
   const soonest = gold === undefined ? undefined : bestStudy(state, faction, gold);
@@ -147,8 +171,12 @@ export function marked(
     faction === state.player
       ? worthBuilding(state, true, !hasConquered(state, world, faction))
       : undefined;
-  if (building && building.years < soonest.payback) return { building, soonest };
-  return { advance: soonest.advance, soonest };
+  if (!building || building.years >= soonest.payback) return { advance: soonest.advance, soonest };
+  const wait = waitFor(state, faction, BUILDINGS[building.kind].gold);
+  const fromToday = wait.days === undefined ? Infinity : wait.days / 365 + building.years;
+  if (soonest.payback < fromToday)
+    return { advance: soonest.advance, soonest, building, wait, fromToday };
+  return { building, soonest, wait, fromToday };
 }
 
 /** Whether the realm holds a city the map gave another owner: it has taken a city and kept it. */
@@ -174,31 +202,41 @@ export function markedLine(
   };
 }
 
-/** The line that names a building that would pay back sooner than any advance the realm can start, or undefined. */
+/**
+ * The line that names a building that would pay back sooner than any advance the realm can
+ * start once built, or undefined: what it lacks and when today's income brings it, its payback
+ * counted from today, and, when an advance the treasury pays for now beats that, both sides and
+ * how long studying it puts the building off.
+ */
 export function buildingFirstLine(
   state: State,
   world: World,
   faction: FactionId,
 ): string | undefined {
-  const { building, soonest } = marked(state, world, faction);
-  if (!building || !soonest) return undefined;
+  const { building, soonest, wait, fromToday, advance } = marked(state, world, faction);
+  if (!building || !soonest || !wait || fromToday === undefined) return undefined;
   const { city, kind, years } = building;
-  const { name, gold: price } = BUILDINGS[kind];
-  const gold = state.factions[faction]?.stores.gold ?? 0;
-  const net = dailyBalances(state).get(faction)?.gold ?? 0;
-  const missing = price - gold;
-  const limit = limitsOf(state).get(faction)?.gold ?? Infinity;
-  const costs = `It costs ${whole(price)} gold, ${whole(Math.ceil(missing))} more than you hold`;
+  const { name } = BUILDINGS[kind];
+  const opening = `Building ${name} at ${city.name} would pay back in ${years.toFixed(1)} years${paybackBasis(kind)}`;
+  if (wait.missing <= 0)
+    return `${opening}, sooner than any advance you can start: the soonest, ${ADVANCES[soonest.advance].name}, takes ${soonest.payback.toFixed(1)}. Build first, and study with the gold left.`;
+  const costs = `it costs ${whole(wait.price)} gold, ${whole(Math.ceil(wait.missing))} more than you hold`;
   // Gold stops at the treasury's limit, so a price above it is never saved up.
-  const short =
-    missing <= 0
-      ? ''
-      : price > limit
-        ? ` ${costs}, and more than your treasury holds at its limit of ${whole(Math.floor(limit))}, so it waits until the limit grows.`
-        : net > 0
-          ? ` ${costs}, which today's income brings in ${whole(Math.ceil(missing / net))} days.`
-          : ` ${costs}, and today's income does not bring it in.`;
-  return `Building ${name} at ${city.name} would pay back in ${years.toFixed(1)} years${paybackBasis(kind)}, sooner than any advance you can start: the soonest, ${ADVANCES[soonest.advance].name}, takes ${soonest.payback.toFixed(1)}.${short} Build first, and study with the gold left.`;
+  const when =
+    wait.days !== undefined
+      ? `${costs}, which today's income brings in ${whole(wait.days)} days, so counted from today it pays back in ${fromToday.toFixed(1)} years`
+      : wait.price > wait.limit
+        ? `${costs}, and more than your treasury holds at its limit of ${whole(Math.floor(wait.limit))}, so no day can be promised for it`
+        : `${costs}, and today's income does not bring it in`;
+  if (!advance)
+    return `${opening} once built, but ${when}. That is still sooner than any advance you can start: the soonest, ${ADVANCES[soonest.advance].name}, takes ${soonest.payback.toFixed(1)}. Build first, and study with the gold left.`;
+  const study = ADVANCES[advance].name;
+  const price = studyPrice(state, faction, advance);
+  const putOff =
+    wait.days !== undefined && wait.net > 0
+      ? ` Studying it puts the ${name} off to about ${whole(Math.ceil((wait.missing + price) / wait.net))} days from now.`
+      : '';
+  return `${opening} once built, but ${when}. ${study}, which you can pay for now, pays back in ${soonest.payback.toFixed(1)} years, sooner.${putOff} You choose.`;
 }
 
 /** What each advance does, in a sentence with its number. */

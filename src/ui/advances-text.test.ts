@@ -10,9 +10,10 @@ import { changeCityOwner } from '../sim/cities.ts';
 import type { FactionId } from '../sim/ids.ts';
 import { parseMap } from '../sim/map.ts';
 import { newGame } from '../sim/new-game.ts';
-import { dailyBalances, limitsOf } from '../sim/systems/economy.ts';
+import { dailyBalances, limitsOf, UPKEEP_PER_MAN } from '../sim/systems/economy.ts';
 import { whole } from '../app/names.ts';
 import { buildWorld } from '../sim/world/world.ts';
+import { studyPayback } from '../sim/ai/study.ts';
 import {
   advancesView,
   buildingFirstLine,
@@ -98,7 +99,7 @@ describe('the advances panel', () => {
     expect(row(buildFixture(), 'standardCoin')?.why).toBeUndefined();
   });
 
-  test('names a building that pays back sooner than any advance, though the treasury cannot pay for it yet, and marks no advance, until no city could start one', () => {
+  test('names a building the treasury pays for that pays back sooner than any advance, and marks no advance, until no city could start one', () => {
     const state = buildFixture();
     rome(state).stores.gold = 50_000;
     const marked = (s: GameState) =>
@@ -108,11 +109,6 @@ describe('the advances panel', () => {
         .map((r) => r.kind);
     expect(buildingFirstLine(state, world, FIXTURE.rome)).toBe(
       'Building Forum at Roma would pay back in 2.1 years, sooner than any advance you can start: the soonest, Citizen rolls, takes 3.4. Build first, and study with the gold left.',
-    );
-    expect(marked(state)).toEqual([]);
-    rome(state).stores.gold = 3_500;
-    expect(buildingFirstLine(state, world, FIXTURE.rome)).toMatch(
-      /^Building Forum at Roma would pay back/,
     );
     expect(marked(state)).toEqual([]);
     for (const city of Object.values(state.cities))
@@ -172,31 +168,65 @@ describe('the advances panel', () => {
     });
   });
 
-  test("says how much gold a building first lacks, and in how many days today's income brings it", () => {
+  /**
+   * Rome on the real map, its income cut by a larger army to about 3,000 gold in `days`, as in
+   * round fourteen's Year 2, holding 3,500 gold, 3,000 short of the Forum's price.
+   */
+  function shortOfForum(days: number) {
     const map = parseMap(
       JSON.parse(readFileSync(new URL('../../data/map/map.json', import.meta.url), 'utf8')),
     );
     const state = newGame(map, { seed: 1, player: 'rome' });
     const realm = state.factions[state.player];
     if (!realm) throw new Error('no Rome');
-    realm.stores.gold = 4_000;
+    const formation = Object.values(state.formations).find((f) => {
+      const army = state.armies[f.army];
+      return army?.owner === state.player;
+    });
+    if (!formation) throw new Error('no Roman formation');
+    const wanted = 3_000 / (days - 0.5);
+    const now = dailyBalances(state).get(state.player)?.gold ?? 0;
+    formation.men += Math.max(0, Math.floor((now - wanted) / UPKEEP_PER_MAN.gold));
     const net = dailyBalances(state).get(state.player)?.gold ?? 0;
     expect(net).toBeGreaterThan(0);
-    expect(buildingFirstLine(state, buildWorld(map), state.player)).toContain(
-      `It costs 6,500 gold, 2,500 more than you hold, which today's income brings in ${Math.ceil(2500 / net)} days.`,
+    realm.stores.gold = 6_500 - (days - 0.5) * net;
+    const atlas = buildWorld(map);
+    const shown = advancesView(state, atlas, state.player, [])
+      .flatMap((branch) => branch.rows)
+      .filter((r) => r.suggested)
+      .map((r) => r.kind);
+    return { state, net, line: buildingFirstLine(state, atlas, state.player), shown };
+  }
+
+  test("round fourteen's Year 2: Rome short of a Forum for most of a year is marked the advance it can pay for, with both sides and the cost of choosing", () => {
+    const { state, net, line, shown } = shortOfForum(300);
+    const rolls = studyPayback(state, state.player, 'citizenRolls') ?? 0;
+    expect(shown).toEqual(['citizenRolls']);
+    const missing = Math.ceil(6_500 - (state.factions[state.player]?.stores.gold ?? 0));
+    expect(line).toMatch(
+      new RegExp(
+        `^Building Forum at Roma would pay back in 2\\.1 years once built, but it costs 6,500 gold, ${whole(missing)} more than you hold, which today's income brings in 300 days, so counted from today it pays back in 2\\.9 years\\. Citizen rolls, which you can pay for now, pays back in ${rolls.toFixed(1)} years, sooner\\. Studying it puts the Forum off to about ${whole(Math.ceil((missing + 3_000) / net))} days from now\\. You choose\\.$`,
+      ),
     );
   });
 
-  test('promises no day for a building that costs more than the treasury holds at its limit', () => {
+  test('a building a few days short still counts sooner from today, and keeps the mark off the advances', () => {
+    const { line, shown } = shortOfForum(10);
+    expect(shown).toEqual([]);
+    expect(line).toMatch(
+      /^Building Forum at Roma would pay back in 2\.1 years once built, but it costs 6,500 gold, [\d,]+ more than you hold, which today's income brings in 10 days, so counted from today it pays back in 2\.1 years\. That is still sooner than any advance you can start: the soonest, Citizen rolls, takes 2\.\d\. Build first, and study with the gold left\.$/,
+    );
+  });
+
+  test("with no day to promise, as the price is above the treasury's limit, the advance it can pay for is marked", () => {
     const state = buildFixture();
     rome(state).stores.gold = 3_500;
     const limit = limitsOf(state).get(FIXTURE.rome)?.gold ?? 0;
     expect(limit).toBeLessThan(6_500);
-    const line = buildingFirstLine(state, world, FIXTURE.rome);
-    expect(line).toContain(
-      `It costs 6,500 gold, 3,000 more than you hold, and more than your treasury holds at its limit of ${whole(Math.floor(limit))}, so it waits until the limit grows.`,
+    expect(buildingFirstLine(state, world, FIXTURE.rome)).toBe(
+      `Building Forum at Roma would pay back in 2.1 years once built, but it costs 6,500 gold, 3,000 more than you hold, and more than your treasury holds at its limit of ${whole(Math.floor(limit))}, so no day can be promised for it. Citizen rolls, which you can pay for now, pays back in 3.4 years, sooner. You choose.`,
     );
-    expect(line).not.toMatch(/brings in \d+ days/);
+    expect(row(state, 'citizenRolls')?.suggested).toBe(true);
   });
 
   test('holds no Temple against the advances for a realm that has taken no city, as its payback assumes one taken a year', () => {
