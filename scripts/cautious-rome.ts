@@ -16,7 +16,7 @@ import * as routes from '../src/sim/trade/routes.ts';
 import { areAtWar } from '../src/sim/wars.ts';
 import { distance } from '../src/sim/world/find-path.ts';
 import { buildWorld, type World } from '../src/sim/world/world.ts';
-import { threatNewsOfDay } from '../src/app/threat-news.ts';
+import { menDesertIfRaised, threatNewsOfDay } from '../src/app/threat-news.ts';
 import { GUARD_GOLD, guardRefusal, hireGuards } from '../src/sim/guards.ts';
 import { warReadiness } from '../src/sim/ai/war.ts';
 import { THREAT_WARN } from '../src/app/threat-news.ts';
@@ -88,6 +88,7 @@ export function playCautiousRome(
     peaceful = false,
     guards = 'never',
     answer = false,
+    follows = false,
     climbs = true,
     builds,
     drops = [],
@@ -97,6 +98,14 @@ export function playCautiousRome(
     peaceful?: boolean;
     guards?: GuardPlay;
     answer?: boolean;
+    /**
+     * Whether the answer follows the advice it is given: no answer to a line that advises
+     * nothing, as a warning that ran the game on; no troop when the line says the men in training
+     * will come, or names a band of guards; and no troop that the realm's food cannot feed, as
+     * the recruit card reckons it, so the guards alone answer. False answers every line with
+     * the cheapest troop it can afford, as the answering Romes did before.
+     */
+    follows?: boolean;
     /** Whether a power that climbs THREAT_SPARE_RISE points above its last stop stops the game again (`threatNewsOfDay`); false plays the rule before it. */
     climbs?: boolean;
     /** Rome's building orders for the day, in place of the AI's. */
@@ -139,7 +148,7 @@ export function playCautiousRome(
       ai.filter((o) => o.faction === rome && !held(o)),
     );
     if (answering && state.day >= answering.until) answering = undefined;
-    const answers = answering ? answerOrders(state, answering.city, answering.raise) : [];
+    const answers = answering ? answerOrders(state, answering.city, answering.raise, follows) : [];
     if (answering) answering.raise = false;
     // The reader plans its hires on the day as the answer and the trade before them leave it.
     const earlier = [...answers, ...trade];
@@ -209,6 +218,8 @@ export function playCautiousRome(
     for (const alert of threatNewsOfDay(state, next, world, told, undefined, true, climbs)) {
       // The end of a war that held a power back advises nothing; a climb it brings stops the game itself.
       if (alert.kind === 'heldWarEnded') continue;
+      // A warning that ran the game on names nothing new to do.
+      if (follows && alert.kind === 'warThreat' && !alert.pause) continue;
       const at = alert.focus?.at;
       warnedAt = Object.values(next.cities).find(
         (city) => at && city.owner === rome && city.position.x === at.x && city.position.y === at.y,
@@ -217,7 +228,9 @@ export function playCautiousRome(
         answering = {
           city: warnedAt ?? homeCapital(next, world, rome)?.id ?? ('roma' as CityId),
           until: next.day + NOTICE_DAYS,
-          raise: true,
+          raise:
+            !follows ||
+            (alert.kind === 'warThreat' && !/ in training muster (on|by) /.test(alert.text)),
         };
       if (warnedAt) {
         named.delete(warnedAt);
@@ -302,7 +315,7 @@ const MOVES = new Set<Order['kind']>(['moveArmy', 'halt', 'embark', 'retreat']);
  * troop it can afford at its capital, and for the notice's days it holds every army of its
  * own that is not in a battle or a siege at the city the warning names.
  */
-function answerOrders(state: GameState, city: CityId, raise: boolean): Order[] {
+function answerOrders(state: GameState, city: CityId, raise: boolean, fed = false): Order[] {
   const orders: Order[] = [];
   const at = state.cities[city];
   if (!at || at.owner !== rome) return orders;
@@ -314,7 +327,8 @@ function answerOrders(state: GameState, city: CityId, raise: boolean): Order[] {
       .find(
         (t) => TROOPS[t].recruit.gold <= stores.gold && TROOPS[t].recruit.men <= stores.manpower,
       );
-    if (troop) orders.push({ kind: 'recruit', faction: rome, city: capital.id, troop });
+    if (troop && !(fed && menDesertIfRaised(state, world, troop, capital.id)))
+      orders.push({ kind: 'recruit', faction: rome, city: capital.id, troop });
   }
   for (const army of Object.values(state.armies)) {
     if (army.owner !== rome) continue;

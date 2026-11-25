@@ -1,3 +1,4 @@
+import type { Alert } from '../src/app/alerts.ts';
 import { pageData } from '../src/app/page.ts';
 import { warReadiness } from '../src/sim/ai/war.ts';
 import { GUARD_BAND, GUARD_DAYS, GUARD_DETER_DAYS } from '../src/sim/guards.ts';
@@ -14,7 +15,11 @@ import { armyOf, carthage, carthageNearsWar, map, rome } from './support.ts';
  * the page was told. At 5,600 Carthage stands near 95% once the bands stop counting, so it does
  * not declare in the days the scenario plays.
  */
-export function carthageClimbs(stoppedAt: number, bands: number): string {
+export function carthageClimbs(
+  stoppedAt: number,
+  bands: number,
+  chronicle: readonly Alert[] = [],
+): string {
   const state = carthageNearsWar();
   state.day = 100 as Day;
   const punic = state.factions[carthage];
@@ -39,7 +44,7 @@ export function carthageClimbs(stoppedAt: number, bands: number): string {
   return saveGame(
     state,
     pageData({
-      chronicle: [],
+      chronicle,
       camera: undefined,
       selection: undefined,
       panel: undefined,

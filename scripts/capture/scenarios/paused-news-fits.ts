@@ -16,6 +16,8 @@ import {
   weakSiegeOfMediolanum,
 } from '../../../e2e/support.ts';
 import { ownCityInDangerTomorrow } from '../../../e2e/warnings-game.ts';
+import { carthageClimbs } from '../../../e2e/climb-game.ts';
+import { loadGame } from '../../../src/sim/save.ts';
 import type { CityId, FactionId, FormationId } from '../../../src/sim/ids.ts';
 
 const macedon = 'macedon' as FactionId;
@@ -147,6 +149,35 @@ function alone(make: () => GameState): () => GameState {
   };
 }
 
+/**
+ * Carthage pressing Rome as in `carthagePresses`, with Rome's cities grown no larger than 9,000
+ * and 60 food in store, so its food feeds no more men: the warning says men raised would desert,
+ * and names the Canals that would feed them.
+ */
+function carthagePressesHungry(): GameState {
+  const state = carthagePresses();
+  for (const city of Object.values(state.cities))
+    if (city.owner === rome) city.population = Math.min(city.population, 9000);
+  const stores = state.factions[rome]?.stores;
+  if (!stores) throw new Error('no Roman stores');
+  Object.assign(stores, { food: 60, gold: 5000, manpower: 5000 });
+  return state;
+}
+
+/** A save's game and what its page was told. */
+function fromSave(text: string): { state: GameState; told: readonly string[] } {
+  const loaded = loadGame(text);
+  if (!loaded.ok) throw new Error(loaded.error);
+  const told = (loaded.page as { told?: readonly string[] } | undefined)?.told ?? [];
+  return { state: loaded.state, told };
+}
+
+/**
+ * The longest stopping warning the game tells, as `carthageClimbs` builds it for the
+ * warning-climb capture: a climb told with guards that stop counting, the treasury, the food.
+ */
+const longest = fromSave(carthageClimbs(8, 2));
+
 /** The news of each kind that stops the game, with its longest text the saves give. */
 const STOPS: readonly {
   name: string;
@@ -197,7 +228,7 @@ const STOPS: readonly {
   {
     name: 'a reminder by a city',
     make: carthageStillNearCity,
-    line: /still stands near war with you, as warned on .*may declare any day now.*guards at/,
+    line: /still stands near war with you, as warned on .*may declare any day now.*[Gg]uards at/,
     shot: 'city-reminder',
     told: ['threat:carthage:306'],
   },
@@ -214,6 +245,19 @@ const STOPS: readonly {
     make: carthageAndMacedonNearWar,
     line: /^.*Carthage and Macedon could soon declare war on you/,
     shot: 'two-warnings',
+  },
+  {
+    name: 'a warning by field armies to a realm whose food feeds no more men',
+    make: carthagePressesHungry,
+    line: /all your armies in the field.*Men raised now would desert: food feeds no more\. Canals at/,
+    shot: 'hungry-warning',
+  },
+  {
+    name: 'the longest warning, a climb told with guards that stop counting',
+    make: () => structuredClone(longest.state),
+    told: longest.told,
+    line: /no longer count against Carthage's war\. Carthage stands higher.*Guards at Roma for 90 days lower it and eat nothing; your food feeds no more men/,
+    shot: 'longest-warning',
   },
   { name: 'a city in danger', make: alone(ownCityInDangerTomorrow), line: /is in danger/ },
   { name: 'fleets sighted', make: alone(fiveFleetsOnRoma), line: /sail|march/ },

@@ -10,7 +10,7 @@ import { areAtWar } from '../sim/wars.ts';
 import { warKey } from '../sim/state/war.ts';
 import { canFight, positionOf, standsWithin, strengthOf } from '../sim/ai/situation.ts';
 import { distance } from '../sim/world/find-path.ts';
-import { menOf } from '../sim/systems/economy.ts';
+import { menOf, UPKEEP_PER_MAN } from '../sim/systems/economy.ts';
 import type { Army } from '../sim/state/army.ts';
 import type { MapPoint } from '../sim/state/map-point.ts';
 import type { World } from '../sim/world/world.ts';
@@ -23,6 +23,7 @@ import type { Stores } from '../sim/state/faction.ts';
 import { deterrentUntil, GUARD_BAND, GUARD_DETER_DAYS, GUARD_GOLD } from '../sim/guards.ts';
 import type { Day } from '../sim/state/day.ts';
 import { NOTICE_DAYS, NOTICE_SHARE, WAR_FRONT_KM } from '../sim/ai/thresholds.ts';
+import { canalSite, recruitForecast } from '../ui/recruit-forecast.ts';
 
 type State = DeepReadonly<GameState>;
 
@@ -233,7 +234,7 @@ export function threatNewsOfDay(
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
   const text = stops
     ? others.length === 0
-      ? `${folded}${first.climb ? `${first.name} stands higher than when the game last stopped for it, on ${dateText(first.climb.day)} at ${first.climb.share}%:` : first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), guardsHold(after, world, first.power, first.threat))}${heldBack(after, world, first.power, first.threat)} See At peace in Wars.`
+      ? `${folded}${first.climb ? `${first.name} stands higher than when the game last stopped for it, on ${dateText(first.climb.day)} at ${first.climb.share}%:` : first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), guardsHold(after, world, first.power, first.threat), world)}${heldBack(after, world, first.power, first.threat)} See At peace in Wars.`
       : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}.${warned.map((w) => heldBack(after, world, w.power, w.threat, `${w.name}'s`)).join('')} What lowers each is under At peace in Wars.`
     : ranOnText(
         after,
@@ -613,9 +614,10 @@ function whatCounts(
   muster?: TrainingMuster,
   treasury?: string,
   guards = '',
+  world?: World,
 ): string {
   if (threat.pressed)
-    return ` ${raiseAdvice(state, power, waiting, by, where, muster)}. It weighs you so only while you hold no more cities than at the start.`;
+    return ` ${raiseAdvice(state, power, waiting, by, where, muster, world)}. It weighs you so only while you hold no more cities than at the start.`;
   const front = state.cities[threat.front];
   const gold = state.factions[state.player]?.stores.gold ?? 0;
   const hoard =
@@ -623,7 +625,18 @@ function whatCounts(
     (threat.hoard > 0
       ? ` Your treasury of ${whole(gold)} gold lowers the strength it needs by ${Math.round(threat.hoard * 100)}%, so more gold brings war nearer.`
       : '');
-  return `${hoard}${front ? ` Your armies on land within ${whole(WAR_FRONT_KM)} km count; more men, or guards at ${front.name} for ${GUARD_DETER_DAYS} days, lower it.` : ''}${guards}`;
+  const advice = orderAdvice(state, waiting.factions[state.player]?.stores, by);
+  // Men the realm cannot feed would desert, so the advice names the guards alone, which eat nothing.
+  const hungry =
+    world !== undefined &&
+    advice.kind !== 'none' &&
+    unfed(waiting, world, advice.troop) !== undefined;
+  const lowers = !front
+    ? ''
+    : hungry
+      ? ` Guards at ${front.name} for ${GUARD_DETER_DAYS} days lower it and eat nothing; your food feeds no more men.`
+      : ` Your armies on land within ${whole(WAR_FRONT_KM)} km count; more men, or guards at ${front.name} for ${GUARD_DETER_DAYS} days, lower it.`;
+  return `${hoard}${lowers}${guards}`;
 }
 
 /** A share of the strength a power needs that the player's treasury takes off, below which the warning does not name a purchase. */
@@ -846,6 +859,37 @@ function notCounted(army: DeepReadonly<Army>, point: MapPoint): { text: string; 
 }
 
 /**
+ * Whether `troop` raised at `city` now would leave the realm short of food, so that men desert,
+ * as the recruit card reckons it: with the days the troop trains at that city, which Barracks
+ * shorten, since men who muster sooner eat sooner.
+ */
+export function menDesertIfRaised(state: State, world: World, troop: Troop, city: CityId): boolean {
+  const at = state.cities[city];
+  if (!at) return false;
+  const days = trainingDaysAt(at, TROOPS[troop].recruit.days);
+  return recruitForecast(state, [], world, troop, days, city).short.food !== undefined;
+}
+
+/**
+ * When `troop` raised now would leave the realm short of food, as the recruit card reckons it,
+ * so that its men and others desert: what would feed them, the building the card names, its city,
+ * price and the men it feeds, or nothing more when no city can build one. Undefined when they
+ * are fed.
+ */
+function unfed(state: State, world: World, troop: Troop): string | undefined {
+  const cities = Object.values(state.cities).filter(
+    (city) => city.owner === state.player && city.unrestDays === 0 && !beleaguered(state, city),
+  );
+  const days = (city: (typeof cities)[number]) => trainingDaysAt(city, TROOPS[troop].recruit.days);
+  const [fastest] = cities.sort((a, b) => days(a) - days(b));
+  if (!fastest || !menDesertIfRaised(state, world, troop, fastest.id)) return undefined;
+  const site = canalSite(state, undefined);
+  if (!site) return '';
+  const { name, gold, food } = BUILDINGS[site.kind];
+  return `. ${name} at ${site.city.name}, ${whole(gold)} gold, feed ${whole(Math.floor(food / UPKEEP_PER_MAN.food))} more`;
+}
+
+/**
  * What raising men takes today, as the field-army threat advises it. First the men already in
  * training, the waiting orders' too, by troop, city and muster day, and, when `muster` gives
  * the days played to the last muster, what they do to the share; then what more the player can
@@ -865,6 +909,7 @@ function raiseAdvice(
   by: number | undefined,
   where: Where,
   muster: TrainingMuster | undefined,
+  world?: World,
 ): string {
   const training = inTraining(waiting);
   const stores = waiting.factions[state.player]?.stores;
@@ -896,6 +941,8 @@ function raiseAdvice(
     return `More men lower it, not guards. ${told}. ${then}`;
   }
   const advice = orderAdvice(state, stores, by);
+  const hungry = world && advice.kind !== 'none' ? unfed(waiting, world, advice.troop) : undefined;
+  if (hungry !== undefined) return `Men raised now would desert: food feeds no more${hungry}`;
   if (advice.kind === 'none')
     return advice.text === ''
       ? 'More men lower it, not guards, but no city of yours may recruit now'
@@ -919,7 +966,7 @@ function enoughText(state: State, power: FactionId, muster: Muster): string {
 
 /** What more the player can order: a troop in time, one that musters late, or none, with what it lacks; '' with no city that may recruit. */
 type OrderAdvice =
-  | { readonly kind: 'inTime'; readonly text: string }
+  | { readonly kind: 'inTime'; readonly text: string; readonly troop: Troop }
   | {
       readonly kind: 'late';
       readonly text: string;
@@ -951,6 +998,7 @@ function orderAdvice(
   if (inTime)
     return {
       kind: 'inTime',
+      troop: inTime,
       text: `${TROOP_NAMES[inTime]} cost ${whole(TROOPS[inTime].recruit.gold)} gold and train in ${whole(days(inTime))} days`,
     };
   const [late] = affordable;

@@ -8,10 +8,28 @@
 
   /** The day of an alert at most this many days old stands out, so fresh news shows. */
   const FRESH_DAYS = 10;
+
+  let list: HTMLOListElement | undefined = $state();
+  let shown: Alert | undefined;
+
+  // A line that stopped the game is read to its last word: news told the same day can stand
+  // above it, so the corner scrolls to it once, when it comes, and leaves the scroll to the player after.
+  $effect(() => {
+    const stopped = alerts.find((alert) => alert.paused);
+    if (!list || !stopped || stopped === shown) return;
+    shown = stopped;
+    const item = list.children.item(alerts.indexOf(stopped));
+    if (!item) return;
+    const room = list.getBoundingClientRect();
+    const line = item.getBoundingClientRect();
+    if (line.top < room.top) list.scrollTop -= room.top - line.top;
+    else if (line.bottom > room.bottom)
+      list.scrollTop += Math.min(line.top - room.top, line.bottom - room.bottom);
+  });
 </script>
 
 {#if alerts.length > 0}
-  <ol class="alerts" data-testid="alerts" aria-label="Alerts">
+  <ol class="alerts" data-testid="alerts" aria-label="Alerts" bind:this={list}>
     {#each alerts as alert (alert)}
       <li>
         <button

@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import type { Day } from '../src/sim/state/day.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { carthageClimbs } from './climb-game.ts';
 import {
@@ -204,6 +205,44 @@ test.describe('the corner at 390 × 844', () => {
       );
       await expect(page.getByRole('button', { name: 'Chronicle' })).toBeInViewport();
     });
+});
+
+test.describe('the corner at 1280 × 720 with older news', () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  test('scrolls up to a line that stops the game when the player had scrolled the corner down', async ({
+    page,
+  }) => {
+    const older = Array.from({ length: 6 }, (_, i) => ({
+      kind: 'buildingWorthGold' as const,
+      day: (90 + i) as Day,
+      tone: 'neutral' as const,
+      text: `Older news of day ${90 + i}, long enough to take three or four lines of the corner, so that the corner holds more than it shows and scrolls.`,
+    }));
+    await openGame(page, { pauses: true });
+    await pause(page);
+    await dropSave(page, carthageClimbs(8, 2, older.reverse()));
+    await expect(page.getByTestId('time-controls-day')).toHaveAttribute('data-day', '100');
+    await untilDrawn(page);
+    const corner = page.getByTestId('alerts');
+    await corner.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+    expect(await corner.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    await resume(page);
+    const stopped = corner
+      .getByRole('listitem')
+      .filter({ has: page.getByTestId('alert-paused') })
+      .first();
+    await stopped.waitFor();
+    await untilDrawn(page);
+    const line = await box('the stopped line', stopped);
+    const room = await box('the corner', corner);
+    expect(line.y, 'the stopped line starts inside the corner').toBeGreaterThanOrEqual(
+      room.y - 0.5,
+    );
+    expect(line.y + line.height, 'the stopped line ends inside the corner').toBeLessThanOrEqual(
+      room.y + room.height + 0.5,
+    );
+  });
 });
 
 test.describe('the frame readout', () => {

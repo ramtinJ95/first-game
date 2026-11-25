@@ -468,7 +468,7 @@ function siteFor<K extends BuildingKind>(
 const barracksSite = (state: DeepReadonly<GameState>, at: CityId | undefined) =>
   siteFor(state, at, ['barracks', 'drillField'] as const);
 
-const canalSite = (state: DeepReadonly<GameState>, at: CityId | undefined) =>
+export const canalSite = (state: DeepReadonly<GameState>, at: CityId | undefined) =>
   siteFor(state, at, ['canals', 'reservoirs'] as const);
 
 /** The longest wait the warning names; a raise that needs longer waits for better income instead. */

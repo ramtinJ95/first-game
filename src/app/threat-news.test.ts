@@ -1,4 +1,7 @@
 import { readFileSync } from 'node:fs';
+import { buildFixture, FIXTURE } from '../sim/fixture.ts';
+import { recruitForecast } from '../ui/recruit-forecast.ts';
+import { trainingDaysAt } from '../sim/buildings/buildings.ts';
 import { describe, expect, test } from 'vitest';
 import { changeCityOwner } from '../sim/cities.ts';
 import { allocateId, type ArmyId, type CityId, type FactionId } from '../sim/ids.ts';
@@ -32,6 +35,7 @@ import {
   powersNearWar,
   standingThreats,
   threatFadedNewsOfDay,
+  menDesertIfRaised,
   threatNewsOfDay,
   weighedNotes,
 } from './threat-news.ts';
@@ -66,7 +70,8 @@ function spearmenOf(state: GameState, owner: FactionId) {
 
 /**
  * Rome as the player with 4,000 spearmen beside a Carthage of twelve cities at peace with
- * every minor, with `men` spearmen.
+ * every minor, with `men` spearmen. Rome's cities have Canals and Reservoirs, so its food feeds
+ * another troop and the advice is the one a fed realm reads; `starving` takes them away.
  */
 function game(men: number, gold: 'full' | 'empty', day = 0): GameState {
   const state = newGame(map, { seed: 1, player: 'rome' });
@@ -80,9 +85,19 @@ function game(men: number, gold: 'full' | 'empty', day = 0): GameState {
       };
   spearmenOf(state, carthage).men = men;
   spearmenOf(state, rome).men = 4000;
+  for (const city of Object.values(state.cities))
+    if (city.owner === rome) city.buildings.push('canals', 'reservoirs');
   const romans = state.factions[rome];
   if (!romans) throw new Error('no Rome');
   romans.stores.gold = gold === 'full' ? (limitsOf(state).get(rome)?.gold ?? 0) : 0;
+  return state;
+}
+
+/** The state with Rome's Canals and Reservoirs gone: its 4,000 men eat more than its land grows. */
+function starving(state: GameState): GameState {
+  for (const city of Object.values(state.cities))
+    if (city.owner === rome)
+      city.buildings = city.buildings.filter((b) => b !== 'canals' && b !== 'reservoirs');
   return state;
 }
 
@@ -916,7 +931,32 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     ]) {
       const [warning] = newsOf(pressedWith(stores), new Set());
       expect(warning?.text.length ?? 0).toBeLessThanOrEqual(355);
+      const [hungry] = newsOf(starving(pressedWith(stores)), new Set());
+      expect(hungry?.text.length ?? 0).toBeLessThanOrEqual(355);
     }
+  });
+
+  test('a field-army warning to a realm whose food feeds no more men says the men would desert, and what would feed them', () => {
+    const [warning] = newsOf(starving(pressedWith({ gold: 5000, manpower: 5000 })), new Set());
+    expect(warning?.text).toMatch(
+      /all your armies in the field, and may declare from Year \d+, day \d+ if it holds it\. Men raised now would desert: food feeds no more\. Canals at \w+, 4,000 gold, feed 833 more\. It weighs you so only/,
+    );
+  });
+
+  test('a field-army warning says the men would desert even when no city can build what would feed them', () => {
+    const [warning] = newsOf(starving(pressedWith({ gold: 2229, manpower: 5000 })), new Set());
+    expect(warning?.text).toContain(
+      'Men raised now would desert: food feeds no more. It weighs you so only',
+    );
+  });
+
+  test('a warning by a city to a realm whose food feeds no more men says that guards eat nothing', () => {
+    const [warning] = newsOf(starving(game(5300, 'full')), new Set());
+    expect(warning?.text).toContain(
+      'Guards at Roma for 90 days lower it and eat nothing; your food feeds no more men. See At peace',
+    );
+    const [fed] = newsOf(game(5300, 'full'), new Set());
+    expect(fed?.text).toContain('more men, or guards at Roma for 90 days, lower it. See At peace');
   });
 
   test('a first warning that comes late, as after a save is imported, is no longer either', () => {
@@ -1500,5 +1540,30 @@ describe('the armies the At peace list names as counting against each power', ()
     const state = game(5300, 'full');
     const notes = weighedNotes(state, standingThreats(state, world));
     expect(notes.filter((note) => note.startsWith('Your treasury'))).toHaveLength(1);
+  });
+});
+
+describe('the food the warning reckons, as the recruit card does', () => {
+  test('counts the days a troop trains at a city with Barracks, since men who muster sooner eat sooner', () => {
+    const state = buildFixture();
+    for (const city of Object.values(state.cities))
+      if (city.owner === FIXTURE.rome) {
+        city.population = 20_000;
+        city.buildings = ['canals', 'barracks'];
+      }
+    const hastati = state.formations[FIXTURE.hastati];
+    const romans = state.factions[FIXTURE.rome];
+    const roma = state.cities[FIXTURE.roma];
+    if (!hastati || !romans || !roma) throw new Error('no fixture');
+    hastati.men = 1750;
+    Object.assign(romans.stores, { gold: 20_000, food: 0 });
+    const fixtureWorld = buildWorld(map);
+    const days = trainingDaysAt(roma, 15);
+    expect(days).toBeLessThan(15);
+    const card = recruitForecast(state, [], fixtureWorld, 'spearmen', days, FIXTURE.roma);
+    const untrained = recruitForecast(state, [], fixtureWorld, 'spearmen');
+    expect(card.short.food).toBeDefined();
+    expect(untrained.short.food).toBeUndefined();
+    expect(menDesertIfRaised(state, fixtureWorld, 'spearmen', FIXTURE.roma)).toBe(true);
   });
 });
