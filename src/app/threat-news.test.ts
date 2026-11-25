@@ -30,6 +30,7 @@ import { areAtWar } from '../sim/wars.ts';
 import { ALL_PAUSES, stopsOfDay } from './pauses.ts';
 import type { Alert } from './alerts.ts';
 import {
+  GUARDS_AHEAD_DAYS,
   THREAT_SPARE_DAYS,
   THREAT_STAND_DAYS,
   powersNearWar,
@@ -149,7 +150,7 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
     expect(news[0]?.pause).toEqual({ kind: 'warThreat' });
     expect(news[0]?.text).toMatch(
       new RegExp(
-        `^Carthage stands higher than when the game last stopped for it, on Year 1, day 70 at ${now - 8}%: it has ${now}% of the strength it needs against your forces near Roma`,
+        `^Carthage has climbed to ${now}% near Roma, from ${now - 8}% at its last stop on Year 1, day 70`,
       ),
     );
     expect([...told]).toContain(`threat-stop:carthage:100:${now}:roma`);
@@ -282,36 +283,31 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
     expect(news).toHaveLength(1);
     expect(news[0]?.pause).toEqual({ kind: 'warThreat' });
     expect(news[0]?.text).toMatch(
-      /^The 1,000 guards at Roma no longer count against Carthage's war\. Carthage stands higher than when the game last stopped for it/,
+      /^The 1,000 guards at Roma no longer count\. Carthage has climbed to \d+%/,
     );
   });
 
-  test("names the days a warning's guards stop counting, and the share without them", () => {
+  test('leaves the day its guards stop counting to the line ten days ahead', () => {
     const { before, after } = standing(6500, 100, 1, 90);
-    const told = new Set<string>();
     const punic = after.factions[carthage];
     if (punic) punic.noticeSince = 94 as Day;
-    const [warning] = threatNewsOfDay(before, after, world, told);
-    const bare = structuredClone(after);
-    const roma = bare.cities['roma' as CityId];
-    if (!roma) throw new Error('no Roma');
-    roma.guards = [];
-    roma.garrison -= GUARD_BAND;
-    expect(warning?.text).toContain(
-      `Guards at Roma stop counting on ${dateText(180)}; without them it would stand at ${shareOf(bare)}%.`,
-    );
-  });
-  test('names the first and last day when its guards stop counting on different days', () => {
-    const { before, after } = standing(6500, 100, 2, 90);
-    const punic = after.factions[carthage];
-    const roma = after.cities['roma' as CityId];
-    if (!punic || !roma) throw new Error('no Carthage or Roma');
-    punic.noticeSince = 94 as Day;
-    const later = roma.guards[1];
-    if (later) later.until = (95 + GUARD_DAYS) as Day;
     const [warning] = threatNewsOfDay(before, after, world, new Set<string>());
-    expect(warning?.text).toContain(
-      `Guards at Roma stop counting from ${dateText(180)} to ${dateText(185)}; without them it would stand at`,
+    expect(warning?.kind).toBe('warThreat');
+    expect(warning?.text).not.toContain('stop counting');
+  });
+
+  test('tells guards that stop counting within ten days in a line of their own on the day of a stop', () => {
+    const { before, after } = standing(6500, 100, 1, 101 + GUARDS_AHEAD_DAYS - GUARD_DETER_DAYS);
+    const punic = after.factions[carthage];
+    if (punic) punic.noticeSince = 94 as Day;
+    const told = new Set<string>();
+    const news = threatNewsOfDay(before, after, world, told);
+    expect(news.map((alert) => [alert.kind, alert.pause !== undefined])).toEqual([
+      ['warThreat', true],
+      ['guardsStopSoon', false],
+    ]);
+    expect(news[1]?.text).toMatch(
+      /^The 500 guards at Roma stop counting against Carthage's war in/,
     );
   });
 });
@@ -374,7 +370,7 @@ describe('a war that holds back a power on notice', () => {
     expect(freed).toBeGreaterThan(shareOf(state));
     const [warning] = threatNewsOfDay(state, state, world, new Set());
     expect(warning?.text).toContain(
-      `Its war with Syracusae holds back part of its strength: once that war ends, it would stand at ${freed}%.`,
+      `Once its war with Syracusae ends, it would stand at ${freed}%.`,
     );
   });
 
@@ -390,7 +386,7 @@ describe('a war that holds back a power on notice', () => {
     const [warning] = threatNewsOfDay(state, state, world, new Set());
     expect(warning?.text).toMatch(/^Carthage and Macedon could soon declare war on you/);
     expect(warning?.text).toContain(
-      `Carthage's war with Syracusae holds back part of its strength: once that war ends, it would stand at ${freed}%. What lowers each`,
+      `Once Carthage's war with Syracusae ends, it would stand at ${freed}%. What lowers each`,
     );
   });
 
@@ -420,7 +416,7 @@ describe('a war that holds back a power on notice', () => {
     expect(news).toHaveLength(1);
     expect(news[0]?.pause).toEqual({ kind: 'warThreat' });
     expect(news[0]?.text).toMatch(
-      /^Carthage's war with Syracusae has ended\. Carthage stands higher than when the game last stopped for it, on Year 1, day 70 at \d+%/,
+      /^Carthage's war with Syracusae has ended\. Carthage has climbed to \d+% near Roma, from \d+% at its last stop on Year 1, day 70/,
     );
   });
 });
@@ -444,15 +440,15 @@ describe("the warning's word on a full treasury", () => {
   test('says when the gold is what brings the power near war, and what the building worth buying would do', () => {
     const { text, after } = warned(game(5300, 'full'));
     expect(text).toContain(
-      `Your treasury of 8,568 gold is what brings it this near: without that gold it would stand at 67%. Building Forum at Roma for 6,500 gold would take it to ${after}%.`,
+      `Your gold tempts it; Forum at Roma, 6,500 gold, would take it to ${after}%.`,
     );
     expect(after).toBeLessThan(90);
   });
 
-  test('says how much the gold takes off when the power would stand near war without it', () => {
+  test('names the building also when the power would stand near war without the gold', () => {
     const { text, after } = warned(game(7000, 'full'));
     expect(text).toContain(
-      `Your treasury of 8,568 gold takes 25% off the strength it needs. Building Forum at Roma for 6,500 gold would take it to ${after}%.`,
+      `Your gold tempts it; Forum at Roma, 6,500 gold, would take it to ${after}%.`,
     );
   });
 
@@ -461,9 +457,7 @@ describe("the warning's word on a full treasury", () => {
     for (const city of Object.values(state.cities))
       if (city.owner === rome) city.construction = { building: 'temple', daysLeft: 100 };
     const [alert] = newsOf(state, new Set());
-    expect(alert?.text).toContain(
-      'Your treasury of 8,568 gold lowers the strength it needs by 25%, so more gold brings war nearer.',
-    );
+    expect(alert?.text).toContain('Your 8,568 gold takes 25% off the strength it needs.');
   });
 });
 
@@ -474,7 +468,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     const news = newsOf(state, told);
     expect(news.map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Your treasury of [\d,]+ gold is what brings it this near: without that gold it would stand at \d+%\. Building Forum at Roma for 6,500 gold would take it to \d+%\. Your armies on land within 1,500 km count; more men, or guards at Roma for 90 days, lower it\. See At peace in Wars\.$/,
+        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Your gold tempts it; Forum at Roma, 6,500 gold, would take it to \d+%\. More men, or guards at Roma for 90 days, lower it\. See At peace in Wars\.$/,
       ),
     ]);
     expect(news[0]?.tone).toBe('bad');
@@ -1036,6 +1030,17 @@ describe('how near each power at peace stands to declaring war, as the wars pane
     );
   });
 
+  test('the At peace row of a power near war advises what the warning does to a realm whose food feeds no more men', () => {
+    const state = starving(pressedWith({ gold: 5000, manpower: 5000 }));
+    const [warning] = newsOf(state, new Set());
+    const row = standingThreats(state, world).find((t) => t.power === carthage)?.text ?? '';
+    const advice =
+      /Men raised now would desert: food feeds no more\. Canals at \w+, 4,000 gold, feed 833 more\./;
+    expect(warning?.text).toMatch(advice);
+    expect(row).toMatch(advice);
+    expect(row).not.toContain('Skirmishers cost');
+  });
+
   test('a field-army warning says the men would desert even when no city can build what would feed them', () => {
     const [warning] = newsOf(starving(pressedWith({ gold: 2229, manpower: 5000 })), new Set());
     expect(warning?.text).toContain(
@@ -1046,10 +1051,10 @@ describe('how near each power at peace stands to declaring war, as the wars pane
   test('a warning by a city to a realm whose food feeds no more men says that guards eat nothing', () => {
     const [warning] = newsOf(starving(game(5300, 'full')), new Set());
     expect(warning?.text).toContain(
-      'Guards at Roma for 90 days lower it and eat nothing; your food feeds no more men. See At peace',
+      'Guards at Roma for 90 days lower it and eat nothing; food feeds no more men. See At peace',
     );
     const [fed] = newsOf(game(5300, 'full'), new Set());
-    expect(fed?.text).toContain('more men, or guards at Roma for 90 days, lower it. See At peace');
+    expect(fed?.text).toContain('More men, or guards at Roma for 90 days, lower it. See At peace');
   });
 
   test('a first warning that comes late, as after a save is imported, is no longer either', () => {

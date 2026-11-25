@@ -168,8 +168,9 @@ describe('a band that does not take a power off notice', () => {
     const real = warReadiness(hired, atlas, carthage, f.rome)?.readiness ?? 1;
     expect(real).toBeLessThan(0.8);
     const [line] = cityGuards(state, [hireAtRoma], roma(state), atlas).hire.threats;
-    expect(line).toMatch(new RegExp(`^Carthage ${Math.round(real * 100)}% `));
-    expect(line).not.toContain('the band you hired');
+    expect(line).toMatch(
+      new RegExp(`^Carthage, with the band you hired: ${Math.round(real * 100)}% `),
+    );
   });
 
   it('still says the band you hired is not enough when no more can be hired', () => {
@@ -308,6 +309,44 @@ describe('a threat guards cannot answer', () => {
     expect(cityGuards(state, [], city, world).hire.threats).toEqual([
       `Rome ${Math.round(Math.min(1, threat.readiness) * 100)}% of the strength it needs to declare war, by its field armies against yours: guards do not hold that back`,
     ]);
+  });
+});
+
+describe('a power the guards at its front turn to the field armies', () => {
+  it('keeps the city the warning weighed, and says the guards took the power off it', () => {
+    const realWorld = fixtureWorld();
+    const state = newGame(realWorld.map, { seed: 1, player: 'rome' });
+    for (const faction of Object.values(state.factions))
+      if (faction.kind === 'minor')
+        state.truces[warKey(carthage, faction.id)] = {
+          since: state.day,
+          endsOn: (state.day + 365) as Day,
+        };
+    const punic = Object.values(state.armies).find((army) => army.owner === carthage);
+    const spearmen = punic && state.formations[punic.formations[0] as never];
+    const romans = state.factions['rome' as FactionId];
+    if (!spearmen || !romans) throw new Error('no records');
+    spearmen.men = 2200;
+    romans.stores.gold = 20_000;
+    for (const city of Object.values(state.cities))
+      if (city.owner === romans.id) city.garrison = 80_000;
+    const capua = state.cities['capua' as CityId];
+    if (!capua) throw new Error('no Capua');
+    capua.garrison = 800;
+    const warned = warReadiness(state, realWorld, carthage, romans.id);
+    if (!warned || warned.pressed || warned.front !== capua.id)
+      throw new Error('Carthage does not weigh Capua');
+    const hireAtCapua: Order = { kind: 'hireGuards', faction: romans.id, city: capua.id };
+    const [line] = cityGuards(state, [hireAtCapua], capua, realWorld).hire.threats;
+    expect(line).toBe(
+      'Carthage, with the band you hired: 85% of the strength it needs to declare war, still at 80% or more, so it may still declare once it has stood at 80% for 30 days. The guards took it off Capua, where without them it would stand at 95%: it now weighs your field armies, and more guards do not lower that.',
+    );
+    const hired = structuredClone(state);
+    executeOrder(hired, hireAtCapua, realWorld);
+    const [later] = cityGuards(hired, [], hired.cities[capua.id] ?? capua, realWorld).hire.threats;
+    expect(later).toContain(
+      'The guards took it off Capua, where without them it would stand at 95%',
+    );
   });
 });
 

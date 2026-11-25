@@ -123,7 +123,10 @@ function hireChange(state: State, city: DeepReadonly<City>, world: World): strin
  * band takes it; when one is not enough, how many bands the city may still hold take it below
  * NOTICE_SHARE, or that guards alone cannot, since a share that falls reads as an answer and is
  * not one while it stays on notice, and, at a city that holds the most guards it may (`full`), that
- * guards alone cannot. One below NOTICE_SHARE keeps the share now and with one more band.
+ * guards alone cannot. One below NOTICE_SHARE keeps the share now and with one more band. A power
+ * that weighed this city until its guards took its strength there below its pressure on the
+ * field armies is told so, with the share it would stand at here without them, so the section
+ * keeps the ground of the warning that sent the player to hire.
  */
 function hireThreats(
   state: State,
@@ -141,6 +144,14 @@ function hireThreats(
     if (!now || (now.front !== city.id && !now.pressed)) continue;
     const name = factionName(state, power.id);
     if (now.pressed) {
+      const here = now.front === city.id ? withoutGuards(state, city, world, power.id) : undefined;
+      if (here !== undefined) {
+        if (hiring || hired > 0 || full)
+          lines.push(
+            `${hired > 0 ? `${name}, with the ${hired === 1 ? 'band' : `${whole(hired)} bands`} you hired:` : name} ${share(now.readiness)} of the strength it needs to declare war, ${verdictText(state, power.id, now.readiness)}. The guards took it off ${city.name}, where without them it would stand at ${share(here)}: it now weighs your field armies, and more guards do not lower that.`,
+          );
+        continue;
+      }
       if (hiring)
         lines.push(
           `${name} ${share(now.readiness)} of the strength it needs to declare war, by its field armies against yours: guards do not hold that back`,
@@ -167,6 +178,27 @@ function hireThreats(
     );
   }
   return lines;
+}
+
+/**
+ * The power's share at the city without the guards it counts there, the waiting hires too, when
+ * those guards are what turn it from the city to the player's field armies; undefined otherwise.
+ */
+function withoutGuards(
+  state: State,
+  city: DeepReadonly<City>,
+  world: World,
+  power: FactionId,
+): number | undefined {
+  const counted = city.guards.filter((band) => deterrentUntil(band) > state.day).length;
+  if (counted === 0) return undefined;
+  const bare = structuredClone(state) as GameState;
+  const walls = bare.cities[city.id];
+  if (!walls) return undefined;
+  walls.guards = walls.guards.filter((band) => deterrentUntil(band) <= state.day);
+  walls.garrison = Math.max(0, walls.garrison - counted * GUARD_BAND);
+  const threat = warReadiness(bare, world, power, city.owner);
+  return threat && !threat.pressed && threat.front === city.id ? threat.readiness : undefined;
 }
 
 /**
