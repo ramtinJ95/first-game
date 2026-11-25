@@ -4,12 +4,12 @@ import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import {
   deterrentUntil,
   GUARD_BAND,
-  GUARD_DAYS,
   GUARD_DETER_DAYS,
   GUARD_GOLD,
   guardLimit,
   guardMen,
   guardRefusal,
+  hiredOn,
   replaced,
 } from '../sim/guards.ts';
 import { executeOrder, type Order } from '../sim/orders/orders.ts';
@@ -43,7 +43,9 @@ export interface GuardsHire {
 }
 
 /** How long great powers count guards against a war, in a sentence with the number. */
-export const GUARD_RULE = `A great power counts a band against a war on you for its first ${GUARD_DETER_DAYS} days, then reckons on it leaving. The band holds the walls for the whole year.`;
+/** The rule in a sentence, for a band that serves `term`, such as "a year". */
+export const guardRule = (term: string) =>
+  `A great power counts a band against a war on you for its first ${GUARD_DETER_DAYS} days, then reckons on it leaving. The band holds the walls for ${term === 'a year' ? 'the whole year' : `all its ${term}`}.`;
 
 export interface CityGuards {
   /** The guards the city holds, when each band leaves, and any hire waiting for the next day. */
@@ -71,7 +73,7 @@ export function cityGuards(
   const open = why === undefined || short;
   // A band that takes the place of an old one leaves the count as it was, so a waiting hire is a band of the day's term.
   const ofToday = (bands: readonly DeepReadonly<GuardBand>[]) =>
-    bands.filter((band) => band.until >= state.day + GUARD_DAYS).length;
+    bands.filter((band) => hiredOn(band) >= state.day).length;
   const hired = ofToday(next.guards) - ofToday(city.guards);
   return {
     line: guardsLine(city.guards, hired),

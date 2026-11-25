@@ -1,5 +1,5 @@
 import { buildingWorth, paybackLimit } from '../sim/ai/build.ts';
-import { buildRefusal } from '../sim/buildings/build.ts';
+import { buildBarrier, buildRefusal } from '../sim/buildings/build.ts';
 import { BUILDING_KINDS, BUILDINGS, type BuildingKind } from '../sim/buildings/buildings.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { City } from '../sim/state/city.ts';
@@ -16,9 +16,13 @@ export const NEAR_LIMIT = 0.9;
 /** The key the page keeps once the hint is told, so it is told once a game. */
 export const BUILDING_HINT_KEY = 'buildingWorthGold';
 
-/** The building that pays back soonest in a city of the player's that builds nothing, within the AI's years. */
+/**
+ * The building that pays back soonest in a city of the player's that builds nothing, within
+ * the AI's years: of those the treasury pays for today, or with `anyGold` of all it could start.
+ */
 export function worthBuilding(
   state: State,
+  anyGold = false,
 ): { city: DeepReadonly<City>; kind: BuildingKind; years: number } | undefined {
   let best: { city: DeepReadonly<City>; kind: BuildingKind; years: number } | undefined;
   const cities = Object.values(state.cities)
@@ -26,7 +30,7 @@ export function worthBuilding(
     .sort((a, b) => (a.id < b.id ? -1 : 1));
   for (const city of cities) {
     for (const kind of BUILDING_KINDS) {
-      if (buildRefusal(state, city, kind)) continue;
+      if ((anyGold ? buildBarrier : buildRefusal)(state, city, kind)) continue;
       const worth = buildingWorth(state, city, kind);
       if (worth <= 0) continue;
       const years = BUILDINGS[kind].gold / worth / 365;

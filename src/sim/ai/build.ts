@@ -1,4 +1,4 @@
-import { buildRefusal } from '../buildings/build.ts';
+import { buildBarrier } from '../buildings/build.ts';
 import {
   BUILDING_KINDS,
   BUILDINGS,
@@ -104,12 +104,27 @@ export function construction(
   if (spare < CHEAPEST || record.stores.food < reserveOf(state, faction, 'food')) return [];
   const balance = balanceOf(state, faction);
   if (!balance || balance.gold < 0 || balance.food < 0) return [];
+  const best = nextBuilding(state, faction, spare);
+  return best ? [{ kind: 'build', faction, city: best.city.id, building: best.kind }] : [];
+}
+
+/**
+ * The building the power starts next with `spare` gold: the one that pays back its gold
+ * soonest among those its cities can start, if within its payback limit, a first level before
+ * any second level or great work. With no `spare`, the one it would start with gold enough,
+ * however little it holds today.
+ */
+export function nextBuilding(
+  state: State,
+  faction: FactionId,
+  spare = Infinity,
+): { city: CityView; kind: BuildingKind; payback: number } | undefined {
   let best: { city: CityView; kind: BuildingKind; payback: number; first: boolean } | undefined;
   for (const city of sorted(state.cities)) {
     if (city.owner !== faction || city.construction) continue;
     for (const kind of BUILDING_KINDS) {
       const { gold } = BUILDINGS[kind];
-      if (gold > spare || buildRefusal(state, city, kind)) continue;
+      if (gold > spare || buildBarrier(state, city, kind)) continue;
       const worth = buildingWorth(state, city, kind);
       if (worth <= 0) continue;
       const payback = gold / worth / 365;
@@ -120,7 +135,7 @@ export function construction(
       }
     }
   }
-  return best ? [{ kind: 'build', faction, city: best.city.id, building: best.kind }] : [];
+  return best;
 }
 
 /** The city a new temple would calm when it is taken: the nearest foreign one in reach, unless another temple reaches it. */
@@ -164,7 +179,7 @@ function onBorder(state: State, city: CityView): boolean {
 }
 
 /** The nearest city within `km` of another faction: of a great power or an enemy only, unless `any`. */
-function nearestForeign(
+export function nearestForeign(
   state: State,
   city: CityView,
   km: number,

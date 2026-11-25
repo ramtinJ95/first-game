@@ -38,6 +38,7 @@ import { fateChoices } from './fates.ts';
 import { showFrameMeter } from './frame-meter.ts';
 import { guardNewsOfDay } from './guard-news.ts';
 import { BUILDING_HINT_KEY, buildingHintOfDay } from './building-hint.ts';
+import { advanceNewsOfDay } from './advance-news.ts';
 import { refusalText } from './names.ts';
 import { alertsInSight, followJoin, seesPick, sightOfAll } from './sighted.ts';
 import { enqueue, keepOpen, unansweredOffer, type Modal } from './modals.ts';
@@ -281,6 +282,7 @@ const clock = createClock({
         ),
         ...guardNewsOfDay(before, after),
         ...hint,
+        ...advanceNewsOfDay(before, after, events, toldOnce, hint.length > 0),
       ]),
       newsPauses ? pauses : NO_PAUSES,
       toldOnce,
@@ -791,6 +793,10 @@ const actions: Actions = {
     focusClear(at);
   },
   openAlert(alert) {
+    if (alert.opens) {
+      panel = alert.opens;
+      view.refresh();
+    }
     if (!alert.focus) return;
     const { select } = alert.focus;
     if (select && seesPick(sightFor(clock.state), select)) selection = select;

@@ -96,6 +96,50 @@ describe('save and load', () => {
     });
   });
 
+  test('loads a save from before advances with nothing studied', () => {
+    const older = JSON.parse(saveGame(buildFixture())) as {
+      format: string[];
+      state: { factions: Record<string, Record<string, unknown>> };
+    };
+    for (const faction of Object.values(older.state.factions)) {
+      delete faction.advances;
+      delete faction.study;
+    }
+    const result = loadGame(
+      JSON.stringify({ ...older, format: older.format.filter((name) => name !== 'advances') }),
+    );
+    if (!result.ok) throw new Error(result.error);
+    for (const faction of Object.values(result.state.factions)) {
+      expect(faction.advances).toEqual([]);
+      expect(faction.study).toBeNull();
+    }
+    const next = tick(result.state, [], world).state;
+    expect(next.factions[FIXTURE.rome]?.study).toBeNull();
+  });
+
+  test('a save with an advance at study loads with it', () => {
+    const state = buildFixture();
+    const rome = state.factions[FIXTURE.rome];
+    if (!rome) throw new Error('no Rome');
+    rome.advances = ['standardCoin'];
+    rome.study = { advance: 'citizenRolls', daysLeft: 40, paid: 3000 };
+    const result = loadGame(saveGame(state));
+    if (!result.ok) throw new Error(result.error);
+    expect(result.state.factions[FIXTURE.rome]).toMatchObject({
+      advances: ['standardCoin'],
+      study: { advance: 'citizenRolls', daysLeft: 40, paid: 3000 },
+    });
+  });
+
+  test('refuses a faction that studies an advance it has studied', () => {
+    const state = buildFixture();
+    const rome = state.factions[FIXTURE.rome];
+    if (!rome) throw new Error('no Rome');
+    rome.advances = ['citizenRolls'];
+    rome.study = { advance: 'citizenRolls', daysLeft: 40, paid: 3000 };
+    expect(loadGame(saveGame(state))).toMatchObject({ ok: false, refusal: 'damaged' });
+  });
+
   test('treats the format as a set, not an ordered version sequence', () => {
     expect(
       loadGame(JSON.stringify({ format: [...SAVE_FORMAT].reverse(), state: buildFixture() })),
@@ -173,6 +217,8 @@ describe('save and load', () => {
       stores: { gold: 0, food: 0, manpower: 0 },
       defeatedOn: null,
       noticeSince: null,
+      advances: [],
+      study: null,
     };
     state.wars[warKey(FIXTURE.rome, odd)] = newWar(FIXTURE.rome, odd, state.day);
     expect(loadGame(saveGame(state))).toEqual({ ok: true, state });

@@ -50,6 +50,8 @@ export interface Alert {
   readonly tone: 'good' | 'bad' | 'neutral';
   /** Where a click on the alert takes the camera and what it selects. A store has no place. */
   readonly focus?: { readonly at: MapPoint; readonly select?: Pick };
+  /** The panel a click on the alert opens, for news with no place on the map. */
+  readonly opens?: 'advances';
   /** A battle or an army that is gone by the end of the day, which the player may have seen the day before. */
   readonly seenAs?: Pick;
   /** How many alerts of the same kind, text, and place on the day this one line stands for. */

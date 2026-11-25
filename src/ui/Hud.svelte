@@ -5,6 +5,7 @@
   import type { GameMap } from '../sim/map.ts';
   import type { Actions } from './actions.ts';
   import AlertList from './AlertList.svelte';
+  import AdvancesPanel from './AdvancesPanel.svelte';
   import ArmyPanel from './ArmyPanel.svelte';
   import BattlePanel from './BattlePanel.svelte';
   import ChroniclePanel from './ChroniclePanel.svelte';
@@ -91,6 +92,8 @@
         <OverviewPanel {game} {sight} {actions} openWars={() => actions.togglePanel('wars')} />
       {:else if view.current.panel === 'chronicle'}
         <ChroniclePanel alerts={view.current.alerts} {actions} />
+      {:else if view.current.panel === 'advances'}
+        <AdvancesPanel {game} pending={view.current.pending} {actions} />
       {/if}
     </div>
     <aside class="side" aria-label="Selection">

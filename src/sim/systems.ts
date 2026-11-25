@@ -11,6 +11,7 @@ import { population } from './systems/population.ts';
 import { movement } from './systems/movement.ts';
 import type { World } from './world/world.ts';
 import { sieges } from './systems/sieges.ts';
+import { study } from './systems/study.ts';
 import { trade } from './systems/trade.ts';
 
 /** A system changes the tick's own copy of the state in place. It may read the world. */
@@ -19,7 +20,7 @@ export type System = (state: GameState, world: World) => void;
 /**
  * The systems of one day, in the order they run, after the orders: the homecoming of a
  * peace made today, movement, the crossings that marches end in, battles, sieges,
- * economy, trade, construction, guard terms, population, and the notice great powers stand on against the player. The day counter stays last, so
+ * economy, trade, construction, study, guard terms, population, and the notice great powers stand on against the player. The day counter stays last, so
  * every system before it sees the day that is being played.
  */
 export const SYSTEMS: readonly System[] = [
@@ -31,6 +32,7 @@ export const SYSTEMS: readonly System[] = [
   economy,
   trade,
   construction,
+  study,
   guardTerms,
   population,
   notice,

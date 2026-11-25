@@ -240,6 +240,38 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
     ]);
   });
 
+  test('tells of 18-month bands of Long contracts ten days before and on the day 90 after their hire, not 90 after a year before they leave', () => {
+    const long = (state: GameState, hired: number) => {
+      const roma = state.cities['roma' as CityId];
+      if (!roma) throw new Error('no Roma');
+      roma.guards = roma.guards.map(() => ({
+        until: (hired + Math.round(GUARD_DAYS * 1.5)) as Day,
+        hiredOn: hired as Day,
+      }));
+    };
+    const soon = standing(5300, 100, 2, 111 - GUARD_DETER_DAYS);
+    for (const state of [soon.before, soon.after]) long(state, 111 - GUARD_DETER_DAYS);
+    const toldSoon = new Set([
+      `threat:carthage:70`,
+      `threat-stop:carthage:70:${shareOf(soon.after)}:roma`,
+    ]);
+    expect(threatNewsOfDay(soon.before, soon.after, world, toldSoon)).toEqual([
+      expect.objectContaining({
+        kind: 'guardsStopSoon',
+        text: expect.stringContaining(`in 10 days, on ${dateText(111)}`),
+      }),
+    ]);
+    const now = standing(5300, 100, 2, 101 - GUARD_DETER_DAYS);
+    for (const state of [now.before, now.after]) long(state, 101 - GUARD_DETER_DAYS);
+    const told = new Set([
+      `threat:carthage:70`,
+      `threat-stop:carthage:70:${shareOf(now.after)}:roma`,
+    ]);
+    expect(threatNewsOfDay(now.before, now.after, world, told)).toContainEqual(
+      expect.objectContaining({ kind: 'guardsUncounted', day: 100 }),
+    );
+  });
+
   test('tells guards that stop counting on the day of a climb inside the one stop', () => {
     const { before, after } = standing(5300, 100, 2, 101 - GUARD_DETER_DAYS);
     const told = new Set([

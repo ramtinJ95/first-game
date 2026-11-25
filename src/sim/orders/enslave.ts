@@ -1,4 +1,4 @@
-import { ENSLAVE } from '../cities.ts';
+import { ENSLAVE, unrestDaysFor } from '../cities.ts';
 import type { CityId, FactionId } from '../ids.ts';
 import type { City } from '../state/city.ts';
 import type { GameState } from '../state/game-state.ts';
@@ -27,7 +27,7 @@ export function enslave(state: GameState, order: EnslaveOrder, world: World): st
   city.population -= captives;
   capital.population += captives - manpower;
   stores.manpower += manpower;
-  city.unrestDays = ENSLAVE.unrestDays;
+  city.unrestDays = unrestDaysFor(state, order.faction, ENSLAVE.unrestDays);
   city.fellOn = null;
   return undefined;
 }

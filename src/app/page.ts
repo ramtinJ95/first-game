@@ -27,7 +27,7 @@ import {
 } from './alerts.ts';
 
 /** The panels that open over the map's left side, one at a time. */
-export const PANELS = ['overview', 'chronicle', 'wars'] as const;
+export const PANELS = ['overview', 'chronicle', 'wars', 'advances'] as const;
 export type Panel = (typeof PANELS)[number];
 
 /**
@@ -49,6 +49,7 @@ const AlertSchema = v.object({
   text: v.string(),
   tone: v.picklist(['good', 'bad', 'neutral']),
   focus: v.optional(v.object({ at: MapPointSchema, select: v.optional(PickSchema) })),
+  opens: v.optional(v.picklist(['advances'])),
   seenAs: v.optional(PickSchema),
   count: v.optional(v.number()),
   pause: v.optional(v.object({ kind: v.picklist(PAUSE_KINDS), once: v.optional(v.string()) })),

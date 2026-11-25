@@ -38,6 +38,22 @@ export function buildRefusal(
   city: DeepReadonly<City>,
   building: BuildingKind,
 ): string | undefined {
+  const barrier = buildBarrier(state, city, building);
+  if (barrier) return barrier;
+  const row = BUILDINGS[building];
+  const gold = state.factions[city.owner]?.stores.gold ?? 0;
+  if (gold < row.gold) {
+    return `a ${building} costs ${row.gold} gold, but ${city.owner} has ${Math.floor(gold)}`;
+  }
+  return undefined;
+}
+
+/** Why the city could not start this building now even with the gold it costs, or undefined. */
+export function buildBarrier(
+  state: DeepReadonly<GameState>,
+  city: DeepReadonly<City>,
+  building: BuildingKind,
+): string | undefined {
   if (!Object.hasOwn(BUILDINGS, building)) return `building ${building} does not exist`;
   const row = BUILDINGS[building];
   if (hasBuilt(city, building)) return `city ${city.id} has a ${building} already`;
@@ -51,10 +67,6 @@ export function buildRefusal(
   if (needed && !hasBuilt(city, needed)) return `a ${building} needs a ${needed} first`;
   const work = greatWorkOf(city);
   if (work && isGreatWork(building)) return `city ${city.id} has a ${work} already`;
-  const gold = state.factions[city.owner]?.stores.gold ?? 0;
-  if (gold < row.gold) {
-    return `a ${building} costs ${row.gold} gold, but ${city.owner} has ${Math.floor(gold)}`;
-  }
   return undefined;
 }
 

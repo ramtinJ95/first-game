@@ -91,4 +91,25 @@ describe('the news of guards who served their year', () => {
     ]);
     expectConsistent(after);
   });
+
+  test('dates a replaced 18-month band of Long contracts by the day it was hired', () => {
+    const state = buildFixture();
+    state.day = 200 as Day;
+    const capua = state.cities[FIXTURE.capua];
+    const rome = state.factions[FIXTURE.rome];
+    if (!capua || !rome) throw new Error('no Capua or Rome');
+    rome.stores.gold = 5000;
+    rome.advances = ['longContracts'];
+    const band = (hiredOn: number) => ({ until: (hiredOn + 548) as Day, hiredOn: hiredOn as Day });
+    capua.guards = [band(60), band(150), band(160)];
+    const after = tick(
+      state,
+      [{ kind: 'hireGuards', faction: FIXTURE.rome, city: FIXTURE.capua }],
+      world,
+    ).state;
+    expect(guardNewsOfDay(state, after)).toMatchObject([
+      { text: expect.stringContaining('hired at Capua on Year 1, day 60,') },
+    ]);
+    expectConsistent(after);
+  });
 });

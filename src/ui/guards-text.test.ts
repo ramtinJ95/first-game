@@ -13,6 +13,7 @@ import { newGame } from '../sim/new-game.ts';
 import { warKey } from '../sim/state/war.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
 import { buildWorld } from '../sim/world/world.ts';
+import { GUARD_DAYS } from '../sim/guards.ts';
 import { cityGuards, guardsLine, weighedLine } from './guards-text.ts';
 
 const carthage = 'carthage' as FactionId;
@@ -354,6 +355,27 @@ describe('cityGuards', () => {
     expect(after.line).toBe('No guards hired · 500 more hired for the next day');
     expect(after.hire.change).toBe('Garrison 3,500 → 4,000');
     expect(after.hire.why).toBe('Needs 1,000 more gold');
+  });
+
+  it('under Long contracts, counts a waiting hire that replaces an 18-month band, and names the day the next one would have left', () => {
+    const state = withGold(5000);
+    const rome = state.factions[f.rome];
+    const roma = state.cities[f.roma];
+    if (!rome || !roma) throw new Error('no Rome');
+    rome.advances = ['longContracts'];
+    const term = Math.round(GUARD_DAYS * 1.5);
+    const hired = (day: number) => ({ until: (day + term) as Day, hiredOn: day as Day });
+    roma.guards = [
+      hired(state.day - 100),
+      hired(state.day - 95),
+      ...Array.from({ length: 4 }, () => hired(state.day - 10)),
+    ];
+    expect(shown(state, [hire])).toMatchObject({
+      line: expect.stringContaining('500 more hired for the next day'),
+      hire: {
+        change: `Takes the place of the 500 who leave ${dateText(state.day - 95 + term)}, whom no great power still counts`,
+      },
+    });
   });
 
   it('offers a full city a band in the place of one no great power still counts', () => {

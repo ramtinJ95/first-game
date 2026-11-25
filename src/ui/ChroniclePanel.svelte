@@ -18,7 +18,7 @@
           type="button"
           class="entry {alert.tone}"
           class:world={alert.world !== undefined}
-          disabled={!alert.focus}
+          disabled={!alert.focus && !alert.opens}
           onclick={() => actions.openAlert(alert)}
         >
           <span class="day">{dateText(alert.day)}</span>

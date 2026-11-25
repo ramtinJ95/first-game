@@ -94,6 +94,7 @@ export function playCautiousRome(
     drops = [],
     forbid = [],
     start,
+    orders: rule = (orders) => orders,
   }: {
     peaceful?: boolean;
     guards?: GuardPlay;
@@ -116,6 +117,8 @@ export function playCautiousRome(
     forbid?: readonly BuildingKind[];
     /** The game to play from, in place of a new game of the seed. */
     start?: GameState;
+    /** Rewrites the day's orders before the tick, to try another rule for Rome. */
+    orders?: (orders: Order[], state: GameState) => Order[];
   } = {},
 ): GameState {
   const told = new Set<string>();
@@ -177,8 +180,9 @@ export function playCautiousRome(
       orders.unshift(...answers);
     }
     const before = new Set(Object.keys(state.tradeRoutes));
-    const { state: next, rejected, events } = tick(state, orders, world);
-    const accepted = orders.filter(
+    const played = rule(orders, state);
+    const { state: next, rejected, events } = tick(state, played, world);
+    const accepted = played.filter(
       (o) => o.faction === rome && !rejected.some((r) => r.order === o),
     );
     for (const order of accepted) {

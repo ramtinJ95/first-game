@@ -1,4 +1,4 @@
-import { SACK } from '../cities.ts';
+import { SACK, unrestDaysFor } from '../cities.ts';
 import { emit } from '../events.ts';
 import type { CityId, FactionId } from '../ids.ts';
 import type { GameState } from '../state/game-state.ts';
@@ -22,7 +22,7 @@ export function sack(state: GameState, order: SackOrder): string | undefined {
   if (!stores) return `faction ${order.faction} does not exist`;
   stores.gold += city.population * OUTPUT_PER_PERSON.gold * 365 * SACK.wealthYears;
   city.population *= 1 - SACK.populationShare;
-  city.unrestDays = SACK.unrestDays;
+  city.unrestDays = unrestDaysFor(state, order.faction, SACK.unrestDays);
   city.fellOn = null;
   city.sackedOn = state.day;
   const lost = [...city.buildings, ...(city.construction ? [city.construction.building] : [])];
