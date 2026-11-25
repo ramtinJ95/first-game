@@ -20,7 +20,7 @@ Preconditions:
 - `open`, at the widest zoom.
 
 - **Zoom on Roma and pick it.** `act "const cam = support.camera(page); await cam.zoom(cam.city('roma'), 4); const at = support.cityPoint('roma'); const p = cam.screen({ x: at.x, y: at.y + 10 }); await page.mouse.click(p.x, p.y); return { city: await page.getByTestId('city-name').textContent() }"`. `city` is `Roma`, and a `shot` shows Italy filling the view.
-- **Fog** _from tests_. `open --moment e2e/fog-game.ts:romeWithPunicArmyAt` and follow `e2e/fog.spec.ts`: a click where the hidden army stands selects the province, not the army.
+- **Fog.** `open --moment e2e/fog-game.ts:romeWithPunicArmyAt --args '[{"x":2250,"y":1900}]'` puts a Punic army out of Rome's sight (`OUT_OF_SIGHT` in `e2e/fog-game.ts`). Then `act "const flag = support.camera(page).banner({ x: 2250, y: 1900 }); await page.mouse.click(flag.x, flag.y); return { city: await page.getByTestId('city-name').textContent(), armyPanels: await page.getByTestId('army-panel').count() }"`. `city` is `Lugdunum` and `armyPanels` is `0`: the click picks the place, never the hidden army.
 - **Proof.** `shot` before and after the zoom.
 
 ## Gotchas

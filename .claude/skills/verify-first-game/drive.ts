@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, openSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createServer, request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
@@ -13,7 +14,8 @@ Run it from inside the checkout it belongs to; it drives that checkout's build.
 
   up [--no-build]            build, serve dist/ and start the driver; prints the run
   doctor                     read-only health check of the current run
-  open [--power rome|start] [--moment <builder> | --save <file>] [--viewport 1280x720]
+  open [--power rome|start] [--moment <builder> [--args <json array>] | --save <file>]
+       [--viewport 1280x720]
        [--no-pauses] [--query k=v&k=v]
                              open a game as a player would see it
   act '<js>' | act --file f  run async JS with page, expect, support (e2e/support.ts) and
@@ -25,7 +27,8 @@ Run it from inside the checkout it belongs to; it drives that checkout's build.
                              news; pauses there and lists every stop with its line
   viewport <W>x<H>           resize the page
   errors                     print the page's console errors and uncaught exceptions
-  moment <builder> <file>    write the save a builder makes: a name in e2e/support.ts, or
+  moment <builder> <file> [--args <json array>]
+                             write the save a builder makes: a name in e2e/support.ts, or
                              <path>:<name> such as e2e/trade-game.ts:tradingRome
   down                       stop what this run started; the evidence stays
 `;
@@ -36,6 +39,8 @@ interface Session {
   head: string;
   tree: string;
   url: string;
+  port: number;
+  token: string;
   previewPid: number;
   driverPid: number;
   driverPort: number;
@@ -65,8 +70,14 @@ function git(root: string, ...args: string[]) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 }
 
+const INPUTS = ['src', 'data', 'index.html', 'package-lock.json'];
+
 function treeOf(root: string) {
-  return git(root, 'status', '--porcelain', '--', 'src', 'data', 'index.html', 'package-lock.json');
+  const hash = createHash('sha256').update(git(root, 'diff', 'HEAD', '--binary', '--', ...INPUTS));
+  const untracked = git(root, 'ls-files', '--others', '--exclude-standard', '--', ...INPUTS);
+  for (const file of untracked.split('\n').filter(Boolean))
+    hash.update(file).update(readFileSync(join(root, file)));
+  return hash.digest('hex');
 }
 
 function currentSession(root = here()): Session {
@@ -76,13 +87,29 @@ function currentSession(root = here()): Session {
   return JSON.parse(readFileSync(join(verifyDir(root), runId, 'session.json'), 'utf8')) as Session;
 }
 
-function alive(pid: number) {
+function running(pid: number, ...needles: string[]) {
   try {
-    process.kill(pid, 0);
-    return true;
+    const argv = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0');
+    return needles.every((needle) => argv.includes(needle));
   } catch {
     return false;
   }
+}
+
+function processes(s: Session) {
+  return [
+    { name: 'driver', pid: s.driverPid, ours: running(s.driverPid, 'serve', String(s.driverPort)) },
+    { name: 'preview', pid: s.previewPid, ours: running(s.previewPid, String(s.port)) },
+  ];
+}
+
+async function stop(name: string, pid: number, ...needles: string[]) {
+  if (!running(pid, ...needles)) return;
+  process.kill(-pid, 'SIGTERM');
+  await until(`${name} ${pid} to stop`, async () => !running(pid, ...needles), 10).catch(() => {
+    if (running(pid, ...needles)) process.kill(-pid, 'SIGKILL');
+  });
+  console.log(`stopped ${name} ${pid}`);
 }
 
 function freePort(): Promise<number> {
@@ -114,14 +141,18 @@ function call(session: Session, body: object): Promise<unknown> {
         let text = '';
         res.on('data', (chunk: Buffer) => (text += chunk.toString()));
         res.on('end', () => {
-          const reply = JSON.parse(text) as { ok: boolean; value?: unknown; error?: string };
-          if (reply.ok) done(reply.value);
-          else fail(new Error(reply.error));
+          try {
+            const reply = JSON.parse(text) as { ok: boolean; value?: unknown; error?: string };
+            if (reply.ok) done(reply.value);
+            else fail(new Error(reply.error));
+          } catch {
+            fail(new Error(`the driver on ${session.driverPort} answered ${text || 'nothing'}`));
+          }
         });
       },
     );
     req.on('error', fail);
-    req.end(JSON.stringify(body));
+    req.end(JSON.stringify({ ...body, token: session.token }));
   });
 }
 
@@ -130,8 +161,9 @@ async function up(args: string[]) {
   const pointer = join(verifyDir(root), 'current');
   if (existsSync(pointer)) {
     const old = currentSession(root);
-    if (alive(old.previewPid) && alive(old.driverPid)) {
-      console.log(`run ${old.runId} is already up at ${old.url}; "down" it first`);
+    if (processes(old).some((p) => p.ours)) {
+      console.log(`run ${old.runId} still has processes at ${old.url}; "down" it first`);
+      process.exitCode = 1;
       return;
     }
   }
@@ -143,6 +175,7 @@ async function up(args: string[]) {
   mkdirSync(dir, { recursive: true });
   const [port, driverPort] = [await freePort(), await freePort()];
   const url = `http://127.0.0.1:${port}`;
+  const token = randomUUID();
   const previewLog = openSync(join(dir, 'preview.log'), 'a');
   const preview = spawn(
     join(root, 'node_modules', '.bin', 'vite'),
@@ -155,6 +188,7 @@ async function up(args: string[]) {
     cwd: root,
     detached: true,
     stdio: ['ignore', driverLog, driverLog],
+    env: { ...process.env, VERIFY_TOKEN: token },
   });
   driver.unref();
   const session: Session = {
@@ -163,6 +197,8 @@ async function up(args: string[]) {
     head: git(root, 'rev-parse', 'HEAD'),
     tree: treeOf(root),
     url,
+    port,
+    token,
     previewPid: preview.pid ?? 0,
     driverPid: driver.pid ?? 0,
     driverPort,
@@ -170,8 +206,13 @@ async function up(args: string[]) {
   };
   writeFileSync(join(dir, 'session.json'), JSON.stringify(session, null, 2));
   writeFileSync(pointer, runId);
-  await until('the preview', async () => (await fetch(url)).ok);
-  await until('the driver', async () => (await call(session, { op: 'ping' })) !== undefined);
+  try {
+    await until('the preview', async () => (await fetch(url)).ok);
+    await until('the driver', async () => (await call(session, { op: 'ping' })) !== undefined);
+  } catch (error) {
+    await down();
+    throw error;
+  }
   console.log(`run ${runId}\nurl ${url}\nevidence ${dir}`);
 }
 
@@ -179,12 +220,12 @@ async function doctor() {
   const s = currentSession();
   const problems: string[] = [];
   const lines: string[] = [`run ${s.runId}`, `evidence ${s.dir}`];
-  if (!alive(s.previewPid)) problems.push(`preview pid ${s.previewPid} is gone`);
-  if (!alive(s.driverPid)) problems.push(`driver pid ${s.driverPid} is gone`);
+  for (const p of processes(s)) if (!p.ours) problems.push(`${p.name} pid ${p.pid} is gone`);
   const head = git(s.root, 'rev-parse', 'HEAD');
   lines.push(`built ${s.head}`);
   if (head !== s.head) problems.push(`checkout moved to ${head}: "down", then "up" to rebuild`);
-  if (treeOf(s.root) !== s.tree) problems.push('src, data or index.html changed since the build');
+  if (treeOf(s.root) !== s.tree)
+    problems.push(`${INPUTS.join(', ')} changed since the build: "down", then "up"`);
   try {
     const served = await (await fetch(s.url)).text();
     const built = readFileSync(join(s.root, 'dist', 'index.html'), 'utf8');
@@ -193,7 +234,7 @@ async function doctor() {
   } catch (error) {
     problems.push(`${s.url} does not answer: ${String(error)}`);
   }
-  if (problems.length === 0 || alive(s.driverPid)) {
+  if (processes(s)[0]?.ours) {
     try {
       lines.push(`driver ${JSON.stringify(await call(s, { op: 'ping' }))}`);
     } catch (error) {
@@ -205,7 +246,7 @@ async function doctor() {
   if (problems.length > 0) process.exitCode = 1;
 }
 
-async function moment(name: string, file: string, root = here()) {
+async function moment(name: string, file: string, root = here(), json = '[]') {
   const [module, builder] = name.includes(':') ? name.split(':') : ['e2e/support.ts', name];
   const support = (await import(join(root, module ?? ''))) as Record<string, unknown>;
   const { saveGame } = (await import(join(root, 'src', 'sim', 'save.ts'))) as {
@@ -216,7 +257,8 @@ async function moment(name: string, file: string, root = here()) {
     const names = Object.keys(support).filter((k) => typeof support[k] === 'function');
     throw new Error(`no builder ${builder} in ${module}; functions: ${names.join(', ')}`);
   }
-  writeFileSync(resolve(file), saveGame((make as () => unknown)()));
+  const given = JSON.parse(json) as unknown[];
+  writeFileSync(resolve(file), saveGame((make as (...args: unknown[]) => unknown)(...given)));
   console.log(resolve(file));
 }
 
@@ -226,6 +268,7 @@ function nextShot(dir: string, name: string) {
 }
 
 async function serve(port: number, url: string) {
+  const token = process.env['VERIFY_TOKEN'];
   const browser = await chromium.launch({
     args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
   });
@@ -240,7 +283,9 @@ async function serve(port: number, url: string) {
   const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
     ...args: string[]
   ) => (page: Page, ex: typeof expect, support: unknown, evidence: string) => Promise<unknown>;
-  const support: unknown = await import(join(process.cwd(), 'e2e', 'support.ts'));
+  const support = (await import(join(process.cwd(), 'e2e', 'support.ts'))) as {
+    untilDrawn: (page: Page) => Promise<void>;
+  };
 
   type Command = Record<string, string | undefined> & { op: string };
   const ops: Record<string, (c: Command) => Promise<unknown>> = {
@@ -257,17 +302,25 @@ async function serve(port: number, url: string) {
         const text = readFileSync(c['save'], 'utf8');
         const pause = page.getByRole('button', { name: 'Pause', exact: true });
         if (await pause.isVisible()) await pause.click();
+        const canvas = page.locator('canvas[data-renderer]');
+        const given = async () => Number(await canvas.getAttribute('data-latest-state'));
+        const before = await given();
         const transfer = await page.evaluateHandle((save) => {
           const t = new DataTransfer();
           t.items.add(new File([save], 'save.json', { type: 'application/json' }));
           return t;
         }, text);
         await page.dispatchEvent('canvas', 'drop', { dataTransfer: transfer });
-        const saved = (JSON.parse(text) as { state: { day: number } }).state.day;
-        await expect(page.getByTestId('time-controls-day')).toHaveAttribute(
-          'data-day',
-          String(saved),
-        );
+        const saved = String((JSON.parse(text) as { state: { day: number } }).state.day);
+        const day = page.getByTestId('time-controls-day');
+        const notice = page.getByTestId('notice');
+        const refused = async () =>
+          (await notice.isVisible()) && (await notice.getAttribute('data-tone')) !== 'info';
+        const loaded = async () =>
+          (await day.getAttribute('data-day')) === saved && (await given()) > before;
+        await expect.poll(async () => (await refused()) || (await loaded())).toBe(true);
+        if (await refused()) throw new Error(`the save was refused: ${await notice.textContent()}`);
+        await support.untilDrawn(page);
       }
       const day = page.getByTestId('time-controls-day');
       if (!(await day.isVisible())) return { url: page.url(), screen: 'start' };
@@ -302,20 +355,26 @@ async function serve(port: number, url: string) {
       await page.getByRole('button', { name: `Speed ${c['speed'] ?? '3'}` }).click();
       for (;;) {
         const alerts = page.getByTestId('alerts');
+        const paused = await resume.isVisible();
+        if (paused) {
+          const marked = alerts
+            .getByRole('listitem')
+            .filter({ has: page.getByTestId('alert-paused') });
+          const line = (
+            (await marked
+              .first()
+              .textContent({ timeout: 1000 })
+              .catch(() => '')) ?? ''
+          )
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (line && stops.at(-1)?.line !== line) stops.push({ day: await dayOf(), line });
+        }
         if (pattern && (await alerts.getByText(pattern).count()) > 0) break;
         if ((await dayOf()) >= untilDay) break;
         if (Date.now() > end) throw new Error(`still on day ${await dayOf()} after the time given`);
         if (await page.getByTestId('defeat').or(page.getByTestId('victory')).isVisible()) break;
-        if (await resume.isVisible()) {
-          const marked = alerts
-            .getByRole('listitem')
-            .filter({ has: page.getByTestId('alert-paused') });
-          if ((await marked.count()) > 0) {
-            const line = (await marked.first().textContent()) ?? '';
-            stops.push({ day: await dayOf(), line: line.replace(/\s+/g, ' ').trim() });
-          }
-          await resume.click();
-        }
+        if (paused) await resume.click();
         await page.waitForTimeout(200);
       }
       const pause = page.getByRole('button', { name: 'Pause', exact: true });
@@ -334,9 +393,22 @@ async function serve(port: number, url: string) {
     let text = '';
     req.on('data', (chunk: Buffer) => (text += chunk.toString()));
     req.on('end', () => {
-      const command = JSON.parse(text) as Command;
+      const reply = (body: object) => {
+        try {
+          res.end(JSON.stringify(body));
+        } catch (error) {
+          res.end(JSON.stringify({ ok: false, error: `not sendable as JSON: ${String(error)}` }));
+        }
+      };
+      let command: Command;
+      try {
+        command = JSON.parse(text) as Command;
+      } catch {
+        return reply({ ok: false, error: 'not a JSON command' });
+      }
+      if (req.method !== 'POST' || !token || command['token'] !== token)
+        return reply({ ok: false, error: "not this run's driver" });
       const op = ops[command.op];
-      const reply = (body: object) => res.end(JSON.stringify(body));
       if (!op) return reply({ ok: false, error: `unknown op ${command.op}` });
       op(command).then(
         (value) => reply({ ok: true, value: value ?? null }),
@@ -349,17 +421,8 @@ async function serve(port: number, url: string) {
 
 async function down() {
   const s = currentSession();
-  for (const [name, pid] of [
-    ['driver', s.driverPid],
-    ['preview', s.previewPid],
-  ] as const) {
-    if (!alive(pid)) continue;
-    process.kill(-pid, 'SIGTERM');
-    await until(`${name} ${pid} to stop`, async () => !alive(pid), 10).catch(() => {
-      process.kill(-pid, 'SIGKILL');
-    });
-    console.log(`stopped ${name} ${pid}`);
-  }
+  await stop('driver', s.driverPid, 'serve', String(s.driverPort));
+  await stop('preview', s.previewPid, String(s.port));
   console.log(`evidence kept in ${s.dir}`);
 }
 
@@ -380,7 +443,7 @@ switch (command) {
     await serve(Number(args[0]), args[1] ?? '');
     break;
   case 'moment':
-    await moment(args[0] ?? '', args[1] ?? 'save.json');
+    await moment(args[0] ?? '', args[1] ?? 'save.json', here(), arg(args, '--args'));
     break;
   case 'down':
     await down();
@@ -395,7 +458,7 @@ switch (command) {
     const builder = arg(args, '--moment');
     if (builder) {
       save = join(s.dir, `${builder.replace(/\W/g, '_')}.save.json`);
-      await moment(builder, save, s.root);
+      await moment(builder, save, s.root, arg(args, '--args'));
     }
     print(
       await call(s, {

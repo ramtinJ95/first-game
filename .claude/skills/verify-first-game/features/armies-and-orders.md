@@ -20,14 +20,15 @@ The player selects an army on the map and right-clicks a place to march there, o
 
 Preconditions:
 
-- `open --moment marchToCamp` or `open --moment armyAtRest`, at the widest zoom.
+- `open --moment armyAtRest`: First Legion, 3,100 men, idle at Roma, paused at the widest zoom.
 
-- **Select** _from tests_. `act "await page.getByTestId('overview-armies').getByRole('button').first().click(); return await page.getByRole('region', { name: 'Army' }).ariaSnapshot()"`.
-- **March** _from tests_. `act "const p = support.camera(page).city('capua'); await page.mouse.click(p.x, p.y, { button: 'right' }); const menu = page.getByTestId('command-menu'); if (await menu.isVisible()) await menu.getByRole('menuitem').first().click(); return await page.getByTestId('army-activity').textContent()"`. The activity says it marches.
+- **Select and march.** `act "const view = support.camera(page); const flag = view.banner(support.cityPoint('roma')); await page.mouse.click(flag.x, flag.y); await expect(page.getByTestId('army-activity')).toHaveText('Idle at Roma'); const p = view.city('capua'); await page.mouse.click(p.x, p.y, { button: 'right' }); await expect(page.getByTestId('orders-waiting')).toHaveAttribute('title', '1 army has orders for the next day'); await page.getByRole('button', { name: 'Resume', exact: true }).click(); await expect(page.getByTestId('army-activity')).toHaveText(/^Marching to Capua · \\d+ days? left$/); await page.getByRole('button', { name: 'Pause', exact: true }).click(); return await page.getByTestId('army-activity').textContent()"`. It returns `Marching to Capua · 6 days left`.
+- **Select from the Overview.** `Overview`, then the row `First Legion 3,100 men Idle at Roma` in `overview-armies`, opens the region `Army` with its formations.
 - **Battle and siege** _from tests_. `open --moment fieldBattle` or `siegeOfCarthago`, and follow `e2e/panels.spec.ts` and `e2e/stances.spec.ts`.
 - **Proof.** `shot` the order and the panel a day later.
 
 ## Gotchas
 
 - The army often stands on its city's symbol, and a click there may pick the city. Click the banner (`support.camera(page).banner(point)`) or use the Overview.
+- An order given while paused waits for the next day: `army-activity` keeps `Idle at Roma` and the top bar's `orders-waiting` counts it until you resume.
 - Moments: `armyAtRest`, `marchToCamp`, `fieldBattle`, `siegeOfCarthago`, `stormedCarthago`, `crossingToCaralis`, `beatenOverseas`, `beatenNearHadrumetum`, `idleBesideEnemyCity`, `greatBattle`, `winnerMarchesOn`. Specs: `orders`, `order-paths`, `stances`, `armies`, `flag-click`, `war-loop`. Capture scenarios: `march`, `crossing`, `sea-orders`, `siege`, `battle`, `stances`.

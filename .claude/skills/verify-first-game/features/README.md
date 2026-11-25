@@ -35,13 +35,13 @@ Files marked _from tests_ hold recipes taken from the browser tests and capture 
 
 - [Start screen and guide](./start-and-guide.md) covers choosing a power, Continue, and the guide.
 - [Time and stores](./time-and-stores.md) covers pause, speed, Space, the date, and the gold, food and manpower readings with their short and full states.
-- [Map and fog](./map-and-fog.md) covers zoom, pan, map clicks and fog of war; fog is _from tests_.
-- [Armies and orders](./armies-and-orders.md) covers selecting armies, marching, sailing, joining, halting, stances, battles, sieges and storms. _from tests_
-- [City panel](./city-panel.md) covers a city's facts, evacuation, declaring war, and the fate of a taken city. _from tests_
+- [Map and fog](./map-and-fog.md) covers zoom, pan, map clicks and fog of war.
+- [Armies and orders](./armies-and-orders.md) covers selecting armies, marching, sailing, joining, halting, stances, battles, sieges and storms; all but selecting and marching are _from tests_.
+- [City panel](./city-panel.md) covers a city's facts, evacuation, declaring war, and the fate of a taken city; all but the facts are _from tests_.
 - [Recruit cards](./recruit.md) covers the Raise cards, their forecast, and the threat each card reckons.
-- [City projects](./city-projects.md) covers buildings, second levels and great works.
+- [City projects](./city-projects.md) covers buildings, second levels, great works and cancelling.
 - [Guards](./guards.md) covers hiring guards, their term, and the day great powers stop counting them.
-- [Trade](./trade.md) covers invitations, routes, partners and their risks. _from tests_
+- [Trade](./trade.md) covers invitations, routes, partners and their risks; invitations, closing and raids are _from tests_.
 - [Advances](./advances.md) covers studying one advance at a time for gold.
 - [Warnings and stops](./warnings-and-stops.md) covers war-threat warnings, the stops they cause, the pause settings, and the line ten days before guards stop counting.
 - [Wars and peace](./wars-and-peace.md) covers the Wars panel, its At peace rows, offers, terms and truces.

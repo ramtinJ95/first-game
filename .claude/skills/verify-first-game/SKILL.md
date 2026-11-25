@@ -19,7 +19,7 @@ D=.claude/skills/verify-first-game/drive.ts
 node $D up
 ```
 
-`up` runs `npm run build`, serves `dist/` with `vite preview` on a free port of 127.0.0.1, starts the driver with Chromium on another free port, and prints `run`, `url` and `evidence`. It returns once the page answers and the driver answers. `--no-build` reuses `dist/` when you just built. A first run in a fresh checkout needs `npm ci` and `npx playwright install chromium` first, which `.nexus/setup` does on a pylon.
+`up` runs `npm run build`, serves `dist/` with `vite preview` on a free port of 127.0.0.1, starts the driver with Chromium on another free port, and prints `run`, `url` and `evidence`. It returns once the page answers and the driver answers, and stops both again if either never does. `--no-build` reuses `dist/`; use it only right after `npm run build` of the same tree, since `doctor` cannot tell which tree an old `dist/` came from. The driver takes commands only with the run's token from `session.json`. A first run in a fresh checkout needs `npm ci` and `npx playwright install chromium` first, which `.nexus/setup` does on a pylon.
 
 The game keeps no data on disk. Saves live in the page's `localStorage`, which lasts as long as the run's browser. Every `up` starts with an empty browser, so no save, no autosave and no settings carry over.
 
@@ -30,7 +30,7 @@ node $D open                      # a new game as Rome, running at speed 1
 node $D open --moment carthageNearsWar   # a set-up moment, loaded paused
 ```
 
-`open` waits for the top bar (or the start screen with `--power start`) and prints the day and speed. `--moment <builder>` builds a save from a function in `e2e/support.ts` (or `<path>:<name>`, such as `e2e/trade-game.ts:tradingRome`), pauses, drops the file on the map as a player drops one, and waits for its day. News stops the game as the Game menu says, as for a player. `--no-pauses` adds `pauses=off`, as the browser tests do. `--viewport 390x844` opens at phone size.
+`open` waits for the top bar (or the start screen with `--power start`) and prints the day and speed. `--moment <builder>` builds a save from a function in `e2e/support.ts` (or `<path>:<name>`, such as `e2e/trade-game.ts:tradingRome`; `--args '<json array>'` passes its arguments), pauses, drops the file on the map as a player drops one, and waits until the page holds the save's day and the map has drawn it. A refused save fails `open` with the page's own refusal. News stops the game as the Game menu says, as for a player. `--no-pauses` adds `pauses=off`, as the browser tests do. `--viewport 390x844` opens at phone size.
 
 ## Doctor
 
@@ -40,7 +40,7 @@ Run it first, and whenever anything looks wrong:
 node $D doctor
 ```
 
-It is read-only. It checks that the preview and the driver are alive, that `HEAD` and the files under `src`, `data` and `index.html` are what was built, that the URL serves this checkout's `dist/index.html`, and that the driver answers with its Chromium version, page URL and size. It ends `OK`, or `NOT OK` after `PROBLEM` lines. After you edit the game, `down` and `up` again. After you edit `drive.ts`, do the same, because the driver keeps running the code it started with.
+It is read-only. It checks that the preview and the driver this run started are alive, by pid and command line, that `HEAD` and the contents of `src`, `data`, `index.html` and `package-lock.json` are what was built, that the URL serves this checkout's `dist/index.html`, and that the driver answers with its Chromium version, page URL and size. It ends `OK`, or `NOT OK` after `PROBLEM` lines. After you edit the game, `down` and `up` again. After you edit `drive.ts`, do the same, because the driver keeps running the code it started with.
 
 ## Drive
 
@@ -54,7 +54,7 @@ node $D errors                    # console errors and uncaught exceptions of th
 ```
 
 - `page` is the Playwright page. `expect` is Playwright's. `support` is `e2e/support.ts`, so `support.untilDrawn(page)`, `support.cityPoint('roma')` and `support.camera(page)` work as they do in the browser tests. `evidence` is the run's folder.
-- `play` sets the speed, resumes after every stop, and pauses at the day or once a line in the corner matches. It prints the day and each stop with the line that caused it. A stop already standing when it starts is listed too.
+- `play` sets the speed, resumes after every stop, and pauses at the day or once a line in the corner matches, or when an ending shows. It prints the day and each stop with the line that caused it, the stop it ends on included. A stop already standing when it starts is listed too.
 - Prefer roles and names, then `data-testid`. The map is a canvas: click a place with `support.camera(page).screen(support.cityPoint(id))`, which is right only at the widest zoom that `open` leaves. Once a click on news or a row has moved the camera, reach your own city through the Overview's rows instead. The recipes in `features/` say which.
 - `Pause`, `Resume` and `Game` need `exact: true`, because news lines contain those words. The Game menu's entries are `menuitem`s.
 - A command that waits on the page fails after Playwright's 30 s, or 5 s for `expect`. Pass `{ timeout }` for a long wait, or use `play`.
@@ -79,7 +79,7 @@ The run's folder is `.cache/verify/<run>/` in the checkout. It is ignored by git
 node $D down
 ```
 
-`down` stops the driver and its Chromium, then the preview, by the process groups this run started, and waits for them to exit. It keeps the run's folder. Never stop processes by name: the pylon's `web` service is a Vite dev server on another port, and a browser test may be running. Two checkouts can each run their own `up` side by side, since every port is free when chosen. One checkout holds one run at a time, and `up` refuses while one is live.
+`down` stops the driver and its Chromium, then the preview, by the process groups this run started, and waits for them to exit. It signals a pid only while its command line still names this run's port, so a reused pid is left alone. It keeps the run's folder. Never stop processes by name: the pylon's `web` service is a Vite dev server on another port, and a browser test may be running. Two checkouts can each run their own `up` side by side, since every port is free when chosen. One checkout holds one run at a time, and `up` refuses while any process of the last run is live.
 
 ## Shared machine
 
