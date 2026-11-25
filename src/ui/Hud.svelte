@@ -252,6 +252,14 @@
       display: none;
     }
 
+    /*
+     * An open panel takes the middle of a phone, as the sheet takes its bottom; the latest news,
+     * even news that stopped the game, waits in the chronicle, or the panel keeps a sliver.
+     */
+    .hud:has(.main > :global(*)) .latest {
+      display: none;
+    }
+
     /* The open Chronicle holds the same news, and a phone has room for one of them read whole. */
     .hud:has(.chronicle-toggle[aria-expanded='true']) .latest {
       display: none;

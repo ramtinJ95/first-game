@@ -175,4 +175,20 @@
     font-size: 12px;
     font-style: italic;
   }
+
+  /* On a phone the menu opens below the whole bar, across its width, its lines wrapping. */
+  @media (max-width: 1023px) {
+    .frame {
+      position: static;
+    }
+    .menu {
+      top: 100%;
+      left: 0;
+      right: 0;
+      white-space: normal;
+    }
+    .hint {
+      max-width: none;
+    }
+  }
 </style>

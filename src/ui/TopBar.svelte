@@ -265,6 +265,23 @@
     color: var(--bad);
   }
 
+  /*
+   * On a phone the buttons take a second row of their own rather than shorter words, as the bar
+   * already wraps into rows there. The bar holds the Game menu, which opens across its width.
+   */
+  @media (max-width: 1023px) {
+    .bar {
+      position: relative;
+    }
+    .end {
+      flex-wrap: wrap;
+      flex-shrink: 1;
+      justify-content: flex-end;
+      row-gap: 4px;
+      min-width: 0;
+    }
+  }
+
   @media (min-width: 1024px) {
     .bar,
     .stores {
