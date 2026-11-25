@@ -23,8 +23,9 @@ Run it from inside the checkout it belongs to; it drives that checkout's build.
   shot <name>                screenshot and ARIA snapshot into the run's evidence folder
   look                       print the page's ARIA snapshot
   play [--until-day N] [--until-text <regex>] [--speed 3] [--seconds 600]
-                             play on, resuming after each stop, until the day or a line of
-                             news; pauses there and lists every stop with its line
+                             play on, resuming after each stop, until the day, a line of
+                             news, an ending, or a dialog that asks the player to decide;
+                             pauses there and lists every stop with its line
   viewport <W>x<H>           resize the page
   errors                     print the page's console errors and uncaught exceptions
   moment <builder> <file> [--args <json array>]
@@ -352,6 +353,8 @@ async function serve(port: number, url: string) {
       const pattern = c['untilText'] ? new RegExp(c['untilText']) : null;
       const end = Date.now() + Number(c['seconds'] ?? 600) * 1000;
       const stops: { day: number; line: string }[] = [];
+      let decision: { testid: string | null; name: string } | undefined;
+      let stalled: string | undefined;
       await page.getByRole('button', { name: `Speed ${c['speed'] ?? '3'}` }).click();
       for (;;) {
         const alerts = page.getByTestId('alerts');
@@ -372,14 +375,33 @@ async function serve(port: number, url: string) {
         }
         if (pattern && (await alerts.getByText(pattern).count()) > 0) break;
         if ((await dayOf()) >= untilDay) break;
-        if (Date.now() > end) throw new Error(`still on day ${await dayOf()} after the time given`);
         if (await page.getByTestId('defeat').or(page.getByTestId('victory')).isVisible()) break;
+        const open = page.getByRole('dialog').or(page.getByRole('alertdialog')).filter({
+          visible: true,
+        });
+        if ((await open.count()) > 0) {
+          const dialog = open.first();
+          decision = {
+            testid: await dialog.getAttribute('data-testid'),
+            name: (await dialog.getByRole('heading').first().textContent({ timeout: 1000 })) ?? '',
+          };
+          break;
+        }
+        if (Date.now() > end) {
+          stalled = `still on day ${await dayOf()} after the time given`;
+          break;
+        }
         if (paused) await resume.click();
         await page.waitForTimeout(200);
       }
       const pause = page.getByRole('button', { name: 'Pause', exact: true });
       if (await pause.isVisible()) await pause.click();
-      return { day: await dayOf(), stops };
+      return {
+        day: await dayOf(),
+        stops,
+        ...(decision && { decision }),
+        ...(stalled && { stalled }),
+      };
     },
     viewport: async (c) => {
       const [width, height] = (c['size'] ?? '').split('x').map(Number);
@@ -400,20 +422,27 @@ async function serve(port: number, url: string) {
           res.end(JSON.stringify({ ok: false, error: `not sendable as JSON: ${String(error)}` }));
         }
       };
-      let command: Command;
+      let parsed: unknown;
       try {
-        command = JSON.parse(text) as Command;
+        parsed = JSON.parse(text);
       } catch {
         return reply({ ok: false, error: 'not a JSON command' });
       }
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+        return reply({ ok: false, error: 'not a JSON command' });
+      const command = parsed as Command;
       if (req.method !== 'POST' || !token || command['token'] !== token)
         return reply({ ok: false, error: "not this run's driver" });
-      const op = ops[command.op];
-      if (!op) return reply({ ok: false, error: `unknown op ${command.op}` });
-      op(command).then(
-        (value) => reply({ ok: true, value: value ?? null }),
-        (error: unknown) => reply({ ok: false, error: String(error) }),
-      );
+      const name = command.op;
+      const op = typeof name === 'string' && Object.hasOwn(ops, name) ? ops[name] : undefined;
+      if (typeof op !== 'function')
+        return reply({ ok: false, error: `unknown op ${String(name)}` });
+      Promise.resolve()
+        .then(() => op(command))
+        .then(
+          (value) => reply({ ok: true, value: value ?? null }),
+          (error: unknown) => reply({ ok: false, error: String(error) }),
+        );
     });
   }).listen(port, '127.0.0.1');
   console.log(`driver on ${port} for ${url}`);
@@ -486,17 +515,18 @@ switch (command) {
   case 'errors':
     print(await call(currentSession(), { op: command }));
     break;
-  case 'play':
-    print(
-      await call(currentSession(), {
-        op: 'play',
-        untilDay: arg(args, '--until-day'),
-        untilText: arg(args, '--until-text'),
-        speed: arg(args, '--speed'),
-        seconds: arg(args, '--seconds'),
-      }),
-    );
+  case 'play': {
+    const played = await call(currentSession(), {
+      op: 'play',
+      untilDay: arg(args, '--until-day'),
+      untilText: arg(args, '--until-text'),
+      speed: arg(args, '--speed'),
+      seconds: arg(args, '--seconds'),
+    });
+    print(played);
+    if (typeof played === 'object' && played !== null && 'stalled' in played) process.exitCode = 1;
     break;
+  }
   case 'viewport':
     print(await call(currentSession(), { op: 'viewport', size: args[0] }));
     break;

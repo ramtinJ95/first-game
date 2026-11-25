@@ -37,7 +37,7 @@ Files marked _from tests_ hold recipes taken from the browser tests and capture 
 - [Time and stores](./time-and-stores.md) covers pause, speed, Space, the date, and the gold, food and manpower readings with their short and full states.
 - [Map and fog](./map-and-fog.md) covers zoom, pan, map clicks and fog of war.
 - [Armies and orders](./armies-and-orders.md) covers selecting armies, marching, sailing, joining, halting, stances, battles, sieges and storms; all but selecting and marching are _from tests_.
-- [City panel](./city-panel.md) covers a city's facts, evacuation, declaring war, and the fate of a taken city; all but the facts are _from tests_.
+- [City panel](./city-panel.md) covers a city's facts, evacuation, declaring war, and the fate of a taken city; evacuation and declaring war are _from tests_.
 - [Recruit cards](./recruit.md) covers the Raise cards, their forecast, and the threat each card reckons.
 - [City projects](./city-projects.md) covers buildings, second levels, great works and cancelling.
 - [Guards](./guards.md) covers hiring guards, their term, and the day great powers stop counting them.

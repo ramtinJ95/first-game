@@ -55,6 +55,7 @@ node $D errors                    # console errors and uncaught exceptions of th
 
 - `page` is the Playwright page. `expect` is Playwright's. `support` is `e2e/support.ts`, so `support.untilDrawn(page)`, `support.cityPoint('roma')` and `support.camera(page)` work as they do in the browser tests. `evidence` is the run's folder.
 - `play` sets the speed, resumes after every stop, and pauses at the day or once a line in the corner matches, or when an ending shows. It prints the day and each stop with the line that caused it, the stop it ends on included. A stop already standing when it starts is listed too.
+- A dialog that asks the player to decide, such as a taken city's fate, holds the clock. `play` returns at once with `decision` (the dialog's test id and heading). Choose with `act`, then `play` again. If the time given runs out, `play` returns what it saw with `stalled` and exits 1.
 - Prefer roles and names, then `data-testid`. The map is a canvas: click a place with `support.camera(page).screen(support.cityPoint(id))`, which is right only at the widest zoom that `open` leaves. Once a click on news or a row has moved the camera, reach your own city through the Overview's rows instead. The recipes in `features/` say which.
 - `Pause`, `Resume` and `Game` need `exact: true`, because news lines contain those words. The Game menu's entries are `menuitem`s.
 - A command that waits on the page fails after Playwright's 30 s, or 5 s for `expect`. Pass `{ timeout }` for a long wait, or use `play`.

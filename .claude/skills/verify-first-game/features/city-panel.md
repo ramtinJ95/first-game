@@ -21,7 +21,7 @@ Preconditions:
 
 - **Facts.** `act "const at = support.cityPoint('roma'); const p = support.camera(page).screen({ x: at.x, y: at.y + 40 }); await page.mouse.click(p.x, p.y); return await page.getByTestId('city-panel').ariaSnapshot()"`. The region `City` reads Roma's facts.
 - **Declare war** _from tests_. Click `mediolanum` the same way, then `Declare war on <owner>` and `Confirm war`; the Wars button counts one war.
-- **Fate** _from tests_. `open --moment mediolanumFallsTomorrow`, play a day, and the `fate-prompt` dialog opens; `fate-occupy` occupies.
+- **Fate.** `open --moment mediolanumFallsTomorrow`, then `play --until-day 5`. It returns on day 2 with `decision` `{ testid: 'fate-prompt', name: 'Mediolanum has fallen to you' }`. `act "await page.getByTestId('fate-occupy').click(); return await page.getByTestId('fate-prompt').isVisible()"` returns `false`, and `play --until-day 5` then reaches day 5.
 - **Evacuate** _from tests_. `open --moment refugeesToCapua` and follow `e2e/panels.spec.ts`.
 - **Proof.** `shot` each panel.
 
