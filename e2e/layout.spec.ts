@@ -383,7 +383,7 @@ test.describe('the top bar and the Game menu at 390 × 844', () => {
     await page
       .getByTestId('alerts')
       .getByRole('listitem')
-      .filter({ hasText: /no longer count against Carthage's war\. Carthage stands higher/ })
+      .filter({ hasText: /no longer count\. Carthage has climbed/ })
       .waitFor();
     await page.getByTestId('advances-button').click();
     const panel = page.getByTestId('advances');
