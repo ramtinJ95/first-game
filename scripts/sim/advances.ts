@@ -5,6 +5,7 @@ import { ADVANCE_KINDS, type AdvanceKind } from '../../src/sim/advances/advances
 import { studyRefusal } from '../../src/sim/advances/study.ts';
 import { bestStudy, studyPayback } from '../../src/sim/ai/study.ts';
 import { marked } from '../../src/ui/advances-text.ts';
+import { studyPrice } from '../../src/sim/advances/study.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
 import { dailyBalances, limitsOf, menOf } from '../../src/sim/systems/economy.ts';
 import { panelBuilds, playCautiousRome, rome, suggested, world } from '../cautious-rome.ts';
@@ -129,6 +130,11 @@ function asThePanelSuggests(state: GameState, gold: number, heedsLine: boolean):
   if (heedsLine) {
     const mark = marked(state, world, rome);
     if (mark.building && !mark.advance) return [];
+    // Marked over a building, the advance is the one the panel named, or none the budget allows.
+    if (mark.building && mark.advance)
+      return studyPrice(state, rome, mark.advance) <= gold
+        ? [{ kind: 'study', faction: rome, advance: mark.advance }]
+        : [];
   }
   const best = bestStudy(state, rome, gold);
   return best ? [{ kind: 'study', faction: rome, advance: best.advance }] : [];
