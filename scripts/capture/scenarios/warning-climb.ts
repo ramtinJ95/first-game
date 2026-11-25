@@ -15,10 +15,10 @@ const CASES = [
   {
     name: 'ahead',
     title:
-      'ten days before guards Carthage counts at Roma stop counting: told, with the day and the share it would then stand at, and the game runs on',
+      'ten days before guards Carthage counts at Roma stop counting, when it would then stand above 80% and be free to declare: told, with the day, the share and what a new band costs, and the game stops',
     save: () => carthageClimbs(0, 2, [], 111),
-    line: /The 1,000 guards at Roma stop counting against Carthage's war in 10 days/,
-    stops: false,
+    line: /The 1,000 guards at Roma stop counting against Carthage's war in 10 days, .* and may declare\. A new band/,
+    stops: true,
   },
   {
     name: 'climb',
@@ -61,7 +61,7 @@ async function whole(page: Page, where: 'alerts' | 'chronicle', line: RegExp) {
 export default defineScenario({
   name: 'warning-climb',
   title:
-    'A power on notice whose guards stop counting is told ten days ahead and on that day, and one that climbs 6 points or more above the share the game last stopped for stops it again',
+    'A power on notice whose guards stop counting is told ten days ahead, which stops the game when it could then declare, and on that day; and one that climbs 6 points or more above the share the game last stopped for stops it again',
   async run({ page, shot }) {
     await openGame(page, { pauses: true });
     for (const width of [1280, 1024]) {
