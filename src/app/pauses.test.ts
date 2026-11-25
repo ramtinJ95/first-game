@@ -71,4 +71,26 @@ describe('stopsOfDay', () => {
     store.set('pauses', 'not json');
     expect(readPauses(storage)).toEqual(ALL_PAUSES);
   });
+
+  it('stops for a finished advance by default, keeps it off once turned off, and turns it on for settings saved before it', () => {
+    const store = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    } as Storage;
+    expect(readPauses(storage).advance).toBe(true);
+    writePauses(storage, { ...ALL_PAUSES, advance: false });
+    expect(readPauses(storage).advance).toBe(false);
+    store.set('pauses', JSON.stringify({ battle: false }));
+    expect(readPauses(storage)).toEqual({ ...ALL_PAUSES, battle: false, advance: true });
+    const finished: Alert = {
+      kind: 'advanceFinished',
+      day: 3 as Day,
+      tone: 'good',
+      text: 'Standard coin is studied',
+      pause: { kind: 'advance' },
+    };
+    expect(stopsOfDay([finished], ALL_PAUSES, new Set()).stop).toBe(true);
+    expect(stopsOfDay([finished], { ...ALL_PAUSES, advance: false }, new Set()).stop).toBe(false);
+  });
 });

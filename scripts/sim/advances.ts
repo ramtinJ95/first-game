@@ -7,7 +7,7 @@ import { bestStudy, studyPayback } from '../../src/sim/ai/study.ts';
 import { marked } from '../../src/ui/advances-text.ts';
 import type { GameState } from '../../src/sim/state/game-state.ts';
 import { dailyBalances, limitsOf, menOf } from '../../src/sim/systems/economy.ts';
-import { panelBuilds, playCautiousRome, rome, suggested } from '../cautious-rome.ts';
+import { panelBuilds, playCautiousRome, rome, suggested, world } from '../cautious-rome.ts';
 import { buildingWorth } from '../../src/sim/ai/build.ts';
 import { reserveOf } from '../../src/sim/ai/situation.ts';
 import { BUILDINGS, type BuildingKind } from '../../src/sim/buildings/buildings.ts';
@@ -126,7 +126,7 @@ function withGold(state: GameState, gold: number): GameState {
 function asThePanelSuggests(state: GameState, gold: number, heedsLine: boolean): Order[] {
   const realm = state.factions[rome];
   if (!realm || realm.study) return [];
-  if (heedsLine && marked(state, rome).building) return [];
+  if (heedsLine && marked(state, world, rome).building) return [];
   const best = bestStudy(state, rome, gold);
   return best ? [{ kind: 'study', faction: rome, advance: best.advance }] : [];
 }

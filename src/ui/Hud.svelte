@@ -93,7 +93,7 @@
       {:else if view.current.panel === 'chronicle'}
         <ChroniclePanel alerts={view.current.alerts} {actions} />
       {:else if view.current.panel === 'advances'}
-        <AdvancesPanel {game} pending={view.current.pending} {actions} />
+        <AdvancesPanel {game} {world} pending={view.current.pending} {actions} />
       {/if}
     </div>
     <aside class="side" aria-label="Selection">
