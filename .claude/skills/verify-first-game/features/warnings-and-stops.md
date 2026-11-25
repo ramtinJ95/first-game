@@ -4,12 +4,13 @@ When a great power at peace nears the strength to declare war on the player, the
 
 ## Sub-features
 
-- `warn-line` is the warning: `<Power> could soon declare war on you: it has <n>% of the strength it needs against your forces near <city>, and may declare from <date> if it holds it.`, then the treasury's part, a building, guards, food, and `See At peace in Wars.`
+- `warn-line` is the warning: `<Power> could soon declare war on you: it has <n>% of the strength it needs near <city>, and may declare from <date> if it holds it.`, then the treasury's part, a building, guards, food, and `See At peace in Wars.`
 - `warn-stop` pauses the game and marks the line `Paused` (`alert-paused`); the speed reads `Paused`.
 - `warn-climb` a power that climbs past the share of its last stop warns again and stops the game: `<Power> has climbed to <n>% near <city>, from <n>% at its last stop on <date>`.
 - `warn-spared` a later line at no higher share says `The game ran on: its stop on <date> was at <n>%` and does not stop.
 - `warn-top-bar` the Wars button reads `Wars 0 · 1 threat`.
-- `warn-guards-ahead` the line ten days before guards stop counting (see [Guards](./guards.md)).
+- `warn-guards-ahead` the line ten days before guards stop counting, which stops the game when the power would then stand at 80% or more and be free to declare (see [Guards](./guards.md)).
+- `warn-held-end` a climb that the end of a war brings, within 30 days of a stop that named that war and no higher than the share it named, runs the game on; the corner tells the war's end.
 - `warn-held` a power held back by another war says `Once its war with … ends, it would stand at <n>%`, and the corner tells when that war ends.
 - `warn-settings` the Game menu's `Pause the game when` checkboxes: battles, weak sieges, enemies sighted, own cities, war threats, fates.
 

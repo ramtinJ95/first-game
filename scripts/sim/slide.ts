@@ -235,9 +235,11 @@ function play(player: Player, seed: number, years: number): Game {
         }
       for (const alert of threatNewsOfDay(before, after, world, toldOld, undefined, true, false))
         if (alert.kind === 'warThreat' && alert.pause) game.stopsOld++;
-      for (const alert of threatNewsOfDay(before, after, world, told, undefined, true, climbs)) {
+      const news = threatNewsOfDay(before, after, world, told, undefined, true, climbs);
+      // A day stops the game once, whether its warning, its line ten days ahead, or both stop it.
+      if (news.some((alert) => alert.pause)) game.stops++;
+      for (const alert of news) {
         if (alert.kind !== 'warThreat') continue;
-        if (alert.pause) game.stops++;
         const named = warnedPowers(alert.text).length;
         game.warnings += named;
         year.warnings = (year.warnings ?? 0) + named;

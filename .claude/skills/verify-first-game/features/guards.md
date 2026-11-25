@@ -8,7 +8,7 @@ A city can hire 500 guards for a year for 2,000 gold. They hold the walls all ye
 - `guards-line` shows the bands held and the day each leaves: `500 guards · 500 leave Year 2, day 8`.
 - `guards-weighed` shows until when they count against a war, or `None count against a war now`.
 - `guards-threat` shows the share a power on notice holds now, and with one more band.
-- `guards-ahead` puts a line in the corner ten days before a counted band stops counting, without stopping the game.
+- `guards-ahead` puts a line in the corner ten days before a counted band stops counting. It stops the game when the power would then stand at 80% or more and be free to declare (`… and may declare.`), at most once in 200 days for a power unless 6 points higher; in the recipe below the power is not yet free by that day, so the line runs on.
 - `guards-left` tells in the corner when a band has served its year.
 
 ## How to get to it (user POV)
