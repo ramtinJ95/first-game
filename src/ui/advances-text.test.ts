@@ -10,7 +10,8 @@ import { changeCityOwner } from '../sim/cities.ts';
 import type { FactionId } from '../sim/ids.ts';
 import { parseMap } from '../sim/map.ts';
 import { newGame } from '../sim/new-game.ts';
-import { dailyBalances } from '../sim/systems/economy.ts';
+import { dailyBalances, limitsOf } from '../sim/systems/economy.ts';
+import { whole } from '../app/names.ts';
 import { buildWorld } from '../sim/world/world.ts';
 import {
   advancesView,
@@ -172,13 +173,30 @@ describe('the advances panel', () => {
   });
 
   test("says how much gold a building first lacks, and in how many days today's income brings it", () => {
+    const map = parseMap(
+      JSON.parse(readFileSync(new URL('../../data/map/map.json', import.meta.url), 'utf8')),
+    );
+    const state = newGame(map, { seed: 1, player: 'rome' });
+    const realm = state.factions[state.player];
+    if (!realm) throw new Error('no Rome');
+    realm.stores.gold = 4_000;
+    const net = dailyBalances(state).get(state.player)?.gold ?? 0;
+    expect(net).toBeGreaterThan(0);
+    expect(buildingFirstLine(state, buildWorld(map), state.player)).toContain(
+      `It costs 6,500 gold, 2,500 more than you hold, which today's income brings in ${Math.ceil(2500 / net)} days.`,
+    );
+  });
+
+  test('promises no day for a building that costs more than the treasury holds at its limit', () => {
     const state = buildFixture();
     rome(state).stores.gold = 3_500;
-    const net = dailyBalances(state).get(FIXTURE.rome)?.gold ?? 0;
-    expect(net).toBeGreaterThan(0);
-    expect(buildingFirstLine(state, world, FIXTURE.rome)).toContain(
-      `It costs 6,500 gold, 3,000 more than you hold, which today's income brings in ${Math.ceil(3000 / net)} days.`,
+    const limit = limitsOf(state).get(FIXTURE.rome)?.gold ?? 0;
+    expect(limit).toBeLessThan(6_500);
+    const line = buildingFirstLine(state, world, FIXTURE.rome);
+    expect(line).toContain(
+      `It costs 6,500 gold, 3,000 more than you hold, and more than your treasury holds at its limit of ${whole(Math.floor(limit))}, so it waits until the limit grows.`,
     );
+    expect(line).not.toMatch(/brings in \d+ days/);
   });
 
   test('holds no Temple against the advances for a realm that has taken no city, as its payback assumes one taken a year', () => {

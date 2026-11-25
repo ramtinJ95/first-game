@@ -24,7 +24,7 @@ import { GUARD_DETER_DAYS, GUARD_GOLD } from '../sim/guards.ts';
 import { fullDefences, WALL_WEAR_PER_THOUSAND_MEN } from '../sim/systems/sieges.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { CityId, FactionId } from '../sim/ids.ts';
-import { dailyBalances } from '../sim/systems/economy.ts';
+import { dailyBalances, limitsOf } from '../sim/systems/economy.ts';
 import type { World } from '../sim/world/world.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
@@ -187,12 +187,17 @@ export function buildingFirstLine(
   const gold = state.factions[faction]?.stores.gold ?? 0;
   const net = dailyBalances(state).get(faction)?.gold ?? 0;
   const missing = price - gold;
+  const limit = limitsOf(state).get(faction)?.gold ?? Infinity;
+  const costs = `It costs ${whole(price)} gold, ${whole(Math.ceil(missing))} more than you hold`;
+  // Gold stops at the treasury's limit, so a price above it is never saved up.
   const short =
     missing <= 0
       ? ''
-      : net > 0
-        ? ` It costs ${whole(price)} gold, ${whole(Math.ceil(missing))} more than you hold, which today's income brings in ${whole(Math.ceil(missing / net))} days.`
-        : ` It costs ${whole(price)} gold, ${whole(Math.ceil(missing))} more than you hold, and today's income does not bring it in.`;
+      : price > limit
+        ? ` ${costs}, and more than your treasury holds at its limit of ${whole(Math.floor(limit))}, so it waits until the limit grows.`
+        : net > 0
+          ? ` ${costs}, which today's income brings in ${whole(Math.ceil(missing / net))} days.`
+          : ` ${costs}, and today's income does not bring it in.`;
   return `Building ${name} at ${city.name} would pay back in ${years.toFixed(1)} years${paybackBasis(kind)}, sooner than any advance you can start: the soonest, ${ADVANCES[soonest.advance].name}, takes ${soonest.payback.toFixed(1)}.${short} Build first, and study with the gold left.`;
 }
 
