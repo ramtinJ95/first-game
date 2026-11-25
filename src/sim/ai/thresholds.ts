@@ -165,7 +165,7 @@ export const SIZE_EXPONENT = 0;
  * map gave it, the odds a power needs fall by this share for each year of the game, to at most
  * STAY_HOME_CAP; 0 leaves them.
  */
-export const STAY_HOME_PER_YEAR = 0;
+export const STAY_HOME_PER_YEAR = 0.06;
 export const STAY_HOME_CAP = 0.5;
 /** Prototype, measuring only: the share of a city's garrison the reckoning of a war weighs. */
 export const GARRISON_WEIGHT = 1;
