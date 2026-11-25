@@ -123,7 +123,10 @@ function terms(state: State, power: FactionId) {
     atWar: Object.keys(state.wars).filter((k) => k.includes(`"${power}"`)).length,
     // The odds the power's free strength gives over Rome's at the front, and what the rule divides them by.
     odds: +(free / theirs).toFixed(3),
-    divisor: threat && threat.readiness > 0 && !threat.pressed ? +(free / theirs / threat.readiness).toFixed(3) : null,
+    divisor:
+      threat && threat.readiness > 0 && !threat.pressed
+        ? +(free / theirs / threat.readiness).toFixed(3)
+        : null,
   };
 }
 
@@ -174,7 +177,10 @@ interface Flow {
   recruits: number;
   buildings: number;
   study: number;
-  other: number;
+  /** Gold the day brought beyond the cities' yield: caravans delivered, a peace paid to it. */
+  tradeIn: number;
+  /** Gold spent beyond recruits, buildings and study: trade routes opened and improved, guards, a peace paid. */
+  otherOut: number;
   daysAtLimit: number;
   daysRecruiting: number;
 }
@@ -186,7 +192,8 @@ const emptyFlow = (): Flow => ({
   recruits: 0,
   buildings: 0,
   study: 0,
-  other: 0,
+  tradeIn: 0,
+  otherOut: 0,
   daysAtLimit: 0,
   daysRecruiting: 0,
 });
@@ -219,15 +226,17 @@ function flowOf(before: State, after: State, power: FactionId, flow: Flow) {
   if (recruits > 0) flow.daysRecruiting++;
   const limit = limitsOf(before).get(power)?.gold ?? Infinity;
   const spent = recruits + buildings + study;
-  const expected = realm.stores.gold + withTrade - spent;
   if (realm.stores.gold >= limit - 1) flow.daysAtLimit++;
-  if (expected > next.stores.gold + 0.5 && withTrade > 0 && expected > limit) {
-    flow.wasted += expected - Math.max(next.stores.gold, limit);
-  }
+  // The economy adds the cities' yield less upkeep up to the limit; caravans and the rest come apart from it.
+  const yielded = realm.stores.gold - spent + bare;
+  const kept = bare > 0 ? Math.max(Math.min(yielded, limit), realm.stores.gold - spent) : yielded;
+  if (bare > 0 && yielded > kept) flow.wasted += yielded - kept;
+  const rest = next.stores.gold - kept;
+  if (rest > 0) flow.tradeIn += rest;
+  else flow.otherOut -= rest;
   flow.recruits += recruits;
   flow.buildings += buildings;
   flow.study += study;
-  flow.other += Math.max(0, Math.min(expected, limit) - next.stores.gold);
 }
 
 function play(player: Player, seed: number, years: number) {
@@ -249,7 +258,10 @@ function play(player: Player, seed: number, years: number) {
       largestFlow: emptyFlow(),
       largest: '',
     })),
-    terms: {} as Record<number, { nearest: ReturnType<typeof terms> | null; largest: ReturnType<typeof terms> | null }>,
+    terms: {} as Record<
+      number,
+      { nearest: ReturnType<typeof terms> | null; largest: ReturnType<typeof terms> | null }
+    >,
     world: {} as Record<number, ReturnType<typeof worldAt>>,
   };
   const end = playCautiousRome(
@@ -266,7 +278,11 @@ function play(player: Player, seed: number, years: number) {
         game.warnings++;
       }
       for (const e of events)
-        if (e.kind === 'warDeclared' && e.against === rome && after.factions[e.by]?.kind === 'greatPower') {
+        if (
+          e.kind === 'warDeclared' &&
+          e.against === rome &&
+          after.factions[e.by]?.kind === 'greatPower'
+        ) {
           game.wars++;
           game.warDays.push(day);
         }
