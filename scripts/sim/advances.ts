@@ -121,12 +121,15 @@ function withGold(state: GameState, gold: number): GameState {
 /**
  * The panel's suggestion, on a day nothing is studied, with `gold` to spend. A player who
  * heeds the panel's line studies nothing while a city could start a building that pays back
- * sooner (`marked`).
+ * sooner, counted from today (`marked`).
  */
 function asThePanelSuggests(state: GameState, gold: number, heedsLine: boolean): Order[] {
   const realm = state.factions[rome];
   if (!realm || realm.study) return [];
-  if (heedsLine && marked(state, world, rome).building) return [];
+  if (heedsLine) {
+    const mark = marked(state, world, rome);
+    if (mark.building && !mark.advance) return [];
+  }
   const best = bestStudy(state, rome, gold);
   return best ? [{ kind: 'study', faction: rome, advance: best.advance }] : [];
 }
