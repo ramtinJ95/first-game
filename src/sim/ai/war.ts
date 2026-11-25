@@ -28,6 +28,10 @@ import {
   NOTICE_DAYS,
   RIVAL_PRESSURE_ODDS,
   SATED_EXPONENT,
+  SIZE_EXPONENT,
+  STAY_HOME_CAP,
+  STAY_HOME_PER_YEAR,
+  GARRISON_WEIGHT,
   WAR_DISTANCE_KM,
   WAR_FRONT_KM,
   WAR_ODDS,
@@ -172,7 +176,7 @@ function reckon(context: Context) {
   for (const army of armies) armiesOf.set(army.owner, [...(armiesOf.get(army.owner) ?? []), army]);
   const measure = (other: FactionId, city: CityView) =>
     strengthNear(state, armiesOf.get(other) ?? [], city.position, WAR_FRONT_KM) +
-    weighedGarrison(city, state.day);
+    weighedGarrison(city, state.day) * GARRISON_WEIGHT;
 
   const fighting = new Set(targetsOf(state, faction, enemies).map((city) => city.owner));
   let free = strength.get(faction) ?? 0;
@@ -208,11 +212,24 @@ function reckon(context: Context) {
   const growth = Math.max(0, 1 - ADMIN_CITIES / Math.max(1, ownCities.length));
   const hoardShare = (other: FactionId) =>
     other !== leader && rivals.has(other) ? HOARD_ODDS_SHARE * growth * hoard(other) : 0;
+  const homelandOf = (other: FactionId) =>
+    context.world.map.provinces.filter((province) => (province.owner as string) === other).length;
+  // Prototype: a larger power needs less against a smaller rival, and against one that stays at home as the years pass.
+  const pull = (other: FactionId) => {
+    if (!rivals.has(other) || other === leader) return 1;
+    const theirs = citiesOf.get(other)?.length ?? 0;
+    let factor = 1;
+    if (SIZE_EXPONENT > 0 && theirs > 0 && ownCities.length > theirs)
+      factor *= (theirs / ownCities.length) ** SIZE_EXPONENT;
+    if (STAY_HOME_PER_YEAR > 0 && theirs <= homelandOf(other))
+      factor *= 1 - Math.min(STAY_HOME_CAP, (state.day / 365) * STAY_HOME_PER_YEAR);
+    return factor;
+  };
   const needed = (other: FactionId) =>
     other === leader
       ? Math.min(odds, COALITION_ODDS)
       : rivals.has(other)
-        ? Math.min(odds, RIVAL_ODDS) * (1 - hoardShare(other))
+        ? Math.min(odds, RIVAL_ODDS) * (1 - hoardShare(other)) * pull(other)
         : odds * sated;
   const income = tradeIncome(state).get(faction) ?? 0;
   const tradeCost = (other: FactionId) =>
@@ -249,7 +266,10 @@ function reckon(context: Context) {
         for (const ours of ownCities) km = Math.min(km, distance(ours.position, theirs.position));
         if (km > WAR_REACH_KM) continue;
         eligible.add(other.id);
-        bound = Math.max(bound, scoreOf(other.id, weighedGarrison(theirs, state.day), km));
+        bound = Math.max(
+          bound,
+          scoreOf(other.id, weighedGarrison(theirs, state.day) * GARRISON_WEIGHT, km),
+        );
       }
       return bound > 0 ? [{ id: other.id, bound }] : [];
     })
@@ -270,7 +290,7 @@ function reckon(context: Context) {
     const home = map.filter((province) => (province.owner as string) === rival).length;
     if ((citiesOf.get(rival)?.length ?? 0) > home) return undefined;
     if (truceBetween(state, faction, rival)) return undefined;
-    return pressureFree / Math.max(1, strength.get(rival) ?? 0);
+    return pressureFree / Math.max(1, strength.get(rival) ?? 0) / pull(rival);
   };
 
   return {
