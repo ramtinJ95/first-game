@@ -30,7 +30,7 @@ node $D open                      # a new game as Rome, running at speed 1
 node $D open --moment carthageNearsWar   # a set-up moment, loaded paused
 ```
 
-`open` waits for the top bar (or the start screen with `--power start`) and prints the day and speed. `--moment <builder>` builds a save from a function in `e2e/support.ts` (or `<path>:<name>`, such as `e2e/trade-game.ts:tradingRome`; `--args '<json array>'` passes its arguments), pauses, drops the file on the map as a player drops one, and waits until the page holds the save's day and the map has drawn it. A refused save fails `open` with the page's own refusal. News stops the game as the Game menu says, as for a player. `--no-pauses` adds `pauses=off`, as the browser tests do. `--viewport 390x844` opens at phone size.
+`open` waits for the top bar (or the start screen with `--power start`) and prints the day and speed. `--moment <builder>` builds a save from a function in `e2e/support.ts` (or `<path>:<name>`, such as `e2e/trade-game.ts:tradingRome`; `--args '<json array>'` passes its arguments), pauses, drops the file on the map as a player drops one, and waits until the page holds the save's day and the map has drawn it. A builder may return a game state, a save string, or an object with a `save` string. `moments.ts` in this folder exports the states only a spec builds inline, such as a battle already joined; name it as `.claude/skills/verify-first-game/moments.ts:<name>`. A refused save fails `open` with the page's own refusal. News stops the game as the Game menu says, as for a player. `--no-pauses` adds `pauses=off`, as the browser tests do. `--viewport 390x844` opens at phone size.
 
 ## Doctor
 
@@ -54,10 +54,11 @@ node $D errors                    # console errors and uncaught exceptions of th
 ```
 
 - `page` is the Playwright page. `expect` is Playwright's. `support` is `e2e/support.ts`, so `support.untilDrawn(page)`, `support.cityPoint('roma')` and `support.camera(page)` work as they do in the browser tests. `evidence` is the run's folder.
-- `play` sets the speed, resumes after every stop, and pauses at the day or once a line in the corner matches, or when an ending shows. It prints the day and each stop with the line that caused it, the stop it ends on included. A stop already standing when it starts is listed too.
+- `play` sets the speed, resumes after every stop, and pauses at the day or once a line in the corner matches, or when an ending shows. It plays the last five days before `--until-day` at speed 1, so it stops on that day. It prints the day and each stop with the line that caused it, the stop it ends on included. A stop already standing when it starts is listed too.
 - A dialog that asks the player to decide, such as a taken city's fate, holds the clock. `play` returns at once with `decision` (the dialog's test id and heading). Choose with `act`, then `play` again. If the time given runs out, `play` returns what it saw with `stalled` and exits 1.
 - Prefer roles and names, then `data-testid`. The map is a canvas: click a place with `support.camera(page).screen(support.cityPoint(id))`, which is right only at the widest zoom that `open` leaves. Once a click on news or a row has moved the camera, reach your own city through the Overview's rows instead. The recipes in `features/` say which.
 - `Pause`, `Resume` and `Game` need `exact: true`, because news lines contain those words. The Game menu's entries are `menuitem`s.
+- An order given while paused, such as a march, a halt, a join or a stance, waits for the next day. The top bar's `orders-waiting` counts it.
 - A command that waits on the page fails after Playwright's 30 s, or 5 s for `expect`. Pass `{ timeout }` for a long wait, or use `play`.
 
 ## Evidence

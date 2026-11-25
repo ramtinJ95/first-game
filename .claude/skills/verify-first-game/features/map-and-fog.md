@@ -19,13 +19,13 @@ Preconditions:
 
 - `open`, at the widest zoom.
 
-- **Zoom on Roma and pick it.** `act "const cam = support.camera(page); await cam.zoom(cam.city('roma'), 4); const at = support.cityPoint('roma'); const p = cam.screen({ x: at.x, y: at.y + 10 }); await page.mouse.click(p.x, p.y); return { city: await page.getByTestId('city-name').textContent() }"`. `city` is `Roma`, and a `shot` shows Italy filling the view.
+- **Zoom on Roma and pick it.** `act "const cam = support.camera(page); await cam.zoom(cam.city('roma'), 4); const at = support.cityPoint('roma'); const p = cam.screen({ x: at.x, y: at.y + 10 }); await page.mouse.click(p.x, p.y); return { city: await page.getByTestId('city-name').textContent() }"`. `city` is `Roma`, and a `shot` shows Italy filling the view. Escape then clears the selection: `city-name` is gone.
 - **Fog.** `open --moment e2e/fog-game.ts:romeWithPunicArmyAt --args '[{"x":2250,"y":1900}]'` puts a Punic army out of Rome's sight (`OUT_OF_SIGHT` in `e2e/fog-game.ts`). Then `act "const flag = support.camera(page).banner({ x: 2250, y: 1900 }); await page.mouse.click(flag.x, flag.y); return { city: await page.getByTestId('city-name').textContent(), armyPanels: await page.getByTestId('army-panel').count() }"`. `city` is `Lugdunum` and `armyPanels` is `0`: the click picks the place, never the hidden army.
 - **Proof.** `shot` before and after the zoom.
 
 ## Gotchas
 
 - `support.camera(page)` tracks only the moves made through it. Keep zooms, drags and the clicks after them in one `act`.
-- `canvas[data-renderer]` carries `data-latest-state` and `data-drawn-state`; `support.untilDrawn(page)` waits for the map to draw the current state before a click.
+- `canvas[data-renderer]` carries `data-latest-state`, `data-drawn-state`, `data-latest-view` and `data-drawn-view`; `support.untilDrawn(page)` waits for the map to draw the current state before a click.
 - `?fog=off` and `?draw=test` change the drawing; leave them out for a player's view.
 - Moments: `e2e/fog-game.ts` (`plainGame`, `romeWithPunicArmyAt`, `romeSees`, `romeSeesArmy`). Capture scenarios: `zooms`, `map`, `italy`, `fog`, `paused-inputs`.

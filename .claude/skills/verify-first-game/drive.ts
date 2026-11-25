@@ -259,7 +259,14 @@ async function moment(name: string, file: string, root = here(), json = '[]') {
     throw new Error(`no builder ${builder} in ${module}; functions: ${names.join(', ')}`);
   }
   const given = JSON.parse(json) as unknown[];
-  writeFileSync(resolve(file), saveGame((make as (...args: unknown[]) => unknown)(...given)));
+  const made = (make as (...args: unknown[]) => unknown)(...given);
+  const saved =
+    typeof made === 'string'
+      ? made
+      : typeof (made as { save?: unknown } | null)?.save === 'string'
+        ? (made as { save: string }).save
+        : saveGame(made);
+  writeFileSync(resolve(file), saved);
   console.log(resolve(file));
 }
 
@@ -381,8 +388,6 @@ async function serve(port: number, url: string) {
             .trim();
           if (line && stops.at(-1)?.line !== line) stops.push({ day: await dayOf(), line });
         }
-        if (pattern && (await alerts.getByText(pattern).count()) > 0) break;
-        if ((await dayOf()) >= untilDay) break;
         if (await page.getByTestId('defeat').or(page.getByTestId('victory')).isVisible()) break;
         const open = page.getByRole('dialog').or(page.getByRole('alertdialog')).filter({
           visible: true,
@@ -395,6 +400,13 @@ async function serve(port: number, url: string) {
           };
           break;
         }
+        if (pattern && (await alerts.getByText(pattern).count()) > 0) break;
+        const today = await dayOf();
+        if (today >= untilDay) break;
+        const slow = page.getByRole('button', { name: 'Speed 1' });
+        if (untilDay - today <= 5 && (await slow.getAttribute('aria-pressed')) !== 'true')
+          // A dialog that opens meanwhile blocks the click; the next pass reports it.
+          await slow.click({ timeout: 1000 }).catch(() => undefined);
         if (Date.now() > end) {
           stalled = `still on day ${await dayOf()} after the time given`;
           break;
