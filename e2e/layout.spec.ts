@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import type { Day } from '../src/sim/state/day.ts';
 import type { GameState } from '../src/sim/state/game-state.ts';
 import { carthageClimbs } from './climb-game.ts';
+import { crowdedBar } from './crowded-bar.ts';
 import {
   camera,
   cityPoint,
@@ -304,5 +305,103 @@ test.describe('leaving for the start screen', () => {
     const start = page.getByTestId('start-screen');
     await expect(start).toBeVisible();
     await expect(start.getByRole('button', { name: 'Continue' })).toHaveCount(0);
+  });
+});
+
+test.describe('the top bar and the Game menu at 390 × 844', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('every button of the top bar is whole inside the window and can be pressed, with wars, a threat, an advance and a store short', async ({
+    page,
+  }) => {
+    await openGame(page);
+    await load(page, crowdedBar());
+    const bar = page.getByTestId('top-bar');
+    await expect(bar.getByTestId('wars-button')).toHaveText(/^Wars 1· 1 threat/);
+    await expect(bar.getByTestId('study-days')).toHaveText('240 days');
+    await expect(bar.getByTestId('store-food-note')).toHaveText('Short 15,400');
+    const window = page.viewportSize();
+    if (!window) throw new Error('no window');
+    const buttons = bar.getByRole('button');
+    for (let i = 0; i < (await buttons.count()); i++) {
+      const button = buttons.nth(i);
+      const name = (await button.textContent())?.trim() ?? `button ${i}`;
+      const found = await box(name, button);
+      expect(found.x, `${name} starts inside the window`).toBeGreaterThanOrEqual(0);
+      expect(found.x + found.width, `${name} ends inside the window`).toBeLessThanOrEqual(
+        window.width,
+      );
+      const hit = await button.evaluate((element) => {
+        const r = element.getBoundingClientRect();
+        const at = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return at !== null && element.contains(at);
+      });
+      expect(hit, `${name} can be pressed`).toBe(true);
+    }
+    const width = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(width, 'the page does not scroll sideways').toBeLessThanOrEqual(window.width);
+  });
+
+  test('the Game menu opens whole inside the window, each entry readable to its end', async ({
+    page,
+  }) => {
+    await openGame(page);
+    await load(page, crowdedBar());
+    await page.getByRole('button', { name: 'Game' }).click();
+    const menu = page.getByTestId('save-menu');
+    await expect(menu).toBeVisible();
+    const window = page.viewportSize();
+    if (!window) throw new Error('no window');
+    const found = await box('the Game menu', menu);
+    expect(found.x, 'the menu starts inside the window').toBeGreaterThanOrEqual(0);
+    expect(found.x + found.width, 'the menu ends inside the window').toBeLessThanOrEqual(
+      window.width,
+    );
+    const items = menu.locator('[role="menuitem"], label, legend, p');
+    for (let i = 0; i < (await items.count()); i++) {
+      const item = items.nth(i);
+      const name = (await item.textContent())?.trim().slice(0, 40) ?? `entry ${i}`;
+      const entry = await box(name, item);
+      expect(entry.x, `${name} starts inside the menu`).toBeGreaterThanOrEqual(found.x - 0.5);
+      expect(entry.x + entry.width, `${name} ends inside the menu`).toBeLessThanOrEqual(
+        found.x + found.width + 0.5,
+      );
+      const clipped = await item.evaluate((element) => element.scrollWidth > element.clientWidth);
+      expect(clipped, `${name} is readable to its end`).toBe(false);
+    }
+  });
+
+  test('the Advances panel takes the height a phone gives it, the corner gives way, and its last card scrolls into view whole', async ({
+    page,
+  }) => {
+    await openGame(page, { pauses: true });
+    await pause(page);
+    await dropSave(page, carthageClimbs(8, 2));
+    await expect(page.getByTestId('time-controls-day')).toHaveAttribute('data-day', '100');
+    await untilDrawn(page);
+    await resume(page);
+    await page
+      .getByTestId('alerts')
+      .getByRole('listitem')
+      .filter({ hasText: /no longer count against Carthage's war\. Carthage stands higher/ })
+      .waitFor();
+    await page.getByTestId('advances-button').click();
+    const panel = page.getByTestId('advances');
+    await expect(panel).toBeVisible();
+    const window = page.viewportSize();
+    if (!window) throw new Error('no window');
+    const found = await box('the Advances panel', panel);
+    expect(found.height, 'the panel has the room of a sheet').toBeGreaterThanOrEqual(
+      0.42 * window.height,
+    );
+    expect(found.y + found.height, 'the panel ends inside the window').toBeLessThanOrEqual(
+      window.height,
+    );
+    const corner = page.getByTestId('alerts');
+    if (await corner.isVisible()) {
+      const news = await box('the corner', corner);
+      expect(overlaps(found, news), 'the corner does not cover the panel').toBe(false);
+    }
+    await readWhole(page, panel, panel.getByTestId('advance-longContracts'), 'the last advance');
   });
 });
