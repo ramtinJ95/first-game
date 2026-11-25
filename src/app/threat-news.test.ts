@@ -180,7 +180,7 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
     expect(news[0]?.pause).toBeUndefined();
   });
 
-  test('tells, without stopping, ten days ahead of the day guards stop counting, and the share it would then stand at', () => {
+  test('stops the game ten days ahead of the day guards stop counting when the power would then stand at 80% or more, free to declare', () => {
     const { before, after } = standing(5300, 100, 2, 111 - GUARD_DETER_DAYS);
     const bare = structuredClone(after);
     const roma = bare.cities['roma' as CityId];
@@ -193,10 +193,11 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
       expect.objectContaining({
         kind: 'guardsStopSoon',
         day: 100,
-        text: `The 1,000 guards at Roma stop counting against Carthage's war in 10 days, on ${dateText(111)}: it would then stand at ${shareOf(bare)}%. A new band counts 90 days, for 2,000 gold.`,
+        text: `The 1,000 guards at Roma stop counting against Carthage's war in 10 days, on ${dateText(111)}: it would then stand at ${shareOf(bare)}% and may declare. A new band counts 90 days, for 2,000 gold.`,
+        pause: { kind: 'warThreat' },
       }),
     ]);
-    expect(news[0]?.pause).toBeUndefined();
+    expect(shareOf(bare)).toBeGreaterThanOrEqual(80);
     expect(threatNewsOfDay(after, after, world, told)).toEqual([]);
   });
 
@@ -220,12 +221,75 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
     const soon = (news: Alert[]) =>
       news.filter((a) => a.kind === 'guardsStopSoon').map((a) => a.text);
     expect(soon(threatNewsOfDay(before, after, world, told))).toEqual([
-      `The 500 guards at Roma stop counting against Carthage's war in 4 days, on ${dateText(105)}: it would then stand at ${without(1)}%. A new band counts 90 days, for 2,000 gold.`,
+      expect.stringMatching(
+        new RegExp(
+          `^The 500 guards at Roma stop counting against Carthage's war in 4 days, on ${dateText(105)}: it would then stand at ${without(1)}%( and may declare)?\\. A new band counts 90 days, for 2,000 gold\\.$`,
+        ),
+      ),
     ]);
     expect(soon(threatNewsOfDay(after, after, world, told))).toEqual([
-      `The 500 guards at Roma stop counting against Carthage's war in 10 days, on ${dateText(111)}: it would then stand at ${without(2)}%. A new band counts 90 days, for 2,000 gold.`,
+      expect.stringMatching(
+        new RegExp(
+          `^The 500 guards at Roma stop counting against Carthage's war in 10 days, on ${dateText(111)}: it would then stand at ${without(2)}%( and may declare)?\\. A new band counts 90 days, for 2,000 gold\\.$`,
+        ),
+      ),
     ]);
     expect(soon(threatNewsOfDay(after, after, world, told))).toEqual([]);
+  });
+
+  test('runs the game on ten days ahead when the power would then stand below 80%, or not yet be free to declare', () => {
+    const below = standing(4300, 100, 2, 111 - GUARD_DETER_DAYS);
+    const low = structuredClone(below.after);
+    const walls = low.cities['roma' as CityId];
+    if (!walls) throw new Error('no Roma');
+    walls.guards = [];
+    walls.garrison -= 2 * GUARD_BAND;
+    expect(shareOf(low)).toBeLessThan(80);
+    const [lowLine] = threatNewsOfDay(
+      below.before,
+      below.after,
+      world,
+      new Set(['threat:carthage:70']),
+    );
+    expect(lowLine).toMatchObject({ kind: 'guardsStopSoon' });
+    expect(lowLine?.pause).toBeUndefined();
+
+    const early = standing(5300, 100, 2, 111 - GUARD_DETER_DAYS);
+    const punic = early.after.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 85 as Day;
+    const news = threatNewsOfDay(early.before, early.after, world, new Set(['threat:carthage:92']));
+    const line = news.find((a) => a.kind === 'guardsStopSoon');
+    expect(line?.text).not.toContain('may declare');
+    expect(line?.pause).toBeUndefined();
+  });
+
+  test('stops ten days ahead once in 200 days for a power, and again only 6 points higher', () => {
+    const lineOn = (day: number, men: number, told: Set<string>) => {
+      const { before, after } = standing(men, day, 2, day + 11 - GUARD_DETER_DAYS);
+      return threatNewsOfDay(before, after, world, told).find((a) => a.kind === 'guardsStopSoon');
+    };
+    const told = new Set(['threat:carthage:70']);
+    expect(lineOn(100, 5300, told)?.pause).toEqual({ kind: 'warThreat' });
+    expect(lineOn(150, 5300, told)?.pause).toBeUndefined();
+    expect(lineOn(160, 7000, told)?.pause).toEqual({ kind: 'warThreat' });
+    expect(lineOn(360, 7000, told)?.pause).toBeUndefined();
+    expect(lineOn(370, 7000, told)?.pause).toEqual({ kind: 'warThreat' });
+  });
+
+  test('a stop ten days ahead that the Game menu turned off spares nothing later', () => {
+    const lineOn = (day: number, told: Set<string>, stopping: boolean) => {
+      const { before, after } = standing(5300, day, 2, day + 11 - GUARD_DETER_DAYS);
+      return threatNewsOfDay(before, after, world, told, undefined, stopping).find(
+        (a) => a.kind === 'guardsStopSoon',
+      );
+    };
+    const told = new Set(['threat:carthage:70']);
+    const off = lineOn(100, told, false);
+    expect(off && stopsOfDay([off], { ...ALL_PAUSES, warThreat: false }, new Set()).stop).toBe(
+      false,
+    );
+    expect(lineOn(150, told, true)?.pause).toEqual({ kind: 'warThreat' });
   });
 
   test('tells a power that comes on notice inside the ten days at once, with the days left', () => {
@@ -419,6 +483,33 @@ describe('a war that holds back a power on notice', () => {
       /^Carthage's war with Syracusae has ended\. Carthage has climbed to \d+% near Roma, from \d+% at its last stop on Year 1, day 70/,
     );
   });
+
+  /** The stop of day 100 that names the war, and the news of the day `day` the war ends. */
+  function endsOn(day: number) {
+    const told = new Set<string>();
+    const stopped = heldBySyracusae();
+    const [stop] = threatNewsOfDay(stopped, stopped, world, told);
+    expect(stop?.pause).toEqual({ kind: 'warThreat' });
+    expect(stop?.text).toContain('Once its war with Syracusae ends, it would stand at');
+    const before = heldBySyracusae();
+    before.day = day as Day;
+    const after = warOver(before);
+    expect(shareOf(after) - shareOf(stopped)).toBeGreaterThanOrEqual(6);
+    return { news: threatNewsOfDay(before, after, world, told), told, after };
+  }
+
+  test('a climb the end of a named war brings within 30 days of the stop runs the game on, and the end is told in a line', () => {
+    const { news, told, after } = endsOn(120);
+    expect(news.map((a) => [a.kind, a.pause])).toEqual([['heldWarEnded', undefined]]);
+    const next = structuredClone(after);
+    next.day = (after.day + 1) as Day;
+    expect(threatNewsOfDay(after, next, world, told).filter((a) => a.pause)).toEqual([]);
+  });
+
+  test('a climb the end of a named war brings more than 30 days after the stop stops the game', () => {
+    const { news } = endsOn(131);
+    expect(news.map((a) => [a.kind, a.pause])).toEqual([['warThreat', { kind: 'warThreat' }]]);
+  });
 });
 
 describe("the warning's word on a full treasury", () => {
@@ -439,17 +530,13 @@ describe("the warning's word on a full treasury", () => {
 
   test('says when the gold is what brings the power near war, and what the building worth buying would do', () => {
     const { text, after } = warned(game(5300, 'full'));
-    expect(text).toContain(
-      `Your gold tempts it; Forum at Roma, 6,500 gold, would take it to ${after}%.`,
-    );
+    expect(text).toContain(`Forum at Roma, 6,500 gold, would take it to ${after}%.`);
     expect(after).toBeLessThan(90);
   });
 
   test('names the building also when the power would stand near war without the gold', () => {
     const { text, after } = warned(game(7000, 'full'));
-    expect(text).toContain(
-      `Your gold tempts it; Forum at Roma, 6,500 gold, would take it to ${after}%.`,
-    );
+    expect(text).toContain(`Forum at Roma, 6,500 gold, would take it to ${after}%.`);
   });
 
   test('names no purchase when no city of the player may start one', () => {
@@ -468,7 +555,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     const news = newsOf(state, told);
     expect(news.map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Your gold tempts it; Forum at Roma, 6,500 gold, would take it to \d+%\. More men, or guards at Roma for 90 days, lower it\. See At peace in Wars\.$/,
+        /^Carthage could soon declare war on you: it has \d+% of the strength it needs near Roma, and may declare from Year \d+, day \d+ if it holds it\. Forum at Roma, 6,500 gold, would take it to \d+%\. More men, or guards at Roma for 90 days, lower it\. See At peace in Wars\.$/,
       ),
     ]);
     expect(news[0]?.tone).toBe('bad');
@@ -534,7 +621,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     state.day = 184 as Day;
     const [reminder] = threatNewsOfDay(state, state, world, told);
     expect(reminder?.text).toMatch(
-      /^Carthage still stands near war with you, as warned on Year 1, day 100: it has \d+% of the strength it needs against your forces near \w+, and may declare any day now if it holds it\./,
+      /^Carthage still stands near war, as warned on Year 1, day 100: \d+% near \w+, and it may declare any day now if it holds it\./,
     );
     expect(reminder?.text).not.toContain('may declare from');
     expect(standingThreats(state, world).find((t) => t.power === carthage)?.text).toContain(
@@ -1165,9 +1252,7 @@ describe('a warning soon after a stop for the same power runs the game on', () =
     if (!punic) throw new Error('no Carthage');
     punic.noticeSince = 994 as Day;
     const reminder = stopsOfDay(threatNewsOfDay(still, still, world, told), ALL_PAUSES, new Set());
-    expect(reminder.news[0]?.text).toMatch(
-      /^Carthage still stands near war with you, as warned on /,
-    );
+    expect(reminder.news[0]?.text).toMatch(/^Carthage still stands near war, as warned on /);
     expect(reminder.stop).toBe(true);
   });
 

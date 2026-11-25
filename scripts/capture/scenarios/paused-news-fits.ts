@@ -184,18 +184,23 @@ function fromSave(text: string): { state: GameState; told: readonly string[] } {
 const longest = fromSave(carthageClimbs(8, 2));
 
 /**
- * The longest stop of all: Carthage of 6,000 held back by its war with Lepcis Magna
- * (`carthageHeldByLepcis`), on notice since day 60, with two bands at Roma that stop counting on
- * day 101 and its last stop on day 70 8 points below its share without them, so the day's stop is
- * a climb told with the lapsed guards, the treasury, the food and the war that holds it back.
+ * The longest stops of all: Carthage of 6,000 held back by its war with Lepcis Magna
+ * (`carthageHeldByLepcis`), with two bands at Roma that stop counting on day 101, so the day's
+ * stop tells the lapsed guards, the treasury, the food and the war that holds it back.
+ * - `climb`: on notice since day 60, its last stop on day 70 8 points below its share without the guards.
+ * - `reminder`: on notice since day 10 and warned on day 17, so the day's stop is its reminder.
+ * - `first`: on notice since day 93 and never warned, so the day's stop is its first warning.
  */
-function heldClimb(): { state: GameState; told: readonly string[] } {
+function heldStop(play: 'climb' | 'reminder' | 'first'): {
+  state: GameState;
+  told: readonly string[];
+} {
   const { state } = fromSave(carthageHeldByLepcis('warning'));
   const punic = state.factions[carthage];
   const spearmen = state.formations[armyOf(state, carthage).formations[0] as FormationId];
   const roma = state.cities['roma' as CityId];
   if (!punic || !spearmen || !roma) throw new Error('no Carthage or Roma');
-  punic.noticeSince = 60 as Day;
+  punic.noticeSince = (play === 'climb' ? 60 : play === 'reminder' ? 10 : 93) as Day;
   spearmen.men = 6000;
   const bare = structuredClone(state);
   roma.guards = [0, 1].map(() => ({ until: (101 - GUARD_DETER_DAYS + GUARD_DAYS) as Day }));
@@ -203,9 +208,20 @@ function heldClimb(): { state: GameState; told: readonly string[] } {
   const share = Math.round(
     Math.min(1, warReadiness(bare, buildWorld(map), carthage, rome)?.readiness ?? 0) * 100,
   );
-  return { state, told: ['threat:carthage:70', `threat-stop:carthage:70:${share - 8}:roma`] };
+  const told =
+    play === 'climb'
+      ? ['threat:carthage:70', `threat-stop:carthage:70:${share - 8}:roma`]
+      : play === 'reminder'
+        ? ['threat:carthage:17', 'threat-stop:carthage:17:80:roma']
+        : [];
+  return { state, told };
 }
-const held = heldClimb();
+
+/**
+ * Guards at Roma that stop counting on day 111, which Carthage, on notice since day 60, counts:
+ * ten days before, it would stand near 95% without them, free to declare, so the line stops the game.
+ */
+const ahead = fromSave(carthageClimbs(0, 2, [], 111));
 
 /** The news of each kind that stops the game, with its longest text the saves give. */
 const STOPS: readonly {
@@ -237,7 +253,7 @@ const STOPS: readonly {
   {
     name: 'a reminder whose first day of war has passed',
     make: carthageStillNearWar,
-    line: /still stands near war with you, as warned on .*may declare any day now.*Skirmishers need 500 men/,
+    line: /still stands near war, as warned on .*may declare any day now.*Skirmishers need 500 men/,
     shot: 'reminder',
     told: ['threat:carthage:306'],
     atPeaceAt: 1280,
@@ -252,14 +268,14 @@ const STOPS: readonly {
   {
     name: 'a reminder with men in training',
     make: carthageStillNearWarTraining,
-    line: /still stands near war with you, as warned on .*Heavy cavalry in training muster on Year 2, day 55, too late\. It weighs/,
+    line: /still stands near war, as warned on .*Heavy cavalry in training muster on Year 2, day 55, too late\. It weighs/,
     shot: 'training-reminder',
     told: ['threat:carthage:306'],
   },
   {
     name: 'a reminder by a city',
     make: carthageStillNearCity,
-    line: /still stands near war with you, as warned on .*may declare any day now.*[Gg]uards at/,
+    line: /still stands near war, as warned on .*may declare any day now.*[Gg]uards at/,
     shot: 'city-reminder',
     told: ['threat:carthage:306'],
   },
@@ -291,12 +307,22 @@ const STOPS: readonly {
     shot: 'longest-warning',
     lines: 13,
   },
+  ...(['climb', 'reminder', 'first'] as const).map((play) => ({
+    name: `the longest ${play === 'climb' ? 'climb' : play === 'reminder' ? 'reminder' : 'first warning'}, with lapsed guards, the treasury, the food and a war that holds the power back`,
+    make: () => structuredClone(heldStop(play).state),
+    told: heldStop(play).told,
+    line: new RegExp(
+      `no longer count\\. Carthage ${play === 'climb' ? 'has climbed' : play === 'reminder' ? 'still stands near war' : 'could soon declare war'}.*eat nothing; food feeds no more men\\. Once its war with Lepcis Magna ends, it would stand at`,
+    ),
+    shot: play === 'climb' ? 'longest-held-warning' : `longest-held-${play}`,
+    lines: 13,
+  })),
   {
-    name: 'the longest warning with a war that holds the power back',
-    make: () => structuredClone(held.state),
-    told: held.told,
-    line: /no longer count\. Carthage has climbed.*Your gold tempts it.*eat nothing; food feeds no more men\. Once its war with Lepcis Magna ends, it would stand at/,
-    shot: 'longest-held-warning',
+    name: 'guards that stop counting in ten days, which would leave the power free to declare',
+    make: () => structuredClone(ahead.state),
+    told: ahead.told,
+    line: /stop counting against Carthage's war in 10 days, on .*and may declare\. A new band counts 90 days, for 2,000 gold\./,
+    shot: 'guards-ahead-stop',
     lines: 13,
   },
   { name: 'a city in danger', make: alone(ownCityInDangerTomorrow), line: /is in danger/ },

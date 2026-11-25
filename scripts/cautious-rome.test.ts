@@ -121,7 +121,7 @@ describe('the powers a warning names', () => {
   it('reads one power from a first warning, a reminder, a climb and a climb told with guards', () => {
     for (const text of [
       'Carthage could soon declare war on you: it has 82% of the strength it needs.',
-      'Carthage still stands near war with you, as warned on Year 9, day 141: it has 82%.',
+      'Carthage still stands near war, as warned on Year 9, day 141: 82% near Ariminum.',
       'Carthage has climbed to 95% near Roma, from 87% at its last stop on Year 1, day 70.',
       'The 1,000 guards at Roma no longer count. Carthage has climbed to 95% near Roma, from 87% at its last stop on Year 1, day 70.',
     ])

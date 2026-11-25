@@ -103,9 +103,7 @@ test.describe('what the page tells of stores, cities, and sieges', () => {
       .getByText(/^Carthage could soon declare war on you: it has \d+% of the strength/);
     await line.waitFor();
     await pause(page);
-    await expect(line).toContainText(
-      /Your gold tempts it; Forum at Roma, 6,500 gold, would take it to \d+%\./,
-    );
+    await expect(line).toContainText(/Forum at Roma, 6,500 gold, would take it to \d+%\./);
     await expect(line).toHaveCount(1);
   });
 
