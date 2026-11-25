@@ -241,7 +241,7 @@ export function threatNewsOfDay(
       ? `${folded}${
           first.climb
             ? // A climb repeats a stop the player read whole, so it says least of the warnings that stop.
-              `${first.name} has climbed to ${share(first.threat.readiness)} of the strength it needs ${near(after, first.threat)}, from ${first.climb.share}% at its last stop on ${dateText(first.climb.day)}, and may declare ${first.from}.`
+              `${first.name} has climbed to ${share(first.threat.readiness)} ${near(after, first.threat)}, from ${first.climb.share}% at its last stop on ${dateText(first.climb.day)}, and may declare ${first.from}.`
             : `${first.told === undefined ? `${first.name} could soon declare war on you:` : `${first.name} still stands near war with you, as warned on ${dateText(first.told)}:`} it has ${share(first.threat.readiness)} of the strength it needs ${weighed(after, first.threat)}, and may declare ${first.from} if it holds it.`
         }${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), world)}${heldBack(after, world, first.power, first.threat)} See At peace in Wars.`
       : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}.${warned.map((w) => heldBack(after, world, w.power, w.threat, `${w.name}'s`)).join('')} What lowers each is under At peace in Wars.`
@@ -668,7 +668,7 @@ function whatCounts(
   const hoard =
     treasury ??
     (threat.hoard > 0
-      ? ` Your treasury of ${whole(gold)} gold lowers the strength it needs by ${Math.round(threat.hoard * 100)}%, so more gold brings war nearer.`
+      ? ` Your ${whole(gold)} gold takes ${Math.round(threat.hoard * 100)}% off the strength it needs.`
       : '');
   const advice = orderAdvice(state, waiting.factions[state.player]?.stores, by);
   // Men the realm cannot feed would desert, so the advice names the guards alone, which eat nothing.
@@ -688,14 +688,13 @@ function whatCounts(
 export const CLEAR_HOARD = 0.1;
 
 /**
- * What the player's treasury does to the warning, said plainly for a stranger who sits on gold,
- * with what spending it would do: the building that repays soonest in a city that builds nothing
- * (`worthBuilding`, as the building hint names it), ordered on a copy of the day through the
- * rules' own handler, and the share the power would stand at with that gold spent. Said when the
- * treasury is what takes the power to NOTICE_SHARE, or takes CLEAR_HOARD or more off the
- * strength it needs, and nothing when no building is worth buying or the purchase leaves the
- * share as it reads now. The wars panel keeps the plain hoard sentence, which it reckons on every
- * refresh without a copy of the day.
+ * What the player's treasury does to the warning, with what spending it would do: the building
+ * that repays soonest in a city that builds nothing (`worthBuilding`, as the building hint names
+ * it), ordered on a copy of the day through the rules' own handler, and the share the power would
+ * stand at with that gold spent. Said when the treasury is what takes the power to NOTICE_SHARE,
+ * or takes CLEAR_HOARD or more off the strength it needs, and nothing when no building is worth
+ * buying or the purchase leaves the share as it reads now. How much the gold takes off is left to
+ * the At peace notes, so the longest warning fits the corner.
  */
 export function treasuryAdvice(
   state: State,
@@ -723,12 +722,8 @@ export function treasuryAdvice(
   if (executeOrder(spent, order, world)) return undefined;
   const after = warReadiness(spent, world, power, state.player)?.readiness;
   if (after === undefined || share(after) === share(threat.readiness)) return undefined;
-  const gold = state.factions[state.player]?.stores.gold ?? 0;
   const { name, gold: price } = BUILDINGS[found.kind];
-  const why = decides
-    ? `Without your ${whole(gold)} gold it would stand at ${share(without)}`
-    : `Your ${whole(gold)} gold takes ${Math.round(threat.hoard * 100)}% off the strength it needs`;
-  return ` ${why}; ${name} at ${found.city.name}, ${whole(price)} gold, would take it to ${share(after)}.`;
+  return ` Your gold tempts it; ${name} at ${found.city.name}, ${whole(price)} gold, would take it to ${share(after)}.`;
 }
 
 /** Where the advice is read: the corner, with room for the warning's 12 lines, or the wars panel. */

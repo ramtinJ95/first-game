@@ -150,7 +150,7 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
     expect(news[0]?.pause).toEqual({ kind: 'warThreat' });
     expect(news[0]?.text).toMatch(
       new RegExp(
-        `^Carthage has climbed to ${now}% of the strength it needs near Roma, from ${now - 8}% at its last stop on Year 1, day 70`,
+        `^Carthage has climbed to ${now}% near Roma, from ${now - 8}% at its last stop on Year 1, day 70`,
       ),
     );
     expect([...told]).toContain(`threat-stop:carthage:100:${now}:roma`);
@@ -416,7 +416,7 @@ describe('a war that holds back a power on notice', () => {
     expect(news).toHaveLength(1);
     expect(news[0]?.pause).toEqual({ kind: 'warThreat' });
     expect(news[0]?.text).toMatch(
-      /^Carthage's war with Syracusae has ended\. Carthage has climbed to \d+% of the strength it needs near Roma, from \d+% at its last stop on Year 1, day 70/,
+      /^Carthage's war with Syracusae has ended\. Carthage has climbed to \d+% near Roma, from \d+% at its last stop on Year 1, day 70/,
     );
   });
 });
@@ -440,15 +440,15 @@ describe("the warning's word on a full treasury", () => {
   test('says when the gold is what brings the power near war, and what the building worth buying would do', () => {
     const { text, after } = warned(game(5300, 'full'));
     expect(text).toContain(
-      `Without your 8,568 gold it would stand at 67%; Forum at Roma, 6,500 gold, would take it to ${after}%.`,
+      `Your gold tempts it; Forum at Roma, 6,500 gold, would take it to ${after}%.`,
     );
     expect(after).toBeLessThan(90);
   });
 
-  test('says how much the gold takes off when the power would stand near war without it', () => {
+  test('names the building also when the power would stand near war without the gold', () => {
     const { text, after } = warned(game(7000, 'full'));
     expect(text).toContain(
-      `Your 8,568 gold takes 25% off the strength it needs; Forum at Roma, 6,500 gold, would take it to ${after}%.`,
+      `Your gold tempts it; Forum at Roma, 6,500 gold, would take it to ${after}%.`,
     );
   });
 
@@ -457,9 +457,7 @@ describe("the warning's word on a full treasury", () => {
     for (const city of Object.values(state.cities))
       if (city.owner === rome) city.construction = { building: 'temple', daysLeft: 100 };
     const [alert] = newsOf(state, new Set());
-    expect(alert?.text).toContain(
-      'Your treasury of 8,568 gold lowers the strength it needs by 25%, so more gold brings war nearer.',
-    );
+    expect(alert?.text).toContain('Your 8,568 gold takes 25% off the strength it needs.');
   });
 });
 
@@ -470,7 +468,7 @@ describe('the news of a power that could soon declare war on the player', () => 
     const news = newsOf(state, told);
     expect(news.map((alert) => alert.text)).toEqual([
       expect.stringMatching(
-        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Without your [\d,]+ gold it would stand at \d+%; Forum at Roma, 6,500 gold, would take it to \d+%\. More men, or guards at Roma for 90 days, lower it\. See At peace in Wars\.$/,
+        /^Carthage could soon declare war on you: it has \d+% of the strength it needs against your forces near Roma, and may declare from Year \d+, day \d+ if it holds it\. Your gold tempts it; Forum at Roma, 6,500 gold, would take it to \d+%\. More men, or guards at Roma for 90 days, lower it\. See At peace in Wars\.$/,
       ),
     ]);
     expect(news[0]?.tone).toBe('bad');

@@ -122,8 +122,8 @@ describe('the powers a warning names', () => {
     for (const text of [
       'Carthage could soon declare war on you: it has 82% of the strength it needs.',
       'Carthage still stands near war with you, as warned on Year 9, day 141: it has 82%.',
-      'Carthage has climbed to 95% of the strength it needs near Roma, from 87% at its last stop on Year 1, day 70.',
-      'The 1,000 guards at Roma no longer count. Carthage has climbed to 95% of the strength it needs near Roma, from 87% at its last stop on Year 1, day 70.',
+      'Carthage has climbed to 95% near Roma, from 87% at its last stop on Year 1, day 70.',
+      'The 1,000 guards at Roma no longer count. Carthage has climbed to 95% near Roma, from 87% at its last stop on Year 1, day 70.',
     ])
       expect(warnedPowers(text)).toEqual(['Carthage']);
   });

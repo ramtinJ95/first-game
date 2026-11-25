@@ -25,7 +25,7 @@ const CASES = [
     title:
       'Carthage stands 8 points above the share the game last stopped for: the game stops again',
     save: () => carthageClimbs(8, 0),
-    line: /Carthage has climbed to \d+% of the strength it needs near Roma, from \d+% at its last stop/,
+    line: /Carthage has climbed to \d+% near Roma, from \d+% at its last stop/,
     stops: true,
   },
   {

@@ -104,7 +104,7 @@ test.describe('what the page tells of stores, cities, and sieges', () => {
     await line.waitFor();
     await pause(page);
     await expect(line).toContainText(
-      /Without your [\d,]+ gold it would stand at \d+%; Forum at Roma, 6,500 gold, would take it to \d+%\./,
+      /Your gold tempts it; Forum at Roma, 6,500 gold, would take it to \d+%\./,
     );
     await expect(line).toHaveCount(1);
   });
