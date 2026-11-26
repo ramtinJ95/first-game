@@ -9,6 +9,7 @@
   import { reformCostText, stanceMatchText } from './describe.ts';
   import type { FrameActions } from './frame-actions.ts';
   import { PEACE_TEXT } from './war-room.ts';
+  import { STAYING_TEXT } from '../app/threat-news.ts';
 
   let {
     game,
@@ -85,10 +86,12 @@
         routes on the map; zoom in to see each city's good and the merchants on the road and at sea.
       </dd>
       <dt>Wars and peace</dt>
-      <dd>
+      <dd data-testid="guide-wars">
         {PEACE_TEXT.start} Wars in the top bar lists your wars and waiting offers. Offer peace as things
         stand, or with gold or cities; it shows what the enemy would accept, and when it would take less
-        than it asks. {PEACE_TEXT.end} Peace sends armies home.
+        than it asks. {PEACE_TEXT.end} Peace sends armies home. While you hold no more cities than at
+        the start, each great power needs less of the strength to declare war on you: {STAYING_TEXT}.
+        Taking a city ends it, while you hold it.
       </dd>
       <dt>Pause and speed</dt>
       <dd data-testid="guide-pauses">

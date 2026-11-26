@@ -22,7 +22,13 @@ import { beleaguered } from '../sim/systems/sieges.ts';
 import type { Stores } from '../sim/state/faction.ts';
 import { deterrentUntil, GUARD_BAND, GUARD_DETER_DAYS, GUARD_GOLD } from '../sim/guards.ts';
 import type { Day } from '../sim/state/day.ts';
-import { NOTICE_DAYS, NOTICE_SHARE, WAR_FRONT_KM } from '../sim/ai/thresholds.ts';
+import {
+  NOTICE_DAYS,
+  NOTICE_SHARE,
+  STAY_HOME_CAP,
+  STAY_HOME_PER_YEAR,
+  WAR_FRONT_KM,
+} from '../sim/ai/thresholds.ts';
 import { canalSite, recruitForecast } from '../ui/recruit-forecast.ts';
 
 type State = DeepReadonly<GameState>;
@@ -209,6 +215,7 @@ export function threatNewsOfDay(
     men: number;
     on: number;
     bare: number;
+    stayedHome: number;
     stops: boolean;
   }[] = [];
   const freed: { power: FactionId; enemies: readonly FactionId[]; threat: Threat; from: string }[] =
@@ -320,8 +327,8 @@ export function threatNewsOfDay(
             : first.told === undefined
               ? `${first.name} could soon declare war on you: it has ${share(first.threat.readiness)} of the strength it needs ${first.threat.pressed ? weighed(after, first.threat) : near(after, first.threat)}, and may declare ${first.from} if it holds it.`
               : `${first.name} still stands near war, as warned on ${dateText(first.told)}: ${share(first.threat.readiness)} ${first.threat.pressed ? weighed(after, first.threat) : near(after, first.threat)}, and it may declare ${first.from} if it holds it.`
-        }${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), world)}${heldBack(after, world, first.power, first.threat)} See At peace in Wars.`
-      : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}.${warned.map((w) => heldBack(after, world, w.power, w.threat, `${w.name}'s`)).join('')} What lowers each is under At peace in Wars.`
+        }${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), world)}${first.threat.pressed ? '' : stayedWords(first.threat)}${heldBack(after, world, first.power, first.threat)} See At peace in Wars.`
+      : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}.${warned.map((w) => heldBack(after, world, w.power, w.threat, `${w.name}'s`)).join('')}${stayedPoints(warned[0]?.threat) > 0 ? ` Each needs ${stayedPoints(warned[0]?.threat)}% less: you have not grown.` : ''} What lowers each is under At peace in Wars.`
     : ranOnText(
         after,
         warned.flatMap((w) => (w.spared ? [{ ...w, stop: w.spared }] : [])),
@@ -437,7 +444,7 @@ function bandsStopSoon(
   world: World,
   power: FactionId,
   remembered: Set<string>,
-): { city: CityId; men: number; on: number; bare: number } | undefined {
+): { city: CityId; men: number; on: number; bare: number; stayedHome: number } | undefined {
   const prefix = `${SOON}${power}:`;
   for (const key of [...remembered])
     if (key.startsWith(prefix) && Number(key.slice(key.lastIndexOf(':') + 1)) <= after.day)
@@ -462,7 +469,13 @@ function bandsStopSoon(
   });
   walls.garrison = Math.max(0, walls.garrison - gone * GUARD_BAND);
   const bare = warReadiness(without, world, power, after.player)?.readiness ?? threat.readiness;
-  return { city: city.id, men: lapses.filter((day) => day === on).length * GUARD_BAND, on, bare };
+  return {
+    city: city.id,
+    men: lapses.filter((day) => day === on).length * GUARD_BAND,
+    on,
+    bare,
+    stayedHome: threat.stayedHome,
+  };
 }
 
 const GUARD_STOP = 'guards-stop:';
@@ -511,6 +524,7 @@ function aheadAlert(
     men: number;
     on: number;
     bare: number;
+    stayedHome: number;
     stops: boolean;
   },
 ): Alert {
@@ -520,7 +534,7 @@ function aheadAlert(
     day: (state.day - 1) as Day,
     tone: 'bad',
     ...(ahead.stops ? { pause: { kind: 'warThreat' } as const } : {}),
-    text: `The ${whole(ahead.men)} guards at ${city?.name ?? ahead.city} stop counting against ${factionName(state, ahead.power)}'s war in ${daysText(ahead.on - state.day)}, on ${dateText(ahead.on)}: it would then stand at ${share(ahead.bare)}${ahead.stops ? ' and may declare' : ''}. A new band counts ${GUARD_DETER_DAYS} days, for ${whole(GUARD_GOLD)} gold.`,
+    text: `The ${whole(ahead.men)} guards at ${city?.name ?? ahead.city} stop counting against ${factionName(state, ahead.power)}'s war in ${daysText(ahead.on - state.day)}, on ${dateText(ahead.on)}: it would then stand at ${share(ahead.bare)}${ahead.stops ? ' and may declare' : ''}.${stayedWords(ahead)} A new band counts ${GUARD_DETER_DAYS} days, for ${whole(GUARD_GOLD)} gold.`,
     ...(city ? { focus: { at: city.position } } : {}),
   };
 }
@@ -556,7 +570,7 @@ function bandAlert(
     kind: 'guardsUncounted',
     day: (state.day - 1) as Day,
     tone: 'bad',
-    text: `The ${whole(band.men)} guards at ${city?.name ?? band.city} no longer count against ${factionName(state, band.power)}'s war: it stands at ${share(band.threat.readiness)} of the strength it needs, and may declare ${band.from}. A new band counts ${GUARD_DETER_DAYS} days, for ${whole(GUARD_GOLD)} gold.`,
+    text: `The ${whole(band.men)} guards at ${city?.name ?? band.city} no longer count against ${factionName(state, band.power)}'s war: it stands at ${share(band.threat.readiness)} of the strength it needs, and may declare ${band.from}.${stayedWords(band.threat)} A new band counts ${GUARD_DETER_DAYS} days, for ${whole(GUARD_GOLD)} gold.`,
     ...(city ? { focus: { at: city.position } } : {}),
   };
 }
@@ -583,8 +597,19 @@ function ranOnText(
     return `${listed(spared.map((w) => w.name))} could soon declare war on you, with ${listed(spared.map((w) => share(w.threat.readiness)))} of the strength each needs. The game ran on: none stands ${THREAT_SPARE_RISE} points above its last stop. See At peace in Wars.`;
   const rise = points(one.threat.readiness) - one.stop.share;
   const higher = rise > 0 ? `only ${rise} ${rise === 1 ? 'point' : 'points'} higher` : 'no higher';
-  return `${one.name} could soon declare war on you: ${share(one.threat.readiness)} of the strength it needs ${near(state, one.threat)}, ${one.from}. The game ran on: its stop on ${dateText(one.stop.day)} was at ${one.stop.share}%, and it stands ${higher}. See At peace in Wars.`;
+  return `${one.name} could soon declare war on you: ${share(one.threat.readiness)} of the strength it needs ${near(state, one.threat)}, ${one.from}. The game ran on: its stop on ${dateText(one.stop.day)} was at ${one.stop.share}%, and it stands ${higher}.${stayedWords(one.threat)} See At peace in Wars.`;
 }
+
+/** The share staying home takes off the strength a power needs, in whole points, 0 when it takes off none. */
+const stayedPoints = (threat: Pick<Threat, 'stayedHome'> | undefined) =>
+  Math.round((threat?.stayedHome ?? 0) * 100);
+
+/** How the share staying home takes off grows, in the words of the At peace note and the Guide. */
+export const STAYING_TEXT = `${Number((STAY_HOME_PER_YEAR * 100).toFixed(1))}% more each year of the game, to at most ${Number((STAY_HOME_CAP * 100).toFixed(1))}%`;
+
+/** A line's few words for what staying home takes off, or nothing; the At peace notes say it in full. */
+const stayedWords = (threat: Pick<Threat, 'stayedHome'> | undefined) =>
+  stayedPoints(threat) > 0 ? ` It needs ${stayedPoints(threat)}% less: you have not grown.` : '';
 
 /** What the power weighs, in the corner's fewest words. */
 const near = (state: State, threat: Threat) =>
@@ -808,7 +833,7 @@ function whatCounts(
   world?: World,
 ): string {
   if (threat.pressed)
-    return ` ${raiseAdvice(state, power, waiting, by, where, muster, world)}. It weighs you so only while you hold no more cities than at the start.`;
+    return ` ${raiseAdvice(state, power, waiting, by, where, muster, world)}. ${stayedPoints(threat) > 0 ? `It weighs you so, and needs ${stayedPoints(threat)}% less,` : 'It weighs you so'} only while you hold no more cities than at the start.`;
   const front = state.cities[threat.front];
   const gold = state.factions[state.player]?.stores.gold ?? 0;
   const hoard =
@@ -885,6 +910,8 @@ export interface StandingThreat {
   readonly weighs: CityId | 'field' | undefined;
   /** The share by which the player's treasury lowers the strength it needs, 0 when it does not. */
   readonly hoard: number;
+  /** The share by which the player's staying in the cities it began with lowers the strength it needs, 0 when it does not. */
+  readonly stayedHome: number;
   readonly text: string;
 }
 
@@ -921,6 +948,7 @@ export function standingThreats(
           readiness: undefined,
           weighs: undefined,
           hoard: 0,
+          stayedHome: 0,
           text: `${name} is not weighing a war on you now: none of its cities is near enough to yours, or none of its armies stands ready to march.`,
         };
       // What counts at a city and what the treasury takes off are the same for every power, so the notes say them once.
@@ -943,6 +971,7 @@ export function standingThreats(
         readiness: Math.min(1, threat.readiness),
         weighs: threat.pressed ? 'field' : threat.front,
         hoard: threat.hoard,
+        stayedHome: threat.stayedHome,
         text: `${name} has ${share(threat.readiness)} of the strength it needs to declare war on you, ${weighed(state, threat)}.${advice}${power.noticeSince === null ? '' : ` It may declare ${mayDeclare(state, power.noticeSince)} if it holds it.${ranOnRow(told, power.id, power.noticeSince)}`}`,
       };
     });
@@ -1033,6 +1062,12 @@ export function weighedNotes(state: State, threats: readonly StandingThreat[]): 
       `Your treasury of ${whole(gold)} gold lowers the strength ${listed(lowered.map((threat) => `${threat.name} needs by ${Math.round(threat.hoard * 100)}%`))}, so more gold brings war nearer.`,
     );
   }
+  const stayed = threats.filter((threat) => stayedPoints(threat) > 0);
+  const first = stayed[0];
+  if (first)
+    notes.push(
+      `You hold no more cities than at the start, so ${listed(stayed.map((threat) => threat.name))} ${stayed.length === 1 ? 'needs' : 'each need'} ${stayedPoints(first)}% less of the strength to declare war on you: ${STAYING_TEXT}. Taking a city ends it, while you hold it.`,
+    );
   return notes;
 }
 

@@ -20,7 +20,7 @@ import { newWar, warKey } from '../sim/state/war.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
 import { buildWorld } from '../sim/world/world.ts';
 import { dateText } from './names.ts';
-import { NOTICE_DAYS } from '../sim/ai/thresholds.ts';
+import { NOTICE_DAYS, STAY_HOME_CAP, STAY_HOME_PER_YEAR } from '../sim/ai/thresholds.ts';
 import { GUARD_BAND, GUARD_DAYS, GUARD_DETER_DAYS } from '../sim/guards.ts';
 import { notice } from '../sim/systems/notice.ts';
 import { recruitThreats, trainingThreats } from '../ui/recruit-threats.ts';
@@ -39,6 +39,7 @@ import {
   menDesertIfRaised,
   threatNewsOfDay,
   weighedNotes,
+  STAYING_TEXT,
 } from './threat-news.ts';
 
 const map = parseMap(
@@ -93,6 +94,13 @@ function game(men: number, gold: 'full' | 'empty', day = 0): GameState {
   romans.stores.gold = gold === 'full' ? (limitsOf(state).get(rome)?.gold ?? 0) : 0;
   return state;
 }
+
+/**
+ * The men that give Carthage, on the day, the share the given men gave it before a power needed
+ * less against a Rome that stays home: the cases come from play-throughs played before that rule.
+ */
+const beforeStaying = (men: number, day: number) =>
+  Math.round(men * (1 - Math.min(STAY_HOME_CAP, (day / 365) * STAY_HOME_PER_YEAR)));
 
 /** The state with Rome's Canals and Reservoirs gone: its 4,000 men eat more than its land grows. */
 function starving(state: GameState): GameState {
@@ -1175,7 +1183,7 @@ describe('how near each power at peace stands to declaring war, as the wars pane
 
 describe('a share just under 80%', () => {
   test('reads just under 80% in the warning and the At peace list, as in the guards line', () => {
-    const state = game(4690, 'full', 100);
+    const state = game(beforeStaying(4690, 100), 'full', 100);
     const readiness =
       standingThreats(state, world).find((t) => t.power === carthage)?.readiness ?? 0;
     expect(readiness).toBeLessThan(0.8);
@@ -1196,12 +1204,12 @@ describe('a share just under 80%', () => {
 describe('a warning soon after a stop for the same power runs the game on', () => {
   /** Carthage's news of a notice that has stood its week on `day`, at a share set by its men. */
   const repeat = (day: number, men: number, told: Set<string>) =>
-    stopsOfDay(newsOf(game(men, 'full', day), told), ALL_PAUSES, new Set());
+    stopsOfDay(newsOf(game(beforeStaying(men, day), 'full', day), told), ALL_PAUSES, new Set());
 
   test("the thirteenth play-through's run: Carthage at Ariminum on Year 5, days 211, 248, 278 and 311 stops the game once", () => {
     const told = new Set<string>();
     const days = [1671, 1708, 1738, 1771];
-    const news = days.map((day, n) => repeat(day, [5000, 4900, 5000, 4800][n] ?? 0, told));
+    const news = days.map((day, n) => repeat(day, [5000, 4870, 5000, 4800][n] ?? 0, told));
     expect(days.map(dateText)).toEqual([
       'Year 5, day 211',
       'Year 5, day 248',
@@ -1211,7 +1219,7 @@ describe('a warning soon after a stop for the same power runs the game on', () =
     expect(news.map((day) => day.stop)).toEqual([true, false, false, false]);
     expect(news.map((day) => day.news.length)).toEqual([1, 1, 1, 1]);
     expect(news[1]?.news[0]?.text).toMatch(
-      /^Carthage could soon declare war on you: 83% of the strength it needs near Roma, from Year 5, day 272\. The game ran on: its stop on Year 5, day 211 was at 85%, and it stands no higher\. See At peace in Wars\.$/,
+      /^Carthage could soon declare war on you: 83% of the strength it needs near Roma, from Year 5, day 272\. The game ran on: its stop on Year 5, day 211 was at 85%, and it stands no higher\. It needs 7% less: you have not grown\. See At peace in Wars\.$/,
     );
     expect(news[1]?.news[0]?.pause).toBeUndefined();
   });
@@ -1302,12 +1310,12 @@ describe('a warning soon after a stop for the same power runs the game on', () =
   test('the At peace list says the power warned again and the game ran on, with the stop it ran on from', () => {
     const told = new Set<string>();
     repeat(1671, 5000, told);
-    const state = game(4900, 'full', 1708);
+    const state = game(beforeStaying(4870, 1708), 'full', 1708);
     newsOf(state, told);
     expect(standingThreats(state, world, state, undefined, told)[0]?.text).toMatch(
       /^Carthage has 83% of the strength .* It warned again on Year 5, day 248 and the game ran on: its stop on Year 5, day 211 was at 85%\.$/,
     );
-    const stopped = game(5000, 'full', 1671);
+    const stopped = game(beforeStaying(5000, 1671), 'full', 1671);
     newsOf(stopped, new Set());
     expect(
       standingThreats(
@@ -1753,5 +1761,111 @@ describe('the food the warning reckons, as the recruit card does', () => {
     expect(card.short.food).toBeDefined();
     expect(untrained.short.food).toBeUndefined();
     expect(menDesertIfRaised(state, fixtureWorld, 'spearmen', FIXTURE.roma)).toBe(true);
+  });
+});
+
+describe('a power that needs less while you hold no more cities than at the start', () => {
+  /** Year 5, day 100: a power needs 6% less of the strength it needs against a Rome still in its first cities. */
+  const DAY = 4 * 365 + 100;
+  const WORDS = ' It needs 6% less: you have not grown.';
+
+  /** `standing` on DAY, with Carthage on notice since 40 days before and its stop told 30 days before at the given share. */
+  function standingLate(men: number, bands = 0, hiredOn = 0) {
+    const { before, after } = standing(men, DAY, bands, hiredOn);
+    for (const state of [before, after]) {
+      const punic = state.factions[carthage];
+      if (!punic) throw new Error('no Carthage');
+      punic.noticeSince = (DAY - 40) as Day;
+    }
+    const told = (share: number) =>
+      new Set([`threat:carthage:${DAY - 30}`, `threat-stop:carthage:${DAY - 30}:${share}:roma`]);
+    return { before, after, told };
+  }
+
+  test('the warning by a city says by how much in a few words, and none in the first months', () => {
+    const [late] = newsOf(game(5000, 'full', DAY), new Set());
+    expect(late?.text).toMatch(/^Carthage could soon declare war on you: /);
+    expect(late?.text).toContain(`${WORDS} See At peace in Wars.`);
+    const [early] = newsOf(game(5300, 'full', 100), new Set());
+    expect(early?.text).toMatch(/^Carthage could soon declare war on you: /);
+    expect(early?.text).not.toContain('you have not grown');
+  });
+
+  test('taking a city ends it: the warning says nothing of it, and the power needs the strength it did', () => {
+    const home = game(5000, 'full', DAY);
+    const grown = game(5000, 'full', DAY);
+    changeCityOwner(grown, 'deva' as CityId, rome);
+    expect(warReadiness(home, world, carthage, rome)?.stayedHome).toBeCloseTo(
+      (DAY / 365) * STAY_HOME_PER_YEAR,
+    );
+    expect(warReadiness(grown, world, carthage, rome)?.stayedHome).toBe(0);
+    const [warning] = newsOf(grown, new Set());
+    expect(warning?.text ?? '').not.toContain('you have not grown');
+  });
+
+  test('the warning against the field armies says it in the words that say it weighs them so', () => {
+    const state = game(8000, 'empty', DAY);
+    const roma = state.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    roma.garrison = 80_000;
+    const [warning] = newsOf(state, new Set());
+    expect(warning?.text).toContain(
+      'It weighs you so, and needs 6% less, only while you hold no more cities than at the start.',
+    );
+    expect(warning?.text).not.toContain('you have not grown');
+  });
+
+  test('a climb says it', () => {
+    const { before, after, told } = standingLate(5000);
+    const now = shareOf(after);
+    const [climb] = threatNewsOfDay(before, after, world, new Set([...told(now - 8)]));
+    expect(climb?.text).toMatch(/^Carthage has climbed to /);
+    expect(climb?.text).toContain(`${WORDS} See At peace in Wars.`);
+  });
+
+  test('a warning that runs the game on says it', () => {
+    const told = new Set<string>();
+    expect(stopsOfDay(newsOf(game(5000, 'full', DAY), told), ALL_PAUSES, new Set()).stop).toBe(
+      true,
+    );
+    const again = stopsOfDay(newsOf(game(5000, 'full', DAY + 20), told), ALL_PAUSES, new Set());
+    expect(again.stop).toBe(false);
+    expect(again.news[0]?.text).toMatch(
+      /The game ran on: .* It needs 6% less: you have not grown\. See At peace in Wars\.$/,
+    );
+  });
+
+  test('the line of guards that stop counting says it, and so does the line ten days ahead', () => {
+    const lapsed = standingLate(5000, 2, DAY + 1 - GUARD_DETER_DAYS);
+    const [gone] = threatNewsOfDay(
+      lapsed.before,
+      lapsed.after,
+      world,
+      lapsed.told(shareOf(lapsed.after)),
+    );
+    expect(gone?.kind).toBe('guardsUncounted');
+    expect(gone?.text).toContain(`${WORDS} A new band counts 90 days, for 2,000 gold.`);
+    const soon = standingLate(5000, 2, DAY + 11 - GUARD_DETER_DAYS);
+    const [ahead] = threatNewsOfDay(soon.before, soon.after, world, soon.told(shareOf(soon.after)));
+    expect(ahead?.kind).toBe('guardsStopSoon');
+    expect(ahead?.text).toContain(`${WORDS} A new band counts 90 days, for 2,000 gold.`);
+  });
+
+  test('the At peace notes say it in full once, how it grows and what ends it', () => {
+    const state = game(5000, 'full', DAY);
+    const notes = weighedNotes(state, standingThreats(state, world));
+    const full = notes.filter((note) => note.startsWith('You hold no more cities'));
+    expect(full).toHaveLength(1);
+    expect(full[0]).toMatch(
+      /^You hold no more cities than at the start, so (\w+, )*(\w+ and )?Carthage(, \w+)*( and \w+)? (needs|each need) 6% less of the strength to declare war on you: 1\.5% more each year of the game, to at most 15%\. Taking a city ends it, while you hold it\.$/,
+    );
+    expect(STAYING_TEXT).toBe('1.5% more each year of the game, to at most 15%');
+    const grown = game(5000, 'full', DAY);
+    changeCityOwner(grown, 'deva' as CityId, rome);
+    expect(
+      weighedNotes(grown, standingThreats(grown, world)).some((note) =>
+        note.startsWith('You hold no more cities'),
+      ),
+    ).toBe(false);
   });
 });
