@@ -207,6 +207,37 @@ describe('a Rome that fights back', () => {
     expect(spent).toBe(0);
   });
 
+  it('never promises the same gold to two enemies', () => {
+    const start = losingWar();
+    const macedon = 'macedon' as FactionId;
+    expect(
+      executeOrder(start, { kind: 'declareWar', faction: macedon, against: rome }, world),
+    ).toBeUndefined();
+    const war = start.wars[warKey(macedon, rome)];
+    if (!war) throw new Error('no war');
+    war.since = 100 as Day;
+    changeCityOwner(start, 'ariminum' as CityId, macedon);
+    const romans = start.factions[rome];
+    if (!romans) throw new Error('no Rome');
+    romans.stores.gold = 3000;
+    expectConsistent(start);
+    const offered: number[] = [];
+    const refused: string[] = [];
+    playCautiousRome(
+      1,
+      4 / 365,
+      ({ accepted, events }) => {
+        for (const o of accepted)
+          if (o.kind === 'offerPeace' && o.terms.kind === 'payment') offered.push(o.terms.gold);
+        for (const e of events) if (e.kind === 'peaceRefused' && e.by !== rome) refused.push(e.by);
+      },
+      { peaceful: true, answer: true, follows: true, guards: 'enough', fights: true, start },
+    );
+    expect(offered.length).toBeGreaterThan(0);
+    expect(offered.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(3000);
+    expect(refused).toEqual([]);
+  });
+
   /** The state with 800 Carthaginian spearmen idle halfway between Roma and Capua, prey for Rome's 4,000 once at war. */
   function withPrey(state: GameState): GameState {
     const roma = state.cities['roma' as CityId];

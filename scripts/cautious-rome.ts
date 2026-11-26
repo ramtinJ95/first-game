@@ -384,7 +384,7 @@ function enemiesOf(state: GameState): FactionId[] {
 /**
  * Rome's offer of peace in a war it is losing by `warDamage`, as the AI reckons a loss: peace
  * as things stand when the enemy would take it, else the least gold it would take, in steps of
- * GOLD_STEP, up to what Rome has, and never a city. None while an offer waits, within
+ * GOLD_STEP, up to what Rome has not already offered another enemy, and never a city. None while an offer waits, within
  * OFFER_GAP_DAYS of the last, or before the enemy talks of peace.
  */
 function peaceWhenLosing(
@@ -398,7 +398,13 @@ function peaceWhenLosing(
   if (!standing || !warDamage(state, standing).losing) return undefined;
   const wish = peaceWish(state, enemy, rome);
   if (!wish || wish.talksFrom !== undefined) return undefined;
-  const purse = Math.floor((state.factions[rome]?.stores.gold ?? 0) / GOLD_STEP) * GOLD_STEP;
+  // Gold already promised to another enemy is not Rome's to offer again.
+  const promised = enemiesOf(state)
+    .filter((other) => other !== enemy)
+    .reduce((sum, other) => sum + pledgedTo(state, other), 0);
+  const purse =
+    Math.floor(Math.max(0, (state.factions[rome]?.stores.gold ?? 0) - promised) / GOLD_STEP) *
+    GOLD_STEP;
   const least = Math.max(0, Math.ceil((-wish.wish * GOLD_PER_POINT) / GOLD_STEP) * GOLD_STEP);
   // The enemy's wish already prices every reason; the steps above it only meet its rounding.
   for (let gold = least; gold <= Math.min(purse, least + 10 * GOLD_STEP); gold += GOLD_STEP) {
