@@ -1219,7 +1219,7 @@ describe('a warning soon after a stop for the same power runs the game on', () =
     expect(news.map((day) => day.stop)).toEqual([true, false, false, false]);
     expect(news.map((day) => day.news.length)).toEqual([1, 1, 1, 1]);
     expect(news[1]?.news[0]?.text).toMatch(
-      /^Carthage could soon declare war on you: 83% of the strength it needs near Roma, from Year 5, day 272\. The game ran on: its stop on Year 5, day 211 was at 85%, and it stands no higher\. It needs 7% less: you have not grown\. See At peace in Wars\.$/,
+      /^Carthage could soon declare war on you: 83% of the strength it needs near Roma, from Year 5, day 272\. The game ran on: its stop on Year 5, day 211 was at 85%, and it stands no higher\. See At peace in Wars\.$/,
     );
     expect(news[1]?.news[0]?.pause).toBeUndefined();
   });
@@ -1823,16 +1823,15 @@ describe('a power that needs less while you hold no more cities than at the star
     expect(climb?.text).toContain(`${WORDS} See At peace in Wars.`);
   });
 
-  test('a warning that runs the game on says it', () => {
+  test('a warning that runs the game on leaves it to the stop it ran on from, to keep the line short', () => {
     const told = new Set<string>();
-    expect(stopsOfDay(newsOf(game(5000, 'full', DAY), told), ALL_PAUSES, new Set()).stop).toBe(
-      true,
-    );
+    const first = stopsOfDay(newsOf(game(5000, 'full', DAY), told), ALL_PAUSES, new Set());
+    expect(first.stop).toBe(true);
+    expect(first.news[0]?.text).toContain(WORDS);
     const again = stopsOfDay(newsOf(game(5000, 'full', DAY + 20), told), ALL_PAUSES, new Set());
     expect(again.stop).toBe(false);
-    expect(again.news[0]?.text).toMatch(
-      /The game ran on: .* It needs 6% less: you have not grown\. See At peace in Wars\.$/,
-    );
+    expect(again.news[0]?.text).toMatch(/The game ran on: .*\. See At peace in Wars\.$/);
+    expect(again.news[0]?.text).not.toContain('you have not grown');
   });
 
   test('the line of guards that stop counting says it, and so does the line ten days ahead', () => {
@@ -1852,14 +1851,7 @@ describe('a power that needs less while you hold no more cities than at the star
   });
 
   test('a stop that names a war holding the power back leaves the words to the At peace notes, so it fits the corner', () => {
-    const syracusae = 'syracusae' as FactionId;
-    const state = game(beforeStaying(8000, DAY), 'full', DAY);
-    Reflect.deleteProperty(state.truces, warKey(carthage, syracusae));
-    state.wars[warKey(carthage, syracusae)] = newWar(carthage, syracusae, (DAY - 10) as Day);
-    const army = Object.values(state.armies).find((a) => a.owner === carthage);
-    const city = state.cities['syracusae' as CityId];
-    if (!army || !city) throw new Error('no Carthaginian army or Syracusae');
-    army.activity = { kind: 'idle', position: { ...city.position } };
+    const state = heldBySyracusae(game(beforeStaying(8000, DAY), 'full', DAY));
     const [warning] = newsOf(state, new Set());
     expect(warning?.text).toContain('Once its war with Syracusae ends, it would stand at');
     expect(warning?.text).not.toContain('you have not grown');
@@ -1868,13 +1860,50 @@ describe('a power that needs less while you hold no more cities than at the star
     );
   });
 
+  /** The state with Carthage at war with Syracusae, its army before the city, so the war holds it back. */
+  function heldBySyracusae(state: GameState): GameState {
+    const syracusae = 'syracusae' as FactionId;
+    Reflect.deleteProperty(state.truces, warKey(carthage, syracusae));
+    state.wars[warKey(carthage, syracusae)] = newWar(carthage, syracusae, (DAY - 10) as Day);
+    const army = Object.values(state.armies).find((a) => a.owner === carthage);
+    const city = state.cities['syracusae' as CityId];
+    if (!army || !city) throw new Error('no Carthaginian army or Syracusae');
+    army.activity = { kind: 'idle', position: { ...city.position } };
+    return state;
+  }
+
+  test('a warning by field armies that names a war holding the power back leaves the words out too', () => {
+    const state = heldBySyracusae(game(beforeStaying(8000, DAY), 'empty', DAY));
+    const roma = state.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    roma.garrison = 80_000;
+    const [warning] = newsOf(state, new Set());
+    expect(warning?.text).toContain('against all your armies in the field');
+    expect(warning?.text).toContain('Once its war with Syracusae ends, it would stand at');
+    expect(warning?.text).toContain('It weighs you so only while you hold no more cities');
+  });
+
+  test('a line of two powers says it once for both, and leaves it out when it names a war holding one back', () => {
+    const both = game(5000, 'full', DAY);
+    spearmenOf(both, macedon).men = 30_000;
+    const [line] = newsOf(both, new Set());
+    expect(line?.text).toMatch(/^Carthage and Macedon could soon declare war on you/);
+    expect(line?.text).toContain(' Each needs 6% less: you have not grown. What lowers each');
+    const held = heldBySyracusae(game(beforeStaying(8000, DAY), 'full', DAY));
+    spearmenOf(held, macedon).men = 30_000;
+    const [heldLine] = newsOf(held, new Set());
+    expect(heldLine?.text).toMatch(/^Carthage and Macedon could soon declare war on you/);
+    expect(heldLine?.text).toContain("Once Carthage's war with Syracusae ends");
+    expect(heldLine?.text).not.toContain('you have not grown');
+  });
+
   test('the At peace notes say it in full once, how it grows and what ends it', () => {
     const state = game(5000, 'full', DAY);
     const notes = weighedNotes(state, standingThreats(state, world));
     const full = notes.filter((note) => note.startsWith('You hold no more cities'));
     expect(full).toHaveLength(1);
     expect(full[0]).toMatch(
-      /^You hold no more cities than at the start, so (\w+, )*(\w+ and )?Carthage(, \w+)*( and \w+)? (needs|each need) 6% less of the strength to declare war on you: 1\.5% for each year of the game, to at most 15%\. Taking a city ends it, while you hold it\.$/,
+      /^You hold no more cities than at the start, so (\w+, )*(\w+ and )?Carthage(, \w+)*( and \w+)? (needs|each need) 6% less of the strength to declare war on you: 1\.5% for each year of the game, to at most 15%\. Holding more cities than at the start ends it\.$/,
     );
     expect(STAYING_TEXT).toBe('1.5% for each year of the game, to at most 15%');
     const grown = game(5000, 'full', DAY);

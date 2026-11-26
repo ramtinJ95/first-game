@@ -91,7 +91,7 @@
         stand, or with gold or cities; it shows what the enemy would accept, and when it would take less
         than it asks. {PEACE_TEXT.end} Peace sends armies home. While you hold no more cities than at
         the start, each great power needs less of the strength to declare war on you: {STAYING_TEXT}.
-        Taking a city ends it, while you hold it.
+        Holding more cities than at the start ends it.
       </dd>
       <dt>Pause and speed</dt>
       <dd data-testid="guide-pauses">

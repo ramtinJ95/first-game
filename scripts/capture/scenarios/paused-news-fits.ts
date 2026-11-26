@@ -435,7 +435,7 @@ const STOPS: readonly {
     atPeaceAt: [1280, 1024],
     atPeace: 'Carthage has',
     atPeaceNote:
-      'You hold no more cities than at the start, so Carthage needs 12% less of the strength to declare war on you: 1.5% for each year of the game, to at most 15%. Taking a city ends it, while you hold it.',
+      'You hold no more cities than at the start, so Carthage needs 12% less of the strength to declare war on you: 1.5% for each year of the game, to at most 15%. Holding more cities than at the start ends it.',
   },
   { name: 'a city in danger', make: alone(ownCityInDangerTomorrow), line: /is in danger/ },
   { name: 'fleets sighted', make: alone(fiveFleetsOnRoma), line: /sail|march/ },

@@ -132,6 +132,32 @@ describe('a rival great power that stays in the cities the map gave it', () => {
     expect(twenty?.readiness).toBeCloseTo((start?.readiness ?? 0) / (1 - STAY_HOME_CAP));
   });
 
+  test('lowers the pressure a power needs on the rival field armies by the same share', () => {
+    const at = (years: number) => {
+      const state = inYear(years);
+      spearmenOf(state, carthage).men = 8000;
+      const roma = state.cities['roma' as CityId];
+      if (!roma) throw new Error('no Roma');
+      roma.garrison = 80_000;
+      return warReadiness(state, world, carthage, rome);
+    };
+    expect(at(0)?.pressed).toBe(true);
+    expect(at(4)?.pressed).toBe(true);
+    expect(at(4)?.readiness).toBeCloseTo((at(0)?.readiness ?? 0) / (1 - 4 * STAY_HOME_PER_YEAR));
+  });
+
+  test('counts cities, not conquests: a rival that lost a city and took another holds no more than the map gave it', () => {
+    const state = inYear(4);
+    changeCityOwner(state, 'capua' as CityId, carthage);
+    changeCityOwner(state, 'deva' as CityId, rome);
+    expect(warReadiness(state, world, carthage, rome)?.stayedHome).toBeCloseTo(
+      4 * STAY_HOME_PER_YEAR,
+    );
+    changeCityOwner(state, 'capua' as CityId, rome);
+    expect(warReadiness(state, world, carthage, rome)?.stayedHome).toBe(0);
+    expectConsistent(state);
+  });
+
   test('ends while the rival holds a city more than the map gave it, and weighs it so again once lost', () => {
     const state = inYear(4);
     changeCityOwner(state, 'mediolanum' as CityId, rome);
