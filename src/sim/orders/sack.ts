@@ -22,7 +22,7 @@ export function sack(state: GameState, order: SackOrder): string | undefined {
   if (!stores) return `faction ${order.faction} does not exist`;
   stores.gold += city.population * OUTPUT_PER_PERSON.gold * 365 * SACK.wealthYears;
   city.population *= 1 - SACK.populationShare;
-  city.unrestDays = unrestDaysFor(state, order.faction, SACK.unrestDays);
+  city.unrestDays = unrestDaysFor(state, order.faction, SACK.unrestDays, city.position);
   city.fellOn = null;
   city.sackedOn = state.day;
   const lost = [...city.buildings, ...(city.construction ? [city.construction.building] : [])];

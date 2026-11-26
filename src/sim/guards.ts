@@ -2,6 +2,7 @@ import { guardShareOf } from './advances/advances.ts';
 import type { DeepReadonly } from './deep-readonly.ts';
 import type { CityId, FactionId } from './ids.ts';
 import { ownedCity } from './orders/owned-city.ts';
+import { bonusOf } from './signatures.ts';
 import type { City, GuardBand } from './state/city.ts';
 import type { Day } from './state/day.ts';
 import type { GameState } from './state/game-state.ts';
@@ -11,6 +12,11 @@ import { beleaguered, CITY_DEFENCES } from './systems/sieges.ts';
 export const GUARD_BAND = 500;
 /** Gold paid at the order for one band's term. Guards cost no manpower, food, or upkeep. */
 export const GUARD_GOLD = 2000;
+
+/** The gold the faction pays for one band: less for Carthage. */
+export function guardGoldOf(faction: FactionId): number {
+  return Math.round(GUARD_GOLD * (bonusOf(faction, 'carthage')?.guardShare ?? 1));
+}
 /** Days a band serves before it leaves, so the choice to hire comes back each year. */
 export const GUARD_DAYS = 365;
 /**
@@ -83,8 +89,9 @@ export function guardRefusal(
     return `${city.id} holds ${guardMen(city)} guards, and ${guardLimit(city)} is the most it can`;
   }
   const gold = state.factions[faction]?.stores.gold ?? 0;
-  if (gold < GUARD_GOLD) {
-    return `${GUARD_BAND} guards cost ${GUARD_GOLD} gold, but ${faction} has ${Math.floor(gold)}`;
+  const price = guardGoldOf(faction);
+  if (gold < price) {
+    return `${GUARD_BAND} guards cost ${price} gold, but ${faction} has ${Math.floor(gold)}`;
   }
   return undefined;
 }
@@ -97,7 +104,7 @@ export function hireGuards(state: GameState, order: HireGuardsOrder): string | u
   if (refusal) return refusal;
   const stores = state.factions[order.faction]?.stores;
   if (!stores) return `faction ${order.faction} does not exist`;
-  stores.gold -= GUARD_GOLD;
+  stores.gold -= guardGoldOf(order.faction);
   const old = guardMen(city) + GUARD_BAND > guardLimit(city) ? replaced(city, state.day) : -1;
   if (old >= 0) city.guards.splice(old, 1);
   else city.garrison += GUARD_BAND;

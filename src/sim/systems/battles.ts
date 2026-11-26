@@ -3,6 +3,7 @@ import { emit, type BattleSideName } from '../events.ts';
 import type { ArmyId, BattleId, FactionId } from '../ids.ts';
 import { allocateId } from '../ids.ts';
 import { removeRecord } from '../records.ts';
+import { bonusOf } from '../signatures.ts';
 import { nextRandom } from '../rng.ts';
 import type { Army, Stance } from '../state/army.ts';
 import type { Battle } from '../state/battle.ts';
@@ -102,16 +103,27 @@ export const STANCE_EDGE = 1.27;
  */
 export const REFORM_DAYS = 3;
 
+/** The days the faction's armies re-form after a change of stance: fewer for Rome. */
+export function reformDaysOf(faction: FactionId): number {
+  return bonusOf(faction, 'rome')?.reformDays ?? REFORM_DAYS;
+}
+
 /** Whether the army is still re-forming after a change of stance. */
-export function reforming(state: { day: number }, army: Pick<Army, 'stanceChangedOn'>): boolean {
-  return army.stanceChangedOn !== undefined && state.day - army.stanceChangedOn < REFORM_DAYS;
+export function reforming(
+  state: { day: number },
+  army: Pick<Army, 'stanceChangedOn' | 'owner'>,
+): boolean {
+  return (
+    army.stanceChangedOn !== undefined &&
+    state.day - army.stanceChangedOn < reformDaysOf(army.owner)
+  );
 }
 
 /** What one army multiplies its blows on another by, for their stances and their re-forming. */
 export function edgeBetween(
   state: { readonly day: number },
-  mine: Pick<Army, 'stance' | 'stanceChangedOn'>,
-  theirs: Pick<Army, 'stance' | 'stanceChangedOn'>,
+  mine: Pick<Army, 'stance' | 'stanceChangedOn' | 'owner'>,
+  theirs: Pick<Army, 'stance' | 'stanceChangedOn' | 'owner'>,
 ): number {
   const a = reforming(state, mine);
   const b = reforming(state, theirs);

@@ -32,6 +32,8 @@ export interface BuildingGain {
   readonly slots: number;
   /** The share more its end of each route would earn. */
   readonly tradeShare: number;
+  /** The food more the owner's granaries would hold. */
+  readonly store: number;
 }
 
 /**
@@ -61,8 +63,10 @@ export function gainOf(
   const afterCity = withIt.cities[city.id] ?? city;
   const before = dailyBalances(without).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
   const after = dailyBalances(withIt).get(city.owner) ?? { gold: 0, food: 0, manpower: 0 };
-  const levyBefore = limitsOf(without).get(city.owner)?.manpower ?? 0;
-  const levyAfter = limitsOf(withIt).get(city.owner)?.manpower ?? 0;
+  const limitsBefore = limitsOf(without).get(city.owner);
+  const limitsAfter = limitsOf(withIt).get(city.owner);
+  const levyBefore = limitsBefore?.manpower ?? 0;
+  const levyAfter = limitsAfter?.manpower ?? 0;
   const fullBefore = fullDefences(without.cities[city.id] ?? city);
   const fullAfter = fullDefences(withIt.cities[city.id] ?? city);
   return {
@@ -81,6 +85,7 @@ export function gainOf(
     reachKm: changesReach ? templeReachOf(withIt.cities[city.id] ?? city) : undefined,
     slots: extraSlotsOf(afterCity) - extraSlotsOf(beforeCity),
     tradeShare: tradeShareOf(afterCity) - tradeShareOf(beforeCity),
+    store: (limitsAfter?.food ?? 0) - (limitsBefore?.food ?? 0),
   };
 }
 

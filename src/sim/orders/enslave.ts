@@ -27,7 +27,7 @@ export function enslave(state: GameState, order: EnslaveOrder, world: World): st
   city.population -= captives;
   capital.population += captives - manpower;
   stores.manpower += manpower;
-  city.unrestDays = unrestDaysFor(state, order.faction, ENSLAVE.unrestDays);
+  city.unrestDays = unrestDaysFor(state, order.faction, ENSLAVE.unrestDays, city.position);
   city.fellOn = null;
   return undefined;
 }

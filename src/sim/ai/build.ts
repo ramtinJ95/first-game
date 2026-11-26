@@ -2,15 +2,19 @@ import { buildBarrier } from '../buildings/build.ts';
 import {
   BUILDING_KINDS,
   BUILDINGS,
+  coloniaShareAt,
   FIRST_LEVELS,
+  ownPowerOf,
   templeReachOf,
+  trainingDaysAt,
   type BuildingKind,
 } from '../buildings/buildings.ts';
 import { buildingGain } from '../buildings/gains.ts';
 import { UNREST_DAYS } from '../cities.ts';
 import type { FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
-import { OUTPUT_PER_PERSON, UNREST_OUTPUT, UPKEEP_PER_MAN } from '../systems/economy.ts';
+import { CONVOY_KM_PER_DAY, MARCH_KM_PER_DAY } from '../march.ts';
+import { menOf, OUTPUT_PER_PERSON, UNREST_OUTPUT, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import { TROOPS } from '../troops.ts';
 import { areAtWar } from '../wars.ts';
 import { mostNeeded } from './budget.ts';
@@ -31,11 +35,20 @@ export function paybackLimit(kind: BuildingKind): number {
   return isFirstLevel(kind) ? BUILD_PAYBACK_YEARS : PROJECT_PAYBACK_YEARS;
 }
 
+/** A first level, or a power's own building, which the AI weighs as one. */
 function isFirstLevel(kind: BuildingKind): boolean {
-  return (FIRST_LEVELS as readonly BuildingKind[]).includes(kind);
+  return (FIRST_LEVELS as readonly BuildingKind[]).includes(kind) || ownPowerOf(kind) !== undefined;
 }
-/** The cities a power takes in a year near a border temple, by which the AI prices one. */
+/** The cities a power takes in a year near a border temple or Colonia, by which the AI prices one. */
 export const CONQUESTS_A_YEAR = 1;
+/** The times a year the realm's armies cross a Royal road's province or sail within a Cothon's reach, by which the AI prices them. */
+export const CROSSINGS_A_YEAR = 2;
+/** The km of a Royal road's province an army crosses. */
+export const ROAD_KM = 200;
+/** The formations of cavalry a city with Royal stables trains a year, by which the AI prices them. */
+export const CAVALRY_A_YEAR = 3;
+/** The gold a day one man under arms costs, food at FOOD_PRICE: what a day of his service saved is worth. */
+const MAN_DAY = UPKEEP_PER_MAN.gold + UPKEEP_PER_MAN.food * FOOD_PRICE;
 
 /**
  * Food counts in a building's worth only while the realm's harvest, after its upkeep,
@@ -53,7 +66,10 @@ const CHEAPEST = Math.min(...BUILDING_KINDS.map((kind) => BUILDINGS[kind].gold))
  * in CONQUESTS_A_YEAR cities like the nearest city of another faction in its reach, and
  * towers behind the border and a temple with no city to take are worth nothing. Outer walls
  * and a Stronghold count as towers do, and a Sanctuary as a temple for the nearest city of
- * another faction in its longer reach that no temple of the owner reaches yet.
+ * another faction in its longer reach that no temple of the owner reaches yet. A Colonia is
+ * priced as a temple is, by the unrest it would spare. A Cothon and a Royal road are worth the
+ * upkeep of the realm's armies for the days they save on CROSSINGS_A_YEAR crossings, and Royal
+ * stables the upkeep of CAVALRY_A_YEAR formations of heavy cavalry for the days of training saved.
  */
 export function buildingWorth(state: State, city: CityView, kind: BuildingKind): number {
   const gain = buildingGain(state, city, kind);
@@ -64,8 +80,9 @@ export function buildingWorth(state: State, city: CityView, kind: BuildingKind):
     (kind === 'towers' || kind === 'outerWalls' || kind === 'stronghold') &&
     onBorder(state, city)
   ) {
-    worth += gain.garrison * (UPKEEP_PER_MAN.gold + UPKEEP_PER_MAN.food * FOOD_PRICE);
+    worth += gain.garrison * MAN_DAY;
   }
+  worth += (savedManDays(state, city, kind) / 365) * MAN_DAY;
   const target =
     kind === 'temple'
       ? templeTarget(state, city)
@@ -73,13 +90,46 @@ export function buildingWorth(state: State, city: CityView, kind: BuildingKind):
         ? sanctuaryTarget(state, city)
         : undefined;
   if (target) {
-    const output =
-      target.population * (OUTPUT_PER_PERSON.gold + OUTPUT_PER_PERSON.manpower * MANPOWER_PRICE);
-    const savedDays =
-      ((1 - UNREST_OUTPUT) / 2) * UNREST_DAYS * (1 - 1 / BUILDINGS.temple.unrestPace);
-    worth += (CONQUESTS_A_YEAR / 365) * savedDays * output;
+    worth += conquestWorth(target, 1 - 1 / BUILDINGS.temple.unrestPace);
   }
+  const colonist =
+    kind === 'colonia' && !coloniaShareAtTarget(state, city)
+      ? nearestForeign(state, city, BUILDINGS.colonia.reachKm, true)
+      : undefined;
+  if (colonist) worth += conquestWorth(colonist, 1 - BUILDINGS.colonia.unrestShare);
   return worth;
+}
+
+/** The gold a day that sparing `share` of a conquest's unrest a year in a city like the target is worth. */
+function conquestWorth(target: CityView, share: number): number {
+  const output =
+    target.population * (OUTPUT_PER_PERSON.gold + OUTPUT_PER_PERSON.manpower * MANPOWER_PRICE);
+  const savedDays = ((1 - UNREST_OUTPUT) / 2) * UNREST_DAYS * share;
+  return (CONQUESTS_A_YEAR / 365) * savedDays * output;
+}
+
+/** Whether a Colonia of the owner already halves the unrest of the city a new one would. */
+function coloniaShareAtTarget(state: State, city: CityView): boolean {
+  const target = nearestForeign(state, city, BUILDINGS.colonia.reachKm, true);
+  return target !== undefined && coloniaShareAt(state, city.owner, target.position) < 1;
+}
+
+/** The days of service a year times the men that a building which saves time saves its owner. */
+function savedManDays(state: State, city: CityView, kind: BuildingKind): number {
+  if (kind === 'royalStables') {
+    const before = trainingDaysAt(city, 'heavyCavalry');
+    const after = trainingDaysAt({ buildings: [...city.buildings, kind] }, 'heavyCavalry');
+    return CAVALRY_A_YEAR * (before - after) * TROOPS.heavyCavalry.recruit.men;
+  }
+  if (kind !== 'cothon' && kind !== 'royalRoad') return 0;
+  const men = sorted(state.armies)
+    .filter((army) => army.owner === city.owner)
+    .reduce((sum, army) => sum + menOf(state, army), 0);
+  const saved =
+    kind === 'cothon'
+      ? (BUILDINGS.cothon.reachKm / CONVOY_KM_PER_DAY) * (1 - 1 / BUILDINGS.cothon.sailShare)
+      : (ROAD_KM / MARCH_KM_PER_DAY) * (1 - 1 / BUILDINGS.royalRoad.marchShare);
+  return CROSSINGS_A_YEAR * saved * men;
 }
 
 /**

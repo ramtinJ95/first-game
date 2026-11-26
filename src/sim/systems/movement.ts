@@ -1,4 +1,4 @@
-import { advanceAlong, CONVOY_KM_PER_DAY, MARCH_KM_PER_DAY, REFUGEE_KM_PER_DAY } from '../march.ts';
+import { advanceAlong, marchKmAt, REFUGEE_KM_PER_DAY, sailKmAt } from '../march.ts';
 import { removeRecord } from '../records.ts';
 import type { GameState } from '../state/game-state.ts';
 
@@ -13,7 +13,8 @@ export function movement(state: GameState): void {
   for (const army of Object.values(state.armies)) {
     const { activity } = army;
     if (activity.kind !== 'marching' && activity.kind !== 'retreating') continue;
-    const position = advanceAlong(activity.position, activity.waypoints, MARCH_KM_PER_DAY);
+    const km = marchKmAt(state, army.owner, activity.position);
+    const position = advanceAlong(activity.position, activity.waypoints, km);
     activity.position = position;
     if (activity.waypoints.length > 0) continue;
     if (activity.kind === 'marching' && activity.sail) activity.waypoints = [{ ...position }];
@@ -21,7 +22,8 @@ export function movement(state: GameState): void {
   }
   for (const convoy of Object.values(state.convoys)) {
     if (convoy.departsOn !== undefined && state.day < convoy.departsOn) continue;
-    convoy.position = advanceAlong(convoy.position, convoy.waypoints, CONVOY_KM_PER_DAY);
+    const km = sailKmAt(state, convoy.owner, convoy.position);
+    convoy.position = advanceAlong(convoy.position, convoy.waypoints, km);
     if (convoy.waypoints.length > 0) continue;
     for (const id of convoy.armies) {
       const army = state.armies[id];

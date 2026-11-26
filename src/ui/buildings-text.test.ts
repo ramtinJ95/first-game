@@ -96,6 +96,7 @@ describe('cityBuildings', () => {
       'treasuryHall',
       'merchantsQuarter',
       'stronghold',
+      'colonia',
     ]);
     expect(shown.options.every((o) => o.why === undefined)).toBe(true);
   });
@@ -143,6 +144,18 @@ describe('cityBuildings', () => {
     });
   });
 
+  it("tags a power's own building with whose it is, and offers it only to that power", () => {
+    const state = rich();
+    roma(state).buildings = ['colonia'];
+    const shown = cityBuildings(state, [], roma(state), fixtureWorld());
+    expect(shown.built.map((b) => [b.name, b.tag])).toEqual([['Colonia', "Rome's own"]]);
+    expect(shown.built[0]?.effect).toMatch(/^cities you take within 400 km start half the unrest/);
+    const carthago = state.cities[f.carthago];
+    if (!carthago) throw new Error('expected Carthago');
+    const offered = cityBuildings(state, [], carthago, fixtureWorld()).options;
+    expect(offered.filter((o) => o.tier === 'signature').map((o) => o.kind)).toEqual(['cothon']);
+  });
+
   it('lists what stands with its effect and offers only the rest', () => {
     const state = rich();
     roma(state).buildings = ['forum'];
@@ -158,6 +171,7 @@ describe('cityBuildings', () => {
       ['treasuryHall', 'work'],
       ['merchantsQuarter', 'work'],
       ['stronghold', 'work'],
+      ['colonia', 'signature'],
     ]);
     expect(option(state, 'lawCourts').raises).toBe('Forum');
   });
@@ -188,7 +202,9 @@ describe('cityBuildings', () => {
     const offered = option(state, 'temple').effect;
     roma(state).buildings = ['temple'];
     const shown = cityBuildings(state, [], roma(state), fixtureWorld());
-    expect(shown.built).toEqual([{ kind: 'temple', name: 'Temple', level: 1, effect: offered }]);
+    expect(shown.built).toEqual([
+      { kind: 'temple', name: 'Temple', level: 1, tag: 'level 1', effect: offered },
+    ]);
   });
 
   it("names a Merchants' quarter's route slot and its share of each route even where no route runs", () => {

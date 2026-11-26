@@ -2,6 +2,7 @@ import { nameNewArmy } from './army-names.ts';
 import { allocateId, type CityId, type FactionId } from './ids.ts';
 import { POWERS, type GameMap, type PowerId, type Province } from './map.ts';
 import { serialOf } from './references.ts';
+import { bonusOf } from './signatures.ts';
 import { nextRandom, seedRng } from './rng.ts';
 import type { CityRank } from './state/city.ts';
 import type { Day } from './state/day.ts';
@@ -110,8 +111,13 @@ export const FRONTIER_SHARES: Readonly<Record<MinorKind, number>> = {
 };
 export const LEAGUE_KM = 600;
 
-/** Every power's starting general has this skill, on the 0 to 10 scale. */
+/** Every power's new army has a general of this skill, on the 0 to 10 scale, but Macedon's. */
 export const STARTING_GENERAL_SKILL = 3;
+
+/** The skill of a new army's general for the faction, before any advance. */
+export function startingSkillOf(faction: FactionId): number {
+  return bonusOf(faction, 'macedon')?.generalSkill ?? STARTING_GENERAL_SKILL;
+}
 
 export const STARTING_FORMATIONS = [
   { troop: 'spearmen', men: 1200 },
@@ -247,7 +253,7 @@ function addArmy(
     name: nameNewArmy(state, owner),
     formations,
     stance: 'holdTheLine',
-    generalSkill: STARTING_GENERAL_SKILL,
+    generalSkill: startingSkillOf(owner),
     activity: { kind: 'idle', position },
   };
 }

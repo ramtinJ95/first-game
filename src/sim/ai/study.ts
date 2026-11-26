@@ -6,7 +6,7 @@ import {
   type AdvanceKind,
 } from '../advances/advances.ts';
 import { UNREST_DAYS } from '../cities.ts';
-import { STARTING_GENERAL_SKILL } from '../new-game.ts';
+import { startingSkillOf } from '../new-game.ts';
 import { GENERAL_EFFECT } from '../systems/battles.ts';
 import { fullDefences, WALL_WEAR_PER_THOUSAND_MEN } from '../systems/sieges.ts';
 import { advanceGain } from '../advances/gains.ts';
@@ -95,18 +95,19 @@ export function sharperMen(state: State, faction: FactionId): number {
 
 /**
  * The men more that the realm's armies strike as now that Drillmasters raised their generals,
- * against the STARTING_GENERAL_SKILL they would have had: an army at exactly the skill
+ * against the skill `startingSkillOf` gave them: an army at exactly the skill
  * Drillmasters gives owes it that much. Nothing before it is studied.
  */
 export function drilledMen(state: State, faction: FactionId): number {
   const record = state.factions[faction];
   const skill = ADVANCES.drillmasters.generalSkill;
-  if (!record || !hasStudied(record, 'drillmasters') || STARTING_GENERAL_SKILL >= skill) return 0;
+  const base = startingSkillOf(faction);
+  if (!record || !hasStudied(record, 'drillmasters') || base >= skill) return 0;
   const factor = (level: number) => 1 + GENERAL_EFFECT * level;
   let men = 0;
   for (const army of sorted(state.armies))
     if (army.owner === faction && army.generalSkill === skill)
-      men += menOf(state, army) * (factor(skill) / factor(STARTING_GENERAL_SKILL) - 1);
+      men += menOf(state, army) * (factor(skill) / factor(base) - 1);
   return men;
 }
 

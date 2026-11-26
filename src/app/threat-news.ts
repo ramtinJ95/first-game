@@ -20,7 +20,7 @@ import { trainingDaysAt } from '../sim/buildings/buildings.ts';
 import { TROOPS, type Troop } from '../sim/troops.ts';
 import { beleaguered } from '../sim/systems/sieges.ts';
 import type { Stores } from '../sim/state/faction.ts';
-import { deterrentUntil, GUARD_BAND, GUARD_DETER_DAYS, GUARD_GOLD } from '../sim/guards.ts';
+import { deterrentUntil, GUARD_BAND, GUARD_DETER_DAYS, guardGoldOf } from '../sim/guards.ts';
 import type { Day } from '../sim/state/day.ts';
 import {
   NOTICE_DAYS,
@@ -541,7 +541,7 @@ function aheadAlert(
     day: (state.day - 1) as Day,
     tone: 'bad',
     ...(ahead.stops ? { pause: { kind: 'warThreat' } as const } : {}),
-    text: `The ${whole(ahead.men)} guards at ${city?.name ?? ahead.city} stop counting against ${factionName(state, ahead.power)}'s war in ${daysText(ahead.on - state.day)}, on ${dateText(ahead.on)}: it would then stand at ${share(ahead.bare)}${ahead.stops ? ' and may declare' : ''}.${stayedWords(ahead)} A new band counts ${GUARD_DETER_DAYS} days, for ${whole(GUARD_GOLD)} gold.`,
+    text: `The ${whole(ahead.men)} guards at ${city?.name ?? ahead.city} stop counting against ${factionName(state, ahead.power)}'s war in ${daysText(ahead.on - state.day)}, on ${dateText(ahead.on)}: it would then stand at ${share(ahead.bare)}${ahead.stops ? ' and may declare' : ''}.${stayedWords(ahead)} A new band counts ${GUARD_DETER_DAYS} days, for ${whole(guardGoldOf(state.player))} gold.`,
     ...(city ? { focus: { at: city.position } } : {}),
   };
 }
@@ -577,7 +577,7 @@ function bandAlert(
     kind: 'guardsUncounted',
     day: (state.day - 1) as Day,
     tone: 'bad',
-    text: `The ${whole(band.men)} guards at ${city?.name ?? band.city} no longer count against ${factionName(state, band.power)}'s war: it stands at ${share(band.threat.readiness)} of the strength it needs, and may declare ${band.from}.${stayedWords(band.threat)} A new band counts ${GUARD_DETER_DAYS} days, for ${whole(GUARD_GOLD)} gold.`,
+    text: `The ${whole(band.men)} guards at ${city?.name ?? band.city} no longer count against ${factionName(state, band.power)}'s war: it stands at ${share(band.threat.readiness)} of the strength it needs, and may declare ${band.from}.${stayedWords(band.threat)} A new band counts ${GUARD_DETER_DAYS} days, for ${whole(guardGoldOf(state.player))} gold.`,
     ...(city ? { focus: { at: city.position } } : {}),
   };
 }
@@ -1114,7 +1114,7 @@ function notCounted(army: DeepReadonly<Army>, point: MapPoint): { text: string; 
 export function menDesertIfRaised(state: State, world: World, troop: Troop, city: CityId): boolean {
   const at = state.cities[city];
   if (!at) return false;
-  const days = trainingDaysAt(at, TROOPS[troop].recruit.days);
+  const days = trainingDaysAt(at, troop);
   return recruitForecast(state, [], world, troop, days, city).short.food !== undefined;
 }
 
@@ -1128,7 +1128,7 @@ function unfed(state: State, world: World, troop: Troop): string | undefined {
   const cities = Object.values(state.cities).filter(
     (city) => city.owner === state.player && city.unrestDays === 0 && !beleaguered(state, city),
   );
-  const days = (city: (typeof cities)[number]) => trainingDaysAt(city, TROOPS[troop].recruit.days);
+  const days = (city: (typeof cities)[number]) => trainingDaysAt(city, troop);
   const [fastest] = cities.sort((a, b) => days(a) - days(b));
   if (!fastest || !menDesertIfRaised(state, world, troop, fastest.id)) return undefined;
   const site = canalSite(state, undefined);
@@ -1232,8 +1232,7 @@ function orderAdvice(
     (city) => city.owner === state.player && city.unrestDays === 0 && !beleaguered(state, city),
   );
   if (cities.length === 0) return { kind: 'none', text: '' };
-  const days = (troop: Troop) =>
-    Math.min(...cities.map((city) => trainingDaysAt(city, TROOPS[troop].recruit.days)));
+  const days = (troop: Troop) => Math.min(...cities.map((city) => trainingDaysAt(city, troop)));
   const gold = stores?.gold ?? 0;
   const manpower = stores?.manpower ?? 0;
   const troops = (Object.keys(TROOPS) as Troop[]).sort(

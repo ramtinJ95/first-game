@@ -5,7 +5,7 @@ import {
   deterrentUntil,
   GUARD_BAND,
   GUARD_DETER_DAYS,
-  GUARD_GOLD,
+  guardGoldOf,
   guardLimit,
   guardMen,
   guardRefusal,
@@ -87,7 +87,7 @@ export function cityGuards(
         hired,
         guardMen(next) + GUARD_BAND > guardLimit(next) && replaced(next, waiting.day) < 0,
       ),
-      gold: GUARD_GOLD,
+      gold: guardGoldOf(city.owner),
       change: open ? hireChange(short ? withGold(waiting, next) : waiting, next, world) : undefined,
       why: hireRefusalText(waiting, next, why, short),
     },
@@ -217,7 +217,7 @@ function sharesWithBands(
   for (;;) {
     const copy = structuredClone(next) as GameState;
     const stores = copy.factions[city.owner]?.stores;
-    if (stores && stores.gold < GUARD_GOLD) stores.gold = GUARD_GOLD;
+    if (stores && stores.gold < guardGoldOf(city.owner)) stores.gold = guardGoldOf(city.owner);
     if (executeOrder(copy, { kind: 'hireGuards', faction: city.owner, city: city.id }, world))
       return shares;
     const readiness = warReadiness(copy, world, power, city.owner)?.readiness ?? 0;
@@ -250,11 +250,11 @@ function bandsText(
   const last = bands.at(-1) ?? then;
   const count = bands.length;
   if (last < NOTICE_SHARE)
-    return `${held} ${one}, takes it to ${share(then)}; ${whole(count)} bands, ${whole(count * GUARD_GOLD)} gold, take it to ${share(last)}, ${verdictText(state, power, last)}.`;
+    return `${held} ${one}, takes it to ${share(then)}; ${whole(count)} bands, ${whole(count * guardGoldOf(city.owner))} gold, take it to ${share(last)}, ${verdictText(state, power, last)}.`;
   const cap = `guards alone cannot take it below ${share(NOTICE_SHARE)}`;
   return count === 1
     ? `${held} ${one} and the last ${city.name} may hold, takes it to ${share(then)}: ${cap}.`
-    : `${held} ${one}, takes it to ${share(then)}, and all ${whole(count)} bands ${city.name} may still hire, ${whole(count * GUARD_GOLD)} gold, take it ${share(last) === share(then) ? 'no lower' : `to ${share(last)}`}: ${cap}.`;
+    : `${held} ${one}, takes it to ${share(then)}, and all ${whole(count)} bands ${city.name} may still hire, ${whole(count * guardGoldOf(city.owner))} gold, take it ${share(last) === share(then) ? 'no lower' : `to ${share(last)}`}: ${cap}.`;
 }
 
 /**
@@ -305,7 +305,7 @@ function hireRefusalText(
   if (why === undefined) return undefined;
   if (short) {
     const gold = state.factions[city.owner]?.stores.gold ?? 0;
-    return `Needs ${whole(GUARD_GOLD - gold)} more gold`;
+    return `Needs ${whole(guardGoldOf(city.owner) - gold)} more gold`;
   }
   return reasonText(state, why).replace(/\b\d{4,}\b/g, (n) => whole(Number(n)));
 }
@@ -313,6 +313,6 @@ function hireRefusalText(
 function withGold(state: State, city: DeepReadonly<City>): State {
   const record = state.factions[city.owner];
   if (!record) return state;
-  const stores = { ...record.stores, gold: GUARD_GOLD };
+  const stores = { ...record.stores, gold: guardGoldOf(city.owner) };
   return { ...state, factions: { ...state.factions, [city.owner]: { ...record, stores } } };
 }

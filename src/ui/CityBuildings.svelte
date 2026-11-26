@@ -27,6 +27,7 @@
     { tier: 'first', title: undefined },
     { tier: 'second', title: 'Second levels' },
     { tier: 'work', title: 'Great works · a city holds one' },
+    { tier: 'signature', title: 'Your own building' },
   ];
 </script>
 
@@ -39,9 +40,7 @@
     <ul data-testid="city-built">
       {#each shown.built as line (line.kind)}
         <li>
-          <span class="name">{line.name}</span> · {line.level
-            ? `level ${line.level}`
-            : 'great work'} · {line.effect}
+          <span class="name">{line.name}</span> · {line.tag} · {line.effect}
         </li>
       {/each}
     </ul>

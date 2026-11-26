@@ -19,7 +19,7 @@ Preconditions:
 
 - `open --moment carthageNearsWar`.
 
-- **Open it.** `act "await page.getByRole('button', { name: 'Overview', exact: true }).click(); await page.getByTestId('overview').waitFor(); return await page.getByTestId('overview').ariaSnapshot()"`. Rows `Roma 40,000 people Calm`, `Ariminum`, `Arretium`, `Capua`, `First Legion 4,300 men Idle at Roma`, `At peace with everyone` and `Wars and peace`.
+- **Open it.** `act "await page.getByRole('button', { name: 'Overview', exact: true }).click(); await page.getByTestId('overview').waitFor(); return await page.getByTestId('overview').ariaSnapshot()"`. The line `overview-bonus` (`Armies re-form in 2 days after a change of stance, not 3.`), then rows `Roma 40,000 people Calm`, `Ariminum`, `Arretium`, `Capua`, `First Legion 4,300 men Idle at Roma`, `At peace with everyone` and `Wars and peace`.
 - **Select from a row.** `act "await page.getByTestId('overview-cities').getByRole('button', { name: /^Roma/ }).first().click(); await expect(page.getByTestId('city-name')).toHaveText('Roma')"`.
 - **Fallen.** After the defeat from `romaFallsTomorrow` (see [Ending](./ending.md)), `Watch on`, then `Overview`: only `overview-fallen` shows.
 - **Proof.** `shot overview` with the panel open, then `shot overview-roma`.

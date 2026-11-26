@@ -100,7 +100,7 @@ for (let seed = first; seed <= last; seed++) {
 
 function days(state: GameState): number {
   const city = state.cities[roma];
-  return city ? trainingDaysAt(city, TROOPS.spearmen.recruit.days) : TROOPS.spearmen.recruit.days;
+  return city ? trainingDaysAt(city, 'spearmen') : TROOPS.spearmen.recruit.days;
 }
 
 /** The tester's rule: raise only with the means and a gold income of +8 a day, and cancel at a warning. */

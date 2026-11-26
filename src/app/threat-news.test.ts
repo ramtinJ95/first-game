@@ -1754,7 +1754,7 @@ describe('the food the warning reckons, as the recruit card does', () => {
     hastati.men = 1750;
     Object.assign(romans.stores, { gold: 20_000, food: 0 });
     const fixtureWorld = buildWorld(map);
-    const days = trainingDaysAt(roma, 15);
+    const days = trainingDaysAt(roma, 'spearmen');
     expect(days).toBeLessThan(15);
     const card = recruitForecast(state, [], fixtureWorld, 'spearmen', days, FIXTURE.roma);
     const untrained = recruitForecast(state, [], fixtureWorld, 'spearmen');

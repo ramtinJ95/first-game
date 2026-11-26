@@ -4,13 +4,7 @@ import * as v from 'valibot';
 import { describe, expect, test } from 'vitest';
 import type { CityId, FactionId } from './ids.ts';
 import { parseMap, POWERS, type PowerId } from './map.ts';
-import {
-  FRONTIER_KM,
-  MINOR_KINDS,
-  newGame,
-  STARTING_GENERAL_SKILL,
-  STARTING_STORES,
-} from './new-game.ts';
+import { FRONTIER_KM, MINOR_KINDS, newGame, startingSkillOf, STARTING_STORES } from './new-game.ts';
 import type { Order } from './orders/orders.ts';
 import { expectConsistent } from './references.ts';
 import { loadGame, saveGame } from './save.ts';
@@ -93,7 +87,7 @@ describe('newGame on the committed map', () => {
         position: { x: capital?.city[0], y: capital?.city[1] },
       });
       expect(own[0]?.formations.length).toBeGreaterThan(0);
-      expect(own[0]?.generalSkill).toBe(STARTING_GENERAL_SKILL);
+      expect(own[0]?.generalSkill).toBe(startingSkillOf(power as string as FactionId));
     }
     const minorArmies = armies.filter((army) => state.factions[army.owner]?.kind === 'minor');
     expect(minorArmies.length).toBeGreaterThan(0);

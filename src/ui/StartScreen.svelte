@@ -5,6 +5,7 @@
   import { POWER_COLOURS } from '../render/palette.ts';
   import type { PowerId } from '../sim/map.ts';
   import { GAME_NAME, type FrameActions } from './frame-actions.ts';
+  import { bonusText } from './signature-text.ts';
 
   let { frame, actions }: { frame: Frame; actions: FrameActions } = $props();
 
@@ -57,6 +58,8 @@
             <span class="capital">Capital {card.capital}</span>
             <span class="cities">{card.cities.join(' · ')}</span>
             <span class="position">{POSITIONS[card.power]}</span>
+            <span class="bonus" data-testid="power-bonus-{card.power}">{bonusText(card.power)}</span
+            >
           </button>
         </li>
       {/each}
@@ -222,6 +225,15 @@
     margin-top: 4px;
     font-size: 14px;
     line-height: 1.35;
+  }
+
+  .bonus {
+    margin-top: auto;
+    padding-top: 6px;
+    border-top: 1px solid var(--rule);
+    font-size: 13px;
+    font-style: italic;
+    line-height: 1.3;
   }
 
   .muted {

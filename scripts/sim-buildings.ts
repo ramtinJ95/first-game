@@ -8,14 +8,17 @@ import {
   FIRST_LEVELS,
   BUILDINGS,
   GREAT_WORKS,
+  hasBuilt,
   SECOND_LEVELS,
+  SIGNATURE_BUILDINGS,
   type BuildingKind,
   type FirstLevel,
 } from '../src/sim/buildings/buildings.ts';
+import { decideAll } from '../src/sim/ai/decide.ts';
 import { buildingGain } from '../src/sim/buildings/gains.ts';
 import type { DeepReadonly } from '../src/sim/deep-readonly.ts';
 import type { CityId, FactionId } from '../src/sim/ids.ts';
-import { parseMap } from '../src/sim/map.ts';
+import { parseMap, POWERS, type PowerId } from '../src/sim/map.ts';
 import { newGame } from '../src/sim/new-game.ts';
 import type { Order } from '../src/sim/orders/orders.ts';
 import type { City } from '../src/sim/state/city.ts';
@@ -409,4 +412,43 @@ console.log(
       ? 'met'
       : 'not met'
   } (${GREAT_WORKS.map((kind) => `${BUILDINGS[kind].name} ${yearsText(projectWorst.get(kind))}`).join(', ')}).\n`,
+);
+
+console.log("## Each great power's own building\n");
+console.log(
+  "Years each pays back its gold by the AI valuation, in its power's homeland cities on day 1 and in year 4 of a game every power plays by the AI. A Colonia counts the unrest it spares in one conquest a year within its reach, a Cothon and a Royal road the upkeep of the realm's armies for the days they save on two crossings a year, and Royal stables that of three formations of heavy cavalry for the days of training saved. The last column counts the cities that hold it at the end of year 10 of that game.\n",
+);
+let played: GameState = newGame(map, { seed: SEED, player: 'rome' });
+const playTo = (year: number) => {
+  while (played.day <= year * 365) played = tick(played, decideAll(played, world, []), world).state;
+  return played;
+};
+const atYearFour = playTo(4);
+const atYearTen = playTo(10);
+const ownPaybacks = (state: DeepReadonly<GameState>, power: PowerId) => {
+  const kind = SIGNATURE_BUILDINGS[power];
+  const years = Object.values(state.cities)
+    .filter((city) => (city.owner as string) === power && !hasBuilt(city, kind))
+    .map((city) => {
+      const worth = buildingWorth(state, { ...city, unrestDays: 0 }, kind);
+      return worth > 0 ? BUILDINGS[kind].gold / worth / 365 : Infinity;
+    });
+  return years.length === 0 ? undefined : Math.min(...years);
+};
+table(
+  ['power', 'building', 'gold', 'days', 'best on day 1', 'best in year 4', 'built by year 10'],
+  POWERS.map((power) => {
+    const kind = SIGNATURE_BUILDINGS[power];
+    const day1 = newGame(map, { seed: SEED, player: power });
+    const built = Object.values(atYearTen.cities).filter((city) => hasBuilt(city, kind)).length;
+    return [
+      power,
+      BUILDINGS[kind].name,
+      whole(BUILDINGS[kind].gold),
+      String(BUILDINGS[kind].days),
+      yearsText(ownPaybacks(day1, power)),
+      yearsText(ownPaybacks(atYearFour, power)),
+      String(built),
+    ];
+  }),
 );

@@ -1,6 +1,10 @@
 import type { DeepReadonly } from '../deep-readonly.ts';
 import type { City } from '../state/city.ts';
 import type { GameState } from '../state/game-state.ts';
+import type { FactionId } from '../ids.ts';
+import type { PowerId } from '../map.ts';
+import type { MapPoint } from '../state/map-point.ts';
+import { TROOPS, type Troop } from '../troops.ts';
 
 /** The five buildings every city may build first. */
 export const FIRST_LEVELS = ['forum', 'canals', 'barracks', 'towers', 'temple'] as const;
@@ -20,22 +24,35 @@ export type SecondLevel = (typeof SECOND_LEVELS)[FirstLevel];
 export const GREAT_WORKS = ['treasuryHall', 'merchantsQuarter', 'stronghold'] as const;
 export type GreatWork = (typeof GREAT_WORKS)[number];
 
+/** Each great power's own building, which only that power starts. */
+export const SIGNATURE_BUILDINGS = {
+  rome: 'colonia',
+  carthage: 'cothon',
+  macedon: 'royalStables',
+  egypt: 'greatGranary',
+  persia: 'royalRoad',
+} as const satisfies Record<PowerId, string>;
+export type SignatureBuilding = (typeof SIGNATURE_BUILDINGS)[PowerId];
+
 export const BUILDING_KINDS = [
   ...FIRST_LEVELS,
   ...FIRST_LEVELS.map((kind) => SECOND_LEVELS[kind]),
   ...GREAT_WORKS,
+  ...Object.values(SIGNATURE_BUILDINGS),
 ] as const;
-export type BuildingKind = FirstLevel | SecondLevel | GreatWork;
+export type BuildingKind = FirstLevel | SecondLevel | GreatWork | SignatureBuilding;
 
 /**
  * What every building has: its price in gold, its days of work, the people its city
- * needs to start it, and the building it must stand with first, if any.
+ * needs to start it, the building it must stand with first, if any, and the one great
+ * power that may start it, if only one may.
  */
 interface BuildingRow {
   readonly name: string;
   readonly gold: number;
   readonly days: number;
   readonly needs: { readonly people: number; readonly building?: FirstLevel };
+  readonly power?: PowerId;
 }
 
 /**
@@ -62,6 +79,15 @@ interface BuildingRow {
  * raises the city's base gold, a Merchants' quarter raises what its end of each route
  * earns by `tradeShare` and adds `slots` route slots, and a Stronghold raises the walls
  * and garrison as towers do, but more.
+ *
+ * Each great power has one building of its own, which a conqueror keeps but cannot start:
+ * Rome's Colonia halves the unrest of every city Rome takes within `reachKm`, and its own
+ * recruits train in `trainingShare` of the days. Carthage's Cothon has ships gather on a shore
+ * within `reachKm` in `gatherShare` of the days, and convoys within that reach sail
+ * `sailShare` times as fast. Macedon's Royal stables train cavalry in `cavalryShare` of the
+ * days. Egypt's Great granary stores `storeDays` more days of the city's food and grows
+ * `harvestShare` more of it. Persia's Royal road has its owner's armies march `marchShare`
+ * times as fast in the city's province, the land nearer it than any other city.
  */
 export const BUILDINGS = {
   forum: { name: 'Forum', gold: 6500, days: 60, needs: { people: 20_000 }, goldShare: 0.5 },
@@ -149,6 +175,51 @@ export const BUILDINGS = {
     wallsShare: 1,
     garrisonShare: 0.35,
   },
+  colonia: {
+    name: 'Colonia',
+    gold: 2500,
+    days: 60,
+    needs: { people: 0 },
+    power: 'rome',
+    unrestShare: 0.5,
+    reachKm: 400,
+    trainingShare: 0.75,
+  },
+  cothon: {
+    name: 'Cothon',
+    gold: 3500,
+    days: 90,
+    needs: { people: 0 },
+    power: 'carthage',
+    reachKm: 400,
+    gatherShare: 0.5,
+    sailShare: 1.5,
+  },
+  royalStables: {
+    name: 'Royal stables',
+    gold: 1200,
+    days: 45,
+    needs: { people: 0 },
+    power: 'macedon',
+    cavalryShare: 0.5,
+  },
+  greatGranary: {
+    name: 'Great granary',
+    gold: 4500,
+    days: 90,
+    needs: { people: 0 },
+    power: 'egypt',
+    storeDays: 90,
+    harvestShare: 0.25,
+  },
+  royalRoad: {
+    name: 'Royal road',
+    gold: 2000,
+    days: 90,
+    needs: { people: 0 },
+    power: 'persia',
+    marchShare: 1.5,
+  },
 } as const satisfies Record<BuildingKind, BuildingRow & { readonly [effect: string]: unknown }>;
 
 /** The share of a building's gold that cancelling its work gives back. The rest is spent. */
@@ -168,6 +239,12 @@ export function isGreatWork(kind: BuildingKind): kind is GreatWork {
 export function levelOf(city: Built, kind: FirstLevel): 0 | 1 | 2 {
   if (!hasBuilt(city, kind)) return 0;
   return hasBuilt(city, SECOND_LEVELS[kind]) ? 2 : 1;
+}
+
+/** The great power that alone may start this building, or undefined when any city may. */
+export function ownPowerOf(kind: BuildingKind): PowerId | undefined {
+  const row: BuildingRow = BUILDINGS[kind];
+  return row.power;
 }
 
 /** The first building a second level stands on, or undefined for a first level or a great work. */
@@ -223,9 +300,83 @@ export function extraSlotsOf(city: Built): number {
   return hasBuilt(city, 'merchantsQuarter') ? BUILDINGS.merchantsQuarter.slots : 0;
 }
 
-/** The days a recruit of this many days of training takes in the city. */
-export function trainingDaysAt(city: Built, days: number): number {
-  return hasBuilt(city, 'barracks') ? Math.ceil(days * BUILDINGS.barracks.trainingShare) : days;
+/** The days the troop's recruits take to train in the city. */
+export function trainingDaysAt(city: Built, troop: Troop): number {
+  const { days } = TROOPS[troop].recruit;
+  const share =
+    (hasBuilt(city, 'barracks') ? BUILDINGS.barracks.trainingShare : 1) *
+    (hasBuilt(city, 'colonia') ? BUILDINGS.colonia.trainingShare : 1) *
+    (hasBuilt(city, 'royalStables') && TROOPS[troop].category === 'cavalry'
+      ? BUILDINGS.royalStables.cavalryShare
+      : 1);
+  return share === 1 ? days : Math.ceil(days * share);
+}
+
+/** What the food the city's people grow is multiplied by. */
+export function harvestShareAt(city: Built): number {
+  return hasBuilt(city, 'greatGranary') ? 1 + BUILDINGS.greatGranary.harvestShare : 1;
+}
+
+/** The days of its people's food the city's granaries hold beyond the realm's own. */
+export function extraStoreDaysOf(city: Built): number {
+  return hasBuilt(city, 'greatGranary') ? BUILDINGS.greatGranary.storeDays : 0;
+}
+
+type Placed = DeepReadonly<Pick<City, 'buildings' | 'owner' | 'position'>>;
+
+function km(a: DeepReadonly<MapPoint>, b: DeepReadonly<MapPoint>): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+/** Whether a city of the faction stands with the building within `reachKm` of the point. */
+function withinReach(
+  cities: Readonly<Record<string, Placed>>,
+  faction: FactionId,
+  kind: 'colonia' | 'cothon',
+  at: DeepReadonly<MapPoint>,
+): boolean {
+  return Object.values(cities).some(
+    (city) =>
+      city.owner === faction &&
+      hasBuilt(city, kind) &&
+      km(city.position, at) <= BUILDINGS[kind].reachKm,
+  );
+}
+
+/** What the days of unrest of a city the faction takes at the point are multiplied by: less near its Colonia. */
+export function coloniaShareAt(
+  state: DeepReadonly<Pick<GameState, 'cities'>>,
+  faction: FactionId,
+  at: DeepReadonly<MapPoint>,
+): number {
+  return withinReach(state.cities, faction, 'colonia', at) ? BUILDINGS.colonia.unrestShare : 1;
+}
+
+/** Whether a convoy or a shore of the faction at the point lies within reach of its Cothon. */
+export function nearCothon(
+  state: DeepReadonly<Pick<GameState, 'cities'>>,
+  faction: FactionId,
+  at: DeepReadonly<MapPoint>,
+): boolean {
+  return withinReach(state.cities, faction, 'cothon', at);
+}
+
+/** Whether the point lies in a province of the faction whose city has a Royal road: nearer that city than any other. */
+export function onRoyalRoad(
+  state: DeepReadonly<Pick<GameState, 'cities'>>,
+  faction: FactionId,
+  at: DeepReadonly<MapPoint>,
+): boolean {
+  let nearest: Placed | undefined;
+  let best = Number.POSITIVE_INFINITY;
+  for (const city of Object.values(state.cities)) {
+    const d = km(city.position, at);
+    if (d < best) {
+      best = d;
+      nearest = city;
+    }
+  }
+  return nearest !== undefined && nearest.owner === faction && hasBuilt(nearest, 'royalRoad');
 }
 
 const DEFENCES = ['towers', 'outerWalls', 'stronghold'] as const;

@@ -199,7 +199,13 @@ it.each([false, true])(
     const city = required(state.cities[f.roma]);
     if (barracks) city.buildings.push('barracks');
     required(state.factions[f.rome]).stores.food = required(limitsOf(state).get(f.rome)).food - 1;
-    const forecast = recruitForecast(state, [], world, 'spearmen', trainingDaysAt(city, 15));
+    const forecast = recruitForecast(
+      state,
+      [],
+      world,
+      'spearmen',
+      trainingDaysAt(city, 'spearmen'),
+    );
     expect(forecast.lasts.food).toBe(firstShortfall(state, 'food'));
   },
 );

@@ -10,6 +10,9 @@
   import type { FrameActions } from './frame-actions.ts';
   import { PEACE_TEXT } from './war-room.ts';
   import { STAYING_TEXT } from '../app/threat-news.ts';
+  import type { FactionId } from '../sim/ids.ts';
+  import { POWERS } from '../sim/map.ts';
+  import { bonusText, ownBuildingText } from './signature-text.ts';
 
   let {
     game,
@@ -75,6 +78,21 @@
         enemies at the walls stop work. Full stores waste further gains. Watch the daily balances:
         short gold or food costs men.
       </dd>
+      <dt>The great powers</dt>
+      <dd data-testid="guide-signatures">
+        Each great power has one building of its own and one standing bonus. A conqueror keeps
+        another power's building where it stands, but cannot build it or gain the bonus.
+        <ul>
+          {#each POWERS as power (power)}
+            <li>
+              <strong>{factionName(game, power as string as FactionId)}</strong>. {ownBuildingText(
+                power,
+              )}
+              {bonusText(power)}
+            </li>
+          {/each}
+        </ul>
+      </dd>
       <dt>Trade</dt>
       <dd data-testid="guide-trade">
         Your city's Trade section opens routes. A city has one route slot; 25,000 people, a Forum
@@ -114,8 +132,8 @@
         <ul>
           {#each STANCES as stance (stance)}<li>{stanceMatchText(stance)}</li>{/each}
         </ul>
-        {reformCostText()} In a battle the panel says whose stance beats whose, and marks the stance that
-        would beat the enemy's.
+        {reformCostText(game.player)} In a battle the panel says whose stance beats whose, and marks the
+        stance that would beat the enemy's.
       </dd>
       <dt>Saving</dt>
       <dd>
