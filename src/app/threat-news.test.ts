@@ -174,6 +174,23 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
     expect(threatNewsOfDay(before, after, world, told)).toEqual([]);
   });
 
+  test('a stop that tells the guards at its city no longer count says a new band lowers it, naming the city once', () => {
+    const { before, after } = standing(5300, 100, 2, 101 - GUARD_DETER_DAYS);
+    const bare = structuredClone(after);
+    const roma = bare.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    roma.guards = [];
+    roma.garrison -= 2 * GUARD_BAND;
+    const told = new Set([
+      `threat:carthage:70`,
+      `threat-stop:carthage:70:${shareOf(bare) - 8}:roma`,
+    ]);
+    const [stop] = threatNewsOfDay(before, after, world, told);
+    expect(stop?.text).toMatch(/^The 1,000 guards at Roma no longer count\. Carthage has climbed/);
+    expect(stop?.text).toContain(' More men, or a new band, lower it.');
+    expect(stop?.text).not.toContain('guards at Roma for 90 days');
+  });
+
   test('tells, without stopping, of guards that stop counting while the power stands on notice', () => {
     const { before, after } = standing(5300, 100, 2, 101 - GUARD_DETER_DAYS);
     const told = new Set([`threat:carthage:70`, `threat-stop:carthage:70:${shareOf(after)}:roma`]);
@@ -1895,6 +1912,20 @@ describe('a power that needs less while you hold no more cities than at the star
     expect(heldLine?.text).toMatch(/^Carthage and Macedon could soon declare war on you/);
     expect(heldLine?.text).toContain("Once Carthage's war with Syracusae ends");
     expect(heldLine?.text).not.toContain('you have not grown');
+  });
+
+  test('a stop that names a war holding the power back leaves out "if it holds it", so its longest form fits 13 lines', () => {
+    const [warning] = newsOf(
+      heldBySyracusae(game(beforeStaying(8000, DAY), 'full', DAY)),
+      new Set(),
+    );
+    expect(warning?.text).toMatch(
+      /^Carthage could soon declare war on you: .*, and may declare from Year 5, day \d+\. /,
+    );
+    expect(warning?.text).toContain('Once its war with Syracusae ends');
+    expect(warning?.text).not.toContain('if it holds it');
+    const [free] = newsOf(game(5000, 'full', DAY), new Set());
+    expect(free?.text).toContain('if it holds it.');
   });
 
   test('the At peace notes say it in full once, how it grows and what ends it', () => {
