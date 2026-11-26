@@ -208,6 +208,12 @@ export function playCautiousRome(
       if (ai >= 0) orders.splice(ai, 1);
       orders.unshift(offer);
     }
+    // Gold offered for peace stays in the treasury until the enemy answers, or the offer fails for want of it.
+    if (fights && (pledged(offer) > 0 || enemies.some((enemy) => pledgedTo(state, enemy) > 0)))
+      for (let i = orders.length - 1; i >= 0; i--) {
+        const order = orders[i];
+        if (order && order.faction === rome && SPENDS.has(order.kind)) orders.splice(i, 1);
+      }
     const before = new Set(Object.keys(state.tradeRoutes));
     const played = rule(orders, state);
     const { state: next, rejected, events } = tick(state, played, world);
@@ -342,6 +348,31 @@ export function warnedPowers(text: string): string[] {
 
 /** The orders that move an army, which an answering Rome gives only its own way. */
 const MOVES = new Set<Order['kind']>(['moveArmy', 'halt', 'embark', 'retreat']);
+
+/** The orders that take gold from the treasury. */
+const SPENDS = new Set<Order['kind']>([
+  'build',
+  'hireGuards',
+  'improveTrade',
+  'openTrade',
+  'acceptTrade',
+  'recruit',
+  'study',
+]);
+
+/** The gold Rome pays in the offer, 0 for none. */
+const pledged = (offer: Order | undefined) =>
+  offer?.kind === 'offerPeace' && offer.terms.kind === 'payment' && offer.terms.payer === rome
+    ? offer.terms.gold
+    : 0;
+
+/** The gold Rome's offer of peace to the enemy that waits for its answer pays, 0 for none. */
+function pledgedTo(state: GameState, enemy: FactionId): number {
+  const offer = standingOffer(state, rome, enemy);
+  return offer?.from === rome && offer.terms.kind === 'payment' && offer.terms.payer === rome
+    ? offer.terms.gold
+    : 0;
+}
 
 /** The factions at war with Rome, by id. */
 function enemiesOf(state: GameState): FactionId[] {
