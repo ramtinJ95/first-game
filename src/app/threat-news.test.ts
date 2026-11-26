@@ -1851,6 +1851,23 @@ describe('a power that needs less while you hold no more cities than at the star
     expect(ahead?.text).toContain(`${WORDS} A new band counts 90 days, for 2,000 gold.`);
   });
 
+  test('a stop that names a war holding the power back leaves the words to the At peace notes, so it fits the corner', () => {
+    const syracusae = 'syracusae' as FactionId;
+    const state = game(beforeStaying(8000, DAY), 'full', DAY);
+    Reflect.deleteProperty(state.truces, warKey(carthage, syracusae));
+    state.wars[warKey(carthage, syracusae)] = newWar(carthage, syracusae, (DAY - 10) as Day);
+    const army = Object.values(state.armies).find((a) => a.owner === carthage);
+    const city = state.cities['syracusae' as CityId];
+    if (!army || !city) throw new Error('no Carthaginian army or Syracusae');
+    army.activity = { kind: 'idle', position: { ...city.position } };
+    const [warning] = newsOf(state, new Set());
+    expect(warning?.text).toContain('Once its war with Syracusae ends, it would stand at');
+    expect(warning?.text).not.toContain('you have not grown');
+    expect(weighedNotes(state, standingThreats(state, world)).join(' ')).toContain(
+      '6% less of the strength to declare war on you',
+    );
+  });
+
   test('the At peace notes say it in full once, how it grows and what ends it', () => {
     const state = game(5000, 'full', DAY);
     const notes = weighedNotes(state, standingThreats(state, world));

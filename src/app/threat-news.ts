@@ -327,7 +327,7 @@ export function threatNewsOfDay(
             : first.told === undefined
               ? `${first.name} could soon declare war on you: it has ${share(first.threat.readiness)} of the strength it needs ${first.threat.pressed ? weighed(after, first.threat) : near(after, first.threat)}, and may declare ${first.from} if it holds it.`
               : `${first.name} still stands near war, as warned on ${dateText(first.told)}: ${share(first.threat.readiness)} ${first.threat.pressed ? weighed(after, first.threat) : near(after, first.threat)}, and it may declare ${first.from} if it holds it.`
-        }${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), world)}${first.threat.pressed ? '' : stayedWords(first.threat)}${heldBack(after, world, first.power, first.threat)} See At peace in Wars.`
+        }${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), world)}${heldAndStayed(after, world, first.power, first.threat)} See At peace in Wars.`
       : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}.${warned.map((w) => heldBack(after, world, w.power, w.threat, `${w.name}'s`)).join('')}${stayedPoints(warned[0]?.threat) > 0 ? ` Each needs ${stayedPoints(warned[0]?.threat)}% less: you have not grown.` : ''} What lowers each is under At peace in Wars.`
     : ranOnText(
         after,
@@ -606,6 +606,16 @@ const stayedPoints = (threat: Pick<Threat, 'stayedHome'> | undefined) =>
 
 /** How the share staying home takes off grows, in the words of the At peace note and the Guide. */
 export const STAYING_TEXT = `${Number((STAY_HOME_PER_YEAR * 100).toFixed(1))}% more each year of the game, to at most ${Number((STAY_HOME_CAP * 100).toFixed(1))}%`;
+
+/**
+ * What holds the power back, or else the few words for what staying home takes off: a stop that
+ * names both would pass the corner's 13 lines, so the one that names a war leaves them to the At
+ * peace notes it points to. Against the field armies, `whatCounts` says it.
+ */
+function heldAndStayed(state: State, world: World, power: FactionId, threat: Threat): string {
+  const held = heldBack(state, world, power, threat);
+  return held !== '' || threat.pressed ? held : stayedWords(threat);
+}
 
 /** A line's few words for what staying home takes off, or nothing; the At peace notes say it in full. */
 const stayedWords = (threat: Pick<Threat, 'stayedHome'> | undefined) =>
