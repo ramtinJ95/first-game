@@ -1,4 +1,4 @@
-import { advanceAlong, marchKmAt, REFUGEE_KM_PER_DAY, sailKmAt } from '../march.ts';
+import { advanceAlong, armyKmPerDay, marchKmAt, REFUGEE_KM_PER_DAY, sailKmAt } from '../march.ts';
 import { removeRecord } from '../records.ts';
 import type { GameState } from '../state/game-state.ts';
 
@@ -13,7 +13,7 @@ export function movement(state: GameState): void {
   for (const army of Object.values(state.armies)) {
     const { activity } = army;
     if (activity.kind !== 'marching' && activity.kind !== 'retreating') continue;
-    const km = marchKmAt(state, army.owner, activity.position);
+    const km = marchKmAt(state, army.owner, activity.position, armyKmPerDay(state, army));
     const position = advanceAlong(activity.position, activity.waypoints, km);
     activity.position = position;
     if (activity.waypoints.length > 0) continue;

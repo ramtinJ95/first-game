@@ -3,7 +3,7 @@ import { executeOrder, type Order } from '../orders/orders.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { World } from '../world/world.ts';
 import { UPKEEP_PER_MAN } from '../systems/economy.ts';
-import { TROOPS, type Troop } from '../troops.ts';
+import { SHARED_TROOPS, TROOPS, troopsFor, type Troop } from '../troops.ts';
 import {
   besieged,
   formationsOf,
@@ -15,7 +15,7 @@ import {
   type State,
   balanceOf,
 } from './situation.ts';
-import { MIN_BALANCE_SHARE, TROOP_MIX } from './thresholds.ts';
+import { MIN_BALANCE_SHARE, SIGNATURE_SHARE, TROOP_MIX } from './thresholds.ts';
 
 /**
  * Raises at most one formation a day at the muster city. The troop is the one furthest
@@ -51,6 +51,19 @@ export function recruitment(
   return [{ kind: 'recruit', faction, city: muster.id, troop }];
 }
 
+/** The share of its men a faction wants in each troop it may raise. */
+export function mixFor(faction: FactionId): Map<Troop, number> {
+  const mix = new Map<Troop, number>(Object.entries(TROOP_MIX) as [Troop, number][]);
+  for (const troop of troopsFor(faction)) {
+    const { signature } = TROOPS[troop];
+    if (!signature) continue;
+    const given = TROOP_MIX[signature.resembles] * SIGNATURE_SHARE;
+    mix.set(signature.resembles, (mix.get(signature.resembles) ?? 0) - given);
+    mix.set(troop, (mix.get(troop) ?? 0) + given);
+  }
+  return mix;
+}
+
 export function mostNeeded(state: State, faction: FactionId): Troop {
   const men = new Map<Troop, number>();
   let total = 0;
@@ -68,8 +81,8 @@ export function mostNeeded(state: State, faction: FactionId): Troop {
   }
   let best: Troop = 'spearmen';
   let bestGap = Number.NEGATIVE_INFINITY;
-  for (const troop of Object.keys(TROOP_MIX) as Troop[]) {
-    const gap = TROOP_MIX[troop] - (total === 0 ? 0 : (men.get(troop) ?? 0) / total);
+  for (const [troop, share] of mixFor(faction)) {
+    const gap = share - (total === 0 ? 0 : (men.get(troop) ?? 0) / total);
     if (gap > bestGap) {
       best = troop;
       bestGap = gap;
@@ -83,7 +96,7 @@ export function tradeReserve(state: State, faction: FactionId): number {
   const next =
     state.factions[faction]?.kind === 'greatPower'
       ? TROOPS[mostNeeded(state, faction)].recruit.gold
-      : Math.min(...Object.values(TROOPS).map((troop) => troop.recruit.gold));
+      : Math.min(...SHARED_TROOPS.map((troop) => TROOPS[troop].recruit.gold));
   return Math.max(600, reserveOf(state, faction, 'gold')) + next;
 }
 

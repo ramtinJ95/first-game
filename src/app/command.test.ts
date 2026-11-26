@@ -408,6 +408,23 @@ describe('a right click on a port from a port', () => {
     }
   });
 
+  it("counts a fast army's march by its pace on both ways, so each promises the days it plays", () => {
+    const state = newGame(world.map, { seed: 1, player: 'carthage' });
+    const punic = Object.values(state.armies).find((army) => army.owner === state.player);
+    if (!punic) throw new Error('no Carthaginian army');
+    for (const id of punic.formations) {
+      const formation = state.formations[id];
+      if (formation) formation.troop = 'numidianHorse';
+    }
+    const planned = plan(state, atCity(state, 'capua' as CityId), punic.id);
+    if (planned.kind !== 'menu') throw new Error(`expected a menu, got ${planned.kind}`);
+    const sea = planned.menu.options.filter((option) => option.group === 'sea');
+    expect(sea.length).toBeGreaterThan(0);
+    for (const option of sea) {
+      expect(playOut(state, option.order, punic.id).days, option.label).toBe(daysOf(option.detail));
+    }
+  });
+
   it('refuses a port that neither the sea nor the land reaches', () => {
     const state = buildFixture();
     const inland = { x: 2641.2, y: 2911.3 };

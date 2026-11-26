@@ -17,7 +17,7 @@ import type { World } from '../sim/world/world.ts';
 import type { Alert } from './alerts.ts';
 import { dateText, factionName, TROOP_NAMES, whole } from './names.ts';
 import { trainingDaysAt } from '../sim/buildings/buildings.ts';
-import { TROOPS, type Troop } from '../sim/troops.ts';
+import { TROOPS, troopsFor, type Troop } from '../sim/troops.ts';
 import { beleaguered } from '../sim/systems/sieges.ts';
 import type { Stores } from '../sim/state/faction.ts';
 import { deterrentUntil, GUARD_BAND, GUARD_DETER_DAYS, guardGoldOf } from '../sim/guards.ts';
@@ -324,6 +324,8 @@ export function threatNewsOfDay(
     stops && others.length > 0
       ? warned.map((w) => heldBack(after, world, w.power, w.threat, `${w.name}'s`)).join('')
       : '';
+  // A stop that names the war holding the power back says what would change its strength, so "if it holds it" goes, to fit 13 lines.
+  const holds = held === '' ? ' if it holds it' : '';
   // Two warnings at once would not both fit the corner, so one line names every power and the Wars panel what lowers each.
   const text = stops
     ? others.length === 0
@@ -332,9 +334,9 @@ export function threatNewsOfDay(
             ? // A climb repeats a stop the player read whole, so it says least of the warnings that stop.
               `${first.name} has climbed to ${share(first.threat.readiness)} ${near(after, first.threat)}, from ${first.climb.share}% at its last stop on ${dateText(first.climb.day)}, and may declare ${first.from}.`
             : first.told === undefined
-              ? `${first.name} could soon declare war on you: it has ${share(first.threat.readiness)} of the strength it needs ${first.threat.pressed ? weighed(after, first.threat) : near(after, first.threat)}, and may declare ${first.from} if it holds it.`
-              : `${first.name} still stands near war, as warned on ${dateText(first.told)}: ${share(first.threat.readiness)} ${first.threat.pressed ? weighed(after, first.threat) : near(after, first.threat)}, and it may declare ${first.from} if it holds it.`
-        }${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), world, held === '')}${held !== '' || first.threat.pressed ? held : stayedWords(first.threat)} See At peace in Wars.`
+              ? `${first.name} could soon declare war on you: it has ${share(first.threat.readiness)} of the strength it needs ${first.threat.pressed ? weighed(after, first.threat) : near(after, first.threat)}, and may declare ${first.from}${holds}.`
+              : `${first.name} still stands near war, as warned on ${dateText(first.told)}: ${share(first.threat.readiness)} ${first.threat.pressed ? weighed(after, first.threat) : near(after, first.threat)}, and it may declare ${first.from}${holds}.`
+        }${whatCounts(after, first.power, first.threat, after, first.by, 'corner', first.threat.pressed ? training(after, world).get(first.power) : undefined, treasuryAdvice(after, world, first.power, first.threat), world, held === '', foldedBand?.city === first.threat.front)}${held !== '' || first.threat.pressed ? held : stayedWords(first.threat)} See At peace in Wars.`
       : `${listed(warned.map((w) => w.name))} could soon declare war on you, with ${listed(warned.map((w) => share(w.threat.readiness)))} of the strength each needs. If they hold it, ${listed(warned.map((w) => `${w.name}${w.told === undefined ? '' : `, as warned on ${dateText(w.told)},`} may declare ${w.from}`))}.${heldOthers}${heldOthers === '' && stayedPoints(warned[0]?.threat) > 0 ? ` Each needs ${stayedPoints(warned[0]?.threat)}% less: you have not grown.` : ''} What lowers each is under At peace in Wars.`
     : ranOnText(
         after,
@@ -839,6 +841,7 @@ function whatCounts(
   treasury?: string,
   world?: World,
   stayed = true,
+  bandTold = false,
 ): string {
   if (threat.pressed)
     return ` ${raiseAdvice(state, power, waiting, by, where, muster, world)}. ${stayed && stayedPoints(threat) > 0 ? `It weighs you so, and needs ${stayedPoints(threat)}% less,` : 'It weighs you so'} only while you hold no more cities than at the start.`;
@@ -855,11 +858,15 @@ function whatCounts(
     world !== undefined &&
     advice.kind !== 'none' &&
     unfed(waiting, world, advice.troop) !== undefined;
+  // A stop that has just told the guards there no longer count names the city once: "a new band" is a band there.
+  const guards = bandTold
+    ? 'a new band'
+    : `guards at ${front?.name ?? ''} for ${GUARD_DETER_DAYS} days`;
   const lowers = !front
     ? ''
     : hungry
-      ? ` Guards at ${front.name} for ${GUARD_DETER_DAYS} days lower it and eat nothing; food feeds no more men.`
-      : ` More men, or guards at ${front.name} for ${GUARD_DETER_DAYS} days, lower it.`;
+      ? ` ${bandTold ? 'A new band lowers it and eats' : `Guards at ${front.name} for ${GUARD_DETER_DAYS} days lower it and eat`} nothing; food feeds no more men.`
+      : ` More men, or ${guards}, lower it.`;
   return `${hoard}${lowers}`;
 }
 
@@ -1235,7 +1242,7 @@ function orderAdvice(
   const days = (troop: Troop) => Math.min(...cities.map((city) => trainingDaysAt(city, troop)));
   const gold = stores?.gold ?? 0;
   const manpower = stores?.manpower ?? 0;
-  const troops = (Object.keys(TROOPS) as Troop[]).sort(
+  const troops = troopsFor(state.player).sort(
     (a, b) => TROOPS[a].recruit.gold - TROOPS[b].recruit.gold,
   );
   const affordable = troops.filter(

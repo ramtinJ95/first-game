@@ -109,7 +109,7 @@ describe('a great power', () => {
   describe('budget', () => {
     test('raises a troop when the balance after its upkeep stays positive and gold covers the reserve', () => {
       expect(only(decide(richRome(), f.rome), 'recruit')).toEqual([
-        { kind: 'recruit', faction: f.rome, city: f.roma, troop: 'swordsmen' },
+        { kind: 'recruit', faction: f.rome, city: f.roma, troop: 'triarii' },
       ]);
     });
 
@@ -125,7 +125,7 @@ describe('a great power', () => {
       const state = richRome();
       const rome = state.factions[f.rome];
       if (!rome) throw new Error('no Rome');
-      rome.stores.gold = 4000;
+      rome.stores.gold = 3000;
       expect(only(decide(state, f.rome), 'recruit')).toEqual([]);
     });
   });

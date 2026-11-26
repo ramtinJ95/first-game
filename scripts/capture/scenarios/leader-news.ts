@@ -25,11 +25,11 @@ async function load(page: Page, state: GameState) {
 }
 
 /**
- * Seed 8 under the AI, days before Carthage takes the lead on day 1321 and keeps it. Played
- * as an idle Persia, which no fate, offer, or defeat stops the clock for.
+ * Seed 8 under the AI, days before Carthage takes the lead on day 1756. Played as an idle
+ * Persia, at war with no one from here, no fate, offer, or defeat stops the clock.
  */
-const BEFORE_CARTHAGE_LEADS = 1307;
-const AFTER_THE_LEAD = 1345;
+const BEFORE_CARTHAGE_LEADS = 1740;
+const AFTER_THE_LEAD = 1790;
 
 export default defineScenario({
   name: 'leader-news',
@@ -37,7 +37,7 @@ export default defineScenario({
     'The leading-power news of a ten-year game around a change of lead, told once for each power that takes the lead',
   async run({ page, shot }) {
     await openGame(page);
-    // An idle Rome has fallen by then, so the page plays the world as Persia.
+    // Rome has fallen by then, so the page plays the world as Persia.
     const tenYears = playAi(newGame(map, { seed: 8, player: 'rome' }), BEFORE_CARTHAGE_LEADS - 1);
     tenYears.player = 'persia' as FactionId;
     await load(page, tenYears);

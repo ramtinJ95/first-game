@@ -3,12 +3,26 @@ import type { DeepReadonly } from './deep-readonly.ts';
 import type { FactionId } from './ids.ts';
 import type { Army } from './state/army.ts';
 import type { GameState } from './state/game-state.ts';
+import { TROOPS } from './troops.ts';
 import type { MapPoint } from './state/map-point.ts';
 import { distance, findPath, surfaceAt } from './world/find-path.ts';
 import type { World } from './world/world.ts';
 
-/** How far an army marches in a day. Troop speeds come later. */
+/** How far an army of troops at pace 1 marches in a day. */
 export const MARCH_KM_PER_DAY = 25;
+/** How far the army marches in a day: at the pace of its slowest formation. */
+export function armyKmPerDay(
+  state: DeepReadonly<Pick<GameState, 'formations'>>,
+  army: DeepReadonly<Pick<Army, 'formations'>>,
+): number {
+  let pace = Infinity;
+  for (const id of army.formations) {
+    const formation = state.formations[id];
+    if (formation) pace = Math.min(pace, TROOPS[formation.troop].pace);
+  }
+  return MARCH_KM_PER_DAY * (pace === Infinity ? 1 : pace);
+}
+
 /** How far a convoy of transports sails in a day. */
 export const CONVOY_KM_PER_DAY = 20;
 /** How far a column of refugees walks in a day. */
@@ -22,11 +36,14 @@ export const MAX_MARCH_DAYS = 90;
 
 type Cities = DeepReadonly<Pick<GameState, 'cities'>>;
 
-/** How far the faction's army at the point marches today: faster on its Royal road. */
-export function marchKmAt(state: Cities, owner: FactionId, at: MapPoint): number {
-  return onRoyalRoad(state, owner, at)
-    ? MARCH_KM_PER_DAY * BUILDINGS.royalRoad.marchShare
-    : MARCH_KM_PER_DAY;
+/** How far the faction's army of this pace in km a day marches at the point today: faster on its Royal road. */
+export function marchKmAt(
+  state: Cities,
+  owner: FactionId,
+  at: MapPoint,
+  kmPerDay = MARCH_KM_PER_DAY,
+): number {
+  return onRoyalRoad(state, owner, at) ? kmPerDay * BUILDINGS.royalRoad.marchShare : kmPerDay;
 }
 
 /** How far the faction's convoy at the point sails today: faster within reach of its Cothon. */
@@ -36,40 +53,48 @@ export function sailKmAt(state: Cities, owner: FactionId, at: MapPoint): number 
     : CONVOY_KM_PER_DAY;
 }
 
-/** The fastest an army marches or a convoy sails anywhere, for a bound no route can beat. */
-export const FASTEST_MARCH_KM = MARCH_KM_PER_DAY * BUILDINGS.royalRoad.marchShare;
+/** The fastest an army of this pace marches, or a convoy sails, anywhere: a bound no route beats. */
+export function fastestMarchKm(kmPerDay: number): number {
+  return kmPerDay * BUILDINGS.royalRoad.marchShare;
+}
 export const FASTEST_SAIL_KM = CONVOY_KM_PER_DAY * BUILDINGS.cothon.sailShare;
 
 /**
- * The days the faction's army, or with `sail` its convoy, takes along the waypoints from the
- * point, at the speed each day's position gives, as the movement system moves it.
+ * The days the faction's army marching at `pace` km a day, or with `'sail'` its convoy, takes
+ * along the waypoints from the point, at the speed each day's position gives, as the
+ * movement system moves it.
  */
 export function travelDaysAlong(
   state: Cities,
   owner: FactionId,
   from: DeepReadonly<MapPoint>,
   waypoints: readonly DeepReadonly<MapPoint>[],
-  sail = false,
+  pace: number | 'sail' = MARCH_KM_PER_DAY,
 ): number {
   const left = waypoints.map((point) => ({ x: point.x, y: point.y }));
   let at: MapPoint = { x: from.x, y: from.y };
   let days = 0;
   while (left.length > 0) {
-    at = advanceAlong(at, left, sail ? sailKmAt(state, owner, at) : marchKmAt(state, owner, at));
+    const km = pace === 'sail' ? sailKmAt(state, owner, at) : marchKmAt(state, owner, at, pace);
+    at = advanceAlong(at, left, km);
     days++;
   }
   return days;
 }
 
-/** The days an army takes to walk the waypoints from the point. */
-export function marchDays(from: MapPoint, waypoints: readonly MapPoint[]): number {
+/** The days an army takes to walk the waypoints from the point, at pace 1 unless told its pace. */
+export function marchDays(
+  from: MapPoint,
+  waypoints: readonly MapPoint[],
+  kmPerDay = MARCH_KM_PER_DAY,
+): number {
   let km = 0;
   let at = from;
   for (const point of waypoints) {
     km += distance(at, point);
     at = point;
   }
-  return Math.ceil(km / MARCH_KM_PER_DAY);
+  return Math.ceil(km / kmPerDay);
 }
 
 /** The land path from one point to another, or the reason no army can walk it. */

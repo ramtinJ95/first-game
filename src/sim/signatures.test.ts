@@ -15,7 +15,7 @@ import { expectConsistent } from './references.ts';
 import type { GameState } from './state/game-state.ts';
 import type { MapPoint } from './state/map-point.ts';
 import { reforming } from './systems/battles.ts';
-import { travelDaysAlong } from './march.ts';
+import { armyKmPerDay, travelDaysAlong } from './march.ts';
 import { adminShareOf, dailyBalances, limitsOf, muster } from './systems/economy.ts';
 import { movement } from './systems/movement.ts';
 import { tick } from './tick.ts';
@@ -179,7 +179,13 @@ describe("each great power's own building", () => {
         { x: 2900, y: 2500 },
       ];
       army.activity = { kind: 'marching', position: from, waypoints: structuredClone(waypoints) };
-      const forecast = travelDaysAlong(state, army.owner, from, waypoints);
+      const forecast = travelDaysAlong(
+        state,
+        army.owner,
+        from,
+        waypoints,
+        armyKmPerDay(state, army),
+      );
       marches.push(forecast);
       expect(ticksToArrive(state, () => army.activity.kind === 'marching')).toBe(forecast);
     }
@@ -197,7 +203,7 @@ describe("each great power's own building", () => {
         convoy.owner,
         convoy.position,
         convoy.waypoints,
-        true,
+        'sail',
       );
       crossings.push(forecast);
       const moved = structuredClone(state);

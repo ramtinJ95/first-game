@@ -2,7 +2,8 @@ import { citylessLandKm2 } from '../sim/world/land-reach.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { ArmyId, CityId, FactionId } from '../sim/ids.ts';
 import {
-  FASTEST_MARCH_KM,
+  armyKmPerDay,
+  fastestMarchKm,
   FASTEST_SAIL_KM,
   MARCH_KM_PER_DAY,
   marchPath,
@@ -106,9 +107,9 @@ function travelDays(
   owner: FactionId,
   from: MapPoint,
   waypoints: readonly MapPoint[],
-  sail = false,
+  pace: number | 'sail',
 ): number {
-  return Math.max(1, travelDaysAlong(state, owner, from, waypoints, sail));
+  return Math.max(1, travelDaysAlong(state, owner, from, waypoints, pace));
 }
 
 /**
@@ -129,7 +130,13 @@ export function route(
   if (army && after?.kind === 'marching') {
     const march = {
       path: [after.position, ...after.waypoints],
-      days: travelDays(trial, army.owner, after.position, after.waypoints),
+      days: travelDays(
+        trial,
+        army.owner,
+        after.position,
+        after.waypoints,
+        armyKmPerDay(trial, army),
+      ),
     };
     if (!after.sail) return march;
     const end = after.waypoints.at(-1) ?? after.position;
@@ -150,9 +157,10 @@ export function route(
 
 /** The way and the days of the crossing the army has just embarked on from the point. */
 function crossingOf(trial: GameState, id: ArmyId, from: MapPoint): Route {
-  const after = trial.armies[id]?.activity;
+  const army = trial.armies[id];
+  const after = army?.activity;
   const convoy = after?.kind === 'embarked' ? trial.convoys[after.convoy] : undefined;
-  if (!convoy || after?.kind !== 'embarked') {
+  if (!army || !convoy || after?.kind !== 'embarked') {
     throw new Error(`army ${id} set out from ${from.x}, ${from.y} without a convoy`);
   }
   const landing = convoy.waypoints.at(-1) ?? convoy.position;
@@ -161,8 +169,10 @@ function crossingOf(trial: GameState, id: ArmyId, from: MapPoint): Route {
     path: [convoy.position, ...convoy.waypoints, ...ashore],
     days:
       (convoy.departsOn === undefined ? 0 : convoy.departsOn - trial.day) +
-      travelDays(trial, convoy.owner, convoy.position, convoy.waypoints, true) +
-      (ashore.length > 0 ? travelDays(trial, convoy.owner, landing, ashore) : 0),
+      travelDays(trial, convoy.owner, convoy.position, convoy.waypoints, 'sail') +
+      (ashore.length > 0
+        ? travelDays(trial, convoy.owner, landing, ashore, armyKmPerDay(trial, army))
+        : 0),
   };
 }
 
@@ -258,6 +268,7 @@ function seaWay(
     return found;
   };
 
+  const pace = armyKmPerDay(state, army);
   const marched = new Map<string, number | undefined>();
   const march = (from: MapPoint, end: MapPoint) => {
     const key = `${from.x},${from.y};${end.x},${end.y}`;
@@ -265,7 +276,7 @@ function seaWay(
       const path = marchPath(world, from, end);
       marched.set(
         key,
-        typeof path === 'string' ? undefined : travelDaysAlong(state, army.owner, from, path),
+        typeof path === 'string' ? undefined : travelDaysAlong(state, army.owner, from, path, pace),
       );
     }
     return marched.get(key);
@@ -283,10 +294,10 @@ function seaWay(
     .map((pair) => ({
       ...pair,
       bound:
-        (pair.here ? 0 : distance(at, walkTo(pair.start)) / FASTEST_MARCH_KM) +
+        (pair.here ? 0 : distance(at, walkTo(pair.start)) / fastestMarchKm(pace)) +
         pair.start.waitDays +
         distance(pair.start.from, harbour(pair.landing)) / FASTEST_SAIL_KM +
-        distance(harbour(pair.landing), to) / FASTEST_MARCH_KM,
+        distance(harbour(pair.landing), to) / fastestMarchKm(pace),
     }))
     .sort((a, b) => a.bound - b.bound);
 
@@ -302,7 +313,7 @@ function seaWay(
     if (ashore === undefined) continue;
     const path = findPath(world.mesh, start.from, harbour(landing), 'sea');
     if (!path) continue;
-    const sail = travelDays(state, army.owner, start.from, path, true);
+    const sail = travelDays(state, army.owner, start.from, path, 'sail');
     const onward = city?.id === landing.id ? {} : { then: { x: to.x, y: to.y } };
     const from = walkTo(start);
     const order: EmbarkOrder = {
@@ -385,7 +396,13 @@ function weakSiegeWarning(
           ? [
               {
                 army: other,
-                days: travelDays(trial, other.owner, activity.position, activity.waypoints),
+                days: travelDays(
+                  trial,
+                  other.owner,
+                  activity.position,
+                  activity.waypoints,
+                  armyKmPerDay(trial, other),
+                ),
               },
             ]
           : [];
@@ -401,9 +418,15 @@ function weakSiegeWarning(
                 army: other,
                 days:
                   Math.max(0, (convoy.departsOn ?? state.day) - state.day) +
-                  travelDays(trial, convoy.owner, convoy.position, convoy.waypoints, true) +
+                  travelDays(trial, convoy.owner, convoy.position, convoy.waypoints, 'sail') +
                   (activity.march?.length
-                    ? travelDays(trial, convoy.owner, landing, activity.march)
+                    ? travelDays(
+                        trial,
+                        convoy.owner,
+                        landing,
+                        activity.march,
+                        armyKmPerDay(trial, other),
+                      )
                     : 0),
               },
             ]
@@ -493,7 +516,10 @@ export function planCommand(
   const start = landing && embarkationOf(state, world, army, landing);
   const portToPort = !!start && start.port?.id !== city?.id;
   // No way by sea is quicker than a march in a straight line, so only a longer march can be far longer.
-  const straight = Math.max(1, Math.ceil(distance(activity.position, to) / FASTEST_MARCH_KM));
+  const straight = Math.max(
+    1,
+    Math.ceil(distance(activity.position, to) / fastestMarchKm(armyKmPerDay(state, army))),
+  );
   const mayBeFar = typeof found === 'string' || found.days > FAR_LONGER * straight;
   const sea = portToPort || mayBeFar ? seaWay(state, world, army, to, city) : undefined;
   const ways: { option: MenuOption; days: number }[] = [];

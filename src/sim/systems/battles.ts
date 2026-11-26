@@ -13,16 +13,15 @@ import type { MapPoint } from '../state/map-point.ts';
 import { landPath, MARCH_KM_PER_DAY, marchDays } from '../march.ts';
 import { connected, surfaceAt } from '../world/find-path.ts';
 import type { World } from '../world/world.ts';
-import { TROOPS } from '../troops.ts';
+import { FASTEST_PACE, TROOPS } from '../troops.ts';
 import { recordBattleLosses, recordLoss } from '../peace/war-record.ts';
 import { areAtWar } from '../wars.ts';
 
 /**
- * Armies at war this close, in kilometres, lock into a battle. It is at least half
- * a day's march for two armies, so two armies that march at each other cannot pass
- * between ticks.
+ * Armies at war this close, in kilometres, lock into a battle. It is a day's march of
+ * the fastest troop, so two armies that march at each other cannot pass between ticks.
  */
-export const ENGAGEMENT_DISTANCE = 25;
+export const ENGAGEMENT_DISTANCE = MARCH_KM_PER_DAY * FASTEST_PACE;
 
 /** The share of the enemy's men that one man of attack 1 kills per day against defence 1. */
 const KILL_RATE = 0.045;
@@ -350,9 +349,15 @@ function fightOneDay(state: GameState, id: BattleId) {
     for (const { formation, army } of from) {
       const troop = TROOPS[formation.troop];
       const luck = 1 + LUCK * (2 * nextRandom(state) - 1);
-      const blows = formation.men * troop.attack * generalFactor(army) * luck;
+      const blows =
+        formation.men *
+        troop.attack *
+        (troop.stance[army.stance] ?? 1) *
+        generalFactor(army) *
+        luck;
       for (const target of at) {
-        const bonus = troop.bonus[TROOPS[target.formation.troop].category] ?? 1;
+        const struck = TROOPS[target.formation.troop];
+        const bonus = troop.bonus[struck.category] ?? 1;
         const killed =
           (blows *
             stanceBlows(army.stance, target.army.stance) *
@@ -360,7 +365,9 @@ function fightOneDay(state: GameState, id: BattleId) {
             (target.formation.men / atMen) *
             bonus *
             KILL_RATE) /
-          TROOPS[target.formation.troop].defence;
+          (struck.defence *
+            (struck.guard[troop.category] ?? 1) *
+            (struck.stance[target.army.stance] ?? 1));
         losses.set(target.formation, (losses.get(target.formation) ?? 0) + killed);
       }
     }

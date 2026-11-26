@@ -42,6 +42,20 @@ The game is original. Civilization 5, Knights of Honor 2, and Rome: Total War 2 
 - **Retreat and pursuit.** A beaten or retreating army breaks off and falls back to the nearest city of its own that is not besieged and that no enemy threatens. With none, it falls back into the field, away from the enemy. The winner's horsemen cut down part of it as it breaks, and it fights no battle until it arrives. An enemy that marches after it can fight it again once it stands still. The winner takes up the march it was on, so an order survives a battle on the way.
 - **News.** Every event that touches the player, or that happens in sight, reaches the alerts: a battle that begins, a battle that ends with its result and losses, a retreat, a lost army, desertion, and a declaration of war on the player. This holds for an event that begins and ends within one day.
 - **Generals.** A general is a skill number on an army for now, from 0 to 10. The best general against none does not make up for a fifth more men. Every new army, at the start or raised by recruits, has a general of skill 3.
+- **Each power's own troops.** Agreed at the start of stage 6. Each great power raises two troops of its own beside the six shared ones. No other power raises them, and a power that takes another's city does not gain them. Each is worth raising over the shared troop it resembles where its idea says, and no better elsewhere, and a stronger one costs more gold, men, or days. The AI gives each own troop half the share of the shared troop it resembles. Three numbers came with them. A guard divides the men a troop loses to one category. A stance factor multiplies its blows and divides its losses while its army holds that stance. A pace multiplies the march of an army whose every formation is that fast, and armies lock into battle within a day's march of the fastest troop, 30 km. The war elephants and the chariots are drawn on horses until their own figures come. Attack, defence, and discipline, then the rest, then men, gold, and days of one formation:
+
+  | Power | Troop | Resembles | Attack / defence / discipline | Idea in numbers | Men / gold / days |
+  | --- | --- | --- | --- | --- | --- |
+  | Rome | Legionaries | swordsmen | 1.3 / 1.1 / 1.15 | ×1.15 while holding the line | 1,000 / 3,400 / 20 |
+  | Rome | Triarii | spearmen | 0.9 / 1.3 / 1.8 | ×2.5 against horse | 800 / 2,600 / 25 |
+  | Carthage | War elephants | heavy cavalry | 2.4 / 1.5 / 0.7 | ×2 against foot | 400 / 3,600 / 30 |
+  | Carthage | Numidian horse | light cavalry | 0.9 / 0.8 / 0.9 | ×2.5 against bows, pace 1.2 | 400 / 2,000 / 20 |
+  | Macedon | Phalangites | spearmen | 1 / 1.2 / 1 | ×2.5 against horse, loses ÷1.8 to horse and ÷0.75 to bows | 1,000 / 2,500 / 20 |
+  | Macedon | Companion cavalry | heavy cavalry | 2.1 / 1.1 / 1.3 | ×1.4 against foot, ×1.5 against bows | 400 / 3,200 / 30 |
+  | Egypt | Nile archers | archers | 1.1 / 0.6 / 0.8 | ×1.3 against foot, loses ÷1.5 to foot | 500 / 1,300 / 20 |
+  | Egypt | Chariots | light cavalry | 1.2 / 0.9 / 0.9 | ×3 against bows, loses ÷0.8 to foot, pace 1.2 | 300 / 2,000 / 25 |
+  | Persia | Cataphracts | heavy cavalry | 1.6 / 1.7 / 1.2 | ×1.2 against foot, ×1.5 against bows, loses ÷1.5 to bows | 400 / 3,800 / 30 |
+  | Persia | Horse archers | light cavalry | 1 / 0.8 / 0.9 | ×1.3 against foot, loses ÷1.4 to foot | 400 / 2,200 / 25 |
 - **The sea.** An army embarks at a port city and crosses the water as a transport convoy. A convoy is slow and fights badly. War fleets come in a later stage. Fleets fight sea battles, capture convoys, blockade ports, and protect sea trade.
 
 ### Country

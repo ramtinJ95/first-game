@@ -7,6 +7,7 @@ import type {
   FormationId,
   TradeRouteId,
 } from '../../sim/ids.ts';
+import type { PowerId } from '../../sim/map.ts';
 import type { Sight } from '../../sim/sight.ts';
 import type { Army, Stance } from '../../sim/state/army.ts';
 import type { Battle } from '../../sim/state/battle.ts';
@@ -19,7 +20,7 @@ import { fullDefences } from '../../sim/systems/sieges.ts';
 import { TROOPS, type Troop } from '../../sim/troops.ts';
 import { mapToScreen, type Camera, type Size } from '../camera.ts';
 import type { Box } from '../labels.ts';
-import { MOTIONS, MOUNTED, type FigureKind, type Motion } from '../figures/motions.ts';
+import { MOTIONS, MOUNTED, missileOf, type FigureKind, type Motion } from '../figures/motions.ts';
 import { OWNED, SHARED, artKey, figureKey, groundSpan, type GroundArt } from '../figures/sheet.ts';
 import { factionColour, MINOR_COLOUR, POWER_COLOURS } from '../palette.ts';
 import { figuresFor } from './count.ts';
@@ -40,8 +41,16 @@ import { alongTrail, dayPath, trailLength } from './trail.ts';
 import type { DrawnLane } from '../drawn-lane.ts';
 import { merchantPoses } from '../trade.ts';
 
+/** Whose art each colour of the sheets holds, in the order of `SHEET_COLOURS`. */
+export const SHEET_OWNERS: readonly (PowerId | 'minors')[] = [
+  ...(Object.keys(POWER_COLOURS) as PowerId[]),
+  'minors',
+];
+
 /** The colours the sheet paints, in its order: the five powers, then every minor city. */
-export const SHEET_COLOURS: readonly number[] = [...Object.values(POWER_COLOURS), MINOR_COLOUR];
+export const SHEET_COLOURS: readonly number[] = SHEET_OWNERS.map((owner) =>
+  owner === 'minors' ? MINOR_COLOUR : POWER_COLOURS[owner],
+);
 
 /** Below this zoom, in px per km, an army is its flag. From it, its figures. */
 export const FIGURE_SCALE = 0.9;
@@ -973,8 +982,7 @@ class Context {
       line = { side, shooters: [], front: [] };
       lines.push(line);
     }
-    if (troop && TROOPS[troop].category === 'missile') line.shooters.push({ x, y, troop });
-    else if (troop === 'lightCavalry') line.shooters.push({ x, y, troop });
+    if (troop && missileOf(troop)) line.shooters.push({ x, y, troop });
     if (front) line.front.push({ x, y });
   }
 
@@ -1149,7 +1157,7 @@ class Context {
           const to = enemy.front[Math.floor(seeded(key, 2) * enemy.front.length)];
           if (!from || !to) continue;
           const t = frac(this.input.motion * 0.9 + seeded(key, 3));
-          const javelin = from.troop !== 'archers';
+          const javelin = missileOf(from.troop) === 'javelin';
           const sx = from.x;
           const sy = from.y - 0.75 * this.h;
           const ex = to.x + (seeded(key, 4) - 0.5) * 0.6 * this.h;

@@ -19,6 +19,7 @@ import { allocateId } from '../src/sim/ids.ts';
 import { dateText } from '../src/app/names.ts';
 import { fixtureWorld } from '../src/sim/fixture.ts';
 import { tick } from '../src/sim/tick.ts';
+import { troopsFor } from '../src/sim/troops.ts';
 import {
   foodShortfall,
   loadWarnings,
@@ -41,7 +42,9 @@ test('recruitment forecasts upkeep and demands confirmation before a food shortf
   await expect(page.getByTestId('recruit-forecast')).toHaveCount(1);
   await expect(page.getByTestId('recruit-cards')).not.toContainText('Realm');
   await expect(page.getByTestId('recruit-cards')).not.toContainText('Shortfall');
-  await expect(page.getByTestId('recruit-cards').getByRole('button')).toHaveCount(6);
+  await expect(page.getByTestId('recruit-cards').getByRole('button')).toHaveCount(
+    troopsFor(rome).length,
+  );
   await spears.click();
   const warning = page.getByTestId('recruit-warning');
   await expect(warning).toContainText('Food shortfall: stores last about 8 days');

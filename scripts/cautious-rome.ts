@@ -27,7 +27,14 @@ import { WAR_REACH_KM } from '../src/sim/ai/thresholds.ts';
 import { limitsOf } from '../src/sim/systems/economy.ts';
 import { homeCapital } from '../src/sim/ai/situation.ts';
 import { NOTICE_DAYS, NOTICE_SHARE } from '../src/sim/ai/thresholds.ts';
-import { TROOPS, type Troop } from '../src/sim/troops.ts';
+import { TROOPS, troopsFor } from '../src/sim/troops.ts';
+import { peaceAnswer, peaceWish, warDamage } from '../src/sim/ai/peace.ts';
+import { GOLD_STEP, OFFER_GAP_DAYS } from '../src/sim/ai/thresholds.ts';
+import { standingOffer } from '../src/sim/peace/offer.ts';
+import { warStanding } from '../src/sim/peace/standing.ts';
+import { AS_THINGS_STAND, GOLD_PER_POINT } from '../src/sim/peace/terms.ts';
+import type { PeaceTerms } from '../src/sim/state/peace.ts';
+import { warKey } from '../src/sim/state/war.ts';
 
 export const map = parseMap(
   JSON.parse(readFileSync(new URL('../data/map/map.json', import.meta.url), 'utf8')),
@@ -90,6 +97,7 @@ export function playCautiousRome(
     answer = false,
     follows = false,
     climbs = true,
+    fights = false,
     builds,
     drops = [],
     forbid = [],
@@ -109,6 +117,14 @@ export function playCautiousRome(
     follows?: boolean;
     /** Whether a power that climbs THREAT_SPARE_RISE points above its last stop stops the game again (`threatNewsOfDay`); false plays the rule before it. */
     climbs?: boolean;
+    /**
+     * Whether Rome fights back once at war: the answer to a warning no longer holds its
+     * armies at the city it named, so the AI's own war moves stand, which meet an enemy army
+     * idle in the field at ATTACK_ODDS and relieve a besieged city at RELIEF_ODDS; and in a
+     * war it is losing (`warDamage`), it offers peace on the least the enemy would take
+     * (`peaceWhenLosing`). False holds its armies through a war as before.
+     */
+    fights?: boolean;
     /** Rome's building orders for the day, in place of the AI's. */
     builds?: (state: GameState) => Order[];
     /** Kinds of Rome's AI orders it does not give, such as `recruit` for a ruler who raises men only to answer a warning. */
@@ -151,7 +167,11 @@ export function playCautiousRome(
       ai.filter((o) => o.faction === rome && !held(o)),
     );
     if (answering && state.day >= answering.until) answering = undefined;
-    const answers = answering ? answerOrders(state, answering.city, answering.raise, follows) : [];
+    const enemies = fights ? enemiesOf(state) : [];
+    const fighting = enemies.length > 0;
+    const answers = (
+      answering ? answerOrders(state, answering.city, answering.raise, follows) : []
+    ).filter((order) => !fighting || !MOVES.has(order.kind));
     if (answering) answering.raise = false;
     // The reader plans its hires on the day as the answer and the trade before them leave it.
     const earlier = [...answers, ...trade];
@@ -171,14 +191,29 @@ export function playCautiousRome(
               : [];
     threatened = [];
     orders.unshift(...trade, ...hires, ...(builds?.(state) ?? []));
-    if (answering) {
+    if (answering && !fighting) {
       // Every army of Rome is held at the warned city, so no order of the AI moves one away.
       for (let i = orders.length - 1; i >= 0; i--) {
         const order = orders[i];
         if (order && order.faction === rome && MOVES.has(order.kind)) orders.splice(i, 1);
       }
-      orders.unshift(...answers);
     }
+    orders.unshift(...answers);
+    const offer = enemies.map((enemy) => peaceWhenLosing(state, enemy)).find((o) => o);
+    if (offer) {
+      // One offer a war a day: Rome's own, in place of any the AI would make for it.
+      const ai = orders.findIndex(
+        (o) => o.faction === rome && o.kind === 'offerPeace' && o.to === offer.to,
+      );
+      if (ai >= 0) orders.splice(ai, 1);
+      orders.unshift(offer);
+    }
+    // Gold offered for peace stays in the treasury until the enemy answers, or the offer fails for want of it.
+    if (fights && (pledged(offer) > 0 || enemies.some((enemy) => pledgedTo(state, enemy) > 0)))
+      for (let i = orders.length - 1; i >= 0; i--) {
+        const order = orders[i];
+        if (order && order.faction === rome && SPENDS.has(order.kind)) orders.splice(i, 1);
+      }
     const before = new Set(Object.keys(state.tradeRoutes));
     const played = rule(orders, state);
     const { state: next, rejected, events } = tick(state, played, world);
@@ -314,6 +349,73 @@ export function warnedPowers(text: string): string[] {
 /** The orders that move an army, which an answering Rome gives only its own way. */
 const MOVES = new Set<Order['kind']>(['moveArmy', 'halt', 'embark', 'retreat']);
 
+/** The orders that take gold from the treasury. */
+const SPENDS = new Set<Order['kind']>([
+  'build',
+  'hireGuards',
+  'improveTrade',
+  'openTrade',
+  'acceptTrade',
+  'recruit',
+  'study',
+]);
+
+/** The gold Rome pays in the offer, 0 for none. */
+const pledged = (offer: Order | undefined) =>
+  offer?.kind === 'offerPeace' && offer.terms.kind === 'payment' && offer.terms.payer === rome
+    ? offer.terms.gold
+    : 0;
+
+/** The gold Rome's offer of peace to the enemy that waits for its answer pays, 0 for none. */
+function pledgedTo(state: GameState, enemy: FactionId): number {
+  const offer = standingOffer(state, rome, enemy);
+  return offer?.from === rome && offer.terms.kind === 'payment' && offer.terms.payer === rome
+    ? offer.terms.gold
+    : 0;
+}
+
+/** The factions at war with Rome, by id. */
+function enemiesOf(state: GameState): FactionId[] {
+  return Object.keys(state.factions)
+    .sort()
+    .filter((id) => id !== rome && areAtWar(state, id as FactionId, rome)) as FactionId[];
+}
+
+/**
+ * Rome's offer of peace in a war it is losing by `warDamage`, as the AI reckons a loss: peace
+ * as things stand when the enemy would take it, else the least gold it would take, in steps of
+ * GOLD_STEP, up to what Rome has not already offered another enemy, and never a city. None while an offer waits, within
+ * OFFER_GAP_DAYS of the last, or before the enemy talks of peace.
+ */
+function peaceWhenLosing(
+  state: GameState,
+  enemy: FactionId,
+): Extract<Order, { kind: 'offerPeace' }> | undefined {
+  const war = state.wars[warKey(rome, enemy)];
+  if (!war || standingOffer(state, rome, enemy)) return undefined;
+  if (war.offeredOn !== null && state.day - war.offeredOn < OFFER_GAP_DAYS) return undefined;
+  const standing = warStanding(state, rome, enemy);
+  if (!standing || !warDamage(state, standing).losing) return undefined;
+  const wish = peaceWish(state, enemy, rome);
+  if (!wish || wish.talksFrom !== undefined) return undefined;
+  // Gold already promised to another enemy is not Rome's to offer again.
+  const promised = enemiesOf(state)
+    .filter((other) => other !== enemy)
+    .reduce((sum, other) => sum + pledgedTo(state, other), 0);
+  const purse =
+    Math.floor(Math.max(0, (state.factions[rome]?.stores.gold ?? 0) - promised) / GOLD_STEP) *
+    GOLD_STEP;
+  const least = Math.max(0, Math.ceil((-wish.wish * GOLD_PER_POINT) / GOLD_STEP) * GOLD_STEP);
+  // The enemy's wish already prices every reason; the steps above it only meet its rounding.
+  for (let gold = least; gold <= Math.min(purse, least + 10 * GOLD_STEP); gold += GOLD_STEP) {
+    const terms: PeaceTerms =
+      gold === 0 ? AS_THINGS_STAND : { kind: 'payment', payer: rome, gold, cities: [] };
+    if (peaceAnswer(state, enemy, rome, terms)?.accepts)
+      return { kind: 'offerPeace', faction: rome, to: enemy, terms };
+  }
+  return undefined;
+}
+
 /**
  * A Rome that answers a warning as it advises: on the day it comes, it raises the cheapest
  * troop it can afford at its capital, and for the notice's days it holds every army of its
@@ -326,7 +428,7 @@ function answerOrders(state: GameState, city: CityId, raise: boolean, fed = fals
   const stores = state.factions[rome]?.stores;
   const capital = homeCapital(state, world, rome);
   if (raise && stores && capital) {
-    const troop = (Object.keys(TROOPS) as Troop[])
+    const troop = troopsFor(rome)
       .sort((a, b) => TROOPS[a].recruit.gold - TROOPS[b].recruit.gold)
       .find(
         (t) => TROOPS[t].recruit.gold <= stores.gold && TROOPS[t].recruit.men <= stores.manpower,

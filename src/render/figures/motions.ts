@@ -104,6 +104,75 @@ export const KINDS: Readonly<Record<FigureKind, KindArt>> = {
     horse: { coat: 'bay', dress: 'barding', armoured: true },
     rest: { ...SEATED, grip: 168, shoulderFar: 20, elbowFar: 50, shoulderNear: 40, elbowNear: 50 },
   },
+  legionaries: {
+    kit: kit({
+      helmet: 'montefortino',
+      body: 'mail',
+      shield: 'oval',
+      weapon: 'sword',
+      greaves: true,
+      spares: true,
+    }),
+    action: 'cut',
+    rest: { grip: 140, shoulderFar: 8, elbowFar: 50 },
+  },
+  triarii: {
+    kit: kit({ helmet: 'plumed', body: 'mail', shield: 'oval', weapon: 'spear', greaves: true }),
+    action: 'thrust',
+    rest: { grip: 176, shoulderFar: 14, elbowFar: 36 },
+  },
+  phalangites: {
+    kit: kit({
+      helmet: 'attic',
+      body: 'linothorax',
+      shield: 'round',
+      weapon: 'pike',
+      greaves: true,
+    }),
+    action: 'thrust',
+    rest: { grip: 178, shoulderFar: 14, elbowFar: 36 },
+  },
+  nileArchers: {
+    kit: kit({ helmet: 'bare', body: 'tunic', weapon: 'bow', quiver: true }),
+    action: 'loose',
+    rest: { shoulderNear: 18, elbowNear: 10, grip: 14, draw: 0 },
+  },
+  numidianHorse: {
+    kit: kit({ helmet: 'bare', body: 'tunic', shield: 'round', weapon: 'javelin', spares: true }),
+    action: 'throw',
+    horse: { coat: 'black', dress: 'none', armoured: false },
+    rest: { ...SEATED, grip: 150, shoulderFar: 30, elbowFar: 50, shoulderNear: 30, elbowNear: 60 },
+  },
+  horseArchers: {
+    kit: kit({ helmet: 'cap', body: 'tunic', weapon: 'bow', quiver: true, cloak: true }),
+    action: 'loose',
+    horse: { coat: 'dun', dress: 'saddleCloth', armoured: false },
+    rest: { ...SEATED, shoulderNear: 30, elbowNear: 20, grip: 14, draw: 0 },
+  },
+  chariots: {
+    kit: kit({ helmet: 'cap', body: 'scale', weapon: 'bow', quiver: true }),
+    action: 'loose',
+    horse: { coat: 'bay', dress: 'barding', armoured: false },
+    rest: { ...SEATED, shoulderNear: 30, elbowNear: 20, grip: 14, draw: 0 },
+  },
+  companionCavalry: {
+    kit: kit({ helmet: 'plumed', body: 'muscle', weapon: 'lance', cloak: true }),
+    action: 'charge',
+    horse: { coat: 'grey', dress: 'saddleCloth', armoured: false },
+    rest: { ...SEATED, grip: 168, shoulderFar: 20, elbowFar: 50, shoulderNear: 40, elbowNear: 50 },
+  },
+  cataphracts: {
+    kit: kit({ helmet: 'attic', body: 'scale', weapon: 'lance', greaves: true }),
+    action: 'charge',
+    horse: { coat: 'black', dress: 'barding', armoured: true },
+    rest: { ...SEATED, grip: 168, shoulderFar: 20, elbowFar: 50, shoulderNear: 40, elbowNear: 50 },
+  },
+  warElephants: {
+    kit: kit({ helmet: 'bare', body: 'tunic', shield: 'round', weapon: 'spear' }),
+    action: 'charge',
+    horse: { coat: 'grey', dress: 'barding', armoured: true },
+    rest: { ...SEATED, grip: 160, shoulderFar: 20, elbowFar: 50, shoulderNear: 40, elbowNear: 50 },
+  },
   general: {
     kit: kit({ helmet: 'plumed', body: 'muscle', weapon: 'swordRaised', cloak: true }),
     action: 'lead',
@@ -609,6 +678,12 @@ export function standardArt(t: number): PaintOp[] {
   const ops: PaintOp[] = [];
   drawStandardPole(ops, { x: 0, y: -18 }, 180, t);
   return ops;
+}
+
+/** What a figure sends at the enemy in battle, if anything: arrows from a bow, javelins thrown. */
+export function missileOf(kind: FigureKind): 'arrow' | 'javelin' | undefined {
+  const { action } = KINDS[kind];
+  return action === 'loose' ? 'arrow' : action === 'throw' ? 'javelin' : undefined;
 }
 
 export const MOUNTED: ReadonlySet<FigureKind> = new Set(

@@ -3,6 +3,7 @@ import { decideAll } from '../../../src/sim/ai/decide.ts';
 import { FIRST_LEVELS } from '../../../src/sim/buildings/buildings.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
 import { tick } from '../../../src/sim/tick.ts';
+import { TROOPS } from '../../../src/sim/troops.ts';
 import { buildWorld } from '../../../src/sim/world/world.ts';
 import { currentHelpers, withBaseline } from '../baseline.ts';
 import { defineScenario } from '../scenario.ts';
@@ -23,6 +24,17 @@ function withFirstLevelsOnly(state: GameState): GameState {
   return copy;
 }
 
+/** The state as the pinned build can load it, which knows only the shared troops: each power's own as the troop it resembles. */
+function sharedTroopsOnly(state: GameState): GameState {
+  const shared = structuredClone(state);
+  const plain = (troop: keyof typeof TROOPS) => TROOPS[troop].signature?.resembles ?? troop;
+  for (const formation of Object.values(shared.formations))
+    formation.troop = plain(formation.troop);
+  for (const city of Object.values(shared.cities))
+    for (const recruit of city.recruits) recruit.troop = plain(recruit.troop);
+  return shared;
+}
+
 export default defineScenario({
   name: 'atlas-ownership',
   title:
@@ -39,19 +51,14 @@ export default defineScenario({
     if (!observer) throw new Error('ten-year campaign has no surviving power');
     opening.player = observer.id;
     decade.player = observer.id;
-    const views = async (
-      stage: string,
-      base = '',
-      helpers = currentHelpers,
-      ten: GameState = decade,
-    ) => {
+    const views = async (stage: string, base = '', helpers = currentHelpers) => {
       await helpers.openGame(page, { base });
       await pause(page);
       for (const [name, state] of [
         ['opening', opening],
-        ['ten-years', ten],
+        ['ten-years', decade],
       ] as const) {
-        await helpers.loadSave(page, state);
+        await helpers.loadSave(page, base ? sharedTroopsOnly(withFirstLevelsOnly(state)) : state);
         await helpers.untilDrawn(page);
         await page.locator('canvas[data-terrain="ready"]').waitFor();
         await shot(
@@ -60,9 +67,7 @@ export default defineScenario({
         );
       }
     };
-    await withBaseline(BEFORE, (base, helpers) =>
-      views('before', base, helpers, withFirstLevelsOnly(decade)),
-    );
+    await withBaseline(BEFORE, (base, helpers) => views('before', base, helpers));
     await views('after');
   },
 });

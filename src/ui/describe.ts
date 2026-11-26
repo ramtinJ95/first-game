@@ -25,7 +25,7 @@ import type {
   RefugeeColumnId,
 } from '../sim/ids.ts';
 import type { GameMap } from '../sim/map.ts';
-import { travelDaysAlong } from '../sim/march.ts';
+import { armyKmPerDay, travelDaysAlong } from '../sim/march.ts';
 import { joinRefusal, type JoinArmyOrder } from '../sim/orders/join-army.ts';
 import type { MoveArmyOrder } from '../sim/orders/move-army.ts';
 import type { Order } from '../sim/orders/orders.ts';
@@ -89,12 +89,24 @@ export function activityText(state: State, army: DeepReadonly<Army>): string {
     case 'marching': {
       const port = activity.sail && state.cities[activity.sail.to];
       return `Marching${destination(state, activity.waypoints.at(-1))} · ${daysLeft(
-        travelDaysAlong(state, army.owner, activity.position, activity.waypoints),
+        travelDaysAlong(
+          state,
+          army.owner,
+          activity.position,
+          activity.waypoints,
+          armyKmPerDay(state, army),
+        ),
       )}${port ? `, then sailing for ${port.name}` : ''}`;
     }
     case 'retreating': {
       const days = daysLeft(
-        travelDaysAlong(state, army.owner, activity.position, activity.waypoints),
+        travelDaysAlong(
+          state,
+          army.owner,
+          activity.position,
+          activity.waypoints,
+          armyKmPerDay(state, army),
+        ),
       );
       const end = activity.waypoints.at(-1);
       const refuge =
@@ -125,11 +137,17 @@ export function activityText(state: State, army: DeepReadonly<Army>): string {
       const onward =
         activity.march && landing
           ? `, then marching${destination(state, activity.march.at(-1))} · ${daysLeft(
-              travelDaysAlong(state, army.owner, landing, activity.march),
+              travelDaysAlong(
+                state,
+                army.owner,
+                landing,
+                activity.march,
+                armyKmPerDay(state, army),
+              ),
             )}`
           : '';
       const sailing = `${destination(state, landing)} · ${daysLeft(
-        travelDaysAlong(state, convoy.owner, convoy.position, convoy.waypoints, true),
+        travelDaysAlong(state, convoy.owner, convoy.position, convoy.waypoints, 'sail'),
       )}${onward}`;
       if (convoy.departsOn !== undefined && convoy.departsOn > state.day) {
         const wait = convoy.departsOn - state.day;
