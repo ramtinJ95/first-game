@@ -38,7 +38,10 @@ const { values, positionals } = parseArgs({
  * `first-` Romes by the AI's rule but first levels only, so their gold sits at its limit as the
  * game before city projects left it, and the `hoarding-` Romes build nothing, as the thirteenth
  * play-through's tester did, each ignoring or answering as above, and answering every line as
- * `answering-every` does.
+ * `answering-every` does. `fighting` answers as `answering` does and fights back once at war
+ * (`fights` in `playCautiousRome`): its armies are no longer held at the warned city, so the AI's
+ * moves meet an enemy army in the field and relieve a besieged city, and it offers peace in a war
+ * it is losing.
  */
 const FIRST_ONLY = { forbid: [...Object.values(SECOND_LEVELS), ...GREAT_WORKS] };
 const NOTHING = { builds: () => [] };
@@ -58,6 +61,7 @@ const PLAYERS = {
     builds: panelBuilds,
   },
   'panel-answering-every': { peaceful: true, answer: true, guards: 'enough', builds: panelBuilds },
+  fighting: { peaceful: true, answer: true, follows: true, guards: 'enough', fights: true },
   'first-ignoring': { peaceful: true, ...FIRST_ONLY },
   'first-answering': {
     peaceful: true,
