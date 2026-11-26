@@ -605,7 +605,7 @@ const stayedPoints = (threat: Pick<Threat, 'stayedHome'> | undefined) =>
   Math.round((threat?.stayedHome ?? 0) * 100);
 
 /** How the share staying home takes off grows, in the words of the At peace note and the Guide. */
-export const STAYING_TEXT = `${Number((STAY_HOME_PER_YEAR * 100).toFixed(1))}% more each year of the game, to at most ${Number((STAY_HOME_CAP * 100).toFixed(1))}%`;
+export const STAYING_TEXT = `${Number((STAY_HOME_PER_YEAR * 100).toFixed(1))}% for each year of the game, to at most ${Number((STAY_HOME_CAP * 100).toFixed(1))}%`;
 
 /**
  * What holds the power back, or else the few words for what staying home takes off: a stop that

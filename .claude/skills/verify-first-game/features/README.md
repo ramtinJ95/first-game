@@ -43,7 +43,7 @@ A step marked _from tests_ is taken from the browser tests and capture scenarios
 - [Guards](./guards.md) covers hiring guards, their term, and the day great powers stop counting them.
 - [Trade](./trade.md) covers invitations, routes, partners, closing a route, and raids.
 - [Advances](./advances.md) covers studying one advance at a time for gold, giving it up, the marked advance, the building that pays back sooner, the stop when one finishes, and the hint.
-- [Warnings and stops](./warnings-and-stops.md) covers war-threat warnings, reminders and climbs, the stops they cause and the ones they spare, a war's end, the pause settings, and the line ten days before guards stop counting.
+- [Warnings and stops](./warnings-and-stops.md) covers war-threat warnings, reminders and climbs, the stops they cause and the ones they spare, a war's end, the pause settings, the line ten days before guards stop counting, and what a power no longer needs against a realm that stays home.
 - [Wars and peace](./wars-and-peace.md) covers the Wars panel, its At peace rows, offers, refusals, counters, terms and truces.
 - [Chronicle and news corner](./chronicle-and-news.md) covers the corner's lines, the Chronicle, and the notice toast.
 - [Overview](./overview.md) covers the realm's cities, armies and wars in one panel.

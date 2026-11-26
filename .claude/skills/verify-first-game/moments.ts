@@ -1,6 +1,7 @@
 import {
   armyOf,
   battleAt,
+  carthageNearsWar,
   cityPoint,
   fieldBattle,
   nextDay,
@@ -11,6 +12,7 @@ import {
 import { carthageHeldByLepcis } from '../../../e2e/held-war-game.ts';
 import { HINT_SHARE } from '../../../src/app/advance-news.ts';
 import { allocateId } from '../../../src/sim/ids.ts';
+import type { Day } from '../../../src/sim/state/day.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
 import { limitsOf } from '../../../src/sim/systems/economy.ts';
 
@@ -96,5 +98,17 @@ export function advanceHintNear(): GameState {
 export function romeHolds(gold: number): GameState {
   const state = startGame();
   romeOf(state).stores.gold = gold;
+  return state;
+}
+
+/**
+ * `carthageNearsWar` eight years on, Year 9, day 1, with the truces it sets running a year from
+ * then: Rome still holds only the cities it began with, so Carthage needs 12% less and its warning says so.
+ */
+export function carthageNearsWarLate(): GameState {
+  const state = carthageNearsWar();
+  state.day = (8 * 365) as Day;
+  for (const truce of Object.values(state.truces))
+    Object.assign(truce, { since: state.day, endsOn: (state.day + 365) as Day });
   return state;
 }

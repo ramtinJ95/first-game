@@ -1874,9 +1874,9 @@ describe('a power that needs less while you hold no more cities than at the star
     const full = notes.filter((note) => note.startsWith('You hold no more cities'));
     expect(full).toHaveLength(1);
     expect(full[0]).toMatch(
-      /^You hold no more cities than at the start, so (\w+, )*(\w+ and )?Carthage(, \w+)*( and \w+)? (needs|each need) 6% less of the strength to declare war on you: 1\.5% more each year of the game, to at most 15%\. Taking a city ends it, while you hold it\.$/,
+      /^You hold no more cities than at the start, so (\w+, )*(\w+ and )?Carthage(, \w+)*( and \w+)? (needs|each need) 6% less of the strength to declare war on you: 1\.5% for each year of the game, to at most 15%\. Taking a city ends it, while you hold it\.$/,
     );
-    expect(STAYING_TEXT).toBe('1.5% more each year of the game, to at most 15%');
+    expect(STAYING_TEXT).toBe('1.5% for each year of the game, to at most 15%');
     const grown = game(5000, 'full', DAY);
     changeCityOwner(grown, 'deva' as CityId, rome);
     expect(
