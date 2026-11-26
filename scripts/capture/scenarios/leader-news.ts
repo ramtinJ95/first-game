@@ -25,12 +25,12 @@ async function load(page: Page, state: GameState) {
 }
 
 /**
- * Seed 8 under the AI, days before Carthage takes the lead on day 1794, loses it to a tie on
- * day 1913 and takes it back on day 1955. Played as an idle Persia, at war with no one from
- * here, no fate, offer, or defeat stops the clock.
+ * Seed 8 under the AI, days before Carthage takes the lead from Macedon on day 1394, loses it
+ * to a tie on day 1396 and takes it back on day 1463. Played as an idle Persia, at war with no
+ * one from here, no fate, offer, or defeat stops the clock.
  */
-const BEFORE_CARTHAGE_LEADS = 1780;
-const AFTER_THE_LEAD = 1980;
+const BEFORE_CARTHAGE_LEADS = 1370;
+const AFTER_THE_LEAD = 1490;
 
 export default defineScenario({
   name: 'leader-news',
@@ -38,7 +38,7 @@ export default defineScenario({
     'The leading-power news of a ten-year game around a change of lead, told once for each power that takes the lead',
   async run({ page, shot }) {
     await openGame(page);
-    // An idle Rome has fallen by then, so the page plays the world as Persia.
+    // Rome has fallen by then, so the page plays the world as Persia.
     const tenYears = playAi(newGame(map, { seed: 8, player: 'rome' }), BEFORE_CARTHAGE_LEADS - 1);
     tenYears.player = 'persia' as FactionId;
     await load(page, tenYears);
@@ -54,7 +54,7 @@ export default defineScenario({
       .scrollIntoViewIfNeeded();
     await shot(
       'leader-news',
-      'Seed 8, 200 days around a change of lead: Carthage is told once as it takes the lead, and not again after a tie',
+      'Seed 8, 120 days around a change of lead: Carthage is told once as it takes the lead, and not again after a tie',
     );
   },
 });
