@@ -20,7 +20,7 @@ import {
 } from '../sim/ai/study.ts';
 import { GARRISON_ODDS } from '../sim/ai/thresholds.ts';
 import { UNREST_DAYS, unrestDaysFor } from '../sim/cities.ts';
-import { GUARD_DETER_DAYS, GUARD_GOLD } from '../sim/guards.ts';
+import { GUARD_DETER_DAYS } from '../sim/guards.ts';
 import { fullDefences, WALL_WEAR_PER_THOUSAND_MEN } from '../sim/systems/sieges.ts';
 import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { CityId, FactionId } from '../sim/ids.ts';
@@ -29,7 +29,7 @@ import type { World } from '../sim/world/world.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { whole } from '../app/names.ts';
-import { STARTING_GENERAL_SKILL } from '../sim/new-game.ts';
+import { startingSkillOf } from '../sim/new-game.ts';
 import { worthBuilding } from '../app/building-hint.ts';
 import { BUILDINGS } from '../sim/buildings/buildings.ts';
 import { paybackBasis } from './buildings-text.ts';
@@ -249,7 +249,7 @@ export const ADVANCE_EFFECTS: Readonly<Record<AdvanceKind, string>> = {
   marketWeights: `Every trade route pays your ends ${percent(ADVANCES.marketWeights.tradeShare - 1)} more.`,
   citizenRolls: `Every city gives ${percent(ADVANCES.citizenRolls.levyShare - 1)} more manpower, a day and to call up.`,
   clemency: `A city you take, sack or enslave has ${percent(1 - ADVANCES.clemency.unrestShare)} fewer days of unrest.`,
-  longContracts: `A band of guards serves ${Math.round(12 * ADVANCES.longContracts.guardShare)} months instead of 12 for the same ${whole(GUARD_GOLD)} gold.`,
+  longContracts: `A band of guards serves ${Math.round(12 * ADVANCES.longContracts.guardShare)} months instead of 12 for the same price.`,
 };
 
 function percent(share: number): string {
@@ -284,7 +284,7 @@ function extraText(state: State, faction: FactionId, kind: AdvanceKind): string 
     if (hasStudied(state.factions[faction], kind)) {
       const men = drilledMen(state, faction);
       return men >= 1
-        ? `Your armies strike as ${whole(men)} more men would than under generals of skill ${STARTING_GENERAL_SKILL}, and each new army starts at skill ${ADVANCES.drillmasters.generalSkill}`
+        ? `Your armies strike as ${whole(men)} more men would than under generals of skill ${startingSkillOf(faction)}, and each new army starts at skill ${ADVANCES.drillmasters.generalSkill}`
         : `Each new army starts at skill ${ADVANCES.drillmasters.generalSkill}`;
     }
     const men = sharperMen(state, faction);
@@ -298,8 +298,10 @@ function extraText(state: State, faction: FactionId, kind: AdvanceKind): string 
         { ...state, factions: learned(state, faction, kind) },
         faction,
         UNREST_DAYS,
+        target.position,
       );
-      return `${target.name} would stay in unrest ${days} days instead of ${UNREST_DAYS}`;
+      const now = unrestDaysFor(state, faction, UNREST_DAYS, target.position);
+      return `${target.name} would stay in unrest ${days} days instead of ${now}`;
     }
     const men = Math.ceil(GARRISON_ODDS * fullDefences(target).garrison);
     const wear = (men / 1000) * WALL_WEAR_PER_THOUSAND_MEN;

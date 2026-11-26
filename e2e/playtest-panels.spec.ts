@@ -160,8 +160,8 @@ test.describe('the panels after the playtest', () => {
     // Each other stance says on its button what a change to it costs.
     await expect(stances.getByRole('button')).toHaveText([
       'Hold the line',
-      /^All-out assault.*re-forms 3 days$/,
-      /^Skirmish and withdraw.*re-forms 3 days$/,
+      /^All-out assault.*re-forms 2 days$/,
+      /^Skirmish and withdraw.*re-forms 2 days$/,
     ]);
     await expect(
       stances.getByRole('button', { name: 'Hold the line' }),

@@ -45,7 +45,7 @@ interface Trial {
 
 function forecast(state: GameState, city: CityId, troop: Troop) {
   const at = state.cities[city];
-  const days = at ? trainingDaysAt(at, TROOPS[troop].recruit.days) : TROOPS[troop].recruit.days;
+  const days = at ? trainingDaysAt(at, troop) : TROOPS[troop].recruit.days;
   return recruitForecast(state, [], world, troop, days);
 }
 

@@ -12,7 +12,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import { warKey, newWar } from '../sim/state/war.ts';
 import { tick } from '../sim/tick.ts';
 import { STANCES, type Stance } from '../sim/state/army.ts';
-import { REFORM_DAYS } from '../sim/systems/battles.ts';
+import { REFORM_DAYS, reformDaysOf } from '../sim/systems/battles.ts';
 import {
   armiesAt,
   cityFoodText,
@@ -442,6 +442,9 @@ describe('storeNote', () => {
   });
 
   it('says when food or manpower stops growing at its limit, and nothing below it', () => {
+    expect(storeNote('food', 500, 5, 500, 1)?.why).toBe(
+      "Granaries full. They hold 90 days of what your people and men eat, and your Great granary 90 more of its city's. More food spoils.",
+    );
     expect(storeNote('food', 500, 5, 500)).toMatchObject({
       text: 'Full',
       why: expect.stringMatching(/^Granaries full\. /) as string,
@@ -627,17 +630,18 @@ describe('the stance texts', () => {
       'All-out assault: beats skirmish and withdraw, beaten by hold the line.',
       'Skirmish and withdraw: beats hold the line, beaten by an all-out assault.',
     ]);
-    expect(reformCostText()).toBe(
+    expect(reformCostText(f.carthage)).toBe(
       `A change of stance takes ${REFORM_DAYS} days to re-form. Until then every enemy that is not re-forming too beats it, whatever its stance.`,
     );
+    expect(reformCostText(f.rome)).toMatch(/^A change of stance takes 2 days to re-form\./);
   });
 
   it('says how long an army still re-forms after a change, and nothing after', () => {
     const { state, roman } = armies('holdTheLine', 'holdTheLine', { mine: 1 });
-    expect(reformingText(state, roman)).toBe(`Re-forming, ${REFORM_DAYS} days left`);
-    state.day = REFORM_DAYS as number as Day;
+    expect(reformingText(state, roman)).toBe(`Re-forming, ${reformDaysOf(f.rome)} days left`);
+    state.day = reformDaysOf(f.rome) as number as Day;
     expect(reformingText(state, roman)).toBe('Re-forming, 1 day left');
-    state.day = (REFORM_DAYS + 1) as Day;
+    state.day = (reformDaysOf(f.rome) + 1) as Day;
     expect(reformingText(state, roman)).toBeUndefined();
   });
 
@@ -666,14 +670,14 @@ describe('the stance texts', () => {
     expect(choice('holdTheLine')).toEqual({ answers: false, cost: undefined });
     expect(choice('allOutAssault')).toEqual({
       answers: true,
-      cost: `re-forms ${REFORM_DAYS} days`,
+      cost: `re-forms ${reformDaysOf(f.rome)} days`,
     });
     expect(choice('skirmishAndWithdraw')).toEqual({
       answers: false,
-      cost: `re-forms ${REFORM_DAYS} days`,
+      cost: `re-forms ${reformDaysOf(f.rome)} days`,
     });
     roman.stanceChangedOn = state.day;
-    expect(choice('allOutAssault').cost).toBe(`re-forms ${REFORM_DAYS} days again`);
+    expect(choice('allOutAssault').cost).toBe(`re-forms ${reformDaysOf(f.rome)} days again`);
   });
 });
 

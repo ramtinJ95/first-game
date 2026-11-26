@@ -26,7 +26,7 @@ export function recruit(state: GameState, order: RecruitOrder): string | undefin
   if (typeof city === 'string') return city;
   if (city.unrestDays > 0) return `city ${city.id} is in unrest for ${city.unrestDays} more days`;
   if (beleaguered(state, city)) return `city ${city.id} is under siege`;
-  const { men, gold, days } = TROOPS[order.troop].recruit;
+  const { men, gold } = TROOPS[order.troop].recruit;
   const stores = state.factions[order.faction]?.stores;
   if (!stores) return `faction ${order.faction} does not exist`;
   if (stores.gold < gold)
@@ -38,7 +38,7 @@ export function recruit(state: GameState, order: RecruitOrder): string | undefin
   stores.manpower -= men;
   city.recruits.push({
     troop: order.troop,
-    readyOn: (state.day + trainingDaysAt(city, days)) as Day,
+    readyOn: (state.day + trainingDaysAt(city, order.troop)) as Day,
   });
   return undefined;
 }

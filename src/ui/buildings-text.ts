@@ -1,5 +1,5 @@
 import { reasonText, whole } from '../app/names.ts';
-import { buildingWorth } from '../sim/ai/build.ts';
+import { buildingWorth, CAVALRY_A_YEAR, CROSSINGS_A_YEAR } from '../sim/ai/build.ts';
 import { buildRefusal, cancelRefund } from '../sim/buildings/build.ts';
 import {
   BUILDING_KINDS,
@@ -10,7 +10,9 @@ import {
   hasBuilt,
   isGreatWork,
   levelOf,
+  ownPowerOf,
   SECOND_LEVELS,
+  SIGNATURE_BUILDINGS,
   type BuildingKind,
 } from '../sim/buildings/buildings.ts';
 import { buildingGain, gainOf, type BuildingGain } from '../sim/buildings/gains.ts';
@@ -33,14 +35,16 @@ export interface BuildingLine {
   readonly effect: string;
 }
 
-/** A building that stands: a first building at its level, with its second's effect added, or a great work. */
+/** A building that stands: a first building at its level, with its second's effect added, a great work, or a power's own building. */
 export interface StandingLine extends BuildingLine {
-  /** 1 or 2 for a first building, undefined for a great work. */
+  /** 1 or 2 for a first building, undefined otherwise. */
   readonly level: 1 | 2 | undefined;
+  /** What it is beside its name: its level, a great work, or whose own building. */
+  readonly tag: string;
 }
 
-/** What an option is: a first building, the second level of one, or a great work. */
-export type OptionTier = 'first' | 'second' | 'work';
+/** What an option is: a first building, the second level of one, a great work, or the power's own building. */
+export type OptionTier = 'first' | 'second' | 'work' | 'signature';
 
 export interface BuildOption extends BuildingLine {
   readonly tier: OptionTier;
@@ -107,6 +111,8 @@ export function cityBuildings(
   const holdsWork = greatWorkOf(city) !== undefined || atWork.some((k) => k && isGreatWork(k));
   const offered = BUILDING_KINDS.filter((kind) => {
     if (hasBuilt(city, kind) || atWork.includes(kind)) return false;
+    const power = ownPowerOf(kind);
+    if (power) return (city.owner as string) === power;
     if (isGreatWork(kind)) return !holdsWork;
     const first = firstLevelOf(kind);
     return !first || hasBuilt(city, first);
@@ -123,7 +129,13 @@ export function cityBuildings(
       const worth = buildingWorth(state, city, kind);
       return {
         ...line(state, city, kind),
-        tier: isGreatWork(kind) ? 'work' : first ? 'second' : 'first',
+        tier: ownPowerOf(kind)
+          ? 'signature'
+          : isGreatWork(kind)
+            ? 'work'
+            : first
+              ? 'second'
+              : 'first',
         raises: first && BUILDINGS[first].name,
         caution: gainCaution(waiting, next, kind),
         gold: BUILDINGS[kind].gold,
@@ -140,9 +152,20 @@ export function cityBuildings(
  * shorten in one conquest a year within its reach, not by what it adds today.
  */
 export function paybackBasis(kind: BuildingKind): string {
-  return kind === 'temple' || kind === 'sanctuary'
-    ? ' if you take one city a year within its reach'
-    : '';
+  return PAYBACK_BASES[kind] ?? '';
+}
+
+const PAYBACK_BASES: Partial<Record<BuildingKind, string>> = {
+  temple: ' if you take one city a year within its reach',
+  sanctuary: ' if you take one city a year within its reach',
+  colonia: ' if you take one city a year within its reach',
+  cothon: ` if your armies sail within its reach ${timesText(CROSSINGS_A_YEAR)} a year`,
+  royalRoad: ` if your armies cross its province ${timesText(CROSSINGS_A_YEAR)} a year`,
+  royalStables: ` if you train ${CAVALRY_A_YEAR} formations of cavalry here a year`,
+};
+
+function timesText(times: number): string {
+  return times === 1 ? 'once' : times === 2 ? 'twice' : `${times} times`;
 }
 
 /** An option's payback in words, as its button shows it. */
@@ -162,12 +185,22 @@ function standing(state: State, city: DeepReadonly<City>): StandingLine[] {
         kind: first,
         name: BUILDINGS[first].name,
         level,
+        tag: `level ${level}`,
         effect: gainText(gainOf(state, city, kinds), city.id),
       },
     ];
   });
   const work = greatWorkOf(city);
-  return work ? [...lines, { ...line(state, city, work), level: undefined }] : lines;
+  const own = Object.values(SIGNATURE_BUILDINGS).filter((kind) => hasBuilt(city, kind));
+  return [
+    ...lines,
+    ...(work ? [{ ...line(state, city, work), level: undefined, tag: 'great work' }] : []),
+    ...own.map((kind) => {
+      const power = ownPowerOf(kind) as string as FactionId;
+      const name = state.factions[power]?.name ?? power;
+      return { ...line(state, city, kind), level: undefined, tag: `${name}'s own` };
+    }),
+  ];
 }
 
 /** Current usefulness, separate from permission to build and the building's lasting effect. */
@@ -204,11 +237,36 @@ function gainCaution(
 }
 
 function line(state: State, city: DeepReadonly<City>, kind: BuildingKind): BuildingLine {
+  const gain = buildingGain(state, city, kind);
   return {
     kind,
     name: BUILDINGS[kind].name,
-    effect: gainText(buildingGain(state, city, kind), city.id),
+    effect: ownPowerOf(kind) ? signatureEffect(kind, gain, city.id) : gainText(gain, city.id),
   };
+}
+
+/** What a power's own building does, in words with the rules' numbers. */
+function signatureEffect(kind: BuildingKind, gain: BuildingGain, city: CityId): string {
+  const part = (share: number) => SHARE_WORDS[share] ?? `${Math.round(share * 100)}% of`;
+  const faster = (share: number) =>
+    share === 1.5 ? 'half again as fast' : `${share.toFixed(2)} times as fast`;
+  if (kind === 'colonia') {
+    const { reachKm, unrestShare, trainingShare } = BUILDINGS.colonia;
+    return `cities you take within ${reachKm} km start ${part(unrestShare)} the unrest, and recruits here train in ${part(trainingShare)} the days`;
+  }
+  if (kind === 'cothon') {
+    const { reachKm, gatherShare, sailShare } = BUILDINGS.cothon;
+    return `ships gather on a shore within ${reachKm} km in ${part(gatherShare)} the days, and your convoys there sail ${faster(sailShare)}`;
+  }
+  if (kind === 'royalStables') {
+    return `cavalry trains here in ${part(BUILDINGS.royalStables.cavalryShare)} the days`;
+  }
+  if (kind === 'royalRoad') {
+    return `your armies march ${faster(BUILDINGS.royalRoad.marchShare)} in this province`;
+  }
+  const grown = gainText({ ...gain, store: 0 }, city);
+  const stored = `granaries hold ${whole(gain.store)} more food`;
+  return grown === 'adds nothing here today' ? stored : `${grown}, ${stored}`;
 }
 
 function work(

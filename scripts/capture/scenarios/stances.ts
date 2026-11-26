@@ -50,7 +50,7 @@ export default defineScenario({
     await load(page, battle('holdTheLine', 'skirmishAndWithdraw'));
     await shot(
       'stance-beaten',
-      "Beaten: Mediolanum's skirmishers beat Rome's line, and the panel marks all-out assault, which beats them, with its three days of re-forming",
+      "Beaten: Mediolanum's skirmishers beat Rome's line, and the panel marks all-out assault, which beats them, with its two days of re-forming",
     );
 
     await load(page, battle('skirmishAndWithdraw', 'holdTheLine'));
@@ -59,7 +59,7 @@ export default defineScenario({
     await load(page, battle('allOutAssault', 'skirmishAndWithdraw', true));
     await shot(
       'stance-reforming',
-      'Re-forming: Rome changed to all-out assault today, so for three days every enemy stance beats it, and the panel counts the days',
+      'Re-forming: Rome changed to all-out assault today, so for two days every enemy stance beats it, and the panel counts the days',
     );
   },
 });

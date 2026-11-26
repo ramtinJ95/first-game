@@ -77,7 +77,7 @@
       pending,
       world,
       confirming,
-      confirming ? trainingDaysAt(city, TROOPS[confirming].recruit.days) : 0,
+      confirming ? trainingDaysAt(city, confirming) : 0,
       city.id,
     ),
   );
@@ -96,10 +96,7 @@
   });
 
   function raise(troop: Troop) {
-    if (
-      recruitForecast(game, pending, world, troop, trainingDaysAt(city, TROOPS[troop].recruit.days))
-        .warning
-    )
+    if (recruitForecast(game, pending, world, troop, trainingDaysAt(city, troop)).warning)
       confirming = troop;
     else {
       actions.issue({ kind: 'recruit', faction: game.player, city: city.id, troop });
@@ -403,13 +400,13 @@
           pending,
           world,
           troop,
-          trainingDaysAt(city, cost.days),
+          trainingDaysAt(city, troop),
           city.id,
         )}
         <button type="button" disabled={why !== undefined} title={why} onclick={() => raise(troop)}>
           <span class="troop" style:color={ownColour(troop)}>{TROOP_NAMES[troop]}</span>
           <span class="cost"
-            >{whole(cost.gold)} gold · {whole(cost.men)} men · {trainingDaysAt(city, cost.days)} days</span
+            >{whole(cost.gold)} gold · {whole(cost.men)} men · {trainingDaysAt(city, troop)} days</span
           >
           <span class="cost">{forecast.upkeepText}</span>
           {#if why}<span class="why">{why}</span>{/if}

@@ -38,6 +38,11 @@
   const game = $derived(view.current.state);
   const fallen = $derived((game.factions[game.player]?.defeatedOn ?? null) !== null);
   const stores = $derived(game.factions[game.player]?.stores);
+  const granaries = $derived(
+    Object.values(game.cities).filter(
+      (city) => city.owner === game.player && city.buildings.includes('greatGranary'),
+    ).length,
+  );
   const deserting = $derived(!fallen && desertionLine(game));
   const balance = $derived(dailyBalances(game).get(game.player));
   const limits = $derived(limitsOf(game).get(game.player));
@@ -66,7 +71,7 @@
   {:else if stores && balance}
     <span class="stores">
       {#each STORES as { key, name } (key)}
-        {@const note = storeNote(key, stores[key], balance[key], limits?.[key])}
+        {@const note = storeNote(key, stores[key], balance[key], limits?.[key], granaries)}
         <span class="store" class:falling={note?.bad} data-testid="store-{key}" title={note?.why}>
           <span class="line">
             <span class="muted">{name}</span>

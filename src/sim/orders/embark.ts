@@ -1,4 +1,5 @@
 import { removeBesieger } from '../armies.ts';
+import { BUILDINGS, nearCothon } from '../buildings/buildings.ts';
 import type { DeepReadonly } from '../deep-readonly.ts';
 import { allocateId, type ArmyId, type CityId, type FactionId } from '../ids.ts';
 import { emit } from '../events.ts';
@@ -55,7 +56,7 @@ export interface Embarkation {
  * Where the army at the point would sail from for the sea point `toward`. A port of its
  * owner, within AT_PORT_KM of the city or its harbour, on that sea, has ships ready. Any
  * other shore within SHORE_KM of that sea, an enemy or a neutral port included, takes
- * GATHER_DAYS to gather them, so no army is ever shut in where it stands. A shore of a sea
+ * GATHER_DAYS to gather them, fewer within reach of the owner's Cothon, so no army is ever shut in where it stands. A shore of a sea
  * that leads elsewhere does not count.
  */
 export function embarkationAt(
@@ -85,7 +86,18 @@ export function embarkationAt(
   if (port && harbour) return { from: harbour, port, waitDays: 0 };
   const shore = nearestSea(world.mesh, at, component);
   if (!shore || distance(at, shore) > SHORE_KM) return undefined;
-  return { from: shore, port: undefined, waitDays: GATHER_DAYS };
+  return { from: shore, port: undefined, waitDays: gatherDaysAt(state, owner, shore) };
+}
+
+/** The days the faction's army waits on a shore that is not its port while it gathers ships: fewer near its Cothon. */
+export function gatherDaysAt(
+  state: DeepReadonly<GameState>,
+  owner: FactionId,
+  shore: MapPoint,
+): number {
+  return nearCothon(state, owner, shore)
+    ? Math.ceil(GATHER_DAYS * BUILDINGS.cothon.gatherShare)
+    : GATHER_DAYS;
 }
 
 /** Where the army stands, if it may set out by sea from there today. */

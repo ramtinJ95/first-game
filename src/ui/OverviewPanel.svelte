@@ -5,6 +5,7 @@
   import type { GameState } from '../sim/state/game-state.ts';
   import type { Actions } from './actions.ts';
   import { cssColour, overviewOf } from './describe.ts';
+  import { bonusText } from './signature-text.ts';
 
   let {
     game,
@@ -21,6 +22,7 @@
 
   const overview = $derived(overviewOf(game, sight));
   const colour = $derived(cssColour(game, game.player));
+  const bonus = $derived(bonusText(game.player));
 </script>
 
 <section class="panel overview" id="overview" data-testid="overview" aria-label="Overview">
@@ -33,6 +35,7 @@
       )}, and nothing is left to command.
     </p>
   {:else}
+    {#if bonus}<p class="muted" data-testid="overview-bonus">{bonus}</p>{/if}
     <h3>Cities</h3>
     <ul class="pick-list" data-testid="overview-cities">
       {#each overview.cities as row (row.city)}

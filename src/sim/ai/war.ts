@@ -4,7 +4,7 @@ import { truceBetween } from '../peace/truce.ts';
 import { BLOCKADE_ODDS } from '../systems/sieges.ts';
 import { distance } from '../world/find-path.ts';
 import { endRate, tradeIncome } from '../trade/routes.ts';
-import { ADMIN_CITIES, limitsOf } from '../systems/economy.ts';
+import { adminCitiesOf, limitsOf } from '../systems/economy.ts';
 import type { World } from '../world/world.ts';
 import { weighedGarrison } from '../guards.ts';
 import type { Context } from './armies.ts';
@@ -213,7 +213,7 @@ function reckon(context: Context) {
     const gold = state.factions[other]?.stores.gold ?? 0;
     return limit > 0 ? Math.min(1, Math.max(0, gold / limit)) : 0;
   };
-  const growth = Math.max(0, 1 - ADMIN_CITIES / Math.max(1, ownCities.length));
+  const growth = Math.max(0, 1 - adminCitiesOf(faction) / Math.max(1, ownCities.length));
   const hoardShare = (other: FactionId) =>
     other !== leader && rivals.has(other) ? HOARD_ODDS_SHARE * growth * hoard(other) : 0;
   const stayedHome = (other: FactionId) =>

@@ -4,10 +4,10 @@ The start screen offers `Continue` when a save exists and five powers to choose 
 
 ## Sub-features
 
-- `start-powers` five buttons, each with the capital, cities and a sentence.
+- `start-powers` five buttons, each with the capital, cities, a sentence and the power's standing bonus in one line (`power-bonus-<power>`, such as `Armies re-form in 2 days after a change of stance, not 3.` for Rome).
 - `start-continue` `Continue` with `continue-info`, only when a save exists (see [Saves](./saves.md)).
 - `start-drop` dropping a save on the start screen loads it.
-- `guide-open` the dialog `guide` with `You rule <name>` and the sections `guide-goal`, `guide-standing`, `guide-trade`, `guide-wars`, `guide-pauses`, `guide-stances`. `guide-wars` ends `While you hold no more cities than at the start, each great power needs less of the strength to declare war on you: 1.5% for each year of the game, to at most 15%. Holding more cities than at the start ends it.`
+- `guide-open` the dialog `guide` with `You rule <name>` and the sections `guide-goal`, `guide-standing`, `guide-signatures` (each power's own building and bonus, one line each), `guide-trade`, `guide-wars`, `guide-pauses`, `guide-stances`. `guide-wars` ends `While you hold no more cities than at the start, each great power needs less of the strength to declare war on you: 1.5% for each year of the game, to at most 15%. Holding more cities than at the start ends it.`
 - `guide-close` `Close`, Enter, Escape, or a click on the backdrop close it; the top bar's `Guide` opens it again.
 
 ## How to get to it (user POV)

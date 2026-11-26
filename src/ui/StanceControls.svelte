@@ -69,7 +69,7 @@
     >
   {/each}
 </div>
-<p class="muted small" data-testid="stance-cost">{reformCostText()}</p>
+<p class="muted small" data-testid="stance-cost">{reformCostText(army.owner)}</p>
 {#if enemy}<p class="muted small" data-testid="stance-ai-rule">
     The enemy chooses freely once, then changes only when beaten and neither side re-forms. Matching
     skirmish stances is not a counter. It may answer your change after you re-form.

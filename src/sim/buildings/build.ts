@@ -11,6 +11,7 @@ import {
   hasBuilt,
   isGreatWork,
   neededFirst,
+  ownPowerOf,
   type BuildingKind,
 } from './buildings.ts';
 
@@ -31,7 +32,7 @@ export interface CancelBuildingOrder {
  * Why the city cannot start this building now, or undefined when it can. A city builds
  * one building at a time, each once, while it is calm and no enemy stands at its walls,
  * and only with the people and the first building it needs and the gold it costs. It
- * holds one great work at most.
+ * holds one great work at most. A great power's own building is started only by that power.
  */
 export function buildRefusal(
   state: DeepReadonly<GameState>,
@@ -56,6 +57,8 @@ export function buildBarrier(
 ): string | undefined {
   if (!Object.hasOwn(BUILDINGS, building)) return `building ${building} does not exist`;
   const row = BUILDINGS[building];
+  const power = ownPowerOf(building);
+  if (power && (city.owner as string) !== power) return `a ${building} is ${power}'s own building`;
   if (hasBuilt(city, building)) return `city ${city.id} has a ${building} already`;
   if (city.construction) return `city ${city.id} is building a ${city.construction.building}`;
   if (city.population < row.needs.people) {

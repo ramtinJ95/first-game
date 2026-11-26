@@ -1,4 +1,6 @@
+import { BUILDINGS, nearCothon, onRoyalRoad } from './buildings/buildings.ts';
 import type { DeepReadonly } from './deep-readonly.ts';
+import type { FactionId } from './ids.ts';
 import type { Army } from './state/army.ts';
 import type { GameState } from './state/game-state.ts';
 import { TROOPS } from './troops.ts';
@@ -31,6 +33,54 @@ export const REFUGEE_KM_PER_DAY = 12;
  * or more, so the bound falls in that gap.
  */
 export const MAX_MARCH_DAYS = 90;
+
+type Cities = DeepReadonly<Pick<GameState, 'cities'>>;
+
+/** How far the faction's army of this pace in km a day marches at the point today: faster on its Royal road. */
+export function marchKmAt(
+  state: Cities,
+  owner: FactionId,
+  at: MapPoint,
+  kmPerDay = MARCH_KM_PER_DAY,
+): number {
+  return onRoyalRoad(state, owner, at) ? kmPerDay * BUILDINGS.royalRoad.marchShare : kmPerDay;
+}
+
+/** How far the faction's convoy at the point sails today: faster within reach of its Cothon. */
+export function sailKmAt(state: Cities, owner: FactionId, at: MapPoint): number {
+  return nearCothon(state, owner, at)
+    ? CONVOY_KM_PER_DAY * BUILDINGS.cothon.sailShare
+    : CONVOY_KM_PER_DAY;
+}
+
+/** The fastest an army of this pace marches, or a convoy sails, anywhere: a bound no route beats. */
+export function fastestMarchKm(kmPerDay: number): number {
+  return kmPerDay * BUILDINGS.royalRoad.marchShare;
+}
+export const FASTEST_SAIL_KM = CONVOY_KM_PER_DAY * BUILDINGS.cothon.sailShare;
+
+/**
+ * The days the faction's army marching at `pace` km a day, or with `'sail'` its convoy, takes
+ * along the waypoints from the point, at the speed each day's position gives, as the
+ * movement system moves it.
+ */
+export function travelDaysAlong(
+  state: Cities,
+  owner: FactionId,
+  from: DeepReadonly<MapPoint>,
+  waypoints: readonly DeepReadonly<MapPoint>[],
+  pace: number | 'sail' = MARCH_KM_PER_DAY,
+): number {
+  const left = waypoints.map((point) => ({ x: point.x, y: point.y }));
+  let at: MapPoint = { x: from.x, y: from.y };
+  let days = 0;
+  while (left.length > 0) {
+    const km = pace === 'sail' ? sailKmAt(state, owner, at) : marchKmAt(state, owner, at, pace);
+    at = advanceAlong(at, left, km);
+    days++;
+  }
+  return days;
+}
 
 /** The days an army takes to walk the waypoints from the point, at pace 1 unless told its pace. */
 export function marchDays(

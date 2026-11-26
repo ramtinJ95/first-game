@@ -1,3 +1,4 @@
+import { BUILDINGS } from '../sim/buildings/buildings.ts';
 import { unrestPaceOf } from '../sim/buildings/buildings.ts';
 import { endRate, routesAt } from '../sim/trade/routes.ts';
 import {
@@ -24,7 +25,7 @@ import type {
   RefugeeColumnId,
 } from '../sim/ids.ts';
 import type { GameMap } from '../sim/map.ts';
-import { armyKmPerDay, CONVOY_KM_PER_DAY } from '../sim/march.ts';
+import { armyKmPerDay, travelDaysAlong } from '../sim/march.ts';
 import { joinRefusal, type JoinArmyOrder } from '../sim/orders/join-army.ts';
 import type { MoveArmyOrder } from '../sim/orders/move-army.ts';
 import type { Order } from '../sim/orders/orders.ts';
@@ -38,7 +39,7 @@ import type { MapPoint } from '../sim/state/map-point.ts';
 import { warSides } from '../sim/state/war.ts';
 import {
   edgeBetween,
-  REFORM_DAYS,
+  reformDaysOf,
   reforming,
   STANCE_BEATS,
   STANCE_EFFECTS,
@@ -68,19 +69,9 @@ export function cssColour(state: State, faction: FactionId): string {
   return `#${factionColour(state, faction).toString(16).padStart(6, '0')}`;
 }
 
-function pathKm(from: MapPoint, waypoints: readonly MapPoint[]): number {
-  let km = 0;
-  let at = from;
-  for (const point of waypoints) {
-    km += Math.hypot(point.x - at.x, point.y - at.y);
-    at = point;
-  }
-  return km;
-}
-
-function daysLeft(km: number, perDay: number): string {
-  const days = Math.max(1, Math.ceil(km / perDay));
-  return `${days} ${days === 1 ? 'day' : 'days'} left`;
+function daysLeft(days: number): string {
+  const shown = Math.max(1, days);
+  return `${shown} ${shown === 1 ? 'day' : 'days'} left`;
 }
 
 function destination(state: State, end: MapPoint | undefined): string {
@@ -98,14 +89,24 @@ export function activityText(state: State, army: DeepReadonly<Army>): string {
     case 'marching': {
       const port = activity.sail && state.cities[activity.sail.to];
       return `Marching${destination(state, activity.waypoints.at(-1))} · ${daysLeft(
-        pathKm(activity.position, activity.waypoints),
-        armyKmPerDay(state, army),
+        travelDaysAlong(
+          state,
+          army.owner,
+          activity.position,
+          activity.waypoints,
+          armyKmPerDay(state, army),
+        ),
       )}${port ? `, then sailing for ${port.name}` : ''}`;
     }
     case 'retreating': {
       const days = daysLeft(
-        pathKm(activity.position, activity.waypoints),
-        armyKmPerDay(state, army),
+        travelDaysAlong(
+          state,
+          army.owner,
+          activity.position,
+          activity.waypoints,
+          armyKmPerDay(state, army),
+        ),
       );
       const end = activity.waypoints.at(-1);
       const refuge =
@@ -136,13 +137,17 @@ export function activityText(state: State, army: DeepReadonly<Army>): string {
       const onward =
         activity.march && landing
           ? `, then marching${destination(state, activity.march.at(-1))} · ${daysLeft(
-              pathKm(landing, activity.march),
-              armyKmPerDay(state, army),
+              travelDaysAlong(
+                state,
+                army.owner,
+                landing,
+                activity.march,
+                armyKmPerDay(state, army),
+              ),
             )}`
           : '';
       const sailing = `${destination(state, landing)} · ${daysLeft(
-        pathKm(convoy.position, convoy.waypoints),
-        CONVOY_KM_PER_DAY,
+        travelDaysAlong(state, convoy.owner, convoy.position, convoy.waypoints, 'sail'),
       )}${onward}`;
       if (convoy.departsOn !== undefined && convoy.departsOn > state.day) {
         const wait = convoy.departsOn - state.day;
@@ -683,6 +688,7 @@ export function storeNote(
   amount: number,
   change: number,
   limit: number | undefined,
+  granaries = 0,
 ): StoreNote | undefined {
   if (store !== 'manpower' && Math.round(-amount) > 0) {
     const short = `${whole(-amount)} ${store}`;
@@ -724,7 +730,7 @@ export function storeNote(
   return store === 'food'
     ? {
         text: `Full${when}`,
-        why: `Granaries full${when}. They hold ${GRANARY_DAYS} days of what your people and men eat. More food spoils.`,
+        why: `Granaries full${when}. They hold ${GRANARY_DAYS} days of what your people and men eat${granaries > 0 ? `, and ${granaries === 1 ? 'your Great granary' : `each of your ${granaries} Great granaries`} ${BUILDINGS.greatGranary.storeDays} more of its city's` : ''}. More food spoils.`,
         bad: false,
       }
     : {
@@ -832,15 +838,15 @@ export function stanceMatchText(stance: Stance): string {
   return `${STANCE_NAMES[stance]}: ${short.charAt(0).toLowerCase()}${short.slice(1)}`;
 }
 
-/** What a change of stance costs, by `REFORM_DAYS`. */
-export function reformCostText(): string {
-  return `A change of stance takes ${REFORM_DAYS} days to re-form. Until then every enemy that is not re-forming too beats it, whatever its stance.`;
+/** What a change of stance costs the faction's armies, by `reformDaysOf`. */
+export function reformCostText(faction: FactionId): string {
+  return `A change of stance takes ${reformDaysOf(faction)} days to re-form. Until then every enemy that is not re-forming too beats it, whatever its stance.`;
 }
 
 /** How long the army still re-forms after a change of stance, or nothing. */
 export function reformingText(state: State, army: DeepReadonly<Army>): string | undefined {
   if (!reforming(state, army) || army.stanceChangedOn === undefined) return undefined;
-  const left = REFORM_DAYS - (state.day - army.stanceChangedOn);
+  const left = reformDaysOf(army.owner) - (state.day - army.stanceChangedOn);
   return `Re-forming, ${left} ${left === 1 ? 'day' : 'days'} left`;
 }
 
@@ -898,8 +904,7 @@ export function stanceChoiceText(
 ): { readonly answers: boolean; readonly cost: string | undefined } {
   const answers = enemy !== undefined && STANCE_BEATS[stance] === enemy.stance;
   if (stance === held) return { answers, cost: undefined };
-  const cost = reforming(state, army)
-    ? `re-forms ${REFORM_DAYS} days again`
-    : `re-forms ${REFORM_DAYS} days`;
+  const days = reformDaysOf(army.owner);
+  const cost = reforming(state, army) ? `re-forms ${days} days again` : `re-forms ${days} days`;
   return { answers, cost };
 }

@@ -132,7 +132,7 @@ function cautiousRaise(
   warns: (forecast: Forecast) => boolean,
 ): Order | 'warned' | undefined {
   const troop = mostNeeded(today, rome);
-  const { gold, men, days } = TROOPS[troop].recruit;
+  const { gold, men } = TROOPS[troop].recruit;
   const before = today.factions[rome]?.stores;
   if (!before || before.gold < gold || before.manpower < men) return undefined;
   const state = afterWaiting(today, others, world);
@@ -142,7 +142,7 @@ function cautiousRaise(
     .filter((c) => c.owner === rome && c.unrestDays === 0 && !beleaguered(state, c))
     .sort((a, b) => Number(b.id === 'roma') - Number(a.id === 'roma') || (a.id < b.id ? -1 : 1))[0];
   if (!city) return undefined;
-  const forecast = recruitForecast(state, [], world, troop, trainingDaysAt(city, days));
+  const forecast = recruitForecast(state, [], world, troop, trainingDaysAt(city, troop));
   if (values.sort) sortForecast(forecast);
   chosen = forecast;
   if (warns(forecast)) return 'warned';

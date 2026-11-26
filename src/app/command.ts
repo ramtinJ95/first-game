@@ -3,15 +3,16 @@ import type { DeepReadonly } from '../sim/deep-readonly.ts';
 import type { ArmyId, CityId, FactionId } from '../sim/ids.ts';
 import {
   armyKmPerDay,
-  CONVOY_KM_PER_DAY,
+  fastestMarchKm,
+  FASTEST_SAIL_KM,
   MARCH_KM_PER_DAY,
-  marchDays,
   marchPath,
   MAX_MARCH_DAYS,
+  travelDaysAlong,
 } from '../sim/march.ts';
 import {
   embarkationAt,
-  GATHER_DAYS,
+  gatherDaysAt,
   type EmbarkOrder,
   type Embarkation,
 } from '../sim/orders/embark.ts';
@@ -100,14 +101,15 @@ export interface Route {
   readonly days: number;
 }
 
-function travelDays(from: MapPoint, waypoints: readonly MapPoint[], kmPerDay: number): number {
-  let km = 0;
-  let at = from;
-  for (const point of waypoints) {
-    km += distance(at, point);
-    at = point;
-  }
-  return Math.max(1, Math.ceil(km / kmPerDay));
+/** At least a day, as a march or a crossing that sets out takes one. */
+function travelDays(
+  state: State,
+  owner: FactionId,
+  from: MapPoint,
+  waypoints: readonly MapPoint[],
+  pace: number | 'sail',
+): number {
+  return Math.max(1, travelDaysAlong(state, owner, from, waypoints, pace));
 }
 
 /**
@@ -128,7 +130,13 @@ export function route(
   if (army && after?.kind === 'marching') {
     const march = {
       path: [after.position, ...after.waypoints],
-      days: travelDays(after.position, after.waypoints, armyKmPerDay(trial, army)),
+      days: travelDays(
+        trial,
+        army.owner,
+        after.position,
+        after.waypoints,
+        armyKmPerDay(trial, army),
+      ),
     };
     if (!after.sail) return march;
     const end = after.waypoints.at(-1) ?? after.position;
@@ -161,8 +169,10 @@ function crossingOf(trial: GameState, id: ArmyId, from: MapPoint): Route {
     path: [convoy.position, ...convoy.waypoints, ...ashore],
     days:
       (convoy.departsOn === undefined ? 0 : convoy.departsOn - trial.day) +
-      travelDays(convoy.position, convoy.waypoints, CONVOY_KM_PER_DAY) +
-      (ashore.length > 0 ? travelDays(landing, ashore, armyKmPerDay(trial, army)) : 0),
+      travelDays(trial, convoy.owner, convoy.position, convoy.waypoints, 'sail') +
+      (ashore.length > 0
+        ? travelDays(trial, convoy.owner, landing, ashore, armyKmPerDay(trial, army))
+        : 0),
   };
 }
 
@@ -249,7 +259,7 @@ function seaWay(
               )
               .map((port) => ({ from: harbour(port), port, waitDays: 0 })),
             ...(shore && distance(at, shore) <= reach
-              ? [{ from: shore, port: undefined, waitDays: GATHER_DAYS }]
+              ? [{ from: shore, port: undefined, waitDays: gatherDaysAt(state, army.owner, shore) }]
               : []),
           ];
       found = { here, starts };
@@ -264,7 +274,10 @@ function seaWay(
     const key = `${from.x},${from.y};${end.x},${end.y}`;
     if (!marched.has(key)) {
       const path = marchPath(world, from, end);
-      marched.set(key, typeof path === 'string' ? undefined : marchDays(from, path, pace));
+      marched.set(
+        key,
+        typeof path === 'string' ? undefined : travelDaysAlong(state, army.owner, from, path, pace),
+      );
     }
     return marched.get(key);
   };
@@ -281,10 +294,10 @@ function seaWay(
     .map((pair) => ({
       ...pair,
       bound:
-        (pair.here ? 0 : distance(at, walkTo(pair.start)) / pace) +
+        (pair.here ? 0 : distance(at, walkTo(pair.start)) / fastestMarchKm(pace)) +
         pair.start.waitDays +
-        distance(pair.start.from, harbour(pair.landing)) / CONVOY_KM_PER_DAY +
-        distance(harbour(pair.landing), to) / pace,
+        distance(pair.start.from, harbour(pair.landing)) / FASTEST_SAIL_KM +
+        distance(harbour(pair.landing), to) / fastestMarchKm(pace),
     }))
     .sort((a, b) => a.bound - b.bound);
 
@@ -300,7 +313,7 @@ function seaWay(
     if (ashore === undefined) continue;
     const path = findPath(world.mesh, start.from, harbour(landing), 'sea');
     if (!path) continue;
-    const sail = travelDays(start.from, path, CONVOY_KM_PER_DAY);
+    const sail = travelDays(state, army.owner, start.from, path, 'sail');
     const onward = city?.id === landing.id ? {} : { then: { x: to.x, y: to.y } };
     const from = walkTo(start);
     const order: EmbarkOrder = {
@@ -383,7 +396,13 @@ function weakSiegeWarning(
           ? [
               {
                 army: other,
-                days: travelDays(activity.position, activity.waypoints, armyKmPerDay(trial, other)),
+                days: travelDays(
+                  trial,
+                  other.owner,
+                  activity.position,
+                  activity.waypoints,
+                  armyKmPerDay(trial, other),
+                ),
               },
             ]
           : [];
@@ -399,9 +418,15 @@ function weakSiegeWarning(
                 army: other,
                 days:
                   Math.max(0, (convoy.departsOn ?? state.day) - state.day) +
-                  travelDays(convoy.position, convoy.waypoints, CONVOY_KM_PER_DAY) +
+                  travelDays(trial, convoy.owner, convoy.position, convoy.waypoints, 'sail') +
                   (activity.march?.length
-                    ? travelDays(landing, activity.march, armyKmPerDay(trial, other))
+                    ? travelDays(
+                        trial,
+                        convoy.owner,
+                        landing,
+                        activity.march,
+                        armyKmPerDay(trial, other),
+                      )
                     : 0),
               },
             ]
@@ -493,7 +518,7 @@ export function planCommand(
   // No way by sea is quicker than a march in a straight line, so only a longer march can be far longer.
   const straight = Math.max(
     1,
-    Math.ceil(distance(activity.position, to) / armyKmPerDay(state, army)),
+    Math.ceil(distance(activity.position, to) / fastestMarchKm(armyKmPerDay(state, army))),
   );
   const mayBeFar = typeof found === 'string' || found.days > FAR_LONGER * straight;
   const sea = portToPort || mayBeFar ? seaWay(state, world, army, to, city) : undefined;

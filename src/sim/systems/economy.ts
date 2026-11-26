@@ -5,18 +5,25 @@ import {
   rationShareOf,
   rollsShareOf,
 } from '../advances/advances.ts';
-import { extraFoodOf, goldShareOf, levyShareOf } from '../buildings/buildings.ts';
+import {
+  extraFoodOf,
+  extraStoreDaysOf,
+  goldShareOf,
+  harvestShareAt,
+  levyShareOf,
+} from '../buildings/buildings.ts';
 import { nameNewArmy } from '../army-names.ts';
 import { SACK, UNREST_DAYS } from '../cities.ts';
 import type { DeepReadonly } from '../deep-readonly.ts';
 import { emit } from '../events.ts';
 import { allocateId, type FactionId } from '../ids.ts';
-import { STARTING_GENERAL_SKILL } from '../new-game.ts';
+import { startingSkillOf } from '../new-game.ts';
 import type { Army } from '../state/army.ts';
 import type { City } from '../state/city.ts';
 import type { Stores } from '../state/faction.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
+import { alongTheNile, bonusOf } from '../signatures.ts';
 import { TROOPS } from '../troops.ts';
 import { tradeIncome } from '../trade/routes.ts';
 
@@ -59,6 +66,11 @@ export const DESERTION = 0.01;
  * realm's income grows ever more slowly with its size.
  */
 export const ADMIN_CITIES = 8;
+
+/** The cities the faction governs before each yields less: more for Persia's satrapies. */
+export function adminCitiesOf(faction: FactionId): number {
+  return bonusOf(faction, 'persia')?.adminCities ?? ADMIN_CITIES;
+}
 export const ADMIN_EXPONENT = 0.75;
 /** A recruit joins an idle army of its owner this close to the city, in kilometres. */
 export const RALLY_DISTANCE = 10;
@@ -107,7 +119,7 @@ export function limitsOf(state: DeepReadonly<GameState>): Map<FactionId, Stores>
   for (const city of Object.values(state.cities)) {
     const limit = of(city.owner);
     limit.gold += TREASURY_DAYS * city.population * OUTPUT_PER_PERSON.gold;
-    limit.food += GRANARY_DAYS * city.population * FOOD_PER_PERSON;
+    limit.food += (GRANARY_DAYS + extraStoreDaysOf(city)) * city.population * FOOD_PER_PERSON;
     limit.manpower +=
       MANPOWER_SHARE *
       city.population *
@@ -154,7 +166,8 @@ export function dailyBalances(
     balance.gold +=
       people * OUTPUT_PER_PERSON.gold * goldShare(state, city) * coinShareOf(realm) * admin;
     balance.food +=
-      city.population * (OUTPUT_PER_PERSON.food * harvestShareOf(realm) - FOOD_PER_PERSON) +
+      city.population *
+        (OUTPUT_PER_PERSON.food * harvestShareOf(realm) * fieldShareOf(city) - FOOD_PER_PERSON) +
       extraFoodOf(city);
     balance.manpower +=
       people * OUTPUT_PER_PERSON.manpower * levyShareOf(city) * rollsShareOf(realm) * admin;
@@ -176,13 +189,32 @@ export function adminShares(state: DeepReadonly<GameState>): Map<FactionId, numb
     cities.set(city.owner, (cities.get(city.owner) ?? 0) + 1);
   }
   const shares = new Map<FactionId, number>();
-  for (const [faction, count] of cities) shares.set(faction, adminShare(count));
+  for (const [faction, count] of cities) shares.set(faction, adminShare(faction, count));
   return shares;
 }
 
-/** The share of its gold and manpower each city yields in a realm of this many cities. */
-function adminShare(cities: number): number {
-  return Math.min(1, ADMIN_CITIES / cities) ** ADMIN_EXPONENT;
+/**
+ * How steeply the faction's share falls past `adminCitiesOf`: for Persia steeply enough that
+ * from its `evenCities` its cities yield no more than another power's.
+ */
+function adminExponentOf(faction: FactionId): number {
+  const satrapies = bonusOf(faction, 'persia');
+  if (!satrapies) return ADMIN_EXPONENT;
+  const { adminCities, evenCities } = satrapies;
+  return (
+    (ADMIN_EXPONENT * Math.log(ADMIN_CITIES / evenCities)) / Math.log(adminCities / evenCities)
+  );
+}
+
+/** The share of its gold and manpower each city of the faction yields in a realm of this many cities. */
+function adminShare(faction: FactionId, cities: number): number {
+  return Math.min(1, adminCitiesOf(faction) / cities) ** adminExponentOf(faction);
+}
+
+/** What the food the city's people grow is multiplied by: more with a Great granary, and along the Nile for Egypt. */
+function fieldShareOf(city: DeepReadonly<City>): number {
+  const nile = alongTheNile(city.province) ? bonusOf(city.owner, 'egypt')?.nileFoodShare : 1;
+  return harvestShareAt(city) * (nile ?? 1);
 }
 
 /**
@@ -190,7 +222,10 @@ function adminShare(cities: number): number {
  * realm, for a panel that shows one city's output.
  */
 export function adminShareOf(state: DeepReadonly<GameState>, faction: FactionId): number {
-  return adminShare(Object.values(state.cities).filter((city) => city.owner === faction).length);
+  return adminShare(
+    faction,
+    Object.values(state.cities).filter((city) => city.owner === faction).length,
+  );
 }
 
 function goldShare(state: DeepReadonly<GameState>, city: DeepReadonly<City>): number {
@@ -248,7 +283,7 @@ function rallyArmy(state: GameState, city: City): Army {
     name: nameNewArmy(state, city.owner),
     formations: [],
     stance: 'holdTheLine',
-    generalSkill: generalSkillOf(state.factions[city.owner], STARTING_GENERAL_SKILL),
+    generalSkill: generalSkillOf(state.factions[city.owner], startingSkillOf(city.owner)),
     activity: { kind: 'idle', position: { x: city.position.x, y: city.position.y } },
   };
   state.armies[id] = army;

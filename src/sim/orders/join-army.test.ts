@@ -77,7 +77,7 @@ describe('joinArmy', () => {
       expect(refused.rejected.map(({ reason }) => reason)).toEqual([
         `army ${changed} is re-forming`,
       ]);
-      expect(reforming(refused.state, refused.state.armies[changed] ?? {})).toBe(true);
+      expect(reforming(state, state.armies[changed] ?? { owner: FIXTURE.rome })).toBe(true);
       expectConsistent(refused.state);
     }
   });
