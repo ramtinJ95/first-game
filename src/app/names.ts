@@ -15,6 +15,16 @@ export const TROOP_NAMES: Record<Troop, string> = {
   archers: 'Archers',
   lightCavalry: 'Light cavalry',
   heavyCavalry: 'Heavy cavalry',
+  legionaries: 'Legionaries',
+  triarii: 'Triarii',
+  warElephants: 'War elephants',
+  numidianHorse: 'Numidian horse',
+  phalangites: 'Phalangites',
+  companionCavalry: 'Companion cavalry',
+  nileArchers: 'Nile archers',
+  chariots: 'Chariots',
+  cataphracts: 'Cataphracts',
+  horseArchers: 'Horse archers',
 };
 
 export const STANCE_NAMES: Record<Stance, string> = {

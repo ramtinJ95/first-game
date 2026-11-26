@@ -1,11 +1,24 @@
 import { map, pause, startGame } from '../../../e2e/support.ts';
 import { decideAll } from '../../../src/sim/ai/decide.ts';
+import type { GameState } from '../../../src/sim/state/game-state.ts';
 import { tick } from '../../../src/sim/tick.ts';
+import { TROOPS } from '../../../src/sim/troops.ts';
 import { buildWorld } from '../../../src/sim/world/world.ts';
 import { currentHelpers, withBaseline } from '../baseline.ts';
 import { defineScenario } from '../scenario.ts';
 
 const BEFORE = 'bfb56179a57b5878f26bd297cc0420a30e2e889c';
+
+/** The state as the pinned build can load it, which knows only the shared troops: each power's own as the troop it resembles. */
+function sharedTroopsOnly(state: GameState): GameState {
+  const shared = structuredClone(state);
+  const plain = (troop: keyof typeof TROOPS) => TROOPS[troop].signature?.resembles ?? troop;
+  for (const formation of Object.values(shared.formations))
+    formation.troop = plain(formation.troop);
+  for (const city of Object.values(shared.cities))
+    for (const recruit of city.recruits) recruit.troop = plain(recruit.troop);
+  return shared;
+}
 
 export default defineScenario({
   name: 'atlas-ownership',
@@ -30,7 +43,7 @@ export default defineScenario({
         ['opening', opening],
         ['ten-years', decade],
       ] as const) {
-        await helpers.loadSave(page, state);
+        await helpers.loadSave(page, base ? sharedTroopsOnly(state) : state);
         await helpers.untilDrawn(page);
         await page.locator('canvas[data-terrain="ready"]').waitFor();
         await shot(

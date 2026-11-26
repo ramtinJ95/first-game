@@ -12,7 +12,8 @@
   import { OUTPUT_PER_PERSON } from '../sim/systems/economy.ts';
   import { trainingDaysAt } from '../sim/buildings/buildings.ts';
   import { beleaguered, fullDefences } from '../sim/systems/sieges.ts';
-  import { TROOPS, type Troop } from '../sim/troops.ts';
+  import { TROOPS, troopsFor, type Troop } from '../sim/troops.ts';
+  import { POWER_COLOURS } from '../render/palette.ts';
   import type { Actions } from './actions.ts';
   import ArmiesHere from './ArmiesHere.svelte';
   import { afterWaiting } from './buildings-text.ts';
@@ -158,7 +159,12 @@
     return undefined;
   }
 
-  const orderable = $derived((Object.keys(TROOPS) as Troop[]).filter((t) => !refusal(t)));
+  const raisable = $derived(troopsFor(game.player));
+  const orderable = $derived(raisable.filter((t) => !refusal(t)));
+  const ownColour = (troop: Troop) => {
+    const power = TROOPS[troop].signature?.power;
+    return power && `#${POWER_COLOURS[power].toString(16).padStart(6, '0')}`;
+  };
   /**
    * What each troop does to each power near war, reckoned while the game is paused, one troop a
    * task: each plays the days to its muster through the rules, tens of milliseconds a troop.
@@ -389,7 +395,7 @@
       </p>
     {/if}
     <div class="troops" class:threatened={threats.size > 0} data-testid="recruit-cards">
-      {#each Object.keys(TROOPS) as Troop[] as troop (troop)}
+      {#each raisable as troop (troop)}
         {@const why = refusal(troop)}
         {@const cost = TROOPS[troop].recruit}
         {@const forecast = recruitForecast(
@@ -401,7 +407,7 @@
           city.id,
         )}
         <button type="button" disabled={why !== undefined} title={why} onclick={() => raise(troop)}>
-          <span class="troop">{TROOP_NAMES[troop]}</span>
+          <span class="troop" style:color={ownColour(troop)}>{TROOP_NAMES[troop]}</span>
           <span class="cost"
             >{whole(cost.gold)} gold · {whole(cost.men)} men · {trainingDaysAt(city, cost.days)} days</span
           >

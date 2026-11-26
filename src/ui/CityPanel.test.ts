@@ -10,7 +10,7 @@ import type { Day } from '../sim/state/day.ts';
 import type { GameState } from '../sim/state/game-state.ts';
 import { newWar, warKey } from '../sim/state/war.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
-import { TROOPS } from '../sim/troops.ts';
+import { TROOPS, troopsFor } from '../sim/troops.ts';
 import { buildWorld } from '../sim/world/world.ts';
 import { TROOP_NAMES } from '../app/names.ts';
 import type { Actions } from './actions.ts';
@@ -58,8 +58,7 @@ function nearWar(): GameState {
   return state;
 }
 
-/** Each troop card of the city panel as the page first draws it, by troop name. */
-function cardsOf(state: GameState, paused: boolean) {
+function cardsBody(state: GameState, paused: boolean) {
   const city = state.cities['roma' as CityId];
   if (!city) throw new Error('no Roma');
   const { body } = render(CityPanel, {
@@ -75,9 +74,14 @@ function cardsOf(state: GameState, paused: boolean) {
       actions: {} as Actions,
     },
   });
-  const cards = body.slice(body.indexOf('data-testid="recruit-cards"'));
+  return body.slice(body.indexOf('data-testid="recruit-cards"'));
+}
+
+/** Each troop card of the city panel as the page first draws it, by troop name. */
+function cardsOf(state: GameState, paused: boolean) {
+  const cards = cardsBody(state, paused);
   return new Map(
-    (Object.keys(TROOPS) as (keyof typeof TROOPS)[]).map((troop) => {
+    troopsFor(rome).map((troop) => {
       const from = cards.indexOf(`>${TROOP_NAMES[troop]}</span>`);
       const to = cards.indexOf('</button>', from);
       return [troop, cards.slice(from, to).replace(/<[^>]+>/g, ' ')] as const;
@@ -91,6 +95,17 @@ it('every troop card says something at a warning before its reckoning arrives: w
   expect(cards.get('swordsmen')).toContain('Needs 415 more manpower');
   for (const troop of ['skirmishers', 'archers', 'lightCavalry', 'heavyCavalry'] as const)
     expect(cards.get(troop), troop).toContain('Reckoning what they do to the threat of Carthage…');
+});
+
+it("offers Rome its own legionaries and triarii in Rome's colour, beside the shared six, and no other power's troops", () => {
+  const cards = cardsBody(nearWar(), true);
+  for (const troop of Object.keys(TROOPS) as (keyof typeof TROOPS)[])
+    expect(cards.includes(`>${TROOP_NAMES[troop]}</span>`), troop).toBe(
+      troopsFor(rome).includes(troop),
+    );
+  for (const troop of ['legionaries', 'triarii'] as const)
+    expect(cards).toContain(`style="color: #b3352a;">${TROOP_NAMES[troop]}</span>`);
+  expect(cards).toMatch(new RegExp(`class="troop[^"]*">${TROOP_NAMES.spearmen}</span>`));
 });
 
 it('says nothing of a reckoning while the clock runs, where a line above the cards says to pause', () => {

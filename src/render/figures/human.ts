@@ -77,7 +77,7 @@ export type Helmet = 'corinthian' | 'montefortino' | 'bare' | 'cap' | 'attic' | 
 export type Body = 'linothorax' | 'mail' | 'tunic' | 'tunicLong' | 'scale' | 'muscle';
 export type Shield = 'aspis' | 'oval' | 'pelta' | 'round' | 'none';
 export type Weapon =
-  'spear' | 'sword' | 'javelin' | 'bow' | 'lance' | 'swordRaised' | 'standard' | 'none';
+  'spear' | 'pike' | 'sword' | 'javelin' | 'bow' | 'lance' | 'swordRaised' | 'standard' | 'none';
 
 export interface Kit {
   readonly helmet: Helmet;
@@ -254,8 +254,15 @@ function blade(tip: Vec, u: Vec, length: number, width: number, fill: string): P
   };
 }
 
-function drawSpear(ops: PaintOp[], hand: Vec, angle: number, length: number, shaftFill: string) {
-  const { tip, butt, u } = shaft(hand, angle, length * 0.62, length * 0.38);
+function drawSpear(
+  ops: PaintOp[],
+  hand: Vec,
+  angle: number,
+  length: number,
+  shaftFill: string,
+  behind = length * 0.38,
+) {
+  const { tip, butt, u } = shaft(hand, angle, length - behind, behind);
   ops.push({ d: capsule(butt, tip, 1.5, 1.3), fill: shaftFill, stroke: THIN });
   ops.push(blade(tip, u, 12, 3.2, C.ironLight));
   ops.push({ d: capsule(butt, add(butt, scale(u, 5)), 1.8, 1.6), fill: C.bronze, stroke: THIN });
@@ -850,6 +857,10 @@ function drawWeapon(ops: PaintOp[], s: Skeleton, pose: FootPose, weapon: Weapon)
   switch (weapon) {
     case 'spear':
       drawSpear(ops, s.handFar, pose.grip, 150, C.wood);
+      break;
+    case 'pike':
+      // The butt sits where a spear's does, so it still meets the ground at rest.
+      drawSpear(ops, s.handFar, pose.grip, 215, C.wood, 57);
       break;
     case 'lance':
       drawSpear(ops, s.handFar, pose.grip, 128, C.wood);

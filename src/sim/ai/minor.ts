@@ -1,6 +1,6 @@
 import type { Order } from '../orders/orders.ts';
 import { RALLY_DISTANCE, UPKEEP_PER_MAN } from '../systems/economy.ts';
-import { TROOPS, type Troop } from '../troops.ts';
+import { SHARED_TROOPS, TROOPS, type Troop } from '../troops.ts';
 import { distance } from '../world/find-path.ts';
 import { endOverlongMarches, retreats, type Context } from './armies.ts';
 import type { FactionId } from '../ids.ts';
@@ -8,7 +8,7 @@ import { truceBetween } from '../peace/truce.ts';
 import { balanceOf, besieged, enemiesOf, meanMorale, menInTraining, sorted } from './situation.ts';
 import { MARCH_MORALE, MINOR_DEFICIT_DAYS } from './thresholds.ts';
 
-const CHEAPEST: Troop = (Object.keys(TROOPS) as Troop[]).reduce((a, b) =>
+const CHEAPEST: Troop = SHARED_TROOPS.reduce((a, b) =>
   TROOPS[b].recruit.gold < TROOPS[a].recruit.gold ? b : a,
 );
 

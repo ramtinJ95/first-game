@@ -27,7 +27,7 @@ import { WAR_REACH_KM } from '../src/sim/ai/thresholds.ts';
 import { limitsOf } from '../src/sim/systems/economy.ts';
 import { homeCapital } from '../src/sim/ai/situation.ts';
 import { NOTICE_DAYS, NOTICE_SHARE } from '../src/sim/ai/thresholds.ts';
-import { TROOPS, type Troop } from '../src/sim/troops.ts';
+import { TROOPS, troopsFor } from '../src/sim/troops.ts';
 import { peaceAnswer, peaceWish, warDamage } from '../src/sim/ai/peace.ts';
 import { GOLD_STEP, OFFER_GAP_DAYS } from '../src/sim/ai/thresholds.ts';
 import { standingOffer } from '../src/sim/peace/offer.ts';
@@ -428,7 +428,7 @@ function answerOrders(state: GameState, city: CityId, raise: boolean, fed = fals
   const stores = state.factions[rome]?.stores;
   const capital = homeCapital(state, world, rome);
   if (raise && stores && capital) {
-    const troop = (Object.keys(TROOPS) as Troop[])
+    const troop = troopsFor(rome)
       .sort((a, b) => TROOPS[a].recruit.gold - TROOPS[b].recruit.gold)
       .find(
         (t) => TROOPS[t].recruit.gold <= stores.gold && TROOPS[t].recruit.men <= stores.manpower,

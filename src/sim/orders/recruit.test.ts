@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { changeCityOwner } from '../cities.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
-import type { CityId } from '../ids.ts';
+import type { CityId, FactionId } from '../ids.ts';
+import { POWERS } from '../map.ts';
 import { expectConsistent } from '../references.ts';
-import type { Troop } from '../troops.ts';
+import { troopsFor, type Troop } from '../troops.ts';
 import { executeOrder, type Order } from './orders.ts';
 
 const world = fixtureWorld();
@@ -56,10 +57,26 @@ describe('recruit is rejected and changes nothing', () => {
       reason: 'city atlantis does not exist',
     },
     {
+      name: "for another power's own troop",
+      setup: () => {},
+      order: order({ troop: 'warElephants' }),
+      reason: 'only carthage raises warElephants',
+    },
+    {
+      name: "for a conquered city's power's own troop",
+      setup: (state: ReturnType<typeof buildFixture>) => {
+        changeCityOwner(state, FIXTURE.carthago, FIXTURE.rome);
+        const carthago = state.cities[FIXTURE.carthago];
+        if (carthago) carthago.unrestDays = 0;
+      },
+      order: order({ city: FIXTURE.carthago, troop: 'numidianHorse' }),
+      reason: 'only carthage raises numidianHorse',
+    },
+    {
       name: 'for a troop that does not exist',
       setup: () => {},
-      order: order({ troop: 'elephants' as Troop }),
-      reason: 'troop elephants does not exist',
+      order: order({ troop: 'oliphaunts' as Troop }),
+      reason: 'troop oliphaunts does not exist',
     },
   ])('$name', ({ setup, order, reason }) => {
     const state = buildFixture();
@@ -77,4 +94,38 @@ test('recruit takes gold and manpower at once and queues the formation', () => {
   expect(state.factions[FIXTURE.rome]?.stores).toEqual({ gold: 1800, food: 1000, manpower: 1000 });
   expect(state.cities[FIXTURE.roma]?.recruits).toEqual([{ troop: 'swordsmen', readyOn: 21 }]);
   expectConsistent(state);
+});
+
+test.each([
+  { faction: FIXTURE.rome, city: FIXTURE.roma, troop: 'legionaries' },
+  { faction: FIXTURE.rome, city: FIXTURE.roma, troop: 'triarii' },
+  { faction: FIXTURE.carthage, city: FIXTURE.carthago, troop: 'warElephants' },
+  { faction: FIXTURE.carthage, city: FIXTURE.carthago, troop: 'numidianHorse' },
+] as const)('$faction raises its own $troop', ({ faction, city, troop }) => {
+  const state = buildFixture();
+  const stores = state.factions[faction]?.stores;
+  if (stores) stores.gold = 10_000;
+  expect(executeOrder(state, order({ faction, city, troop }), world)).toBeUndefined();
+  expect(state.cities[city]?.recruits.map((r) => r.troop)).toEqual([troop]);
+  expectConsistent(state);
+});
+
+test('each great power may raise the six shared troops and its own two, and no other', () => {
+  const raised = Object.fromEntries(POWERS.map((power) => [power, troopsFor(power as FactionId)]));
+  const shared = [
+    'spearmen',
+    'swordsmen',
+    'skirmishers',
+    'archers',
+    'lightCavalry',
+    'heavyCavalry',
+  ];
+  expect(raised).toEqual({
+    rome: [...shared, 'legionaries', 'triarii'],
+    carthage: [...shared, 'warElephants', 'numidianHorse'],
+    macedon: [...shared, 'phalangites', 'companionCavalry'],
+    egypt: [...shared, 'nileArchers', 'chariots'],
+    persia: [...shared, 'cataphracts', 'horseArchers'],
+  });
+  expect(troopsFor(FIXTURE.syracusaeFaction)).toEqual(shared);
 });

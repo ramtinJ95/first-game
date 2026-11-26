@@ -24,7 +24,7 @@ import type {
   RefugeeColumnId,
 } from '../sim/ids.ts';
 import type { GameMap } from '../sim/map.ts';
-import { CONVOY_KM_PER_DAY, MARCH_KM_PER_DAY } from '../sim/march.ts';
+import { armyKmPerDay, CONVOY_KM_PER_DAY } from '../sim/march.ts';
 import { joinRefusal, type JoinArmyOrder } from '../sim/orders/join-army.ts';
 import type { MoveArmyOrder } from '../sim/orders/move-army.ts';
 import type { Order } from '../sim/orders/orders.ts';
@@ -99,11 +99,14 @@ export function activityText(state: State, army: DeepReadonly<Army>): string {
       const port = activity.sail && state.cities[activity.sail.to];
       return `Marching${destination(state, activity.waypoints.at(-1))} · ${daysLeft(
         pathKm(activity.position, activity.waypoints),
-        MARCH_KM_PER_DAY,
+        armyKmPerDay(state, army),
       )}${port ? `, then sailing for ${port.name}` : ''}`;
     }
     case 'retreating': {
-      const days = daysLeft(pathKm(activity.position, activity.waypoints), MARCH_KM_PER_DAY);
+      const days = daysLeft(
+        pathKm(activity.position, activity.waypoints),
+        armyKmPerDay(state, army),
+      );
       const end = activity.waypoints.at(-1);
       const refuge =
         end &&
@@ -134,7 +137,7 @@ export function activityText(state: State, army: DeepReadonly<Army>): string {
         activity.march && landing
           ? `, then marching${destination(state, activity.march.at(-1))} · ${daysLeft(
               pathKm(landing, activity.march),
-              MARCH_KM_PER_DAY,
+              armyKmPerDay(state, army),
             )}`
           : '';
       const sailing = `${destination(state, landing)} · ${daysLeft(
