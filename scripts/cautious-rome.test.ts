@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { changeCityOwner } from '../src/sim/cities.ts';
-import type { CityId, FactionId } from '../src/sim/ids.ts';
+import { allocateId, type CityId, type FactionId } from '../src/sim/ids.ts';
+import { nameNewArmy } from '../src/sim/army-names.ts';
+import type { GameState } from '../src/sim/state/game-state.ts';
 import { newGame } from '../src/sim/new-game.ts';
-import type { Order } from '../src/sim/orders/orders.ts';
+import { executeOrder, type Order } from '../src/sim/orders/orders.ts';
 import type { Day } from '../src/sim/state/day.ts';
 import { warKey } from '../src/sim/state/war.ts';
+import { expectConsistent } from '../src/sim/references.ts';
 import { limitsOf } from '../src/sim/systems/economy.ts';
-import { map, playCautiousRome, rome, warnedPowers } from './cautious-rome.ts';
+import { map, playCautiousRome, rome, warnedPowers, world } from './cautious-rome.ts';
 
 const carthage = 'carthage' as FactionId;
 const WEST = [
@@ -134,5 +137,177 @@ describe('the powers a warning names', () => {
         'Carthage, Egypt and Macedon could soon declare war on you, with 82%, 90% and 81%.',
       ),
     ).toEqual(['Carthage', 'Egypt', 'Macedon']);
+  });
+});
+
+describe('a Rome that fights back', () => {
+  /** Rome on day 200, with 10,000 gold, in a war Carthage declared on day 100 and in which it took Capua: Rome is losing it. */
+  function losingWar() {
+    const state = newGame(map, { seed: 1, player: 'rome' });
+    state.day = 200 as Day;
+    expect(
+      executeOrder(state, { kind: 'declareWar', faction: carthage, against: rome }, world),
+    ).toBeUndefined();
+    const war = state.wars[warKey(carthage, rome)];
+    if (!war) throw new Error('no war');
+    war.since = 100 as Day;
+    changeCityOwner(state, 'capua' as CityId, carthage);
+    expectConsistent(state);
+    const romans = state.factions[rome];
+    if (!romans) throw new Error('no Rome');
+    romans.stores.gold = 10_000;
+    return state;
+  }
+
+  const offers = (fights: boolean) => {
+    const made: Order[] = [];
+    playCautiousRome(
+      1,
+      1 / 365,
+      ({ accepted }) => made.push(...accepted.filter((o) => o.kind === 'offerPeace')),
+      { peaceful: true, answer: true, follows: true, guards: 'enough', fights, start: losingWar() },
+    );
+    return made;
+  };
+
+  it('offers peace in a war it is losing, with no city, where the answering Rome offers none', () => {
+    const [offer, ...more] = offers(true);
+    expect(more).toEqual([]);
+    expect(offer).toMatchObject({ kind: 'offerPeace', faction: rome, to: carthage });
+    if (offer?.kind !== 'offerPeace') throw new Error('no offer');
+    expect(offer.terms.kind === 'payment' ? offer.terms.cities : []).toEqual([]);
+    expect(offers(false)).toEqual([]);
+  });
+
+  it('keeps the gold it offered until the enemy answers, so the peace is made', () => {
+    const made: string[] = [];
+    let spent = 0;
+    playCautiousRome(
+      1,
+      5 / 365,
+      ({ before, accepted, events }) => {
+        for (const e of events)
+          if (e.kind === 'peaceMade' || e.kind === 'peaceRefused')
+            made.push(`${before.day} ${e.kind}`);
+        if (before.day <= 201)
+          spent += accepted.filter((o) =>
+            ['build', 'recruit', 'study', 'hireGuards'].includes(o.kind),
+          ).length;
+      },
+      {
+        peaceful: true,
+        answer: true,
+        follows: true,
+        guards: 'enough',
+        fights: true,
+        start: losingWar(),
+      },
+    );
+    expect(made).toEqual(['201 peaceMade']);
+    expect(spent).toBe(0);
+  });
+
+  it('never promises the same gold to two enemies', () => {
+    const start = losingWar();
+    const macedon = 'macedon' as FactionId;
+    expect(
+      executeOrder(start, { kind: 'declareWar', faction: macedon, against: rome }, world),
+    ).toBeUndefined();
+    const war = start.wars[warKey(macedon, rome)];
+    if (!war) throw new Error('no war');
+    war.since = 100 as Day;
+    changeCityOwner(start, 'ariminum' as CityId, macedon);
+    const romans = start.factions[rome];
+    if (!romans) throw new Error('no Rome');
+    romans.stores.gold = 3000;
+    expectConsistent(start);
+    const offered: number[] = [];
+    const refused: string[] = [];
+    playCautiousRome(
+      1,
+      4 / 365,
+      ({ accepted, events }) => {
+        for (const o of accepted)
+          if (o.kind === 'offerPeace' && o.terms.kind === 'payment') offered.push(o.terms.gold);
+        for (const e of events) if (e.kind === 'peaceRefused' && e.by !== rome) refused.push(e.by);
+      },
+      { peaceful: true, answer: true, follows: true, guards: 'enough', fights: true, start },
+    );
+    expect(offered.length).toBeGreaterThan(0);
+    expect(offered.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(3000);
+    expect(refused).toEqual([]);
+  });
+
+  /** The state with 800 Carthaginian spearmen idle halfway between Roma and Capua, prey for Rome's 4,000 once at war. */
+  function withPrey(state: GameState): GameState {
+    const roma = state.cities['roma' as CityId];
+    const capua = state.cities['capua' as CityId];
+    if (!roma || !capua) throw new Error('no Roma or Capua');
+    const id = allocateId(state, 'army');
+    const formation = allocateId(state, 'formation');
+    state.armies[id] = {
+      id,
+      owner: carthage,
+      name: nameNewArmy(state, carthage),
+      formations: [formation],
+      stance: 'holdTheLine',
+      generalSkill: 3,
+      activity: {
+        kind: 'idle',
+        position: {
+          x: (roma.position.x + capua.position.x) / 2,
+          y: (roma.position.y + capua.position.y) / 2,
+        },
+      },
+    };
+    state.formations[formation] = {
+      id: formation,
+      army: id,
+      troop: 'spearmen',
+      men: 800,
+      morale: 1,
+    };
+    return state;
+  }
+
+  it('at war, lets its own AI move its armies against an army in the field, where the answering Rome holds them at the warned city', () => {
+    const start = withPrey(warnedTomorrow());
+    const punic = Object.values(start.armies)
+      .filter((a) => a.owner === carthage)
+      .at(-1);
+    const prey = punic?.activity.kind === 'idle' ? punic.activity.position : undefined;
+    if (!prey) throw new Error('no prey');
+    const moves = (fights: boolean) => {
+      let count = 0;
+      playCautiousRome(
+        1,
+        20 / 365,
+        ({ before, accepted, answered }) => {
+          if (before.day <= 101) return;
+          // A march on the prey: to a point within 30 km of where it stands.
+          count += accepted.filter(
+            (o) =>
+              !answered.includes(o) &&
+              o.kind === 'moveArmy' &&
+              Math.hypot(o.to.x - prey.x, o.to.y - prey.y) <= 30,
+          ).length;
+        },
+        {
+          peaceful: true,
+          answer: true,
+          follows: true,
+          guards: 'enough',
+          fights,
+          start: structuredClone(start),
+          orders: (orders, state) =>
+            state.day === 101
+              ? [{ kind: 'declareWar', faction: carthage, against: rome }, ...orders]
+              : orders,
+        },
+      );
+      return count;
+    };
+    expect(moves(false)).toBe(0);
+    expect(moves(true)).toBeGreaterThan(0);
   });
 });
