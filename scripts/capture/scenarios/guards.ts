@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import {
+  menBeforeStayingHome,
   armyOf,
   camera,
   carthage,
@@ -30,7 +31,7 @@ function carthageTooStrongForOneBand(): GameState {
   const punic = state.formations[armyOf(state, carthage).formations[0] as FormationId];
   const power = state.factions[carthage];
   if (!punic || !power) throw new Error('no Carthaginian army');
-  punic.men = 6000;
+  punic.men = menBeforeStayingHome(6000, state.day);
   power.noticeSince = 80 as Day;
   return state;
 }

@@ -1,3 +1,4 @@
+import { STAY_HOME_CAP, STAY_HOME_PER_YEAR } from '../src/sim/ai/thresholds.ts';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, type Page } from '@playwright/test';
@@ -1109,4 +1110,13 @@ export function twoNearWarAtWar(): GameState {
   if (!stores) throw new Error('no Roman stores');
   stores.gold = 15_817;
   return state;
+}
+
+/**
+ * The men that give a power on the day the share the given men gave it before a power needed
+ * less against a Rome still in its first cities (`STAY_HOME_PER_YEAR`): the saves of the cases
+ * written before that rule keep their shares.
+ */
+export function menBeforeStayingHome(men: number, day: number): number {
+  return Math.round(men * (1 - Math.min(STAY_HOME_CAP, (day / 365) * STAY_HOME_PER_YEAR)));
 }
