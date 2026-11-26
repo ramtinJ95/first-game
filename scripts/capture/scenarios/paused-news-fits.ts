@@ -233,13 +233,13 @@ function heldStop(play: 'climb' | 'reminder' | 'first'): {
 const ahead = fromSave(carthageClimbs(0, 2, [], 111));
 
 /**
- * Eight years, to Year 9: a power then needs 12% less against a Rome still in its first cities,
- * two figures as at the most, 15%, while the year keeps the one figure the cases had.
+ * Nine years, to Year 10: a power then needs 14% less against a Rome still in its first cities,
+ * and each date of the stop names a year of two figures, as every game past Year 9 does.
  */
-const LATER = 8 * 365;
+const LATER = 9 * 365;
 
-/** Every day of the save's game and of what its page was told, eight years on, so its stop also says what Rome's staying home takes off. */
-function eightYearsOn(save: { state: GameState; told?: readonly string[] }): {
+/** Every day of the save's game and of what its page was told, nine years on, so its stop also says what Rome's staying home takes off. */
+function laterOn(save: { state: GameState; told?: readonly string[] }): {
   state: GameState;
   told: readonly string[];
 } {
@@ -283,34 +283,34 @@ function eightYearsOn(save: { state: GameState; told?: readonly string[] }): {
 }
 
 /**
- * The save with Carthage's men cut by the 12% Rome's staying home takes off what it needs, so
- * it stands where it stood eight years before and its war with Lepcis Magna still holds it below 100%.
+ * The save with Carthage's men cut by the 14% Rome's staying home takes off what it needs, so
+ * it stands where it stood nine years before and its war with Lepcis Magna still holds it below 100%.
  */
 function fewerMen(save: { state: GameState; told: readonly string[] }) {
   const spearmen = save.state.formations[armyOf(save.state, carthage).formations[0] as FormationId];
   if (!spearmen) throw new Error('no Carthaginian army');
-  spearmen.men = Math.round(spearmen.men * 0.88);
+  spearmen.men = Math.round(spearmen.men * 0.86);
   return save;
 }
 
-/** The longest stops, eight years on: each also says a power needs 12% less, since Rome has not grown, but the one that names a war leaves it to the At peace notes. */
+/** The longest stops, nine years on: each also says a power needs 14% less, since Rome has not grown, but the one that names a war leaves it to the At peace notes. */
 const LATE = [
   {
     name: 'the longest warning',
-    save: () => eightYearsOn(longest),
-    line: /no longer count\. Carthage has climbed.*It needs 12% less: you have not grown\./,
+    save: () => laterOn(longest),
+    line: /no longer count\. Carthage has climbed.*It needs 14% less: you have not grown\./,
     shot: 'staying-home-longest',
   },
   ...(['climb', 'reminder', 'first'] as const).map((play) => ({
     name: `the longest held ${play}`,
-    save: () => fewerMen(eightYearsOn(heldStop(play))),
+    save: () => fewerMen(laterOn(heldStop(play))),
     line: /no longer count\..*food feeds no more men\. Once its war with Lepcis Magna ends, it would stand at/,
     shot: undefined,
   })),
   {
     name: 'guards that stop counting in ten days',
-    save: () => eightYearsOn(ahead),
-    line: /in 10 days, on .*and may declare\. It needs 12% less: you have not grown\. A new band/,
+    save: () => laterOn(ahead),
+    line: /in 10 days, on .*and may declare\. It needs 14% less: you have not grown\. A new band/,
     shot: 'staying-home-ahead',
   },
 ];
@@ -397,7 +397,7 @@ const STOPS: readonly {
     name: 'the longest warning, a climb told with guards that stop counting',
     make: () => structuredClone(longest.state),
     told: longest.told,
-    line: /no longer count\. Carthage has climbed.*Guards at Roma for 90 days lower it and eat nothing; food feeds no more men/,
+    line: /no longer count\. Carthage has climbed.*A new band lowers it and eats nothing; food feeds no more men/,
     shot: 'longest-warning',
     lines: 13,
   },
@@ -406,7 +406,7 @@ const STOPS: readonly {
     make: () => structuredClone(heldStop(play).state),
     told: heldStop(play).told,
     line: new RegExp(
-      `no longer count\\. Carthage ${play === 'climb' ? 'has climbed' : play === 'reminder' ? 'still stands near war' : 'could soon declare war'}.*eat nothing; food feeds no more men\\. Once its war with Lepcis Magna ends, it would stand at`,
+      `no longer count\\. Carthage ${play === 'climb' ? 'has climbed' : play === 'reminder' ? 'still stands near war' : 'could soon declare war'}.*A new band lowers it and eats nothing; food feeds no more men\\. Once its war with Lepcis Magna ends, it would stand at`,
     ),
     shot: play === 'climb' ? 'longest-held-warning' : `longest-held-${play}`,
     lines: 13,
@@ -420,7 +420,7 @@ const STOPS: readonly {
     lines: 13,
   },
   ...LATE.map((late) => ({
-    name: `${late.name}, eight years on, which also says what Rome's staying home takes off`,
+    name: `${late.name}, nine years on, which also says what Rome's staying home takes off`,
     make: () => late.save().state,
     told: late.save().told,
     line: late.line,
@@ -428,14 +428,14 @@ const STOPS: readonly {
     lines: 13,
   })),
   {
-    name: 'a warning by a city, eight years on',
-    make: () => eightYearsOn({ state: carthageNearsWar() }).state,
-    line: /could soon declare war on you.*It needs 12% less: you have not grown\. See At peace/,
+    name: 'a warning by a city, nine years on',
+    make: () => laterOn({ state: carthageNearsWar() }).state,
+    line: /could soon declare war on you.*It needs 14% less: you have not grown\. See At peace/,
     shot: 'staying-home-warning',
     atPeaceAt: [1280, 1024],
     atPeace: 'Carthage has',
     atPeaceNote:
-      'You hold no more cities than at the start, so Carthage needs 12% less of the strength to declare war on you: 1.5% for each year of the game, to at most 15%. Holding more cities than at the start ends it.',
+      'You hold no more cities than at the start, so Carthage needs 14% less of the strength to declare war on you: 1.5% for each year of the game, to at most 15%. Holding more cities than at the start ends it.',
   },
   { name: 'a city in danger', make: alone(ownCityInDangerTomorrow), line: /is in danger/ },
   { name: 'fleets sighted', make: alone(fiveFleetsOnRoma), line: /sail|march/ },
