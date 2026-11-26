@@ -65,7 +65,7 @@ export const HOARD_ODDS_SHARE = 0.75;
  * as a realm back at its start that has not grown. Agreed after the fourteenth play-through,
  * in which a Rome that built and stayed home met no war in ten years: with the measuring Romes
  * of `npm run sim -- slide`, seeds 1 to 40, a Rome that ignores warnings lost 86 cities against
- * 20, and one that answers them 4 against 0, with the world's targets as before.
+ * 20, and one that answers them 7 against 0, with the world's targets as before.
  */
 export const STAY_HOME_PER_YEAR = 0.015;
 export const STAY_HOME_CAP = 0.15;
