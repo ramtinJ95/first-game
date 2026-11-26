@@ -14,6 +14,7 @@ import { warKey } from '../sim/state/war.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
 import { buildWorld } from '../sim/world/world.ts';
 import { GUARD_DAYS } from '../sim/guards.ts';
+import { STAY_HOME_PER_YEAR } from '../sim/ai/thresholds.ts';
 import { cityGuards, guardsLine, weighedLine } from './guards-text.ts';
 
 const carthage = 'carthage' as FactionId;
@@ -113,7 +114,11 @@ describe('a band that does not take a power off notice', () => {
   );
   const atlas = buildWorld(map);
 
-  /** Carthage of twelve cities with `men` beside Rome's 4,000 and full treasury on day 100, on notice since day 80. */
+  /**
+   * Carthage of twelve cities with `men` beside Rome's 4,000 and full treasury on day 100, on
+   * notice since day 80. Its men are cut by what Rome's staying home takes off the strength it
+   * needs that day, so the shares are those the cases were written for before that rule.
+   */
   function carthageAt(men: number): GameState {
     const state = newGame(map, { seed: 1, player: 'rome' });
     state.day = 100 as Day;
@@ -126,7 +131,8 @@ describe('a band that does not take a power off notice', () => {
         };
     for (const army of Object.values(state.armies)) {
       const spearmen = state.formations[army.formations[0] as never];
-      if (spearmen && army.owner === carthage) spearmen.men = men;
+      if (spearmen && army.owner === carthage)
+        spearmen.men = Math.round(men * (1 - (state.day / 365) * STAY_HOME_PER_YEAR));
       if (spearmen && army.owner === f.rome) spearmen.men = 4000;
     }
     const rome = state.factions[f.rome];

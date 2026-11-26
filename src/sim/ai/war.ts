@@ -28,6 +28,8 @@ import {
   NOTICE_DAYS,
   RIVAL_PRESSURE_ODDS,
   SATED_EXPONENT,
+  STAY_HOME_CAP,
+  STAY_HOME_PER_YEAR,
   WAR_DISTANCE_KM,
   WAR_FRONT_KM,
   WAR_ODDS,
@@ -50,6 +52,9 @@ import {
  * whose treasury is full, since the gold is what a peace would make the rival pay: the
  * odds fall by HOARD_ODDS_SHARE times the share of the rival's treasury that is full
  * times the share of its own cities past ADMIN_CITIES, which its gold cannot arm.
+ * Against a rival great power that holds no more cities than the map gave it, the odds fall
+ * by STAY_HOME_PER_YEAR for each year of the game, to at most STAY_HOME_CAP, so a realm that
+ * only builds at home draws its neighbours as the years pass.
  * Against a minor the odds it needs grow with its cities over those the map gave it,
  * raised to SATED_EXPONENT, so a realm that has grown is slower to start a new war
  * on a minor.
@@ -95,6 +100,8 @@ export interface WarReadiness {
   readonly pressed: boolean;
   /** The enemies whose wars hold back their whole field strength from the power's own, by id. */
   readonly heldBy: readonly FactionId[];
+  /** The share by which the other's staying in the cities the map gave it lowers the odds it needs (STAY_HOME_PER_YEAR), 0 when it does not. */
+  readonly stayedHome: number;
 }
 
 /**
@@ -128,6 +135,7 @@ export function warReadiness(
   return {
     readiness: Math.max(odds, pressure),
     hoard: reckoning.hoardShare(against),
+    stayedHome: reckoning.stayedHome(against),
     front: front.city.id,
     pressed: pressure > odds,
     heldBy: reckoning.heldBy,
@@ -208,11 +216,17 @@ function reckon(context: Context) {
   const growth = Math.max(0, 1 - ADMIN_CITIES / Math.max(1, ownCities.length));
   const hoardShare = (other: FactionId) =>
     other !== leader && rivals.has(other) ? HOARD_ODDS_SHARE * growth * hoard(other) : 0;
+  const stayedHome = (other: FactionId) =>
+    other !== leader &&
+    rivals.has(other) &&
+    (citiesOf.get(other)?.length ?? 0) <= homelandOf(context.world, other)
+      ? Math.min(STAY_HOME_CAP, (state.day / 365) * STAY_HOME_PER_YEAR)
+      : 0;
   const needed = (other: FactionId) =>
     other === leader
       ? Math.min(odds, COALITION_ODDS)
       : rivals.has(other)
-        ? Math.min(odds, RIVAL_ODDS) * (1 - hoardShare(other))
+        ? Math.min(odds, RIVAL_ODDS) * (1 - hoardShare(other)) * (1 - stayedHome(other))
         : odds * sated;
   const income = tradeIncome(state).get(faction) ?? 0;
   const tradeCost = (other: FactionId) =>
@@ -266,11 +280,9 @@ function reckon(context: Context) {
   const atWarWithPower = [...enemies].some((enemy) => rivals.has(enemy));
   const pressureOn = (rival: FactionId) => {
     if (atWarWithPower || rival === faction || !rivals.has(rival)) return undefined;
-    const map = context.world.map.provinces;
-    const home = map.filter((province) => (province.owner as string) === rival).length;
-    if ((citiesOf.get(rival)?.length ?? 0) > home) return undefined;
+    if ((citiesOf.get(rival)?.length ?? 0) > homelandOf(context.world, rival)) return undefined;
     if (truceBetween(state, faction, rival)) return undefined;
-    return pressureFree / Math.max(1, strength.get(rival) ?? 0);
+    return pressureFree / Math.max(1, strength.get(rival) ?? 0) / (1 - stayedHome(rival));
   };
 
   return {
@@ -281,6 +293,7 @@ function reckon(context: Context) {
     measure,
     scoreOf,
     hoardShare,
+    stayedHome,
     pressureOn,
     eligible,
     candidates: candidates.filter((candidate) => candidate.bound >= 1),
@@ -300,4 +313,9 @@ function leaderOf(
   const [first, second] = counts;
   if (!first || first.count < LEADER_SHARE * total) return undefined;
   return second && second.count === first.count ? undefined : first.rival;
+}
+
+/** The provinces the map gives the faction, the cities it holds at the start. */
+function homelandOf(world: World, faction: FactionId): number {
+  return world.map.provinces.filter((province) => (province.owner as string) === faction).length;
 }

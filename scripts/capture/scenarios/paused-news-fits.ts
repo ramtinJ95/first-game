@@ -232,6 +232,89 @@ function heldStop(play: 'climb' | 'reminder' | 'first'): {
  */
 const ahead = fromSave(carthageClimbs(0, 2, [], 111));
 
+/**
+ * Eight years, to Year 9: a power then needs 12% less against a Rome still in its first cities,
+ * two figures as at the most, 15%, while the year keeps the one figure the cases had.
+ */
+const LATER = 8 * 365;
+
+/** Every day of the save's game and of what its page was told, eight years on, so its stop also says what Rome's staying home takes off. */
+function eightYearsOn(save: { state: GameState; told?: readonly string[] }): {
+  state: GameState;
+  told: readonly string[];
+} {
+  const days = new Set([
+    'day',
+    'readyOn',
+    'until',
+    'hiredOn',
+    'fellOn',
+    'sackedOn',
+    'startedOn',
+    'since',
+    'offeredOn',
+    'departsOn',
+    'defeatedOn',
+    'noticeSince',
+    'madeOn',
+    'endsOn',
+    'openedOn',
+    'on',
+    'stanceChangedOn',
+  ]);
+  const shift = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(shift);
+    if (value === null || typeof value !== 'object') return value;
+    return Object.fromEntries(
+      Object.entries(value).map(([key, field]) => [
+        key,
+        days.has(key) && typeof field === 'number' ? field + LATER : shift(field),
+      ]),
+    );
+  };
+  const told = (save.told ?? []).map((key) => {
+    const parts = key.split(':');
+    const at = parts[0] === 'guards-soon' ? 3 : 2;
+    if (parts[at] !== undefined && /^\d+$/.test(parts[at]))
+      parts[at] = String(Number(parts[at]) + LATER);
+    return parts.join(':');
+  });
+  return { state: shift(save.state) as GameState, told };
+}
+
+/**
+ * The save with Carthage's men cut by the 12% Rome's staying home takes off what it needs, so
+ * it stands where it stood eight years before and its war with Lepcis Magna still holds it below 100%.
+ */
+function fewerMen(save: { state: GameState; told: readonly string[] }) {
+  const spearmen = save.state.formations[armyOf(save.state, carthage).formations[0] as FormationId];
+  if (!spearmen) throw new Error('no Carthaginian army');
+  spearmen.men = Math.round(spearmen.men * 0.88);
+  return save;
+}
+
+/** The longest stops, eight years on: each also says a power needs 12% less, since Rome has not grown, but the one that names a war leaves it to the At peace notes. */
+const LATE = [
+  {
+    name: 'the longest warning',
+    save: () => eightYearsOn(longest),
+    line: /no longer count\. Carthage has climbed.*It needs 12% less: you have not grown\./,
+    shot: 'staying-home-longest',
+  },
+  ...(['climb', 'reminder', 'first'] as const).map((play) => ({
+    name: `the longest held ${play}`,
+    save: () => fewerMen(eightYearsOn(heldStop(play))),
+    line: /no longer count\..*food feeds no more men\. Once its war with Lepcis Magna ends, it would stand at/,
+    shot: undefined,
+  })),
+  {
+    name: 'guards that stop counting in ten days',
+    save: () => eightYearsOn(ahead),
+    line: /in 10 days, on .*and may declare\. It needs 12% less: you have not grown\. A new band/,
+    shot: 'staying-home-ahead',
+  },
+];
+
 /** The news of each kind that stops the game, with its longest text the saves give. */
 const STOPS: readonly {
   name: string;
@@ -240,10 +323,12 @@ const STOPS: readonly {
   shot?: string;
   /** What the page was told before the save, when not nothing. */
   told?: readonly string[];
-  /** Stop on it at this width only, and shoot the At peace list in the wars panel as well. */
-  atPeaceAt?: number;
+  /** Stop on it at these widths only, and shoot the At peace list in the wars panel as well. */
+  atPeaceAt?: readonly number[];
   /** What Carthage's At peace line then says. */
   atPeace?: string;
+  /** A note the At peace list then holds under the rows. */
+  atPeaceNote?: string;
   /** The most lines its text may take in the corner, so a player who read it once can skim it after. */
   lines?: number;
 }[] = [
@@ -265,7 +350,7 @@ const STOPS: readonly {
     line: /still stands near war, as warned on .*may declare any day now.*Skirmishers need 500 men/,
     shot: 'reminder',
     told: ['threat:carthage:306'],
-    atPeaceAt: 1280,
+    atPeaceAt: [1280],
     atPeace: 'It may declare any day now if it holds it.',
   },
   {
@@ -293,7 +378,7 @@ const STOPS: readonly {
     make: carthagePressesSoon,
     line: /could soon declare war on you.*Skirmishers ordered now muster on Year 1, day 111/,
     shot: 'late-warning',
-    atPeaceAt: 1280,
+    atPeaceAt: [1280],
     atPeace: 'order Skirmishers now for 900 gold; they muster and lower it from Year 1, day 111',
   },
   {
@@ -333,6 +418,24 @@ const STOPS: readonly {
     line: /stop counting against Carthage's war in 10 days, on .*and may declare\. A new band counts 90 days, for 2,000 gold\./,
     shot: 'guards-ahead-stop',
     lines: 13,
+  },
+  ...LATE.map((late) => ({
+    name: `${late.name}, eight years on, which also says what Rome's staying home takes off`,
+    make: () => late.save().state,
+    told: late.save().told,
+    line: late.line,
+    ...(late.shot ? { shot: late.shot } : {}),
+    lines: 13,
+  })),
+  {
+    name: 'a warning by a city, eight years on',
+    make: () => eightYearsOn({ state: carthageNearsWar() }).state,
+    line: /could soon declare war on you.*It needs 12% less: you have not grown\. See At peace/,
+    shot: 'staying-home-warning',
+    atPeaceAt: [1280, 1024],
+    atPeace: 'Carthage has',
+    atPeaceNote:
+      'You hold no more cities than at the start, so Carthage needs 12% less of the strength to declare war on you: 1.5% for each year of the game, to at most 15%. Holding more cities than at the start ends it.',
   },
   { name: 'a city in danger', make: alone(ownCityInDangerTomorrow), line: /is in danger/ },
   { name: 'fleets sighted', make: alone(fiveFleetsOnRoma), line: /sail|march/ },
@@ -416,14 +519,14 @@ export default defineScenario({
     for (const width of [1280, 1024]) {
       await resizeTo(page, { width, height: 720 });
       for (const stop of STOPS) {
-        if (stop.atPeaceAt !== undefined && stop.atPeaceAt !== width) continue;
+        if (stop.atPeaceAt && !stop.atPeaceAt.includes(width)) continue;
         await stopOn(page, stop.make(), stop.line, stop.told, stop.lines);
         if (stop.shot)
           await shot(
             `${stop.shot}-${width}`,
             `${width} × 720: ${stop.name} stops the game and is read to its last word`,
           );
-        if (stop.atPeaceAt === width) {
+        if (stop.atPeaceAt?.includes(width)) {
           await page.getByTestId('wars-button').click();
           await expect(
             page
@@ -431,6 +534,14 @@ export default defineScenario({
               .getByTestId('threat-row')
               .filter({ hasText: stop.atPeace ?? '' }),
           ).toHaveCount(1);
+          if (stop.atPeaceNote) {
+            const note = page
+              .getByTestId('wars-panel')
+              .getByTestId('threat-note')
+              .filter({ hasText: stop.atPeaceNote });
+            await expect(note).toHaveCount(1);
+            await note.scrollIntoViewIfNeeded();
+          }
           await shot(
             `${stop.shot}-at-peace-${width}`,
             `${width} × 720: the At peace list after ${stop.name}`,

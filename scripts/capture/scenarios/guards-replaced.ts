@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import {
+  menBeforeStayingHome,
   armyOf,
   camera,
   carthage,
@@ -34,7 +35,7 @@ function romaFullOfOldGuards(): GameState {
   const power = state.factions[carthage];
   const roma = state.cities['roma' as CityId];
   if (!punic || !power || !roma) throw new Error('no Carthaginian army or Roma');
-  punic.men = 6000;
+  punic.men = menBeforeStayingHome(6000, state.day);
   power.noticeSince = 80 as Day;
   roma.guards = Array.from({ length: 6 }, () => ({ until: 366 as Day }));
   roma.garrison += 3000;

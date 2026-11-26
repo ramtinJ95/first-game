@@ -4,7 +4,7 @@ The Wars and peace panel shows every great power's standing toward the player. W
 
 ## Sub-features
 
-- `wars-at-peace` the `At peace` heading lists each power at 80% or more (`threat-row`) with its share and the day it may declare, then notes (`threat-note`) on the armies that count near the city and what the treasury does; `Also at peace` lists the rest.
+- `wars-at-peace` the `At peace` heading lists each power at 80% or more (`threat-row`) with its share and the day it may declare, then notes (`threat-note`) on the armies that count near the city, what the treasury does and, while the player holds no more cities than at the start, `You hold no more cities than at the start, so <Power> needs <n>% less of the strength to declare war on you: 1.5% for each year of the game, to at most 15%. Holding more cities than at the start ends it.`; `Also at peace` lists the rest.
 - `wars-none` the block `wars-at-peace` reads `You are at war with no one.` with how a war starts and how peace works.
 - `wars-declare` a foreign city's panel offers `Declare war on <owner>`, then `Confirm war` or `Cancel`.
 - `wars-tab` each war has a `war-tab` with `war-summary`, `peace-forecast-warning`.
@@ -25,6 +25,7 @@ Preconditions:
 - `open --moment carthageNearsWar`, then `play --until-text 'could soon declare war on you'`.
 
 - **Open the panel.** `act "await page.getByTestId('wars-button').click(); const panel = page.getByTestId('wars-panel'); await panel.waitFor(); return await panel.ariaSnapshot()"`. The region `Wars and peace` has `At peace` with `Carthage has 90% of the strength it needs to declare war on you, against your forces near Roma. It may declare from Year 1, day 31 if it holds it.`, the armies counted near Roma, the treasury line, `You are at war with no one.`, and `Also at peace` with Egypt, Macedon and Persia.
+- **Staying home.** `open --moment .claude/skills/verify-first-game/moments.ts:carthageNearsWarLate`, `play --until-text 'could soon declare war on you'`, then `act "await page.getByTestId('wars-button').click(); const panel = page.getByTestId('wars-panel'); await panel.waitFor(); return await panel.getByTestId('threat-note').allTextContents()"`. Under `At peace`: `You hold no more cities than at the start, so Carthage needs 12% less of the strength to declare war on you: 1.5% for each year of the game, to at most 15%. Holding more cities than at the start ends it.`, and the same for Macedon under `Also at peace`, after the treasury's note.
 - **Close it.** `act "await page.getByTestId('wars-panel').getByRole('button', { name: 'Close' }).click()"`.
 - **Proof.** `shot wars-at-peace` with the panel open.
 - **An offer.** `open --moment carthageOffersPeace` (day 301). `play` resumes past the offer's stop, so use `act "await page.getByRole('button', { name: 'Resume', exact: true }).click(); const o = page.getByTestId('their-offer'); await o.waitFor({ timeout: 20000 }); return o.innerText()"`. It reads `Carthage offers peace: Carthage gives you 1,000 gold.`, `peace-paused` reads `The game is paused for your answer. …`, and the Wars button `Wars 1, 1 offer waiting`.
