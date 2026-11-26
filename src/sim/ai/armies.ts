@@ -5,7 +5,7 @@ import type { MapPoint } from '../state/map-point.ts';
 import { RALLY_DISTANCE } from '../systems/economy.ts';
 import { ENGAGEMENT_DISTANCE } from '../systems/battles.ts';
 import { BLOCKADE_ODDS, defendersAt, SALLY_SHARE, SIEGE_DISTANCE } from '../systems/sieges.ts';
-import { MARCH_KM_PER_DAY, marchDays, MAX_MARCH_DAYS } from '../march.ts';
+import { marchDays, MAX_MARCH_DAYS, travelDaysAlong } from '../march.ts';
 import { embarkationAt } from '../orders/embark.ts';
 import { distance, locate, surfaceAt } from '../world/find-path.ts';
 import { nearestSea, type World } from '../world/world.ts';
@@ -630,13 +630,8 @@ function reinforcementsInTime(
     const { activity } = army;
     if (army.owner !== faction || activity.kind !== 'marching' || ordered.has(army.id)) continue;
     if (!marchingTo(army, city.position)) continue;
-    let km = 0;
-    let from = activity.position;
-    for (const point of activity.waypoints) {
-      km += distance(from, point);
-      from = point;
-    }
-    coming.push({ army, days: Math.ceil(km / MARCH_KM_PER_DAY), men: menOfArmy(state, army) });
+    const days = travelDaysAlong(state, faction, activity.position, activity.waypoints);
+    coming.push({ army, days, men: menOfArmy(state, army) });
   }
   coming.sort((a, b) => a.days - b.days || (a.army.id < b.army.id ? -1 : 1));
   const sally = Math.ceil(city.garrison * SALLY_SHARE);

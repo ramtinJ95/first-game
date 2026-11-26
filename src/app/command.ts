@@ -5,7 +5,6 @@ import {
   FASTEST_MARCH_KM,
   FASTEST_SAIL_KM,
   MARCH_KM_PER_DAY,
-  marchDays,
   marchPath,
   MAX_MARCH_DAYS,
   travelDaysAlong,
@@ -264,7 +263,10 @@ function seaWay(
     const key = `${from.x},${from.y};${end.x},${end.y}`;
     if (!marched.has(key)) {
       const path = marchPath(world, from, end);
-      marched.set(key, typeof path === 'string' ? undefined : marchDays(from, path));
+      marched.set(
+        key,
+        typeof path === 'string' ? undefined : travelDaysAlong(state, army.owner, from, path),
+      );
     }
     return marched.get(key);
   };

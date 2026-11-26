@@ -753,4 +753,28 @@ describe('the days a march is forecast to take', () => {
       expectConsistent(state);
     }
   });
+
+  it('gives a way by sea the days its order takes, a Royal road on the way counted', () => {
+    const state = buildFixture();
+    const persia = 'persia' as FactionId;
+    const carthage = cityOf(state, f.carthago);
+    const record = state.factions[f.carthage];
+    if (!record) throw new Error('expected Carthage');
+    state.factions[persia] = { ...structuredClone(record), id: persia, name: 'Persia' };
+    const roma = cityOf(state, f.roma);
+    roma.owner = persia;
+    roma.buildings.push('royalRoad');
+    const army = armyOf(state);
+    army.owner = persia;
+    army.activity = { kind: 'idle', position: { x: 2545, y: 2330 } };
+    expect(carthage.owner).toBe(f.carthage);
+    const planned = plan(state, atCity(state, f.syracusae));
+    const ways = planned.kind === 'menu' ? planned.menu.options : [];
+    const sea = ways.find((option) => option.group === 'sea');
+    if (!sea || sea.order.kind !== 'embark') throw new Error('expected a way by sea');
+    const legs = (sea.detail.match(/\d+(?= days?)/g) ?? []).map(Number);
+    const way = route(state, world, sea.order);
+    if (typeof way === 'string') throw new Error(way);
+    expect(legs.reduce((a, b) => a + b, 0)).toBe(way.days);
+  });
 });
