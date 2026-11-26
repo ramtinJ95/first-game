@@ -1,11 +1,27 @@
 import { map, pause, startGame } from '../../../e2e/support.ts';
 import { decideAll } from '../../../src/sim/ai/decide.ts';
+import { FIRST_LEVELS } from '../../../src/sim/buildings/buildings.ts';
+import type { GameState } from '../../../src/sim/state/game-state.ts';
 import { tick } from '../../../src/sim/tick.ts';
 import { buildWorld } from '../../../src/sim/world/world.ts';
 import { currentHelpers, withBaseline } from '../baseline.ts';
 import { defineScenario } from '../scenario.ts';
 
 const BEFORE = 'bfb56179a57b5878f26bd297cc0420a30e2e889c';
+
+/**
+ * The state with only the first levels of buildings, the only kinds the pinned build's saves
+ * hold. Buildings draw nothing on the atlas, so its picture is the same.
+ */
+function withFirstLevelsOnly(state: GameState): GameState {
+  const known = new Set<string>(FIRST_LEVELS);
+  const copy = structuredClone(state);
+  for (const city of Object.values(copy.cities)) {
+    city.buildings = city.buildings.filter((kind) => known.has(kind));
+    if (city.construction && !known.has(city.construction.building)) city.construction = null;
+  }
+  return copy;
+}
 
 export default defineScenario({
   name: 'atlas-ownership',
@@ -23,12 +39,17 @@ export default defineScenario({
     if (!observer) throw new Error('ten-year campaign has no surviving power');
     opening.player = observer.id;
     decade.player = observer.id;
-    const views = async (stage: string, base = '', helpers = currentHelpers) => {
+    const views = async (
+      stage: string,
+      base = '',
+      helpers = currentHelpers,
+      ten: GameState = decade,
+    ) => {
       await helpers.openGame(page, { base });
       await pause(page);
       for (const [name, state] of [
         ['opening', opening],
-        ['ten-years', decade],
+        ['ten-years', ten],
       ] as const) {
         await helpers.loadSave(page, state);
         await helpers.untilDrawn(page);
@@ -39,7 +60,9 @@ export default defineScenario({
         );
       }
     };
-    await withBaseline(BEFORE, (base, helpers) => views('before', base, helpers));
+    await withBaseline(BEFORE, (base, helpers) =>
+      views('before', base, helpers, withFirstLevelsOnly(decade)),
+    );
     await views('after');
   },
 });

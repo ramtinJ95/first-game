@@ -25,7 +25,7 @@ import type {
   RefugeeColumnId,
 } from '../sim/ids.ts';
 import type { GameMap } from '../sim/map.ts';
-import { CONVOY_KM_PER_DAY, MARCH_KM_PER_DAY } from '../sim/march.ts';
+import { travelDaysAlong } from '../sim/march.ts';
 import { joinRefusal, type JoinArmyOrder } from '../sim/orders/join-army.ts';
 import type { MoveArmyOrder } from '../sim/orders/move-army.ts';
 import type { Order } from '../sim/orders/orders.ts';
@@ -69,19 +69,9 @@ export function cssColour(state: State, faction: FactionId): string {
   return `#${factionColour(state, faction).toString(16).padStart(6, '0')}`;
 }
 
-function pathKm(from: MapPoint, waypoints: readonly MapPoint[]): number {
-  let km = 0;
-  let at = from;
-  for (const point of waypoints) {
-    km += Math.hypot(point.x - at.x, point.y - at.y);
-    at = point;
-  }
-  return km;
-}
-
-function daysLeft(km: number, perDay: number): string {
-  const days = Math.max(1, Math.ceil(km / perDay));
-  return `${days} ${days === 1 ? 'day' : 'days'} left`;
+function daysLeft(days: number): string {
+  const shown = Math.max(1, days);
+  return `${shown} ${shown === 1 ? 'day' : 'days'} left`;
 }
 
 function destination(state: State, end: MapPoint | undefined): string {
@@ -99,12 +89,13 @@ export function activityText(state: State, army: DeepReadonly<Army>): string {
     case 'marching': {
       const port = activity.sail && state.cities[activity.sail.to];
       return `Marching${destination(state, activity.waypoints.at(-1))} · ${daysLeft(
-        pathKm(activity.position, activity.waypoints),
-        MARCH_KM_PER_DAY,
+        travelDaysAlong(state, army.owner, activity.position, activity.waypoints),
       )}${port ? `, then sailing for ${port.name}` : ''}`;
     }
     case 'retreating': {
-      const days = daysLeft(pathKm(activity.position, activity.waypoints), MARCH_KM_PER_DAY);
+      const days = daysLeft(
+        travelDaysAlong(state, army.owner, activity.position, activity.waypoints),
+      );
       const end = activity.waypoints.at(-1);
       const refuge =
         end &&
@@ -134,13 +125,11 @@ export function activityText(state: State, army: DeepReadonly<Army>): string {
       const onward =
         activity.march && landing
           ? `, then marching${destination(state, activity.march.at(-1))} · ${daysLeft(
-              pathKm(landing, activity.march),
-              MARCH_KM_PER_DAY,
+              travelDaysAlong(state, army.owner, landing, activity.march),
             )}`
           : '';
       const sailing = `${destination(state, landing)} · ${daysLeft(
-        pathKm(convoy.position, convoy.waypoints),
-        CONVOY_KM_PER_DAY,
+        travelDaysAlong(state, convoy.owner, convoy.position, convoy.waypoints, true),
       )}${onward}`;
       if (convoy.departsOn !== undefined && convoy.departsOn > state.day) {
         const wait = convoy.departsOn - state.day;

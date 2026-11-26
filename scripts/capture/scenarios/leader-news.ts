@@ -25,12 +25,11 @@ async function load(page: Page, state: GameState) {
 }
 
 /**
- * Seed 8 under the AI, days before Carthage takes the lead on day 1794, loses it to a tie on
- * day 1913 and takes it back on day 1955. Played as an idle Persia, at war with no one from
- * here, no fate, offer, or defeat stops the clock.
+ * Seed 8 under the AI, days before Carthage takes the lead on day 1321 and keeps it. Played
+ * as an idle Persia, which no fate, offer, or defeat stops the clock for.
  */
-const BEFORE_CARTHAGE_LEADS = 1780;
-const AFTER_THE_LEAD = 1980;
+const BEFORE_CARTHAGE_LEADS = 1307;
+const AFTER_THE_LEAD = 1345;
 
 export default defineScenario({
   name: 'leader-news',
@@ -54,7 +53,7 @@ export default defineScenario({
       .scrollIntoViewIfNeeded();
     await shot(
       'leader-news',
-      'Seed 8, 200 days around a change of lead: Carthage is told once as it takes the lead, and not again after a tie',
+      'Seed 8, the days around a change of lead: Carthage is told once as it takes the lead',
     );
   },
 });

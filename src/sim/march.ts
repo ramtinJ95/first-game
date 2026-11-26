@@ -36,6 +36,31 @@ export function sailKmAt(state: Cities, owner: FactionId, at: MapPoint): number 
     : CONVOY_KM_PER_DAY;
 }
 
+/** The fastest an army marches or a convoy sails anywhere, for a bound no route can beat. */
+export const FASTEST_MARCH_KM = MARCH_KM_PER_DAY * BUILDINGS.royalRoad.marchShare;
+export const FASTEST_SAIL_KM = CONVOY_KM_PER_DAY * BUILDINGS.cothon.sailShare;
+
+/**
+ * The days the faction's army, or with `sail` its convoy, takes along the waypoints from the
+ * point, at the speed each day's position gives, as the movement system moves it.
+ */
+export function travelDaysAlong(
+  state: Cities,
+  owner: FactionId,
+  from: DeepReadonly<MapPoint>,
+  waypoints: readonly DeepReadonly<MapPoint>[],
+  sail = false,
+): number {
+  const left = waypoints.map((point) => ({ x: point.x, y: point.y }));
+  let at: MapPoint = { x: from.x, y: from.y };
+  let days = 0;
+  while (left.length > 0) {
+    at = advanceAlong(at, left, sail ? sailKmAt(state, owner, at) : marchKmAt(state, owner, at));
+    days++;
+  }
+  return days;
+}
+
 /** The days an army takes to walk the waypoints from the point. */
 export function marchDays(from: MapPoint, waypoints: readonly MapPoint[]): number {
   let km = 0;

@@ -86,10 +86,18 @@ export function embarkationAt(
   if (port && harbour) return { from: harbour, port, waitDays: 0 };
   const shore = nearestSea(world.mesh, at, component);
   if (!shore || distance(at, shore) > SHORE_KM) return undefined;
-  const waitDays = nearCothon(state, owner, shore)
+  return { from: shore, port: undefined, waitDays: gatherDaysAt(state, owner, shore) };
+}
+
+/** The days the faction's army waits on a shore that is not its port while it gathers ships: fewer near its Cothon. */
+export function gatherDaysAt(
+  state: DeepReadonly<GameState>,
+  owner: FactionId,
+  shore: MapPoint,
+): number {
+  return nearCothon(state, owner, shore)
     ? Math.ceil(GATHER_DAYS * BUILDINGS.cothon.gatherShare)
     : GATHER_DAYS;
-  return { from: shore, port: undefined, waitDays };
 }
 
 /** Where the army stands, if it may set out by sea from there today. */

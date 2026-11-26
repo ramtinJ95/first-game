@@ -15,6 +15,7 @@ import { expectConsistent } from './references.ts';
 import type { GameState } from './state/game-state.ts';
 import type { MapPoint } from './state/map-point.ts';
 import { reforming } from './systems/battles.ts';
+import { travelDaysAlong } from './march.ts';
 import { adminShareOf, dailyBalances, limitsOf, muster } from './systems/economy.ts';
 import { movement } from './systems/movement.ts';
 import { tick } from './tick.ts';
@@ -153,6 +154,57 @@ describe("each great power's own building", () => {
     expect(marched(power('persia'), true)).toBeCloseTo(25 * 1.5);
     expect(marched(f.rome, true)).toBeCloseTo(25);
     expect(marched(f.rome, true, 'rome')).toBeCloseTo(25 * 1.5);
+  });
+
+  test('a forecast of a march or a crossing takes the days the movement takes, roads and Cothons counted', () => {
+    const ticksToArrive = (state: GameState, moving: () => boolean) => {
+      let days = 0;
+      while (moving() && days < 500) {
+        movement(state);
+        days++;
+      }
+      return days;
+    };
+    const marches: number[] = [];
+    const crossings: number[] = [];
+    for (const road of [false, true]) {
+      const state = holding('persia', f.roma);
+      if (road) finish(state, f.roma, 'royalRoad');
+      const army = need(state.armies[f.romanArmy]);
+      army.owner = power('persia');
+      const from = { x: 2511.3, y: 2345.8 };
+      const waypoints = [
+        { x: 2511.3, y: 2380.8 },
+        { x: 2560, y: 2420.8 },
+        { x: 2900, y: 2500 },
+      ];
+      army.activity = { kind: 'marching', position: from, waypoints: structuredClone(waypoints) };
+      const forecast = travelDaysAlong(state, army.owner, from, waypoints);
+      marches.push(forecast);
+      expect(ticksToArrive(state, () => army.activity.kind === 'marching')).toBe(forecast);
+    }
+    for (const cothon of [false, true]) {
+      let state = holding('carthage');
+      if (cothon) finish(state, f.carthago, 'cothon');
+      state = tick(
+        state,
+        [{ kind: 'embark', faction: f.carthage, army: f.punicArmy, to: f.roma }],
+        world,
+      ).state;
+      const convoy = need(Object.values(state.convoys)[0], 'a convoy');
+      const forecast = travelDaysAlong(
+        state,
+        convoy.owner,
+        convoy.position,
+        convoy.waypoints,
+        true,
+      );
+      crossings.push(forecast);
+      const moved = structuredClone(state);
+      expect(ticksToArrive(moved, () => Object.hasOwn(moved.convoys, convoy.id))).toBe(forecast);
+    }
+    expect(need(marches[1])).toBeLessThan(need(marches[0]));
+    expect(need(crossings[1])).toBeLessThan(need(crossings[0]));
   });
 
   test('a Cothon has convoys within its reach sail faster, and ships gather sooner on a shore there', () => {

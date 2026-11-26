@@ -720,3 +720,37 @@ describe('plannedRoutes', () => {
     expectConsistent(marching);
   });
 });
+
+describe('the days a march is forecast to take', () => {
+  it('counts a Royal road as the movement does', () => {
+    for (const road of [false, true]) {
+      let state = buildFixture();
+      const persia = 'persia' as FactionId;
+      const carthage = state.factions[FIXTURE.carthage];
+      const roma = state.cities[FIXTURE.roma];
+      const army = state.armies[FIXTURE.romanArmy];
+      if (!carthage || !roma || !army) throw new Error('expected the fixture');
+      state.factions[persia] = { ...structuredClone(carthage), id: persia, name: 'Persia' };
+      roma.owner = persia;
+      army.owner = persia;
+      if (road) roma.buildings.push('royalRoad');
+      const order: MoveArmyOrder = {
+        kind: 'moveArmy',
+        faction: persia,
+        army: army.id,
+        to: { x: 2638.8, y: 2440 },
+      };
+      const march = route(state, world, order);
+      if (typeof march === 'string') throw new Error(march);
+      let days = 0;
+      let orders: Order[] = [order];
+      do {
+        state = tick(state, orders, world).state;
+        orders = [];
+        days++;
+      } while (state.armies[FIXTURE.romanArmy]?.activity.kind === 'marching' && days < 100);
+      expect(days).toBe(march.days);
+      expectConsistent(state);
+    }
+  });
+});
