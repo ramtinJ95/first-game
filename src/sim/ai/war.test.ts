@@ -13,7 +13,7 @@ import { ADMIN_CITIES, limitsOf } from '../systems/economy.ts';
 import { buildWorld } from '../world/world.ts';
 import { buildFixture, FIXTURE, fixtureWorld, onNotice } from '../fixture.ts';
 import { decideOrders } from './decide.ts';
-import { HOARD_ODDS_SHARE } from './thresholds.ts';
+import { HOARD_ODDS_SHARE, STAY_HOME_CAP, STAY_HOME_PER_YEAR } from './thresholds.ts';
 import { warReadiness } from './war.ts';
 import { GUARD_BAND, GUARD_DAYS, GUARD_DETER_DAYS } from '../guards.ts';
 
@@ -109,6 +109,37 @@ describe('a rival great power with a full treasury', () => {
       executeOrder(state, { kind: 'declareWar', faction: carthage, against: rome }, world),
     ).toBeUndefined();
     expect(warReadiness(state, world, carthage, rome)).toBeUndefined();
+    expectConsistent(state);
+  });
+});
+
+describe('a rival great power that stays in the cities the map gave it', () => {
+  /** `carthageAndRome` with Rome's treasury empty, on the day the given years into the game. */
+  function inYear(years: number): GameState {
+    const state = carthageAndRome({ grown: true, full: false });
+    state.day = Math.round(years * 365) as Day;
+    return state;
+  }
+
+  test('lowers the odds a power needs by STAY_HOME_PER_YEAR a year, to at most STAY_HOME_CAP', () => {
+    const start = warReadiness(inYear(0), world, carthage, rome);
+    const four = warReadiness(inYear(4), world, carthage, rome);
+    const twenty = warReadiness(inYear(20), world, carthage, rome);
+    expect(start?.stayedHome).toBe(0);
+    expect(four?.stayedHome).toBeCloseTo(4 * STAY_HOME_PER_YEAR);
+    expect(four?.readiness).toBeCloseTo((start?.readiness ?? 0) / (1 - 4 * STAY_HOME_PER_YEAR));
+    expect(twenty?.stayedHome).toBeCloseTo(STAY_HOME_CAP);
+    expect(twenty?.readiness).toBeCloseTo((start?.readiness ?? 0) / (1 - STAY_HOME_CAP));
+  });
+
+  test('ends while the rival holds a city more than the map gave it, and weighs it so again once lost', () => {
+    const state = inYear(4);
+    changeCityOwner(state, 'mediolanum' as CityId, rome);
+    expect(warReadiness(state, world, carthage, rome)?.stayedHome).toBe(0);
+    changeCityOwner(state, 'mediolanum' as CityId, carthage);
+    expect(warReadiness(state, world, carthage, rome)?.stayedHome).toBeCloseTo(
+      4 * STAY_HOME_PER_YEAR,
+    );
     expectConsistent(state);
   });
 });

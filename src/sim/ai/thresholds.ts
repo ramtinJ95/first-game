@@ -57,6 +57,18 @@ export const COALITION_ODDS = 0.8;
  * war in years 6 to 10, and in 18 at 1, where Rome ended four seeds on one or two cities.
  */
 export const HOARD_ODDS_SHARE = 0.75;
+/**
+ * Against a rival great power that holds no more cities than the map gave it, a power needs
+ * this share less of its odds for each year since the game began, to at most STAY_HOME_CAP,
+ * whether it weighs the rival's city or presses its field armies. A rival that holds a city
+ * more than its homeland ends it; one that loses it again is weighed so again in full that day,
+ * as a realm back at its start that has not grown. Agreed after the fourteenth play-through,
+ * in which a Rome that built and stayed home met no war in ten years: with the measuring Romes
+ * of `npm run sim -- slide`, seeds 1 to 40, a Rome that ignores warnings lost 86 cities against
+ * 20, and one that answers them 4 against 0, with the world's targets as before.
+ */
+export const STAY_HOME_PER_YEAR = 0.015;
+export const STAY_HOME_CAP = 0.15;
 /** The odds a power at peace with everyone needs, whatever the distance, so that a long peace can end. */
 export const PEACE_WAR_ODDS = 1.6;
 /**
