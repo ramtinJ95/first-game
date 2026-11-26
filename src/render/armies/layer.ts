@@ -1,8 +1,14 @@
 import { CanvasSource, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import type { CityRank } from '../../sim/state/city.ts';
-import { layoutSheet, paintSheetCells, sheetArt, type SheetLayout } from '../figures/sheet.ts';
+import {
+  layoutSheet,
+  paintSheetCells,
+  sheetArt,
+  type SheetLayout,
+  type SheetPart,
+} from '../figures/sheet.ts';
 import { INK, PAPER } from '../palette.ts';
-import { SHEET_COLOURS, type Scene, type Sprite as SceneSprite } from './scene.ts';
+import { SHEET_COLOURS, SHEET_OWNERS, type Scene, type Sprite as SceneSprite } from './scene.ts';
 import { sheetsOverBudget } from './sheet-budget.ts';
 
 /** Broken water behind a ship, lighter than the sea. */
@@ -37,10 +43,10 @@ interface Sheet {
  * The most the figure sheets may hold, in texture bytes, beyond those a frame draws from;
  * each also holds its canvas. On a screen of twice the density, a player who goes back and
  * forth between the two closest zooms with Rome, Carthage, Macedon and a minor in view
- * needs 151 MB of sheets, the most any two neighbouring sizes need for four colours, so
- * they never wait for a sheet twice. Every colour at every size would be 303 MB.
+ * needs 179 MB of sheets, and any four colours need at most 189 MB there, so they never
+ * wait for a sheet twice. Every colour at every size would be 361 MB.
  */
-export const SHEET_BUDGET_BYTES = 160 * 2 ** 20;
+export const SHEET_BUDGET_BYTES = 190 * 2 ** 20;
 
 const bytesOf = (sheet: Sheet) => sheet.layout.width * sheet.layout.height * 4;
 
@@ -50,11 +56,11 @@ let posed: ReturnType<typeof sheetArt> | undefined;
 const art = () => (posed ??= sheetArt());
 const layouts = new Map<string, SheetLayout>();
 
-function layoutFor(size: number, owned: boolean): SheetLayout {
-  const key = `${size}:${owned}`;
+function layoutFor(size: number, part: SheetPart): SheetLayout {
+  const key = `${size}:${part}`;
   let layout = layouts.get(key);
   if (!layout) {
-    layout = layoutSheet(art(), owned, size, size > 60 ? 4096 : 2048);
+    layout = layoutSheet(art(), part, size, size > 60 ? 4096 : 2048);
     layouts.set(key, layout);
   }
   return layout;
@@ -130,7 +136,7 @@ export function createArmyLayer(resolution: number, onPainted: () => void) {
     const key = `${size}:${part}`;
     const existing = sheets.get(key);
     if (existing) return existing;
-    const layout = layoutFor(size, part !== 'shared');
+    const layout = layoutFor(size, part === 'shared' ? part : (SHEET_OWNERS[part] ?? 'minors'));
     // The canvas gets its size when it is painted, so a sheet asked for costs nothing until then.
     const canvas = document.createElement('canvas');
     canvas.width = 1;

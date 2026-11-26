@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { carthageNearsWar, openGame, rome } from './support.ts';
 import { loadWarnings, showOwnCity } from './warnings-game.ts';
 import type { Day } from '../src/sim/state/day.ts';
+import { troopsFor } from '../src/sim/troops.ts';
 
 test.use({ viewport: { width: 1280, height: 720 } });
 
@@ -18,7 +19,7 @@ test('with an order waiting that takes Carthage below 80%, each card Roma can ra
   await loadWarnings(page, state);
   await showOwnCity(page, 'Roma');
   const cards = page.getByTestId('recruit-cards');
-  await expect(page.getByTestId('recruit-threat')).toHaveCount(6);
+  await expect(page.getByTestId('recruit-threat')).toHaveCount(troopsFor(rome).length);
   await cards.getByRole('button', { name: /^Swordsmen/ }).click();
   const raise = page.getByRole('button', { name: 'Raise anyway' });
   if (await raise.isVisible()) await raise.click();

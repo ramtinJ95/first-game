@@ -1,10 +1,26 @@
+import type { DeepReadonly } from './deep-readonly.ts';
 import type { Army } from './state/army.ts';
+import type { GameState } from './state/game-state.ts';
+import { TROOPS } from './troops.ts';
 import type { MapPoint } from './state/map-point.ts';
 import { distance, findPath, surfaceAt } from './world/find-path.ts';
 import type { World } from './world/world.ts';
 
-/** How far an army marches in a day. Troop speeds come later. */
+/** How far an army of troops at pace 1 marches in a day. */
 export const MARCH_KM_PER_DAY = 25;
+/** How far the army marches in a day: at the pace of its slowest formation. */
+export function armyKmPerDay(
+  state: DeepReadonly<Pick<GameState, 'formations'>>,
+  army: DeepReadonly<Pick<Army, 'formations'>>,
+): number {
+  let pace = Infinity;
+  for (const id of army.formations) {
+    const formation = state.formations[id];
+    if (formation) pace = Math.min(pace, TROOPS[formation.troop].pace);
+  }
+  return MARCH_KM_PER_DAY * (pace === Infinity ? 1 : pace);
+}
+
 /** How far a convoy of transports sails in a day. */
 export const CONVOY_KM_PER_DAY = 20;
 /** How far a column of refugees walks in a day. */
@@ -16,15 +32,19 @@ export const REFUGEE_KM_PER_DAY = 12;
  */
 export const MAX_MARCH_DAYS = 90;
 
-/** The days an army takes to walk the waypoints from the point. */
-export function marchDays(from: MapPoint, waypoints: readonly MapPoint[]): number {
+/** The days an army takes to walk the waypoints from the point, at pace 1 unless told its pace. */
+export function marchDays(
+  from: MapPoint,
+  waypoints: readonly MapPoint[],
+  kmPerDay = MARCH_KM_PER_DAY,
+): number {
   let km = 0;
   let at = from;
   for (const point of waypoints) {
     km += distance(at, point);
     at = point;
   }
-  return Math.ceil(km / MARCH_KM_PER_DAY);
+  return Math.ceil(km / kmPerDay);
 }
 
 /** The land path from one point to another, or the reason no army can walk it. */

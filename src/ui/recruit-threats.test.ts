@@ -12,7 +12,7 @@ import type { GameState } from '../sim/state/game-state.ts';
 import { newWar, warKey } from '../sim/state/war.ts';
 import { limitsOf } from '../sim/systems/economy.ts';
 import { tick } from '../sim/tick.ts';
-import { TROOPS, type Troop } from '../sim/troops.ts';
+import { troopsFor, type Troop } from '../sim/troops.ts';
 import { buildWorld } from '../sim/world/world.ts';
 import { share } from '../app/threat-news.ts';
 import { recruitThreats } from './recruit-threats.ts';
@@ -23,7 +23,7 @@ const map = parseMap(
 const world = buildWorld(map);
 const rome = 'rome' as FactionId;
 const carthage = 'carthage' as FactionId;
-const ALL = Object.keys(TROOPS) as Troop[];
+const ALL = troopsFor(rome);
 
 /**
  * Rome with 4,000 spearmen and a full treasury beside a Carthage of twelve cities at peace

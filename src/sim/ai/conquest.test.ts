@@ -632,13 +632,13 @@ describe('the guard of the capital', () => {
       state,
       target.owner,
       11_000,
-      alongRoad(roma.position, target.position, 80),
+      alongRoad(roma.position, target.position, 90),
     );
     const raider = state.armies[marching];
     if (!raider) throw new Error('no raider');
     raider.activity = {
       kind: 'marching',
-      position: { ...alongRoad(roma.position, target.position, 80) },
+      position: { ...alongRoad(roma.position, target.position, 90) },
       waypoints: [{ ...roma.position }],
     };
     const orders = decideOrders(state, world, rome);

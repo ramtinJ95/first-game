@@ -10,6 +10,8 @@ import {
   resume,
   untilDrawn,
 } from '../../../e2e/support.ts';
+import { rome } from '../../../e2e/support.ts';
+import { troopsFor } from '../../../src/sim/troops.ts';
 import { defineScenario } from '../scenario.ts';
 
 const WIDE = { width: 1280, height: 720 };
@@ -47,12 +49,12 @@ export default defineScenario({
     const point = camera(page).screen({ x: at.x, y: at.y + 40 });
     await page.mouse.click(point.x, point.y);
     await expect(page.getByTestId('city-name')).toHaveText('Roma');
-    await expect(page.getByTestId('recruit-threat')).toHaveCount(6);
+    await expect(page.getByTestId('recruit-threat')).toHaveCount(troopsFor(rome).length);
     await expect(page.getByTestId('recruit-threat').first()).toContainText(/^Carthage \d+% now, /);
     await cards(page, shot, '1280');
     await resizeTo(page, PHONE);
     await page.locator('canvas[data-terrain="ready"]').waitFor();
-    await expect(page.getByTestId('recruit-threat')).toHaveCount(6);
+    await expect(page.getByTestId('recruit-threat')).toHaveCount(troopsFor(rome).length);
     await cards(page, shot, '390');
     await resizeTo(page, WIDE);
     await page.locator('canvas[data-terrain="ready"]').waitFor();
@@ -64,7 +66,7 @@ export default defineScenario({
     await expect(page.getByTestId('recruit-threat')).toHaveCount(0);
     await hint.scrollIntoViewIfNeeded();
     await pause(page);
-    await expect(page.getByTestId('recruit-threat')).toHaveCount(6);
+    await expect(page.getByTestId('recruit-threat')).toHaveCount(troopsFor(rome).length);
     await resume(page);
     await hint.scrollIntoViewIfNeeded();
     await shot(

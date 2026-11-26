@@ -24,16 +24,30 @@ import {
   stakesArt,
   tentArt,
 } from './things.ts';
+import type { PowerId } from '../../sim/map.ts';
+import { TROOPS, type Troop } from '../../sim/troops.ts';
+
+const EVERY: readonly Motion[] = ['stand', 'march', 'fight', 'run', 'fall'];
 
 /** The motions each kind is drawn in. Civilians neither fight nor fall. */
 export const KIND_MOTIONS: Readonly<Record<FigureKind, readonly Motion[]>> = {
-  spearmen: ['stand', 'march', 'fight', 'run', 'fall'],
-  swordsmen: ['stand', 'march', 'fight', 'run', 'fall'],
-  skirmishers: ['stand', 'march', 'fight', 'run', 'fall'],
-  archers: ['stand', 'march', 'fight', 'run', 'fall'],
-  lightCavalry: ['stand', 'march', 'fight', 'run', 'fall'],
-  heavyCavalry: ['stand', 'march', 'fight', 'run', 'fall'],
-  general: ['stand', 'march', 'fight', 'run', 'fall'],
+  spearmen: EVERY,
+  swordsmen: EVERY,
+  skirmishers: EVERY,
+  archers: EVERY,
+  lightCavalry: EVERY,
+  heavyCavalry: EVERY,
+  legionaries: EVERY,
+  triarii: EVERY,
+  warElephants: EVERY,
+  numidianHorse: EVERY,
+  phalangites: EVERY,
+  companionCavalry: EVERY,
+  nileArchers: EVERY,
+  chariots: EVERY,
+  cataphracts: EVERY,
+  horseArchers: EVERY,
+  general: EVERY,
   bearer: ['stand', 'march', 'run', 'fall'],
   refugee: ['stand', 'march'],
   refugeeWoman: ['stand', 'march'],
@@ -70,6 +84,8 @@ export const artKey = (art: Shared | Owned, frame = 0) => `${art}.${frame}`;
 interface CellArt {
   readonly key: string;
   readonly owned: boolean;
+  /** The great power whose own troop this is; only its colour's sheets hold it. */
+  readonly power?: PowerId;
   readonly ops: PaintOp[];
   /** Degrees the picture turns about its origin. */
   readonly turn: number;
@@ -122,10 +138,12 @@ function ownedOps(art: Owned, t: number): PaintOp[] {
 export function sheetArt(): CellArt[] {
   const cells: CellArt[] = [];
   for (const kind of Object.keys(KINDS) as FigureKind[]) {
+    const signature = kind in TROOPS ? TROOPS[kind as Troop].signature : undefined;
+    const power = signature ? { power: signature.power } : {};
     for (const motion of KIND_MOTIONS[kind]) {
       for (let frame = 0; frame < MOTIONS[motion].frames; frame++) {
         const { ops, turn } = posedFigure(kind, motion, frameTime(motion, frame));
-        cells.push({ key: figureKey(kind, motion, frame), owned: true, ops, turn });
+        cells.push({ key: figureKey(kind, motion, frame), owned: true, ...power, ops, turn });
       }
     }
   }
@@ -244,27 +262,35 @@ export interface SheetLayout {
   readonly size: number;
   readonly width: number;
   readonly height: number;
-  /** Whether this sheet holds the art in an owner's colour, or the art every faction shares. */
-  readonly owned: boolean;
+  readonly part: SheetPart;
   readonly cells: ReadonlyMap<string, Cell>;
 }
+
+/**
+ * What a sheet holds: the art every faction shares, or the art in an owner's colour,
+ * which for a great power also holds its own troops.
+ */
+export type SheetPart = 'shared' | PowerId | 'minors';
+
+const holds = (part: SheetPart, cell: CellArt) =>
+  part === 'shared' ? !cell.owned : cell.owned && (!cell.power || cell.power === part);
 
 const PAD = 1;
 
 /**
- * Packs the owned pictures, or the shared ones, into rows of a sheet `width` pixels
- * wide, tallest first. A colour's sheet is the owned layout painted in that colour.
- * The same size always gives the same sheet.
+ * Packs the pictures of a part into rows of a sheet `width` pixels wide, tallest first.
+ * A colour's sheet is its owner's layout painted in that colour. The same size always
+ * gives the same sheet.
  */
 export function layoutSheet(
   art: readonly CellArt[],
-  owned: boolean,
+  part: SheetPart,
   size: number,
   width = 2048,
 ): SheetLayout {
   const k = size / 100;
   const pieces = art
-    .filter((cell) => cell.owned === owned)
+    .filter((cell) => holds(part, cell))
     .map((cell) => {
       const box = artBounds(cell.ops, cell.turn);
       const w = Math.ceil((box.maxX - box.minX) * k) + 2 * PAD;
@@ -295,7 +321,7 @@ export function layoutSheet(
     x += piece.w;
     row = Math.max(row, piece.h);
   }
-  return { size, owned, width, height: y + row, cells };
+  return { size, part, width, height: y + row, cells };
 }
 
 /** Paints these pictures of a sheet into its canvas, each at its place, the owned art in `colour`. */

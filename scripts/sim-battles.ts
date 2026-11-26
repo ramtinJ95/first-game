@@ -13,6 +13,7 @@ import { tick } from '../src/sim/tick.ts';
 import { decideOrders } from '../src/sim/ai/decide.ts';
 import { FIXTURE } from '../src/sim/fixture.ts';
 import { STANCE_BEATS } from '../src/sim/systems/battles.ts';
+import { TROOPS, type Troop } from '../src/sim/troops.ts';
 
 const MIX: Matchup['a']['troops'] = {
   spearmen: 1500,
@@ -121,7 +122,53 @@ const MATCHUPS: Matchup[] = [
     a: { troops: MIX },
     b: { troops: { spearmen: 400 } },
   },
+  ...signatureRows(),
 ];
+
+/**
+ * Each power's own troop and the shared troop it resembles, side by side against the
+ * enemy its idea names, at equal gold: the shared troop fields as many men as the own
+ * troop's gold buys.
+ */
+function signatureRows(): Matchup[] {
+  const ideas: readonly [Troop, number, Partial<Record<Troop, number>>, Stance?][] = [
+    ['legionaries', 3000, { swordsmen: 3000 }],
+    ['legionaries', 3000, { swordsmen: 3000 }, 'allOutAssault'],
+    ['triarii', 1800, { swordsmen: 3600 }],
+    ['warElephants', 1200, { swordsmen: 3000 }],
+    ['warElephants', 1200, { spearmen: 3000 }],
+    ['numidianHorse', 1600, { lightCavalry: 1600 }],
+    ['phalangites', 3000, { heavyCavalry: 2000 }],
+    ['phalangites', 3000, { archers: 3000 }],
+    ['companionCavalry', 1600, { swordsmen: 3000 }],
+    ['nileArchers', 2000, { swordsmen: 2000 }],
+    ['chariots', 1200, { archers: 2000 }],
+    ['cataphracts', 1600, { archers: 3000 }],
+    ['horseArchers', 1600, { swordsmen: 2000 }],
+    ['horseArchers', 1600, { archers: 2000 }],
+  ];
+  return ideas.flatMap(([own, men, enemy, stance]) => {
+    const shared = TROOPS[own].signature?.resembles ?? own;
+    const gold = (men / TROOPS[own].recruit.men) * TROOPS[own].recruit.gold;
+    const sharedMen = Math.round((gold / TROOPS[shared].recruit.gold) * TROOPS[shared].recruit.men);
+    const against = Object.entries(enemy)
+      .map(([troop, count]) => `${count} ${troop}`)
+      .join(', ');
+    const how = stance ? `, ${stance}` : '';
+    return [
+      {
+        name: `${men} ${own} v ${against}${how}`,
+        a: { troops: { [own]: men }, stance },
+        b: { troops: enemy, stance },
+      },
+      {
+        name: `${sharedMen} ${shared} v ${against}${how}`,
+        a: { troops: { [shared]: sharedMen }, stance },
+        b: { troops: enemy, stance },
+      },
+    ];
+  });
+}
 
 const SEEDS = 500;
 

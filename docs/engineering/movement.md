@@ -1,5 +1,6 @@
 ### Movement
 
+- An army marches at `armyKmPerDay`, `MARCH_KM_PER_DAY` times the `pace` of its slowest formation, and the panels' days to arrive use it. The AI's own estimates still count every army at `MARCH_KM_PER_DAY`. `ENGAGEMENT_DISTANCE` is a day's march of the fastest troop, so no two armies pass between ticks.
 - `src/sim/march.ts` names the speeds `MARCH_KM_PER_DAY`, `CONVOY_KM_PER_DAY`, and `REFUGEE_KM_PER_DAY`. `startMarch` is the one way to set an army marching: it finds the land path, or returns why there is none. No march takes longer than `MAX_MARCH_DAYS` (90), so a march round a sea is refused and the way by sea is the answer. `marchPath` gives the path with that check.
 - A marching army, a convoy, and a refugee column hold the `waypoints` still ahead. The path is found once, when the march starts, and `src/sim/systems/movement.ts` follows it. Movement runs first in the day after `homecoming`.
 - A retreating army walks its path like a marching one, but takes no order and fights no battle until it arrives and stands idle.

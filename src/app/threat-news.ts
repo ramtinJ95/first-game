@@ -17,7 +17,7 @@ import type { World } from '../sim/world/world.ts';
 import type { Alert } from './alerts.ts';
 import { dateText, factionName, TROOP_NAMES, whole } from './names.ts';
 import { trainingDaysAt } from '../sim/buildings/buildings.ts';
-import { TROOPS, type Troop } from '../sim/troops.ts';
+import { TROOPS, troopsFor, type Troop } from '../sim/troops.ts';
 import { beleaguered } from '../sim/systems/sieges.ts';
 import type { Stores } from '../sim/state/faction.ts';
 import { deterrentUntil, GUARD_BAND, GUARD_DETER_DAYS, GUARD_GOLD } from '../sim/guards.ts';
@@ -1236,7 +1236,7 @@ function orderAdvice(
     Math.min(...cities.map((city) => trainingDaysAt(city, TROOPS[troop].recruit.days)));
   const gold = stores?.gold ?? 0;
   const manpower = stores?.manpower ?? 0;
-  const troops = (Object.keys(TROOPS) as Troop[]).sort(
+  const troops = troopsFor(state.player).sort(
     (a, b) => TROOPS[a].recruit.gold - TROOPS[b].recruit.gold,
   );
   const affordable = troops.filter(

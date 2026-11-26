@@ -1,4 +1,4 @@
-import type { Troop } from '../troops.ts';
+import type { SharedTroop } from '../troops.ts';
 
 /**
  * Every number the faction AI decides by. `npm run sim:ai` plays the new game under
@@ -10,7 +10,7 @@ export const RESERVE_DAYS = 60;
 /** A recruit is raised only while the daily balance after its upkeep stays at least this share of the income. */
 export const MIN_BALANCE_SHARE = 0.1;
 /** The share of its men a power wants in each troop. It raises the troop furthest below its share. */
-export const TROOP_MIX: Readonly<Record<Troop, number>> = {
+export const TROOP_MIX: Readonly<Record<SharedTroop, number>> = {
   spearmen: 0.35,
   swordsmen: 0.2,
   archers: 0.15,
@@ -18,6 +18,8 @@ export const TROOP_MIX: Readonly<Record<Troop, number>> = {
   lightCavalry: 0.1,
   heavyCavalry: 0.15,
 };
+/** The share of a shared troop's place in the mix that a power gives to its own troop that stands in for it. */
+export const SIGNATURE_SHARE = 0.5;
 
 /** A power declares war when its free strength is this many times the neighbour's, before distance. */
 export const WAR_ODDS = 2;

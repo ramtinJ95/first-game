@@ -3,7 +3,7 @@ import type { CityId, FactionId } from '../ids.ts';
 import type { Day } from '../state/day.ts';
 import type { GameState } from '../state/game-state.ts';
 import { beleaguered } from '../systems/sieges.ts';
-import { TROOPS, type Troop } from '../troops.ts';
+import { TROOPS, troopsFor, type Troop } from '../troops.ts';
 import { ownedCity } from './owned-city.ts';
 
 export interface RecruitOrder {
@@ -20,6 +20,8 @@ export interface RecruitOrder {
  */
 export function recruit(state: GameState, order: RecruitOrder): string | undefined {
   if (!Object.hasOwn(TROOPS, order.troop)) return `troop ${order.troop} does not exist`;
+  if (!troopsFor(order.faction).includes(order.troop))
+    return `only ${TROOPS[order.troop].signature?.power} raises ${order.troop}`;
   const city = ownedCity(state, order.faction, order.city);
   if (typeof city === 'string') return city;
   if (city.unrestDays > 0) return `city ${city.id} is in unrest for ${city.unrestDays} more days`;
