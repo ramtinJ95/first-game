@@ -8,8 +8,10 @@ import {
   type Dress,
   type HorsePose,
 } from './horse.ts';
+import { chariotFigure } from './chariot.ts';
+import { ELEPHANT_STAND, elephantFigure, elephantWalk, type ElephantPose } from './elephant.ts';
 import { drawStandardPole, footFigure, type FootPose, type Kit } from './human.ts';
-import type { PaintOp } from './paint.ts';
+import { add, type PaintOp } from './paint.ts';
 
 /** What a figure can do. A fall plays once and ends lying; the others loop. */
 export const MOTIONS = {
@@ -25,13 +27,26 @@ export type FigureKind = Troop | 'general' | 'bearer' | 'refugee' | 'refugeeWoma
 
 type Action = 'thrust' | 'cut' | 'throw' | 'loose' | 'charge' | 'lead' | 'none';
 
+/**
+ * What a figure stands on or rides. The kind's own man is the rider, the fighting man
+ * in an elephant's tower, or the archer in a chariot beside its driver.
+ */
+type Mount =
+  | { readonly kind: 'foot' }
+  | { readonly kind: 'horse'; readonly coat: Coat; readonly dress: Dress }
+  | { readonly kind: 'elephant' }
+  | { readonly kind: 'chariot'; readonly team: readonly [near: Coat, far: Coat] };
+
 interface KindArt {
   readonly kit: Kit;
   readonly action: Action;
-  readonly horse?: { readonly coat: Coat; readonly dress: Dress; readonly armoured: boolean };
+  readonly mount: Mount;
   /** The pose at ease, which the other motions start from. */
   readonly rest: Partial<FootPose>;
 }
+
+const FOOT: Mount = { kind: 'foot' };
+const horse = (coat: Coat, dress: Dress): Mount => ({ kind: 'horse', coat, dress });
 
 const REST: FootPose = {
   lean: 2,
@@ -61,6 +76,7 @@ const kit = (k: Partial<Kit>): Kit => ({
   quiver: false,
   cloak: false,
   spares: false,
+  armouredLimbs: false,
   ...k,
 });
 
@@ -75,33 +91,37 @@ export const KINDS: Readonly<Record<FigureKind, KindArt>> = {
       greaves: true,
     }),
     action: 'thrust',
+    mount: FOOT,
     rest: { grip: 176, shoulderFar: 14, elbowFar: 36 },
   },
   swordsmen: {
     kit: kit({ helmet: 'montefortino', body: 'mail', shield: 'oval', weapon: 'sword' }),
     action: 'cut',
+    mount: FOOT,
     rest: { grip: 140, shoulderFar: 8, elbowFar: 50 },
   },
   skirmishers: {
     kit: kit({ helmet: 'bare', body: 'tunic', shield: 'pelta', weapon: 'javelin', spares: true }),
     action: 'throw',
+    mount: FOOT,
     rest: { grip: 160, shoulderFar: 18, elbowFar: 60 },
   },
   archers: {
     kit: kit({ helmet: 'cap', body: 'tunicLong', weapon: 'bow', quiver: true }),
     action: 'loose',
+    mount: FOOT,
     rest: { shoulderNear: 18, elbowNear: 10, grip: 14, draw: 0 },
   },
   lightCavalry: {
     kit: kit({ helmet: 'bare', body: 'tunic', shield: 'round', weapon: 'javelin', cloak: true }),
     action: 'throw',
-    horse: { coat: 'dun', dress: 'saddleCloth', armoured: false },
+    mount: horse('dun', 'saddleCloth'),
     rest: { ...SEATED, grip: 150, shoulderFar: 30, elbowFar: 50, shoulderNear: 30, elbowNear: 60 },
   },
   heavyCavalry: {
     kit: kit({ helmet: 'attic', body: 'muscle', weapon: 'lance', cloak: true }),
     action: 'charge',
-    horse: { coat: 'bay', dress: 'barding', armoured: true },
+    mount: horse('bay', 'barding'),
     rest: { ...SEATED, grip: 168, shoulderFar: 20, elbowFar: 50, shoulderNear: 40, elbowNear: 50 },
   },
   legionaries: {
@@ -114,11 +134,13 @@ export const KINDS: Readonly<Record<FigureKind, KindArt>> = {
       spares: true,
     }),
     action: 'cut',
+    mount: FOOT,
     rest: { grip: 140, shoulderFar: 8, elbowFar: 50 },
   },
   triarii: {
     kit: kit({ helmet: 'plumed', body: 'mail', shield: 'oval', weapon: 'spear', greaves: true }),
     action: 'thrust',
+    mount: FOOT,
     rest: { grip: 176, shoulderFar: 14, elbowFar: 36 },
   },
   phalangites: {
@@ -130,68 +152,73 @@ export const KINDS: Readonly<Record<FigureKind, KindArt>> = {
       greaves: true,
     }),
     action: 'thrust',
+    mount: FOOT,
     rest: { grip: 178, shoulderFar: 14, elbowFar: 36 },
   },
   nileArchers: {
     kit: kit({ helmet: 'bare', body: 'tunic', weapon: 'bow', quiver: true }),
     action: 'loose',
+    mount: FOOT,
     rest: { shoulderNear: 18, elbowNear: 10, grip: 14, draw: 0 },
   },
   numidianHorse: {
     kit: kit({ helmet: 'bare', body: 'tunic', shield: 'round', weapon: 'javelin', spares: true }),
     action: 'throw',
-    horse: { coat: 'black', dress: 'none', armoured: false },
+    mount: horse('black', 'none'),
     rest: { ...SEATED, grip: 150, shoulderFar: 30, elbowFar: 50, shoulderNear: 30, elbowNear: 60 },
   },
   horseArchers: {
     kit: kit({ helmet: 'cap', body: 'tunic', weapon: 'bow', quiver: true, cloak: true }),
     action: 'loose',
-    horse: { coat: 'dun', dress: 'saddleCloth', armoured: false },
+    mount: horse('dun', 'saddleCloth'),
     rest: { ...SEATED, shoulderNear: 30, elbowNear: 20, grip: 14, draw: 0 },
   },
   chariots: {
     kit: kit({ helmet: 'cap', body: 'scale', weapon: 'bow', quiver: true }),
     action: 'loose',
-    horse: { coat: 'bay', dress: 'barding', armoured: false },
-    rest: { ...SEATED, shoulderNear: 30, elbowNear: 20, grip: 14, draw: 0 },
+    mount: { kind: 'chariot', team: ['bay', 'dun'] },
+    rest: { shoulderNear: 18, elbowNear: 10, grip: 14, draw: 0 },
   },
   companionCavalry: {
     kit: kit({ helmet: 'plumed', body: 'muscle', weapon: 'lance', cloak: true }),
     action: 'charge',
-    horse: { coat: 'grey', dress: 'saddleCloth', armoured: false },
+    mount: horse('grey', 'saddleCloth'),
     rest: { ...SEATED, grip: 168, shoulderFar: 20, elbowFar: 50, shoulderNear: 40, elbowNear: 50 },
   },
   cataphracts: {
-    kit: kit({ helmet: 'attic', body: 'scale', weapon: 'lance', greaves: true }),
+    kit: kit({ helmet: 'mask', body: 'scale', weapon: 'lance', armouredLimbs: true }),
     action: 'charge',
-    horse: { coat: 'black', dress: 'barding', armoured: true },
+    mount: horse('black', 'scale'),
     rest: { ...SEATED, grip: 168, shoulderFar: 20, elbowFar: 50, shoulderNear: 40, elbowNear: 50 },
   },
   warElephants: {
-    kit: kit({ helmet: 'bare', body: 'tunic', shield: 'round', weapon: 'spear' }),
+    kit: kit({ helmet: 'attic', body: 'linothorax', shield: 'round', weapon: 'lance' }),
     action: 'charge',
-    horse: { coat: 'grey', dress: 'barding', armoured: true },
-    rest: { ...SEATED, grip: 160, shoulderFar: 20, elbowFar: 50, shoulderNear: 40, elbowNear: 50 },
+    mount: { kind: 'elephant' },
+    rest: { grip: 118, shoulderFar: 40, elbowFar: 30, shoulderNear: 40, elbowNear: 50 },
   },
   general: {
     kit: kit({ helmet: 'plumed', body: 'muscle', weapon: 'swordRaised', cloak: true }),
     action: 'lead',
-    horse: { coat: 'grey', dress: 'saddleCloth', armoured: false },
+    mount: horse('grey', 'saddleCloth'),
     rest: { ...SEATED, grip: 130, shoulderFar: 40, elbowFar: 40, shoulderNear: 40, elbowNear: 50 },
   },
   bearer: {
     kit: kit({ helmet: 'attic', body: 'muscle', weapon: 'standard', cloak: true }),
     action: 'none',
+    mount: FOOT,
     rest: { grip: 178, shoulderFar: 26, elbowFar: 70, shoulderNear: 14, elbowNear: 30 },
   },
   refugee: {
     kit: kit({ helmet: 'bare', body: 'tunicLong', weapon: 'none', cloak: true }),
     action: 'none',
+    mount: FOOT,
     rest: { shoulderNear: 10, elbowNear: 50, shoulderFar: 12, elbowFar: 30, flow: 0 },
   },
   refugeeWoman: {
     kit: kit({ helmet: 'cap', body: 'tunicLong', weapon: 'none', cloak: true }),
     action: 'none',
+    mount: FOOT,
     rest: { shoulderNear: 30, elbowNear: 80, shoulderFar: 20, elbowFar: 70, flow: 0 },
   },
 };
@@ -649,12 +676,33 @@ export interface PosedFigure {
 /** The paint of one figure at time `t` of a motion, from 0 to 1. */
 export function posedFigure(kind: FigureKind, motion: Motion, t: number): PosedFigure {
   const art = KINDS[kind];
-  const rider = footPose(art, motion, t);
-  if (!art.horse) return { ops: footFigure(rider, art.kit), turn: fallTurn(motion, t, false) };
-  const { coat, dress, armoured } = art.horse;
-  const horse = horseFigure(horsePose(motion, t), coat, dress, armoured);
+  const man = footPose(art, motion, t);
+  switch (art.mount.kind) {
+    case 'foot':
+      return { ops: footFigure(man, art.kit), turn: fallTurn(motion, t, false) };
+    case 'horse': {
+      const { coat, dress } = art.mount;
+      const horse = horseFigure(horsePose(motion, t), coat, dress);
+      const ops = [
+        ...horse.ops,
+        ...footFigure(seatedPose(man, motion, t), art.kit, {
+          x: horse.seat.x,
+          y: horse.seat.y + 3,
+        }),
+      ];
+      return { ops, turn: fallTurn(motion, t, true) };
+    }
+    case 'elephant':
+      return { ops: elephantOps(art, man, motion, t), turn: 0 };
+    case 'chariot':
+      return { ops: chariotOps(art.mount.team, art.kit, man, motion, t), turn: 0 };
+  }
+}
+
+/** A rider's pose in the saddle: he leans into a charge and slumps over as his mount goes down. */
+function seatedPose(rider: FootPose, motion: Motion, t: number): FootPose {
   const fallen = motion === 'fall' ? smooth(t) : 0;
-  const seated = {
+  return {
     ...rider,
     ...SEATED,
     lean:
@@ -666,11 +714,125 @@ export function posedFigure(kind: FigureKind, motion: Motion, t: number): PosedF
     grip: motion === 'fall' ? 168 - 70 * fallen : rider.grip,
     lift: 0,
   };
-  const ops = [
-    ...horse.ops,
-    ...footFigure(seated, art.kit, { x: horse.seat.x, y: horse.seat.y + 3 }),
+}
+
+function elephantPose(motion: Motion, t: number): ElephantPose {
+  const a = 2 * Math.PI * t;
+  switch (motion) {
+    case 'stand':
+      return {
+        ...ELEPHANT_STAND,
+        head: 2 * Math.sin(a),
+        trunk: 0.06 + 0.08 * Math.sin(a + 1),
+        ears: 0.2 + 0.25 * Math.max(0, Math.sin(2 * a)),
+        tail: 10 * Math.sin(a + 2),
+      };
+    case 'march':
+      return elephantWalk(t);
+    case 'run':
+      return elephantWalk(t, 1.5, 1);
+    case 'fight': {
+      // It rears on its hind legs, trunk up, and stamps down on whatever stands before it.
+      const up = Math.max(0, Math.sin(a)) ** 1.4;
+      return {
+        ...ELEPHANT_STAND,
+        pitch: -12 * up,
+        head: -14 * up + 4 * (1 - up),
+        trunk: 0.15 + 0.8 * up,
+        ears: 0.6 + 0.4 * up,
+        tail: 20 + 10 * Math.sin(a),
+        foreNear: [10 + 34 * up, 4 + 70 * up],
+        foreFar: [4 + 26 * up, 4 + 60 * up],
+        hindNear: [-4 + 14 * up, 6 + 4 * up],
+        hindFar: [2 + 12 * up, 6 + 4 * up],
+      };
+    }
+    case 'fall': {
+      // It sinks on its knees and rolls forward onto its chest.
+      const knees = smooth(Math.min(1, t * 1.5));
+      const k = smooth(t);
+      return {
+        ...ELEPHANT_STAND,
+        pitch: 8 * k,
+        head: 18 * k,
+        trunk: 0.05,
+        ears: 0.1,
+        tail: -10 * k,
+        foreNear: [4 - 70 * knees, 2 + 150 * knees],
+        foreFar: [-2 - 64 * knees, 2 + 140 * knees],
+        hindNear: [-4 + 76 * k, 6 + 120 * k],
+        hindFar: [2 + 70 * k, 6 + 114 * k],
+      };
+    }
+  }
+}
+
+const MAHOUT = kit({ helmet: 'bare', body: 'tunic' });
+
+function elephantOps(art: KindArt, man: FootPose, motion: Motion, t: number): PaintOp[] {
+  const frame = elephantFigure(elephantPose(motion, t));
+  const fallen = motion === 'fall' ? smooth(t) : 0;
+  const a = 2 * Math.PI * t;
+  const fighting = motion === 'fight' ? Math.max(0, Math.sin(a)) : 0;
+  const driver: FootPose = {
+    ...REST,
+    ...SEATED,
+    lean: 10 + 20 * fighting + 50 * fallen,
+    head: 30 * fallen,
+    shoulderNear: 60,
+    elbowNear: 30,
+    shoulderFar: 70 + 80 * fighting,
+    elbowFar: 20,
+    flow: 0,
+  };
+  const rest = { ...REST, ...art.rest };
+  const tower: FootPose =
+    motion === 'fight'
+      ? man
+      : motion === 'run'
+        ? { ...rest, lean: -4, head: -16, shoulderFar: rest.shoulderFar + 8 * Math.sin(a) }
+        : motion === 'fall'
+          ? { ...rest, lean: 50 * fallen, head: 20 * fallen, grip: 118 - 40 * fallen }
+          : man;
+  return [
+    ...frame.below,
+    ...footFigure(tower, art.kit, add(frame.tower, { x: 0, y: 18 * fallen }), 'none'),
+    ...frame.wall,
+    ...footFigure(driver, MAHOUT, add(frame.neck, { x: 0, y: 2 })),
+    ...frame.above,
   ];
-  return { ops, turn: fallTurn(motion, t, true) };
+}
+
+const DRIVER = kit({ helmet: 'bare', body: 'tunic' });
+
+function chariotOps(
+  team: readonly [Coat, Coat],
+  archerKit: Kit,
+  archer: FootPose,
+  motion: Motion,
+  t: number,
+): PaintOp[] {
+  const fallen = motion === 'fall' ? smooth(t) : 0;
+  const speed = motion === 'march' ? 1 : motion === 'stand' ? 0 : 2;
+  const gait = horsePose(motion, t);
+  const offset = horsePose(motion, (t + 0.08) % 1);
+  const driver: FootPose = {
+    ...REST,
+    lean: (motion === 'march' || motion === 'stand' ? 8 : 18) * (1 - fallen) + 40 * fallen,
+    shoulderNear: 64,
+    elbowNear: 16,
+    shoulderFar: 58,
+    elbowFar: 22,
+    flow: 0,
+  };
+  return chariotFigure({
+    team,
+    horses: [gait, motion === 'fall' ? gait : offset],
+    archer: { pose: { ...archer, lift: 0 }, kit: archerKit },
+    driver: { pose: driver, kit: DRIVER },
+    wheel: speed * 60 * t,
+    sink: 30 * fallen,
+  });
 }
 
 /** The army's standard on its own, its cloth stirring with `t`. */
@@ -687,5 +849,15 @@ export function missileOf(kind: FigureKind): 'arrow' | 'javelin' | undefined {
 }
 
 export const MOUNTED: ReadonlySet<FigureKind> = new Set(
-  (Object.keys(KINDS) as FigureKind[]).filter((kind) => KINDS[kind].horse),
+  (Object.keys(KINDS) as FigureKind[]).filter((kind) => KINDS[kind].mount.kind !== 'foot'),
 );
+
+/** How far a standing figure reaches to either side of its feet and above them, in men's heights. */
+const REACH: Readonly<Record<Mount['kind'], { readonly half: number; readonly top: number }>> = {
+  foot: { half: 0.2, top: 0.95 },
+  horse: { half: 0.5, top: 1.35 },
+  chariot: { half: 0.75, top: 1.3 },
+  elephant: { half: 0.65, top: 1.95 },
+};
+
+export const reachOf = (kind: FigureKind) => REACH[KINDS[kind].mount.kind];
