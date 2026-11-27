@@ -28,7 +28,7 @@ import { decideOrders } from '../sim/ai/decide.ts';
 import { warReadiness } from '../sim/ai/war.ts';
 import { areAtWar } from '../sim/wars.ts';
 import { ALL_PAUSES, stopsOfDay } from './pauses.ts';
-import type { Alert } from './alerts.ts';
+import { alertsOfDay, type Alert } from './alerts.ts';
 import {
   GUARDS_AHEAD_DAYS,
   THREAT_SPARE_DAYS,
@@ -1456,6 +1456,46 @@ describe('a war warning stops the game', () => {
   test('the Game menu setting turns the stop off', () => {
     const news = newsOf(game(5300, 'full'), new Set());
     expect(stopsOfDay(news, { ...ALL_PAUSES, warThreat: false }, new Set()).stop).toBe(false);
+  });
+});
+
+describe('a declaration of war on the player stops the game', () => {
+  /** The news of the day Carthage, on notice since day 60 in `state`, declares war on Rome by the AI's own orders. */
+  function declared(state: GameState) {
+    const punic = state.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 60 as Day;
+    const orders = decideOrders(state, world, carthage);
+    expect(orders).toContainEqual(expect.objectContaining({ kind: 'declareWar', against: rome }));
+    const { state: after, events } = tick(state, orders, world);
+    expectConsistent(after);
+    return alertsOfDay(state, after, events, undefined, undefined, world).filter(
+      (alert) => alert.kind === 'warDeclared',
+    );
+  }
+
+  test('names the city whose forces it weighed and what to do first, and stops the game', () => {
+    const news = declared(game(8000, 'full', 100));
+    expect(news.map((alert) => alert.text)).toEqual([
+      'Carthage declared war on you, its armies ready against your forces near Roma. First march your armies to Roma, or raise men: Skirmishers cost 900 gold and train in 10 days.',
+    ]);
+    expect(news[0]?.pause).toEqual({ kind: 'declared' });
+    expect(stopsOfDay(news, ALL_PAUSES, new Set()).stop).toBe(true);
+  });
+
+  test('a power that weighed the field armies is told so, with the men to raise', () => {
+    const state = game(20_000, 'full', 100);
+    const roma = state.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    roma.garrison = 80_000;
+    expect(declared(state).map((alert) => alert.text)).toEqual([
+      'Carthage declared war on you, its armies ready against all your armies in the field. First raise men: Skirmishers cost 900 gold and train in 10 days.',
+    ]);
+  });
+
+  test('the Game menu setting turns the stop off', () => {
+    const news = declared(game(8000, 'full', 100));
+    expect(stopsOfDay(news, { ...ALL_PAUSES, declared: false }, new Set()).stop).toBe(false);
   });
 });
 
