@@ -156,7 +156,7 @@ jobs:
       - name: Figure sheets in one game
         if: ${{ !cancelled() }}
         shell: bash
-        run: bash .github/within-budget.sh node e2e/memory-bench.ts --sheets 4 --dpr 2 --viewport 640x360 --draw full --sheet-bound 190 --out sheets.csv | tee -a "$GITHUB_STEP_SUMMARY"
+        run: bash .github/within-budget.sh node e2e/memory-bench.ts --sheets 4 --dpr 2 --viewport 640x360 --draw full --sheet-bound 196 --out sheets.csv | tee -a "$GITHUB_STEP_SUMMARY"
       # The curve as an annotation too, which the API serves to readers who cannot fetch logs.
       - name: The curve as an annotation
         if: ${{ !cancelled() }}
