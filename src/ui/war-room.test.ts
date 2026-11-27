@@ -190,6 +190,34 @@ describe('the wars panel', () => {
     ).toEqual([]);
   });
 
+  test('gold a waiting order gives back makes a demand payable, and the suggestions count the gold promised', () => {
+    const state = warOn(201);
+    changeCityOwner(state, f.capua, f.carthage);
+    const rome = state.factions[f.rome];
+    if (!rome) throw new Error('fixture');
+    rome.stores.gold = 3000;
+    const terms: PeaceTerms = { kind: 'payment', payer: f.rome, gold: 2500, cities: [] };
+    run(state, { kind: 'offerPeace', faction: f.carthage, to: f.rome, terms });
+    rome.stores.gold = 1000;
+    rome.study = { advance: 'clemency', daysLeft: 10, paid: 3000 };
+    const cancel: Order = { kind: 'cancelStudy', faction: f.rome };
+    expect(warRoomOf(state, [], world).wars[0]?.theirOffer?.problem).toBeDefined();
+    expect(warRoomOf(state, [cancel], world).wars[0]?.theirOffer?.problem).toBeUndefined();
+    const accept: Order = { kind: 'acceptPeace', faction: f.rome, from: f.carthage, terms };
+    expect(tick(state, [cancel, accept], world).rejected).toEqual([]);
+
+    const rich = warOn(201);
+    changeCityOwner(rich, f.capua, f.carthage);
+    const purse = rich.factions[f.rome];
+    if (!purse) throw new Error('fixture');
+    purse.stores.gold = 3500;
+    const study: Order = { kind: 'study', faction: f.rome, advance: 'citizenRolls' };
+    for (const choice of warRoomOf(rich, [study], world).wars[0]?.choices ?? []) {
+      if (choice.terms.kind === 'payment' && choice.terms.payer === f.rome)
+        expect(choice.terms.gold).toBeLessThanOrEqual(500);
+    }
+  });
+
   test('a demand above what the enemy would take offers the cheaper terms as a counter', () => {
     const state = warOn(201);
     changeCityOwner(state, f.capua, f.carthage);
