@@ -1,0 +1,62 @@
+[
+  {
+    "file": "figures-beside-replaced.png",
+    "title": "Outside Pella at the closest zoom: Carthage's war elephants beside heavy horse, Egypt's chariots beside light horse, and Persia's cataphracts beside heavy horse, the troops each stood in for",
+    "kind": "screenshot"
+  },
+  {
+    "file": "figures-new-fighting.png",
+    "title": "East of Pella: the first day of battle after a day on the march: Persia's cataphracts fight Egypt's chariots, and Carthage's war elephants fight Macedon's phalangites",
+    "kind": "screenshot"
+  },
+  {
+    "file": "figures-rome-carthage.png",
+    "title": "Outside Roma at the closest zoom: Rome's legionaries and triarii fight Carthage's war elephants and Numidian horse",
+    "kind": "screenshot"
+  },
+  {
+    "file": "figures-macedon-egypt-persia.png",
+    "title": "Outside Pella at the closest zoom: Macedon's phalangites and companions, Egypt's Nile archers and chariots, and Persia's cataphracts and horse archers at rest",
+    "kind": "screenshot"
+  },
+  {
+    "file": "cards-rome.png",
+    "title": "Rome's recruit cards at Roma: the shared six, and its own two last, named in its colour",
+    "kind": "screenshot"
+  },
+  {
+    "file": "cards-carthage.png",
+    "title": "Carthage's recruit cards at Carthago: the shared six, and its own two last, named in its colour",
+    "kind": "screenshot"
+  },
+  {
+    "file": "cards-macedon.png",
+    "title": "Macedon's recruit cards at Pella: the shared six, and its own two last, named in its colour",
+    "kind": "screenshot"
+  },
+  {
+    "file": "cards-egypt.png",
+    "title": "Egypt's recruit cards at Alexandria: the shared six, and its own two last, named in its colour",
+    "kind": "screenshot"
+  },
+  {
+    "file": "cards-persia.png",
+    "title": "Persia's recruit cards at Persepolis: the shared six, and its own two last, named in its colour",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Each great power's own two troops: war elephants, chariots, and cataphracts in figures of their own beside the troops they stood in for, marching and fighting; the figures of every power's own troops on the map; and its recruit cards in its colour",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Each great power's own two troops: war elephants, chariots, and cataphracts in figures of their own beside the troops they stood in for, marching and fighting; the figures of every power's own troops on the map; and its recruit cards in its colour (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Each great power's own two troops: war elephants, chariots, and cataphracts in figures of their own beside the troops they stood in for, marching and fighting; the figures of every power's own troops on the map; and its recruit cards in its colour (Playwright trace)",
+    "kind": "trace"
+  }
+]

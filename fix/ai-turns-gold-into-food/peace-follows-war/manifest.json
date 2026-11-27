@@ -1,0 +1,67 @@
+[
+  {
+    "file": "mediolanum-winning.png",
+    "title": "Rome winning against the minor Mediolanum: day 65, standing +2, with the answer and every factor",
+    "kind": "screenshot"
+  },
+  {
+    "file": "mediolanum-even.png",
+    "title": "Rome even against the minor Mediolanum: 225-day even war ends as things stand, with the answer and every factor",
+    "kind": "screenshot"
+  },
+  {
+    "file": "mediolanum-losing.png",
+    "title": "Rome losing against the minor Mediolanum: day 65, standing -2, with the answer and every factor",
+    "kind": "screenshot"
+  },
+  {
+    "file": "macedon-winning.png",
+    "title": "Rome winning against the great power Macedon: day 65, standing +2, with the answer and every factor",
+    "kind": "screenshot"
+  },
+  {
+    "file": "macedon-even.png",
+    "title": "Rome even against the great power Macedon: 225-day even war ends as things stand, with the answer and every factor",
+    "kind": "screenshot"
+  },
+  {
+    "file": "macedon-losing.png",
+    "title": "Rome losing against the great power Macedon: day 65, standing -2, with the answer and every factor",
+    "kind": "screenshot"
+  },
+  {
+    "file": "truce-shield.png",
+    "title": "Day 69: 1,500 Romans besiege an exposed city while Macedon has 3,000 men elsewhere. No actual war losses: the provisional siege cannot buy a free year of safety",
+    "kind": "screenshot"
+  },
+  {
+    "file": "live-forecast.png",
+    "title": "Carthago is under siege: the panel warns that the next-day answer may change with the battle or siege",
+    "kind": "screenshot"
+  },
+  {
+    "file": "refusal-reason.png",
+    "title": "An actual next-day refusal remains in the alerts and Chronicle with the amount still wanted, rather than silently clearing the offer",
+    "kind": "screenshot"
+  },
+  {
+    "file": "changed-forecast.png",
+    "title": "Macedon had accepted the forecast of 800 gold, but real battle losses at Ariminum raised its next-day price: the refusal names the changed losses and standing",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Peace follows the war: six standings, the live-forecast warning, and an actual refusal with its reason",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Peace follows the war: six standings, the live-forecast warning, and an actual refusal with its reason (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Peace follows the war: six standings, the live-forecast warning, and an actual refusal with its reason (Playwright trace)",
+    "kind": "trace"
+  }
+]

@@ -1,0 +1,42 @@
+[
+  {
+    "file": "replace-before-1280.png",
+    "title": "Roma holds the most guards it may, none still counted: the hire names the band it replaces, and the Guards section counts 2 bands, 4,000 gold, to take Carthage below 80%, at 1280 by 720",
+    "kind": "screenshot"
+  },
+  {
+    "file": "replace-before-390.png",
+    "title": "Roma holds the most guards it may, none still counted: the hire names the band it replaces, and the Guards section counts 2 bands, 4,000 gold, to take Carthage below 80%, at 390 px wide, where the side column is a sheet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "replace-hired-1280.png",
+    "title": "With one band hired for the next day, the section counts it as hired though the guards on the walls stay at 3,000, at 1280 by 720",
+    "kind": "screenshot"
+  },
+  {
+    "file": "replace-hired-390.png",
+    "title": "With one band hired for the next day, the section counts it as hired though the guards on the walls stay at 3,000, at 390 px wide, where the side column is a sheet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "replace-news-1280.png",
+    "title": "The next day the news tells of the 500 guards who left to make room, and the day great powers count the new band until",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A city full of guards no great power still counts hires a new band in place of the oldest: the panel names the band it replaces and counts the bands it may still hire, and the news tells of the band that left to make room",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A city full of guards no great power still counts hires a new band in place of the oldest: the panel names the band it replaces and counts the bands it may still hire, and the news tells of the band that left to make room (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A city full of guards no great power still counts hires a new band in place of the oldest: the panel names the band it replaces and counts the bands it may still hire, and the news tells of the band that left to make room (Playwright trace)",
+    "kind": "trace"
+  }
+]

@@ -1,0 +1,57 @@
+[
+  {
+    "file": "quote-risk.png",
+    "title": "A quote for Roma to Syracusae: the payback set against Syracusae’s war with Carthage, also at war with Rome, which closes the route if Syracusae falls to Carthage",
+    "kind": "screenshot"
+  },
+  {
+    "file": "picker.png",
+    "title": "The partner list: cities that agree now with their way, payback, price and risk, then the rest with the reason",
+    "kind": "screenshot"
+  },
+  {
+    "file": "war-routes.png",
+    "title": "Declare war on Carthage? The route it closes with its price, what it has brought, and what is still unpaid, and the roads it exposes",
+    "kind": "screenshot"
+  },
+  {
+    "file": "close-route.png",
+    "title": "Close route asks first: what the route cost, what it has brought and what is unpaid, no refund, and the price to open it again",
+    "kind": "screenshot"
+  },
+  {
+    "file": "improve-route.png",
+    "title": "With the slots full, a running route can be improved twice: half its opening price for a quarter more gold a day at both ends, with its payback and no refund on closing",
+    "kind": "screenshot"
+  },
+  {
+    "file": "invitation.png",
+    "title": "An invitation: both goods, the way and its crossing, what each arrival pays Roma, the last day, and Accept disabled with its reason",
+    "kind": "screenshot"
+  },
+  {
+    "file": "news.png",
+    "title": "The news of trade: Carthage’s siege of Syracusae stops the route, which would close only if Syracusae fell to a power at war with Rome, and Macedon’s raid is one line with its loss",
+    "kind": "screenshot"
+  },
+  {
+    "file": "picker-phone.png",
+    "title": "The partner list at 390 px wide, within reach in the bottom sheet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "What trade tells before it is done: the risk beside the payback, the partner list, the routes a war closes, Close route, an invitation, the gathered news, and the list on a phone",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "What trade tells before it is done: the risk beside the payback, the partner list, the routes a war closes, Close route, an invitation, the gathered news, and the list on a phone (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "What trade tells before it is done: the risk beside the payback, the partner list, the routes a war closes, Close route, an invitation, the gathered news, and the list on a phone (Playwright trace)",
+    "kind": "trace"
+  }
+]

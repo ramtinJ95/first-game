@@ -1,0 +1,32 @@
+[
+  {
+    "file": "menu.png",
+    "title": "The only line: march to the shore at Hippo Regius to sail for Syracusae, with the days of each leg",
+    "kind": "screenshot"
+  },
+  {
+    "file": "gathering.png",
+    "title": "A day on, the legion is at the shore and gathering its ships, then sails for Syracusae",
+    "kind": "screenshot"
+  },
+  {
+    "file": "at-sea.png",
+    "title": "Its ships gathered, the legion is at sea to Syracusae",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "At peace with Carthage and at war with Syracusae, a legion a day inland of Hippo Regius takes the menu line to sail for Syracusae, gathers ships at the shore, and sails",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "At peace with Carthage and at war with Syracusae, a legion a day inland of Hippo Regius takes the menu line to sail for Syracusae, gathers ships at the shore, and sails (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "At peace with Carthage and at war with Syracusae, a legion a day inland of Hippo Regius takes the menu line to sail for Syracusae, gathers ships at the shore, and sails (Playwright trace)",
+    "kind": "trace"
+  }
+]

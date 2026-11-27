@@ -1,0 +1,217 @@
+[
+  {
+    "file": "after-cyclades.png",
+    "title": "after: Cyclades, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-delta.png",
+    "title": "after: Nile delta, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-peloponnese.png",
+    "title": "after: Southern Peloponnese, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-bosporus.png",
+    "title": "after: Bosporus, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-hellespont.png",
+    "title": "after: Hellespont, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-messina.png",
+    "title": "after: Strait of Messina, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-carthage.png",
+    "title": "after: Gulf of Tunis at Carthage, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-dalmatia.png",
+    "title": "after: Dalmatian coast, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-brittany.png",
+    "title": "after: Brittany, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-aegean-middle.png",
+    "title": "after: Whole Aegean, day 1, 1 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-italy-middle.png",
+    "title": "after: Whole Italy, day 1, 0.66 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-rhodes.png",
+    "title": "after: Rhodos island, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-gades.png",
+    "title": "after: Gades and its harbour, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-samothrace.png",
+    "title": "after: Samothrace, an island town, 1 px/km, day 1, 1 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-ionian-bound.png",
+    "title": "after: Ionian coast, maximum shared-coast displacement, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-cilicia-bound.png",
+    "title": "after: Cilicia, source shape limited by the physical coast, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-knosos.png",
+    "title": "after: Knosos on Crete, unchanged island city and harbour, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-siege-ground.png",
+    "title": "after: Carthage siege camp and harbour, 4 px/km, identical physical state",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-convoy-ground.png",
+    "title": "after: Convoy crossing to Caralis, 4 px/km, identical physical state",
+    "kind": "screenshot"
+  },
+  {
+    "file": "after-refugee-ground.png",
+    "title": "after: Refugee figures and carts, 4 px/km, identical physical state",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-cyclades.png",
+    "title": "before: Cyclades, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-delta.png",
+    "title": "before: Nile delta, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-peloponnese.png",
+    "title": "before: Southern Peloponnese, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-bosporus.png",
+    "title": "before: Bosporus, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-hellespont.png",
+    "title": "before: Hellespont, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-messina.png",
+    "title": "before: Strait of Messina, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-carthage.png",
+    "title": "before: Gulf of Tunis at Carthage, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-dalmatia.png",
+    "title": "before: Dalmatian coast, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-brittany.png",
+    "title": "before: Brittany, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-aegean-middle.png",
+    "title": "before: Whole Aegean, day 1, 1 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-italy-middle.png",
+    "title": "before: Whole Italy, day 1, 0.66 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-rhodes.png",
+    "title": "before: Rhodos island, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-gades.png",
+    "title": "before: Gades and its harbour, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-samothrace.png",
+    "title": "before: Samothrace, an island town, 1 px/km, day 1, 1 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-ionian-bound.png",
+    "title": "before: Ionian coast, maximum shared-coast displacement, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-cilicia-bound.png",
+    "title": "before: Cilicia, source shape limited by the physical coast, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-knosos.png",
+    "title": "before: Knosos on Crete, unchanged island city and harbour, day 1, 4 px/km",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-siege-ground.png",
+    "title": "before: Carthage siege camp and harbour, 4 px/km, identical physical state",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-convoy-ground.png",
+    "title": "before: Convoy crossing to Caralis, 4 px/km, identical physical state",
+    "kind": "screenshot"
+  },
+  {
+    "file": "before-refugee-ground.png",
+    "title": "before: Refugee figures and carts, 4 px/km, identical physical state",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Real atlas sea coasts, islands and constrained crossings, before and after",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Real atlas sea coasts, islands and constrained crossings, before and after (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Real atlas sea coasts, islands and constrained crossings, before and after (Playwright trace)",
+    "kind": "trace"
+  }
+]

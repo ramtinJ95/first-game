@@ -1,0 +1,27 @@
+[
+  {
+    "file": "recruit-moved-before.png",
+    "title": "Before the second raise: Spearmen at Roma name Year 1, day 252",
+    "kind": "screenshot"
+  },
+  {
+    "file": "recruit-moved-after.png",
+    "title": "After 500 Skirmishers are raised: the card names Year 5, day 35 and says the Skirmishers, fed first, moved the day",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A Spearmen raise warns and names Year 1, day 252; after 500 Skirmishers are raised, the same card names a later day and says the Skirmishers moved it",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A Spearmen raise warns and names Year 1, day 252; after 500 Skirmishers are raised, the same card names a later day and says the Skirmishers moved it (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A Spearmen raise warns and names Year 1, day 252; after 500 Skirmishers are raised, the same card names a later day and says the Skirmishers moved it (Playwright trace)",
+    "kind": "trace"
+  }
+]

@@ -1,0 +1,27 @@
+[
+  {
+    "file": "start-bonuses.png",
+    "title": "The start screen: each power card ends with its standing bonus in one line",
+    "kind": "screenshot"
+  },
+  {
+    "file": "colonia-offered.png",
+    "title": "Roma's panel offers Rome's own building under Your own building: the Colonia, with what it does, its price, its days and its payback",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "Each great power's standing bonus on the start screen, and Roma's panel offering Rome's own building, the Colonia, with its price, days and payback",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "Each great power's standing bonus on the start screen, and Roma's panel offering Rome's own building, the Colonia, with its price, days and payback (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "Each great power's standing bonus on the start screen, and Roma's panel offering Rome's own building, the Colonia, with its price, days and payback (Playwright trace)",
+    "kind": "trace"
+  }
+]

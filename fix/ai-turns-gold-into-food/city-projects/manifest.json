@@ -1,0 +1,67 @@
+[
+  {
+    "file": "levels-offered-1280.png",
+    "title": "Roma with all five first buildings at level 1, offering each second level and the three great works with what each adds here, its price, its days, and its payback, at 1280 by 720",
+    "kind": "screenshot"
+  },
+  {
+    "file": "levels-offered-390.png",
+    "title": "Roma with all five first buildings at level 1, offering each second level and the three great works with what each adds here, its price, its days, and its payback, at 390 px wide, where the side column is a sheet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "works-offered-1280.png",
+    "title": "The great works Roma may choose one of, each with its payback here, at 1280 by 720",
+    "kind": "screenshot"
+  },
+  {
+    "file": "works-offered-390.png",
+    "title": "The great works Roma may choose one of, each with its payback here, at 390 px wide, where the side column is a sheet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "everything-built-1280.png",
+    "title": "Roma with every building at level 2 and a Treasury hall standing, each with what it adds, at 1280 by 720",
+    "kind": "screenshot"
+  },
+  {
+    "file": "everything-built-390.png",
+    "title": "Roma with every building at level 2 and a Treasury hall standing, each with what it adds, at 390 px wide, where the side column is a sheet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "recruit-reservoirs-1280.png",
+    "title": "In a city with Canals the Skirmishers warning names Reservoirs there and the day they feed the raise, at 1280 by 720",
+    "kind": "screenshot"
+  },
+  {
+    "file": "recruit-reservoirs-390.png",
+    "title": "In a city with Canals the Skirmishers warning names Reservoirs there and the day they feed the raise, at 390 px wide, where the side column is a sheet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "recruit-drill-field-1280.png",
+    "title": "In a city with Barracks the Spearmen card names a Drill field there and the day it lets the raise, at 1280 by 720",
+    "kind": "screenshot"
+  },
+  {
+    "file": "recruit-drill-field-390.png",
+    "title": "In a city with Barracks the Spearmen card names a Drill field there and the day it lets the raise, at 390 px wide, where the side column is a sheet",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A grown city's projects: each building's level, the second levels and great works it offers with their payback, a city with everything built, and the recruit card's second-level lines",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A grown city's projects: each building's level, the second levels and great works it offers with their payback, a city with everything built, and the recruit card's second-level lines (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A grown city's projects: each building's level, the second levels and great works it offers with their payback, a city with everything built, and the recruit card's second-level lines (Playwright trace)",
+    "kind": "trace"
+  }
+]

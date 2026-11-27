@@ -1,0 +1,32 @@
+[
+  {
+    "file": "war-warning-years-chronicle.png",
+    "title": "Every war warning a cautious Rome hears in its first four years on seed 5, and each line that the threat passed, newest first",
+    "kind": "screenshot"
+  },
+  {
+    "file": "war-warning-years-corner.png",
+    "title": "The news corner on Year 4, day 180",
+    "kind": "screenshot"
+  },
+  {
+    "file": "war-warning-years-war-elsewhere.png",
+    "title": "A warned Carthage that goes to war with Egypt: the line says its threat passed because that war ties down all its armies, not that it fell to 0%",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A cautious Rome that trades, hires no guards and declares no war, over its first four years: the war warnings and the lines that each passed, in its chronicle, and the line of a threat that passed because the power went to war elsewhere",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A cautious Rome that trades, hires no guards and declares no war, over its first four years: the war warnings and the lines that each passed, in its chronicle, and the line of a threat that passed because the power went to war elsewhere (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A cautious Rome that trades, hires no guards and declares no war, over its first four years: the war warnings and the lines that each passed, in its chronicle, and the line of a threat that passed because the power went to war elsewhere (Playwright trace)",
+    "kind": "trace"
+  }
+]

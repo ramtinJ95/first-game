@@ -1,0 +1,72 @@
+[
+  {
+    "file": "paused.png",
+    "title": "Paused at the whole map: the top bar reads Paused",
+    "kind": "screenshot"
+  },
+  {
+    "file": "zoomed.png",
+    "title": "Zoomed to the middle zoom over Roma while paused",
+    "kind": "screenshot"
+  },
+  {
+    "file": "panned.png",
+    "title": "Panned towards the south-east while paused: Roma stands up and to the left",
+    "kind": "screenshot"
+  },
+  {
+    "file": "hovered.png",
+    "title": "The pointer over Roma: the map is as it was, nothing to draw",
+    "kind": "screenshot"
+  },
+  {
+    "file": "selected.png",
+    "title": "Roma selected while paused: its outline and its panel",
+    "kind": "screenshot"
+  },
+  {
+    "file": "panel-open.png",
+    "title": "The Overview opened over the paused map",
+    "kind": "screenshot"
+  },
+  {
+    "file": "panel-closed.png",
+    "title": "The Overview closed: the map under it as before",
+    "kind": "screenshot"
+  },
+  {
+    "file": "resized.png",
+    "title": "The window made smaller and back to 1280 × 720 while paused",
+    "kind": "screenshot"
+  },
+  {
+    "file": "ordered.png",
+    "title": "An order to march to Capua given while paused: the faint dashed path of an order not yet applied",
+    "kind": "screenshot"
+  },
+  {
+    "file": "loaded.png",
+    "title": "A save of day 21 loaded while paused",
+    "kind": "screenshot"
+  },
+  {
+    "file": "new-game.png",
+    "title": "A new game as Carthage: paused on its capital with the guide open",
+    "kind": "screenshot"
+  },
+  {
+    "file": "clip.gif",
+    "title": "A paused game after each kind of input: it draws only on a change, and shows each at once",
+    "kind": "clip"
+  },
+  {
+    "file": "video.webm",
+    "title": "A paused game after each kind of input: it draws only on a change, and shows each at once (video)",
+    "kind": "video"
+  },
+  {
+    "file": "trace.zip",
+    "title": "A paused game after each kind of input: it draws only on a change, and shows each at once (Playwright trace)",
+    "kind": "trace"
+  }
+]
