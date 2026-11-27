@@ -29,7 +29,7 @@ const DAYS = 3 * 365 + 180;
  * saved with a chronicle of every war warning the page's own rule told it, every line that a
  * warned threat has passed, and every declaration of war on it, newest first, as the page keeps them.
  */
-function cautiousRomeWithItsWarnings(): string {
+function cautiousRomeWithItsWarnings(): { save: string; passed: number } {
   const told = new Set<string>();
   const chronicle: Alert[] = [];
   let state: GameState | undefined;
@@ -48,7 +48,9 @@ function cautiousRomeWithItsWarnings(): string {
     { peaceful: true },
   );
   if (!state) throw new Error(`Rome fell before day ${DAYS}`);
-  return saveGame(
+  const passed = chronicle.filter((alert) => /threat has passed for now/.test(alert.text)).length;
+  if (passed === 0) throw new Error(`no warned threat passed by day ${DAYS}`);
+  const save = saveGame(
     state,
     pageData({
       chronicle,
@@ -60,6 +62,7 @@ function cautiousRomeWithItsWarnings(): string {
       weakSieges: new Map(),
     }),
   );
+  return { save, passed };
 }
 
 const egypt = 'egypt' as FactionId;
@@ -100,10 +103,11 @@ export default defineScenario({
   async run({ page, shot }) {
     await openGame(page);
     await pause(page);
-    await dropSave(page, cautiousRomeWithItsWarnings());
+    const { save, passed } = cautiousRomeWithItsWarnings();
+    await dropSave(page, save);
     const chronicle = page.getByTestId('chronicle');
     await expect(chronicle).toBeVisible();
-    await expect(chronicle.getByText(/threat has passed for now/)).toHaveCount(2);
+    await expect(chronicle.getByText(/threat has passed for now/)).toHaveCount(passed);
     await untilDrawn(page);
     await shot(
       'war-warning-years-chronicle',
