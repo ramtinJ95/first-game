@@ -14,7 +14,7 @@ import {
   STORM_ODDS,
   WALL_DEFENCE,
 } from '../systems/sieges.ts';
-import { dailyBalances, UPKEEP_PER_MAN } from '../systems/economy.ts';
+import { dailyBalances, goldPerManOf, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import type { Stores } from '../state/faction.ts';
 import { TROOPS } from '../troops.ts';
 import { connected, distance } from '../world/find-path.ts';
@@ -115,7 +115,9 @@ export function reserveOf(
   extraMen = 0,
 ): number {
   const men = menUnderArms(state, faction) + menInTraining(state, faction) + extraMen;
-  return RESERVE_DAYS * men * UPKEEP_PER_MAN[store];
+  return (
+    RESERVE_DAYS * men * (store === 'gold' ? goldPerManOf(state, faction) : UPKEEP_PER_MAN.food)
+  );
 }
 
 export function positionOf(army: ArmyView): MapPoint | undefined {

@@ -1,6 +1,6 @@
 import { newGame, STARTING_GENERAL_SKILL } from '../new-game.ts';
 import { describe, expect, test } from 'vitest';
-import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld, growRome } from '../fixture.ts';
 import type { ArmyId, FormationId } from '../ids.ts';
 import { executeOrder } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
@@ -349,6 +349,23 @@ describe('the cost of a large realm', () => {
       (2 * ADMIN_CITIES - 4) * 12_000 * (OUTPUT_PER_PERSON.food - FOOD_PER_PERSON),
       6,
     );
+  });
+});
+
+describe('the pay of a large realm', () => {
+  test('past ADMIN_CITIES cities, each man is paid less gold the more cities the realm holds', () => {
+    const goldPerMan = (cities: number) => {
+      const state = buildFixture();
+      growRome(state, cities);
+      const before = dailyBalances(state).get(FIXTURE.rome)?.gold ?? 0;
+      const formation = state.formations[FIXTURE.hastati];
+      if (!formation) throw new Error('no hastati');
+      formation.men += 1000;
+      return (before - (dailyBalances(state).get(FIXTURE.rome)?.gold ?? 0)) / 1000;
+    };
+    expect(goldPerMan(2)).toBeCloseTo(UPKEEP_PER_MAN.gold, 9);
+    expect(goldPerMan(ADMIN_CITIES)).toBeCloseTo(UPKEEP_PER_MAN.gold, 9);
+    expect(goldPerMan(2 * ADMIN_CITIES) / UPKEEP_PER_MAN.gold).toBeCloseTo(0.878, 3);
   });
 });
 
