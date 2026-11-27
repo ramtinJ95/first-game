@@ -1,14 +1,20 @@
 import { BUILDINGS } from '../sim/buildings/buildings.ts';
 import { expect, it } from 'vitest';
 import { trainingDaysAt } from '../sim/buildings/buildings.ts';
-import { buildFixture, FIXTURE as f, fixtureWorld } from '../sim/fixture.ts';
+import { buildFixture, FIXTURE as f, fixtureWorld, growRome } from '../sim/fixture.ts';
 import { newGame } from '../sim/new-game.ts';
 import { changeCityOwner, UNREST_DAYS } from '../sim/cities.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { Day } from '../sim/state/day.ts';
 import { dateText } from '../app/names.ts';
 import type { GameState } from '../sim/state/game-state.ts';
-import { dailyBalances, economy, limitsOf, UPKEEP_PER_MAN } from '../sim/systems/economy.ts';
+import {
+  ADMIN_CITIES,
+  dailyBalances,
+  economy,
+  limitsOf,
+  UPKEEP_PER_MAN,
+} from '../sim/systems/economy.ts';
 import { tick } from '../sim/tick.ts';
 import { MOVED_DAYS, movedText, recruitForecast } from './recruit-forecast.ts';
 import { TROOP_NAMES } from '../app/names.ts';
@@ -654,4 +660,42 @@ it('names no day past the day the stores run out before the raise, when men dese
   Object.assign(required(state.factions[f.rome]).stores, { gold: 30_000, manpower: 0, food: 0 });
   const line = recruitForecast(state, [], world, 'spearmen', 15, f.roma).barracks;
   if (line !== undefined) barracksWait(state);
+});
+
+function largeRome(): GameState {
+  const state = buildFixture();
+  growRome(state, 2 * ADMIN_CITIES);
+  const rome = state.factions[f.rome];
+  if (!rome) throw new Error('fixture');
+  rome.stores = { gold: 50_000, food: 50_000, manpower: 50_000 };
+  return state;
+}
+
+it('tells a realm past ADMIN_CITIES the gold its men are paid, less than the full upkeep', () => {
+  const state = largeRome();
+  const balance = dailyBalances(state).get(f.rome);
+  if (!balance) throw new Error('fixture');
+  const forecast = recruitForecast(state, [], world, 'spearmen');
+  const men = TROOPS.spearmen.recruit.men;
+  expect(forecast.upkeep.gold / (men * UPKEEP_PER_MAN.gold)).toBeCloseTo(0.878, 3);
+  expect(forecast.after.gold).toBeCloseTo(balance.gold - forecast.upkeep.gold, 9);
+});
+
+it('prices the upkeep at the pay of the realm a queued peace leaves', () => {
+  const state = largeRome();
+  executeOrder(state, { kind: 'declareWar', faction: f.rome, against: f.carthage }, world);
+  const ceded = Object.values(state.cities)
+    .filter((city) => city.owner === f.rome && city.id !== f.roma)
+    .slice(0, ADMIN_CITIES)
+    .map((city) => city.id);
+  const terms = { kind: 'payment', payer: f.rome, gold: 0, cities: ceded } as const;
+  expect(
+    executeOrder(state, { kind: 'offerPeace', faction: f.carthage, to: f.rome, terms }, world),
+  ).toBeUndefined();
+  const accept: Order = { kind: 'acceptPeace', faction: f.rome, from: f.carthage, terms };
+  const forecast = recruitForecast(state, [accept], world, 'spearmen');
+  expect(forecast.upkeep.gold).toBeCloseTo(TROOPS.spearmen.recruit.men * UPKEEP_PER_MAN.gold, 9);
+  expect(recruitForecast(state, [], world, 'spearmen').upkeep.gold).toBeLessThan(
+    forecast.upkeep.gold,
+  );
 });
