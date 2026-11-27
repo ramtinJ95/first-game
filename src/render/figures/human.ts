@@ -73,7 +73,7 @@ const UPPER_ARM = 16;
 const FOREARM = 15;
 const TORSO = 29;
 
-export type Helmet = 'corinthian' | 'montefortino' | 'bare' | 'cap' | 'attic' | 'plumed';
+export type Helmet = 'corinthian' | 'montefortino' | 'bare' | 'cap' | 'attic' | 'plumed' | 'mask';
 export type Body = 'linothorax' | 'mail' | 'tunic' | 'tunicLong' | 'scale' | 'muscle';
 export type Shield = 'aspis' | 'oval' | 'pelta' | 'round' | 'none';
 export type Weapon =
@@ -89,6 +89,8 @@ export interface Kit {
   readonly cloak: boolean;
   /** Spare javelins held behind the shield. */
   readonly spares: boolean;
+  /** Arms and legs in hoops of iron to the wrist and the ankle. */
+  readonly armouredLimbs: boolean;
 }
 
 export interface Skeleton {
@@ -192,10 +194,11 @@ function drawLeg(ops: PaintOp[], s: Skeleton, side: 'near' | 'far', kit: Kit) {
   const knee = near ? s.kneeNear : s.kneeFar;
   const ankle = near ? s.ankleNear : s.ankleFar;
   const toe = near ? s.toeNear : s.toeFar;
-  const skin = near ? C.skin : C.skinShade;
+  const skin = kit.armouredLimbs ? (near ? C.iron : C.ironShade) : near ? C.skin : C.skinShade;
   const hip = add(s.hip, scale(s.forward, near ? 1.5 : -1));
   foot(ops, ankle, toe, near ? C.leather : C.leatherShade);
   limb(ops, knee, ankle, 3.9, 2.7, skin);
+  if (kit.armouredLimbs) hoops(ops, knee, ankle, 4);
   if (kit.greaves) {
     limb(
       ops,
@@ -207,8 +210,20 @@ function drawLeg(ops: PaintOp[], s: Skeleton, side: 'near' | 'far', kit: Kit) {
     );
   }
   limb(ops, hip, knee, 5.4, 4, skin);
+  if (kit.armouredLimbs) hoops(ops, hip, knee, 4);
   if (kit.body === 'scale' || kit.body === 'tunicLong') {
     limb(ops, hip, lerpVec(hip, knee, 0.75), 5.6, 4.5, near ? C.linen : C.linenShade);
+  }
+}
+
+/** Iron hoops round a limb from `a` to `b`. */
+function hoops(ops: PaintOp[], a: Vec, b: Vec, count: number) {
+  const along = { x: b.x - a.x, y: b.y - a.y };
+  const length = Math.hypot(along.x, along.y) || 1;
+  const across = { x: (-along.y / length) * 3.6, y: (along.x / length) * 3.6 };
+  for (let i = 1; i <= count; i++) {
+    const at = lerpVec(a, b, i / (count + 1));
+    ops.push({ d: polyline([add(at, across), add(at, scale(across, -1))]), stroke: 0.8 });
   }
 }
 
@@ -217,13 +232,19 @@ function drawArm(
   s: Skeleton,
   side: 'near' | 'far',
   sleeve: string | { faction: 'base' },
+  armoured: boolean,
 ) {
   const near = side === 'near';
   const elbow = near ? s.elbowNear : s.elbowFar;
   const hand = near ? s.handNear : s.handFar;
   const skin = near ? C.skin : C.skinShade;
-  limb(ops, elbow, hand, 3.3, 2.6, skin);
-  limb(ops, s.shoulder, elbow, 4.4, 3.4, skin);
+  const arm = armoured ? (near ? C.iron : C.ironShade) : skin;
+  limb(ops, elbow, hand, 3.3, 2.6, arm);
+  limb(ops, s.shoulder, elbow, 4.4, 3.4, arm);
+  if (armoured) {
+    hoops(ops, elbow, hand, 3);
+    hoops(ops, s.shoulder, elbow, 3);
+  }
   ops.push({
     d: capsule(s.shoulder, lerpVec(s.shoulder, elbow, 0.45), 5, 4.4),
     fill: sleeve,
@@ -626,6 +647,44 @@ function drawHead(ops: PaintOp[], s: Skeleton, kit: Kit) {
       }
       break;
     }
+    case 'mask': {
+      // A tall iron helmet with a face of iron and a mail curtain over the neck.
+      const shell = [
+        rot(-7.6, 2),
+        rot(-8.2, -4),
+        rot(-5, -10),
+        rot(0, -14.6),
+        rot(5, -10),
+        rot(8, -4),
+        rot(9.2, 1.4),
+        rot(7, 7.4),
+        rot(1, 8.2),
+        rot(-3, 5),
+      ];
+      ops.push({
+        d: smoothClosed([rot(-8, -2), rot(-11, 6), rot(-7, 10), rot(1, 9), rot(-2, 2)]),
+        fill: C.ironShade,
+        stroke: THIN,
+      });
+      ops.push({ d: smoothClosed(shell), fill: C.iron, stroke: OUTLINE });
+      ops.push({
+        d: smoothClosed([rot(-7.6, 2), rot(-8.2, -4), rot(-5, -10), rot(-2, -7), rot(-3, 2)]),
+        fill: C.ironShade,
+      });
+      ops.push({ d: polyline([rot(2.4, -2), rot(7.8, -2.2)]), stroke: 1.6, strokeColour: C.dark });
+      ops.push({ d: polyline([rot(5.6, 4.2), rot(8.2, 4)]), stroke: 1, strokeColour: C.dark });
+      ops.push({
+        d: smoothOpen([rot(-3.6, -11), rot(1, -13.6), rot(4.6, -10)]),
+        stroke: 1.2,
+        strokeColour: C.ironLight,
+      });
+      ops.push({
+        d: smoothClosed([rot(-1, -14), rot(-6, -19), rot(-12, -16), rot(-7, -13)]),
+        fill: { faction: 'base' },
+        stroke: THIN,
+      });
+      break;
+    }
     case 'montefortino': {
       const shell = [
         rot(-7.6, 1.6),
@@ -923,23 +982,31 @@ export function drawStandardPole(ops: PaintOp[], hand: Vec, angle: number, wave 
   ops.push({ d: ellipse(add(tip, scale(u, 3)), 3.4, 3.4, 0, 14), fill: C.bronze, stroke: THIN });
 }
 
-/** The figure on foot, from the back of the picture to the front. */
-export function footFigure(pose: FootPose, kit: Kit, seat?: Vec): PaintOp[] {
+/**
+ * The figure on foot, from the back of the picture to the front. A man with a `seat`
+ * sits a mount with only his near leg showing, and one in a tower shows no legs at all.
+ */
+export function footFigure(
+  pose: FootPose,
+  kit: Kit,
+  seat?: Vec,
+  legs: 'both' | 'near' | 'none' = seat ? 'near' : 'both',
+): PaintOp[] {
   const s = footSkeleton(pose, seat);
   const ops: PaintOp[] = [];
   const sleeve = { faction: 'base' } as const;
   if (kit.cloak) drawCloak(ops, s, pose.flow, seat ? 26 : 34);
   if (kit.quiver) drawQuiver(ops, s);
-  if (!seat) drawLeg(ops, s, 'far', kit);
+  if (legs === 'both') drawLeg(ops, s, 'far', kit);
   drawWeapon(ops, s, pose, kit.weapon);
-  drawArm(ops, s, 'far', sleeve);
-  drawLeg(ops, s, 'near', kit);
+  drawArm(ops, s, 'far', sleeve, kit.armouredLimbs);
+  if (legs !== 'none') drawLeg(ops, s, 'near', kit);
   drawTorso(ops, s, kit);
   drawHead(ops, s, kit);
   if (kit.spares) {
     for (const k of [-6, 0]) drawJavelin(ops, add(s.handNear, { x: k * 0.3, y: 0 }), 170 - k);
   }
-  drawArm(ops, s, 'near', sleeve);
+  drawArm(ops, s, 'near', sleeve, kit.armouredLimbs);
   if (kit.weapon === 'bow') drawBow(ops, s, pose.draw, pose.grip);
   drawShield(ops, s, kit.shield);
   return ops;

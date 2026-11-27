@@ -37,7 +37,8 @@ const COATS: Record<Coat, { coat: string; shade: string; light: string; mane: st
   black: { coat: '#4c3a2c', shade: '#32251b', light: '#7a624c', mane: '#1e140c' },
 };
 
-export type Dress = 'saddleCloth' | 'barding' | 'none';
+/** What the horse wears: a cloth under the rider, a cloth to the knees, scale armour over all of it, or nothing. */
+export type Dress = 'saddleCloth' | 'barding' | 'scale' | 'none';
 
 const OUTLINE = 2.4;
 
@@ -80,6 +81,8 @@ function horseLeg(
 export interface HorseFrame {
   /** Where the rider sits, at the deepest point of the saddle. */
   readonly seat: Vec;
+  /** Where the reins meet the bit. */
+  readonly mouth: Vec;
   readonly ops: PaintOp[];
 }
 
@@ -91,8 +94,9 @@ export function horseFigure(
   pose: HorsePose,
   coatName: Coat,
   dress: Dress,
-  armoured: boolean,
+  shift: Vec = { x: 0, y: 0 },
 ): HorseFrame {
+  const armoured = dress === 'barding' || dress === 'scale';
   const coat = COATS[coatName];
   const body = (p: Vec) => rotate(p, -pose.pitch, PIVOT);
   const tops = { fore: body(FORE_TOP), hind: body(HIND_TOP) };
@@ -105,7 +109,7 @@ export function horseFigure(
   const lowest = Math.max(
     ...Object.values(legs).map((leg) => Math.max(leg.hoof.y + 2, leg.fetlock.y + 3)),
   );
-  const drop = { x: 0, y: -lowest - pose.lift };
+  const drop = { x: shift.x, y: shift.y - lowest - pose.lift };
   const at = (p: Vec) => add(p, drop);
   const ops: PaintOp[] = [];
 
@@ -115,7 +119,17 @@ export function horseFigure(
     const joint = at(leg.joint);
     const fetlock = at(leg.fetlock);
     const hoof = at(leg.hoof);
-    ops.push({ d: capsule(top, joint, fore ? 6.5 : 8, 3.6), fill, stroke: OUTLINE });
+    const thigh = dress === 'scale' ? (near ? C.iron : C.ironShade) : fill;
+    ops.push({ d: capsule(top, joint, fore ? 6.5 : 8, 3.6), fill: thigh, stroke: OUTLINE });
+    if (dress === 'scale') {
+      for (const k of [0.3, 0.55, 0.8]) {
+        const a = lerpVec(top, joint, k);
+        ops.push({
+          d: polyline([add(a, { x: -5, y: 1.5 }), add(a, { x: 5, y: 1.5 })]),
+          stroke: 0.9,
+        });
+      }
+    }
     ops.push({ d: capsule(joint, fetlock, 3.3, 2.7), fill, stroke: OUTLINE });
     ops.push({ d: capsule(fetlock, hoof, 2.9, 2.6), fill, stroke: OUTLINE });
     const along = { x: hoof.x - fetlock.x, y: hoof.y - fetlock.y };
@@ -134,7 +148,7 @@ export function horseFigure(
       fill: C.dark,
       stroke: 1.4,
     });
-    if (armoured && near)
+    if (dress === 'barding' && near)
       ops.push({
         d: polyline([lerpVec(top, joint, 0.3), lerpVec(top, joint, 0.85)]),
         stroke: 1,
@@ -302,9 +316,32 @@ export function horseFigure(
           { x: 52, y: -100 },
         ].map(head),
       ),
-      fill: C.bronze,
+      fill: dress === 'scale' ? C.iron : C.bronze,
       stroke: 1.4,
     });
+  }
+  if (dress === 'scale') {
+    const crinet = [
+      { x: 16, y: -90 },
+      { x: 28, y: -101 },
+      { x: 40, y: -113 },
+      { x: 46, y: -110 },
+      { x: 45, y: -98 },
+      { x: 39, y: -84 },
+      { x: 35, y: -73 },
+      { x: 26, y: -78 },
+    ].map(head);
+    ops.push({ d: smoothClosed(crinet), fill: C.iron, stroke: OUTLINE });
+    for (const k of [0.25, 0.5, 0.75])
+      ops.push({
+        d: scallops(
+          head(lerpVec({ x: 16, y: -90 }, { x: 40, y: -113 }, k)),
+          head(lerpVec({ x: 26, y: -78 }, { x: 42, y: -86 }, k)),
+          3,
+        ),
+        stroke: 0.9,
+        strokeColour: C.ironShade,
+      });
   }
 
   const seat = at(body({ x: -2, y: -86 }));
@@ -339,6 +376,64 @@ export function horseFigure(
         ].map((p) => at(body(p))),
       ),
       fill: { faction: 'shade' },
+    });
+  } else if (dress === 'scale') {
+    const coatOf = [
+      { x: 34, y: -90 },
+      { x: 10, y: -92 },
+      { x: -18, y: -90 },
+      { x: -40, y: -84 },
+      { x: -42, y: -66 },
+      { x: -30, y: -58 },
+      { x: -6, y: -56 },
+      { x: 18, y: -57 },
+      { x: 32, y: -62 },
+      { x: 38, y: -74 },
+    ].map((p) => at(body(p)));
+    ops.push({ d: smoothClosed(coatOf), fill: C.iron, stroke: OUTLINE });
+    ops.push({
+      d: smoothClosed(
+        [
+          { x: -40, y: -84 },
+          { x: -42, y: -66 },
+          { x: -30, y: -58 },
+          { x: -6, y: -56 },
+          { x: 18, y: -57 },
+          { x: 14, y: -62 },
+          { x: -24, y: -64 },
+        ].map((p) => at(body(p))),
+      ),
+      fill: C.ironShade,
+    });
+    for (const y of [-82, -74, -66]) {
+      ops.push({
+        d: scallops(at(body({ x: -38, y })), at(body({ x: 34, y: y + 2 })), 9),
+        stroke: 0.9,
+        strokeColour: C.ironShade,
+      });
+    }
+    ops.push({
+      d: smoothOpen(
+        [
+          { x: 24, y: -88 },
+          { x: 0, y: -89 },
+          { x: -24, y: -87 },
+        ].map((p) => at(body(p))),
+      ),
+      stroke: 1.2,
+      strokeColour: C.ironLight,
+    });
+    const cloth = [
+      { x: 10, y: -90 },
+      { x: -16, y: -88 },
+      { x: -18, y: -76 },
+      { x: 8, y: -78 },
+    ].map((p) => at(body(p)));
+    ops.push({ d: smoothClosed(cloth), fill: { faction: 'base' }, stroke: OUTLINE });
+    ops.push({
+      d: smoothOpen([cloth[2] as Vec, cloth[3] as Vec]),
+      stroke: 1.4,
+      strokeColour: C.bronzeLight,
     });
   } else if (dress === 'barding') {
     const hem = [];
@@ -392,7 +487,22 @@ export function horseFigure(
 
   paintLeg(legs.hindNear, true, false);
   paintLeg(legs.foreNear, true, true);
-  return { seat, ops };
+  const mouth = head({ x: 60, y: -89 });
+  return { seat, mouth, ops };
+}
+
+/** A row of overlapping scales from `a` to `b`, `count` of them, hanging below the line. */
+export function scallops(a: Vec, b: Vec, count: number): string {
+  const points: Vec[] = [];
+  const along = { x: (b.x - a.x) / count, y: (b.y - a.y) / count };
+  const length = Math.hypot(along.x, along.y) || 1;
+  const down = { x: (-along.y / length) * 2.6, y: (along.x / length) * 2.6 };
+  for (let i = 0; i <= count; i++) {
+    const p = add(a, { x: along.x * i, y: along.y * i });
+    points.push(p);
+    if (i < count) points.push(add(add(p, { x: along.x / 2, y: along.y / 2 }), down));
+  }
+  return smoothOpen(points);
 }
 
 /** A horse in the walk, one of the four legs moving at a time, `t` from 0 to 1. */

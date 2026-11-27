@@ -8,16 +8,18 @@ import {
   openGame,
   pause,
   playDays,
+  resume,
   untilDrawn,
   withFormations,
 } from '../../../e2e/support.ts';
-import { loadSave, stillAfter } from '../../../e2e/watch.ts';
+import { loadSave, stillAfter, untilDay } from '../../../e2e/watch.ts';
 import type { FactionId } from '../../../src/sim/ids.ts';
+import type { Order } from '../../../src/sim/orders/orders.ts';
 import { POWERS } from '../../../src/sim/map.ts';
 import { newGame } from '../../../src/sim/new-game.ts';
 import type { GameState } from '../../../src/sim/state/game-state.ts';
 import type { MapPoint } from '../../../src/sim/state/map-point.ts';
-import { troopsFor } from '../../../src/sim/troops.ts';
+import { troopsFor, type Troop } from '../../../src/sim/troops.ts';
 import { defineScenario } from '../scenario.ts';
 
 /** Rome at war with Carthage outside Roma, each side in its own two troops, or Macedon, Egypt, and Persia at peace outside Pella in theirs, seen by Macedon. */
@@ -46,12 +48,136 @@ function signatureArmies(battle: boolean): GameState {
   return state;
 }
 
+type Troops = readonly (readonly [Troop, number])[];
+
+/** Stands `power`'s army in these troops at `dx`, `dy` km from Pella. */
+function stand(state: GameState, power: string, troops: Troops, dx: number, dy: number) {
+  const pella = cityPoint('pella');
+  const army = withFormations(state, armyOf(state, power as FactionId), troops);
+  army.activity = { kind: 'idle', position: { x: pella.x + dx, y: pella.y + dy } };
+  return army;
+}
+
+/** Carthage, Egypt, and Persia at rest outside Pella, each in its new figure and the troop it stood in for. */
+function beside(): GameState {
+  const state = newGame(map, { seed: 1, player: 'macedon' });
+  const pairs: readonly [string, Troops][] = [
+    [
+      'carthage',
+      [
+        ['warElephants', 600],
+        ['heavyCavalry', 600],
+      ],
+    ],
+    [
+      'egypt',
+      [
+        ['chariots', 600],
+        ['lightCavalry', 600],
+      ],
+    ],
+    [
+      'persia',
+      [
+        ['cataphracts', 600],
+        ['heavyCavalry', 600],
+      ],
+    ],
+  ];
+  pairs.forEach(([power, troops], i) => stand(state, power, troops, -60 + 80 * i, -30));
+  return state;
+}
+
+/**
+ * Persia marches on Egypt and Carthage on Macedon, 100 km apart east of Pella, at war:
+ * a day on the road, then they meet and fight.
+ */
+function onTheMarch(): GameState {
+  const state = newGame(map, { seed: 1, player: 'macedon' });
+  declareWar(state, 'persia' as FactionId, 'egypt' as FactionId);
+  declareWar(state, 'carthage' as FactionId, 'macedon' as FactionId);
+  const sides: readonly [string, Troops, number, number][] = [
+    [
+      'persia',
+      [
+        ['cataphracts', 1500],
+        ['heavyCavalry', 800],
+      ],
+      60,
+      -20,
+    ],
+    [
+      'egypt',
+      [
+        ['chariots', 1500],
+        ['lightCavalry', 800],
+      ],
+      160,
+      -20,
+    ],
+    [
+      'carthage',
+      [
+        ['warElephants', 1500],
+        ['heavyCavalry', 800],
+      ],
+      60,
+      -60,
+    ],
+    [
+      'macedon',
+      [
+        ['phalangites', 1500],
+        ['companionCavalry', 800],
+      ],
+      160,
+      -60,
+    ],
+  ];
+  const pella = cityPoint('pella');
+  const orders: Order[] = sides.map(([power, troops, dx, dy]) => {
+    const army = stand(state, power, troops, dx, dy);
+    return {
+      kind: 'moveArmy',
+      faction: army.owner,
+      army: army.id,
+      to: { x: pella.x + 110, y: pella.y + dy },
+    };
+  });
+  return playDays(state, 1, orders);
+}
+
 export default defineScenario({
   name: 'signature-units',
   title:
-    "Each great power's own two troops: its recruit cards in its colour, and the figures of every power's own troops on the map",
+    "Each great power's own two troops: war elephants, chariots, and cataphracts in figures of their own beside the troops they stood in for, marching and fighting; the figures of every power's own troops on the map; and its recruit cards in its colour",
   viewport: { width: 1280, height: 720 },
+  clipSeconds: 45,
   async run({ page, shot }) {
+    await openGame(page, { power: 'macedon' });
+    await pause(page);
+    await loadSave(page, beside());
+    const pella = cityPoint('pella');
+    await camera(page).jumpTo({ x: pella.x + 30, y: pella.y - 32 }, 4);
+    await untilDrawn(page);
+    await page.waitForTimeout(1500);
+    await shot(
+      'figures-beside-replaced',
+      "Outside Pella at the closest zoom: Carthage's war elephants beside heavy horse, Egypt's chariots beside light horse, and Persia's cataphracts beside heavy horse, the troops each stood in for",
+    );
+
+    const march = onTheMarch();
+    await loadSave(page, march);
+    await camera(page).jumpTo({ x: pella.x + 110, y: pella.y - 40 }, 4);
+    await resume(page);
+    await untilDay(page, march.day + 1, 0, 60_000);
+    await page.waitForTimeout(500);
+    await pause(page);
+    await shot(
+      'figures-new-fighting',
+      "East of Pella: the first day of battle after a day on the march: Persia's cataphracts fight Egypt's chariots, and Carthage's war elephants fight Macedon's phalangites",
+    );
+
     await openGame(page);
     await pause(page);
     const fight = playDays(signatureArmies(true), 1);
@@ -69,7 +195,6 @@ export default defineScenario({
     await pause(page);
     const peace = signatureArmies(false);
     await loadSave(page, peace);
-    const pella = cityPoint('pella');
     await camera(page).jumpTo({ x: pella.x + 30, y: pella.y - 32 }, 4);
     await untilDrawn(page);
     await page.waitForTimeout(1500);

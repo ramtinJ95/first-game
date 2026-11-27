@@ -20,7 +20,7 @@ import { fullDefences } from '../../sim/systems/sieges.ts';
 import { TROOPS, type Troop } from '../../sim/troops.ts';
 import { mapToScreen, type Camera, type Size } from '../camera.ts';
 import type { Box } from '../labels.ts';
-import { MOTIONS, MOUNTED, missileOf, type FigureKind, type Motion } from '../figures/motions.ts';
+import { MOTIONS, missileOf, reachOf, type FigureKind, type Motion } from '../figures/motions.ts';
 import { OWNED, SHARED, artKey, figureKey, groundSpan, type GroundArt } from '../figures/sheet.ts';
 import { factionColour, MINOR_COLOUR, POWER_COLOURS } from '../palette.ts';
 import { figuresFor } from './count.ts';
@@ -779,9 +779,8 @@ class Context {
       y = ground.y;
       const usable = motionFor(kind, motion);
       const frame = frameOf(usable, usable === 'fall' ? Math.min(0.999, phase) : phase);
-      const mounted = MOUNTED.has(kind);
-      const half = (mounted ? 0.5 : 0.2) * this.h;
-      const top = (mounted ? 1.35 : 0.95) * this.h;
+      const half = reachOf(kind).half * this.h;
+      const top = reachOf(kind).top * this.h;
       const lying = usable === 'fall';
       const hit =
         pickable && !lying

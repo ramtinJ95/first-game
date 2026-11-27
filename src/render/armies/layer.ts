@@ -43,10 +43,10 @@ interface Sheet {
  * The most the figure sheets may hold, in texture bytes, beyond those a frame draws from;
  * each also holds its canvas. On a screen of twice the density, a player who goes back and
  * forth between the two closest zooms with Rome, Carthage, Macedon and a minor in view
- * needs 179 MB of sheets, and any four colours need at most 189 MB there, so they never
- * wait for a sheet twice. Every colour at every size would be 361 MB.
+ * needs 183 MB of sheets, and any four colours need at most 196 MB there, so they never
+ * wait for a sheet twice. Every colour at every size would be 370 MB.
  */
-export const SHEET_BUDGET_BYTES = 190 * 2 ** 20;
+export const SHEET_BUDGET_BYTES = 196 * 2 ** 20;
 
 const bytesOf = (sheet: Sheet) => sheet.layout.width * sheet.layout.height * 4;
 
