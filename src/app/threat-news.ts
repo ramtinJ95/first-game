@@ -63,19 +63,23 @@ export const THREAT_SPARE_RISE = 6;
 const prefixOf = (faction: string) => `threat:${faction}:`;
 const STOP = 'threat-stop:';
 
-/** The last warning of the power that stopped the game in this peace: its day, shown share and front. */
+/**
+ * The last warning of the power that stopped the game in this peace: its day, shown share and
+ * front, and the highest share its word on the wars holding the power back has since covered.
+ */
 interface Stop {
   readonly day: number;
   readonly share: number;
   readonly front: string;
+  readonly covered: number;
 }
 
 function stopOf(remembered: ReadonlySet<string>, faction: string): Stop | undefined {
   const prefix = `${STOP}${faction}:`;
   for (const key of remembered) {
     if (!key.startsWith(prefix)) continue;
-    const [day = '', share = '', front = ''] = key.slice(prefix.length).split(':');
-    return { day: Number(day), share: Number(share), front };
+    const [day = '', share = '', front = '', covered = share] = key.slice(prefix.length).split(':');
+    return { day: Number(day), share: Number(share), front, covered: Number(covered) };
   }
   return undefined;
 }
@@ -127,13 +131,13 @@ function heldCovers(
   return held.enemies.some((enemy) => !areAtWar(state, power, enemy as FactionId));
 }
 
-/** The power's last stop, its share raised to `share`: the climb the stop's word on its wars covered. */
-function raiseStop(remembered: Set<string>, faction: string, share: number) {
+/** The power's last stop, with `share` the climb its word on the wars holding the power back covered. */
+function coverStop(remembered: Set<string>, faction: string, share: number) {
   const stop = stopOf(remembered, faction);
   if (!stop) return;
   const prefix = `${STOP}${faction}:`;
   for (const key of remembered) if (key.startsWith(prefix)) remembered.delete(key);
-  remembered.add(`${prefix}${stop.day}:${share}:${stop.front}`);
+  remembered.add(`${prefix}${stop.day}:${stop.share}:${stop.front}:${share}`);
 }
 
 /** The share a warning shows, in whole points of at most 100. */
@@ -250,7 +254,8 @@ export function threatNewsOfDay(
     const stop = stopOf(remembered, power.id);
     const climbing = (threat: Threat | undefined) =>
       climbs && told && stopping && stop !== undefined && threat !== undefined
-        ? points(threat.readiness) - stop.share >= THREAT_SPARE_RISE
+        ? points(threat.readiness) - stop.share >= THREAT_SPARE_RISE &&
+          points(threat.readiness) > stop.covered
         : false;
     const due =
       told && before.day - Math.max(last, power.noticeSince + NOTICE_DAYS) >= THREAT_REMIND_DAYS;
@@ -258,7 +263,7 @@ export function threatNewsOfDay(
     const threat = readinessOf(after, world, power.id);
     if (!threat) continue;
     if (!due && climbing(threat) && heldCovers(remembered, after, power.id, threat, before.day)) {
-      raiseStop(remembered, power.id, points(threat.readiness));
+      coverStop(remembered, power.id, points(threat.readiness));
       continue;
     }
     const reminder = told;
