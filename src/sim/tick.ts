@@ -87,6 +87,15 @@ function priceWithGold(state: GameState, order: Order, world: World): number | u
     },
   });
   if (executeOrder(trial, order, world)) return undefined;
-  const cost = AMPLE_GOLD - lowest;
+  const cost = Math.max(AMPLE_GOLD - lowest, goldOffered(order));
   return cost > 0 ? cost : undefined;
+}
+
+/** The gold an offer of peace promises from its sender's treasury, which it holds but pays only on acceptance. */
+function goldOffered(order: Order): number {
+  return order.kind === 'offerPeace' &&
+    order.terms.kind === 'payment' &&
+    order.terms.payer === order.faction
+    ? order.terms.gold
+    : 0;
 }

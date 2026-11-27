@@ -24,6 +24,8 @@ import type { GameState } from '../sim/state/game-state.ts';
 import type { PeaceTerms } from '../sim/state/peace.ts';
 import { warSides } from '../sim/state/war.ts';
 import { peaceTruceDays } from '../sim/peace/make-peace.ts';
+import type { World } from '../sim/world/world.ts';
+import { afterWaiting } from './buildings-text.ts';
 
 type State = DeepReadonly<GameState>;
 
@@ -124,7 +126,61 @@ export function summaryText(standing: WarStanding): string {
  * Terms ready to offer: peace as things stand, the least the enemy would take when it
  * wants something, and the most it would give when it is the readier for peace.
  */
-export function peaceChoices(state: State, enemy: FactionId): PeaceChoice[] {
+/**
+ * The state once the player's waiting orders are paid, leaving out its own offer and answer
+ * in the war with the enemy, which the panel shows for themselves. Peace terms that ask the
+ * player for gold are checked against it, so gold promised to a study or a building today is
+ * not promised again.
+ */
+export function promisedFor(
+  state: State,
+  pending: readonly Order[],
+  world: World,
+  enemy: FactionId,
+): State {
+  return afterWaiting(
+    state,
+    pending.filter(
+      (order) =>
+        !(
+          (order.kind === 'offerPeace' && order.to === enemy) ||
+          ((order.kind === 'acceptPeace' || order.kind === 'refusePeace') && order.from === enemy)
+        ),
+    ),
+    world,
+  );
+}
+
+/** Why the terms cannot be met once the orders waiting are paid, when they can be met today. */
+function promisedProblem(
+  state: State,
+  promised: State,
+  enemy: FactionId,
+  terms: DeepReadonly<PeaceTerms>,
+): string | undefined {
+  if (termsProblem(state, [state.player, enemy], terms)) return undefined;
+  const problem = termsProblem(promised, [state.player, enemy], terms);
+  return problem && `${problem}, once the orders given today are paid`;
+}
+
+/** The enemy's answer to the terms, which cannot be met when the orders waiting leave too little gold. */
+export function promisedAnswer(
+  state: State,
+  promised: State,
+  enemy: FactionId,
+  terms: DeepReadonly<PeaceTerms>,
+): PeaceAnswer | undefined {
+  const answer = peaceAnswer(state, enemy, state.player, terms);
+  const problem = answer && promisedProblem(state, promised, enemy, terms);
+  if (!answer || !problem) return answer;
+  return { ...answer, accepts: false, problem, verdict: `These terms cannot be met: ${problem}.` };
+}
+
+export function peaceChoices(
+  state: State,
+  enemy: FactionId,
+  promised: State = state,
+): PeaceChoice[] {
   const player = state.player;
   const name = factionName(state, enemy);
   const wish = peaceWish(state, enemy, player)?.wish ?? 0;
@@ -143,7 +199,7 @@ export function peaceChoices(state: State, enemy: FactionId): PeaceChoice[] {
     });
   }
   return options.flatMap(({ label, terms }) => {
-    const answer = terms && peaceAnswer(state, enemy, player, terms);
+    const answer = terms && promisedAnswer(state, promised, enemy, terms);
     return terms && answer
       ? [{ label, terms, answer, truce: truceText(state, enemy, terms, state.day + 1) }]
       : [];
@@ -158,10 +214,11 @@ export function cheaperCounter(
   state: State,
   enemy: FactionId,
   asked: DeepReadonly<PeaceTerms>,
+  promised: State = state,
 ): (PeaceChoice & { readonly text: string }) | undefined {
   const player = state.player;
   const cost = (terms: DeepReadonly<PeaceTerms>) => -termsPoints(state, terms, player);
-  const [cheapest] = peaceChoices(state, enemy)
+  const [cheapest] = peaceChoices(state, enemy, promised)
     .filter((choice) => choice.answer.accepts && cost(choice.terms) < cost(asked))
     .sort((a, b) => cost(a.terms) - cost(b.terms));
   if (!cheapest) return undefined;
@@ -211,7 +268,7 @@ export function truceText(
 }
 
 /** Every war the player is in and how it stands, what peace is on offer, and the truces that hold. */
-export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
+export function warRoomOf(state: State, pending: readonly Order[], world: World): WarRoom {
   const player = state.player;
   const wars = Object.keys(state.wars)
     .sort()
@@ -221,6 +278,7 @@ export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
       if (!enemy || !standing) return [];
       const name = factionName(state, enemy);
       const offer = standingOffer(state, player, enemy);
+      const promised = promisedFor(state, pending, world, enemy);
       const reply = pending.findLast(
         (order) =>
           (order.kind === 'acceptPeace' || order.kind === 'refusePeace') &&
@@ -248,9 +306,11 @@ export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
               ? {
                   terms: copyTerms(offer.terms),
                   text: `${name} offers ${peaceText(state, offer.terms, player)}.`,
-                  funds: peaceFundsText(state, offer.terms),
+                  funds: peaceFundsText(state, offer.terms, promised),
                   change: offer.change,
-                  problem: termsProblem(state, [player, enemy], offer.terms),
+                  problem:
+                    termsProblem(state, [player, enemy], offer.terms) ??
+                    promisedProblem(state, promised, enemy, offer.terms),
                   refusing: `Refuse, and the war goes on. ${name} makes no new offer for ${OFFER_GAP_DAYS} days.`,
                   truce: truceText(state, enemy, offer.terms),
                   answered:
@@ -259,11 +319,11 @@ export function warRoomOf(state: State, pending: readonly Order[]): WarRoom {
                       : reply?.kind === 'refusePeace'
                         ? `You refuse. ${name} hears it with the next day.`
                         : undefined,
-                  counter: cheaperCounter(state, enemy, offer.terms),
+                  counter: cheaperCounter(state, enemy, offer.terms, promised),
                 }
               : undefined,
           ourOffer: ours,
-          choices: peaceChoices(state, enemy),
+          choices: peaceChoices(state, enemy, promised),
           volatile:
             standing.besieging.length + standing.besieged.length > 0 ||
             Object.values(state.battles).some((battle) => {

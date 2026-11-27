@@ -14,8 +14,8 @@ type State = DeepReadonly<GameState>;
 /** What an order paid for, in words, and where it stands on the map when it has a place. */
 interface Paid {
   readonly name: string;
-  /** Whether the words name one thing or many, for "it costs" or "they cost". */
-  readonly many: boolean;
+  /** How the line gives its price: "it costs", "they cost", or "it asks". */
+  readonly costs: string;
   readonly failed: string;
   readonly city?: CityId;
 }
@@ -40,45 +40,55 @@ function routeName(states: readonly State[], id: TradeRouteId): string {
 function paidOf(states: readonly State[], order: Order): Paid {
   switch (order.kind) {
     case 'study':
-      return { name: ADVANCES[order.advance].name, many: false, failed: 'was not begun' };
+      return { name: ADVANCES[order.advance].name, costs: 'it costs', failed: 'was not begun' };
     case 'build':
       return {
         name: `${BUILDINGS[order.building].name} at ${cityName(states, order.city)}`,
-        many: false,
+        costs: 'it costs',
         failed: 'was not begun',
         city: order.city,
       };
     case 'recruit':
       return {
         name: `${TROOP_NAMES[order.troop]} at ${cityName(states, order.city)}`,
-        many: true,
+        costs: 'they cost',
         failed: 'were not raised',
         city: order.city,
       };
     case 'hireGuards':
       return {
         name: `Guards at ${cityName(states, order.city)}`,
-        many: true,
+        costs: 'they cost',
         failed: 'were not hired',
         city: order.city,
       };
     case 'improveTrade':
-      return { name: routeName(states, order.route), many: false, failed: 'was not improved' };
+      return {
+        name: routeName(states, order.route),
+        costs: 'it costs',
+        failed: 'was not improved',
+      };
     case 'openTrade':
       return {
         name: `the route from ${cityName(states, order.from)} to ${cityName(states, order.to)}`,
-        many: false,
+        costs: 'it costs',
         failed: 'was not opened',
         city: order.from,
+      };
+    case 'offerPeace':
+      return {
+        name: `the offer of peace to ${states[0]?.factions[order.to]?.name ?? order.to}`,
+        costs: 'it asks',
+        failed: 'was not sent',
       };
     case 'acceptPeace':
       return {
         name: `the peace with ${states[0]?.factions[order.from]?.name ?? order.from}`,
-        many: false,
+        costs: 'it costs',
         failed: 'was not made',
       };
     default:
-      return { name: 'An order', many: false, failed: 'was not carried out' };
+      return { name: 'An order', costs: 'it costs', failed: 'was not carried out' };
   }
 }
 
@@ -108,7 +118,7 @@ export function unpaidNewsOfDay(before: State, later: State, events: readonly Da
         kind: 'orderUnpaid',
         day: before.day,
         tone: 'bad',
-        text: `${subject} ${paid.failed}: ${paid.many ? 'they cost' : 'it costs'} ${whole(event.cost)} gold and the treasury held ${whole(Math.floor(event.held))}${since}.`,
+        text: `${subject} ${paid.failed}: ${paid.costs} ${whole(event.cost)} gold and the treasury held ${whole(Math.floor(event.held))}${since}.`,
         ...(at && city
           ? { focus: { at, select: { kind: 'province', province: city.province } as const } }
           : {}),
