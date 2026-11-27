@@ -39,6 +39,7 @@ import { showFrameMeter } from './frame-meter.ts';
 import { guardNewsOfDay } from './guard-news.ts';
 import { BUILDING_HINT_KEY, buildingHintOfDay } from './building-hint.ts';
 import { advanceNewsOfDay } from './advance-news.ts';
+import { unpaidNewsOfDay } from './unpaid-news.ts';
 import { refusalText } from './names.ts';
 import { alertsInSight, followJoin, seesPick, sightOfAll } from './sighted.ts';
 import { enqueue, keepOpen, unansweredOffer, type Modal } from './modals.ts';
@@ -282,6 +283,7 @@ const clock = createClock({
           newsPauses && pauses.warThreat,
         ),
         ...guardNewsOfDay(before, after),
+        ...unpaidNewsOfDay(before, after, events),
         ...hint,
         ...advanceNewsOfDay(before, after, events, toldOnce, hint.length > 0),
       ]),

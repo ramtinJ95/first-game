@@ -4,6 +4,7 @@ import type { ArmyId, BattleId, CityId, FactionId, TradeRouteId } from './ids.ts
 import type { Day } from './state/day.ts';
 import type { GameState } from './state/game-state.ts';
 import type { MapPoint } from './state/map-point.ts';
+import type { Order } from './orders/orders.ts';
 import type { PeaceTerms } from './state/peace.ts';
 
 interface TradeEvent {
@@ -103,6 +104,17 @@ export type DayEvent =
     }
   | { kind: 'warDeclared'; by: FactionId; against: FactionId }
   | { kind: 'advanceFinished'; faction: FactionId; advance: AdvanceKind }
+  | {
+      kind: 'orderUnpaid';
+      faction: FactionId;
+      /** The order refused only for want of gold: with the gold it would have been carried out. */
+      order: Order;
+      cost: number;
+      /** The faction's gold when the order came to be paid. */
+      held: number;
+      /** The faction's orders that spent gold earlier the same day, in the order paid. */
+      paidBefore: readonly Order[];
+    }
   | {
       kind: 'buildingFinished';
       city: CityId;

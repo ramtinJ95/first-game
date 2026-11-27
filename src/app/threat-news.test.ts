@@ -536,6 +536,29 @@ describe('a war that holds back a power on notice', () => {
     expect(threatNewsOfDay(later, day132, world, told).filter((a) => a.pause)).toEqual([]);
   });
 
+  test('a stop keeps the share it showed through the end of its named war, and a climb is measured from it', () => {
+    const told = new Set<string>();
+    const stopped = heldBySyracusae();
+    const [stop] = threatNewsOfDay(stopped, stopped, world, told);
+    expect(stop?.pause).toEqual({ kind: 'warThreat' });
+    expect(stop?.text).toContain('it has 88% of the strength it needs');
+    const ended = warOver(stopped);
+    spearmenOf(ended, carthage).men = 5600;
+    expect(shareOf(ended)).toBe(95);
+    expect(threatNewsOfDay(stopped, ended, world, told).filter((a) => a.pause)).toEqual([]);
+    const before = structuredClone(ended);
+    before.day = 140 as Day;
+    spearmenOf(before, carthage).men = 8000;
+    const after = structuredClone(before);
+    after.day = 141 as Day;
+    expect(shareOf(after)).toBe(100);
+    const [climb] = threatNewsOfDay(before, after, world, told);
+    expect(climb?.pause).toEqual({ kind: 'warThreat' });
+    expect(climb?.text).toMatch(
+      /^Carthage has climbed to 100% near Roma, from 88% at its last stop on Year 1, day 100,/,
+    );
+  });
+
   test('a climb the end of a named war brings more than 30 days after the stop stops the game', () => {
     const { news } = endsOn(131);
     expect(news.map((a) => [a.kind, a.pause])).toEqual([['warThreat', { kind: 'warThreat' }]]);
