@@ -161,7 +161,7 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
         `^Carthage has climbed to ${now}% near Roma, from ${now - 8}% at its last stop on Year 1, day 70`,
       ),
     );
-    expect([...told]).toContain(`threat-stop:carthage:100:${now}:roma`);
+    expect([...told]).toContain(`threat-stop:carthage:100:${now}:roma:${now}:90`);
     expect(threatNewsOfDay(after, after, world, told)).toEqual([]);
   });
 
@@ -191,6 +191,16 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
     ]);
     const next = onNoticeFrom91(7000, 107);
     expect(threatNewsOfDay(next, next, world, told)).toEqual([]);
+  });
+
+  test('a stop kept before stops stored the day they named still stops the game for a climb', () => {
+    const climbed = onNoticeFrom91(7000, 106);
+    const told = new Set([
+      'threat:carthage:97',
+      `threat-stop:carthage:97:${shareOf(climbed) - 6}:roma`,
+    ]);
+    const [climb] = threatNewsOfDay(climbed, climbed, world, told);
+    expect(climb?.pause).toEqual({ kind: 'warThreat' });
   });
 
   test('a climb to 100% before the named day still stops the game', () => {
