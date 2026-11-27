@@ -614,6 +614,33 @@ function ranOnText(
   return `${one.name} could soon declare war on you: ${share(one.threat.readiness)} of the strength it needs ${near(state, one.threat)}, ${one.from}. The game ran on: its stop on ${dateText(one.stop.day)} was at ${one.stop.share}%, and it stands ${higher}. See At peace in Wars.`;
 }
 
+/**
+ * A great power's declaration of war on the player in a line that stops the game: the forces it
+ * weighed the day it declared, in its warnings' words, and what the player can do first. Its
+ * place is the city it weighed, or none for one that weighed the field armies.
+ */
+export function declarationNews(
+  before: State,
+  after: State,
+  world: World,
+  power: FactionId,
+): { text: string; at: MapPoint | undefined } {
+  const name = factionName(after, power);
+  const threat = readinessOf(before, world, power);
+  if (!threat) return { text: `${name} declared war on you.`, at: undefined };
+  const front = threat.pressed ? undefined : after.cities[threat.front];
+  const march = front ? `march your armies to ${front.name}` : undefined;
+  const advice = orderAdvice(after, after.factions[after.player]?.stores, undefined);
+  const first =
+    advice.kind !== 'none'
+      ? `First ${march ? `${march}, or ` : ''}raise men: ${advice.text}.`
+      : `${march ? `First ${march}; you` : 'You'} can raise no men now${advice.text === '' ? ': no city of yours may recruit' : `: ${advice.text}`}.`;
+  return {
+    text: `${name} declared war on you, its armies ready ${weighed(before, threat)}. ${first}`,
+    at: front?.position,
+  };
+}
+
 /** The share staying home takes off the strength a power needs, in whole points, 0 when it takes off none. */
 const stayedPoints = (threat: Pick<Threat, 'stayedHome'> | undefined) =>
   Math.round((threat?.stayedHome ?? 0) * 100);

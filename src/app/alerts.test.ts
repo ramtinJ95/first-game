@@ -244,14 +244,20 @@ describe('alertsOfDay', () => {
     ).toBe(false);
   });
 
-  it('tells when a power declares war on the player, and when the player declares one', () => {
+  it('tells when a power declares war on the player, which stops the game, and when the player declares one', () => {
     const declared = play(
       buildFixture(),
       [{ kind: 'declareWar', faction: f.carthage, against: f.rome }],
       () => true,
     );
     expect(declared.alerts).toEqual([
-      { kind: 'warDeclared', day: 1, tone: 'bad', text: 'Carthage declared war on you' },
+      {
+        kind: 'warDeclared',
+        day: 1,
+        tone: 'bad',
+        text: 'Carthage declared war on you',
+        pause: { kind: 'declared' },
+      },
     ]);
     const declaring = play(
       buildFixture(),
