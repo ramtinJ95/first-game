@@ -89,63 +89,61 @@ function beside(): GameState {
 }
 
 /**
- * Persia marches on Egypt and Carthage on Macedon, 80 km apart north of Pella, at war:
+ * Persia marches on Egypt and Carthage on Macedon, 100 km apart east of Pella, at war:
  * a day on the road, then they meet and fight.
  */
 function onTheMarch(): GameState {
   const state = newGame(map, { seed: 1, player: 'macedon' });
   declareWar(state, 'persia' as FactionId, 'egypt' as FactionId);
   declareWar(state, 'carthage' as FactionId, 'macedon' as FactionId);
-  const pella = cityPoint('pella');
-  const meet = (dy: number) => ({ x: pella.x + 10, y: pella.y + dy });
-  const armies = [
-    stand(
-      state,
+  const sides: readonly [string, Troops, number, number][] = [
+    [
       'persia',
       [
         ['cataphracts', 1500],
         ['heavyCavalry', 800],
       ],
-      -40,
-      -40,
-    ),
-    stand(
-      state,
+      60,
+      -20,
+    ],
+    [
       'egypt',
       [
         ['chariots', 1500],
         ['lightCavalry', 800],
       ],
-      60,
-      -40,
-    ),
-    stand(
-      state,
+      160,
+      -20,
+    ],
+    [
       'carthage',
       [
         ['warElephants', 1500],
         ['heavyCavalry', 800],
       ],
-      -40,
-      -80,
-    ),
-    stand(
-      state,
+      60,
+      -60,
+    ],
+    [
       'macedon',
       [
         ['phalangites', 1500],
         ['companionCavalry', 800],
       ],
-      60,
-      -80,
-    ),
+      160,
+      -60,
+    ],
   ];
-  const orders: Order[] = armies.map((army, i) => ({
-    kind: 'moveArmy',
-    faction: army.owner,
-    army: army.id,
-    to: meet(i < 2 ? -40 : -80),
-  }));
+  const pella = cityPoint('pella');
+  const orders: Order[] = sides.map(([power, troops, dx, dy]) => {
+    const army = stand(state, power, troops, dx, dy);
+    return {
+      kind: 'moveArmy',
+      faction: army.owner,
+      army: army.id,
+      to: { x: pella.x + 110, y: pella.y + dy },
+    };
+  });
   return playDays(state, 1, orders);
 }
 
@@ -170,14 +168,14 @@ export default defineScenario({
 
     const march = onTheMarch();
     await loadSave(page, march);
-    await camera(page).jumpTo({ x: pella.x + 10, y: pella.y - 110 }, 4);
+    await camera(page).jumpTo({ x: pella.x + 110, y: pella.y - 40 }, 4);
     await resume(page);
     await untilDay(page, march.day + 1, 0, 60_000);
     await page.waitForTimeout(500);
     await pause(page);
     await shot(
       'figures-new-fighting',
-      "North of Pella: the first day of battle after a day on the march: Persia's cataphracts fight Egypt's chariots, and Carthage's war elephants fight Macedon's phalangites",
+      "East of Pella: the first day of battle after a day on the march: Persia's cataphracts fight Egypt's chariots, and Carthage's war elephants fight Macedon's phalangites",
     );
 
     await openGame(page);
