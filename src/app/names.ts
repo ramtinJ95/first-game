@@ -47,13 +47,17 @@ export function factionName(state: DeepReadonly<GameState>, faction: FactionId):
 export function peaceFundsText(
   state: DeepReadonly<GameState>,
   terms: DeepReadonly<PeaceTerms>,
+  promised: DeepReadonly<GameState> = state,
 ): string | undefined {
   if (terms.kind !== 'payment' || terms.payer !== state.player || terms.gold === 0)
     return undefined;
-  const held = Math.floor(state.factions[state.player]?.stores.gold ?? 0);
+  const today = Math.floor(state.factions[state.player]?.stores.gold ?? 0);
+  const held = Math.floor(promised.factions[state.player]?.stores.gold ?? 0);
+  const owed = today - held;
   const treasury =
-    held < 0 ? `Your treasury is ${whole(held)} gold.` : `You hold ${whole(held)} gold.`;
-  return `${treasury} ${
+    today < 0 ? `Your treasury is ${whole(today)} gold.` : `You hold ${whole(today)} gold.`;
+  const spoken = owed > 0 ? ` ${whole(owed)} of it is promised to today's orders.` : '';
+  return `${treasury}${spoken} ${
     held >= terms.gold
       ? `You can pay the ${whole(terms.gold)} gold asked.`
       : `You need ${whole(terms.gold - held)} gold more to pay the ${whole(terms.gold)} asked.`
@@ -118,6 +122,7 @@ export function reasonText(state: DeepReadonly<GameState>, reason: string): stri
         : undefined;
       return faction?.name ?? word;
     })
+    .replace(/(?<![\w.,-])-?\d{4,}(?!\d|\.\d)/g, (amount) => whole(Number(amount)))
     .replace(/^./, (first) => first.toUpperCase());
 }
 

@@ -7,6 +7,8 @@ import type { GameState } from '../state/game-state.ts';
 import { tick } from '../tick.ts';
 import { ADVANCES, GROWING_ADVANCES, STUDY_REFUND, type AdvanceKind } from './advances.ts';
 import { citiesOf, studyPrice } from './study.ts';
+import { openTrade } from '../trade/orders.ts';
+import { improvementCost } from '../trade/routes.ts';
 
 const world = fixtureWorld();
 
@@ -87,6 +89,43 @@ describe('studying an advance', () => {
     expect(result.rejected).toHaveLength(1);
     expect(rome(result.state).study).toBeNull();
     expect(rome(result.state).stores.gold).toBeGreaterThanOrEqual(ADVANCES.marketWeights.gold - 1);
+    expectConsistent(result.state);
+  });
+
+  test('a study ordered after an improvement that spent its gold is not begun, and the day says so', () => {
+    const state = buildFixture();
+    const opening = {
+      kind: 'openTrade',
+      faction: FIXTURE.rome,
+      from: FIXTURE.roma,
+      to: FIXTURE.capua,
+      mode: 'land',
+    } as const;
+    expect(openTrade(state, opening, world)).toBeUndefined();
+    const route = Object.values(state.tradeRoutes)[0];
+    if (!route) throw new Error('expected a route');
+    const improve: Order = { kind: 'improveTrade', faction: FIXTURE.rome, route: route.id };
+    const price = ADVANCES.citizenRolls.gold;
+    rome(state).stores.gold = improvementCost(route) + price - 300;
+    const result = tick(state, [improve, study('citizenRolls')], world);
+    expect(rome(result.state).study).toBeNull();
+    expect(result.events).toContainEqual({
+      kind: 'orderUnpaid',
+      faction: FIXTURE.rome,
+      order: study('citizenRolls'),
+      cost: price,
+      held: price - 300,
+      paidBefore: [improve],
+    });
+    expectConsistent(result.state);
+  });
+
+  test('a study refused for another reason than gold tells no want of gold', () => {
+    const state = rich();
+    rome(state).study = { advance: 'clemency', daysLeft: 10, paid: 1000 };
+    const result = tick(state, [study('citizenRolls')], world);
+    expect(result.rejected).toHaveLength(1);
+    expect(result.events.filter((event) => event.kind === 'orderUnpaid')).toEqual([]);
     expectConsistent(result.state);
   });
 

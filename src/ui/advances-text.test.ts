@@ -19,8 +19,13 @@ import {
   buildingFirstLine,
   hasConquered,
   markedLine,
+  promisedState,
   studyLine,
 } from './advances-text.ts';
+import { openTrade } from '../sim/trade/orders.ts';
+import { improvementCost } from '../sim/trade/routes.ts';
+import { tick } from '../sim/tick.ts';
+import type { Order } from '../sim/orders/orders.ts';
 
 function rome(state: GameState) {
   const record = state.factions[FIXTURE.rome];
@@ -48,6 +53,47 @@ describe('the advances panel', () => {
       gold: ADVANCES.standardCoin.gold,
       days: ADVANCES.standardCoin.days,
     });
+  });
+
+  test("counts the gold promised to today's orders, so a study it offers after them is paid", () => {
+    const base = buildFixture();
+    const opening = {
+      kind: 'openTrade',
+      faction: FIXTURE.rome,
+      from: FIXTURE.roma,
+      to: FIXTURE.capua,
+      mode: 'land',
+    } as const;
+    expect(openTrade(base, opening, world)).toBeUndefined();
+    const route = Object.values(base.tradeRoutes)[0];
+    if (!route) throw new Error('expected a route');
+    const improve: Order = { kind: 'improveTrade', faction: FIXTURE.rome, route: route.id };
+    const cost = improvementCost(route);
+    const price = ADVANCES.citizenRolls.gold;
+    for (const short of [300, 0, -1]) {
+      const state = structuredClone(base);
+      rome(state).stores.gold = cost + price - short;
+      const offered = row(state, 'citizenRolls', [improve])?.refusal === undefined;
+      const result = tick(
+        state,
+        [improve, { kind: 'study', faction: FIXTURE.rome, advance: 'citizenRolls' }],
+        world,
+      );
+      expect(result.rejected).toEqual(
+        offered
+          ? []
+          : [expect.objectContaining({ order: expect.objectContaining({ kind: 'study' }) })],
+      );
+    }
+    const state = structuredClone(base);
+    rome(state).stores.gold = cost + price - 300;
+    expect(row(state, 'citizenRolls')?.refusal).toBeUndefined();
+    expect(row(state, 'citizenRolls', [improve])?.refusal).toBe(
+      `Needs 300 more gold, with ${whole(cost)} promised to today's orders`,
+    );
+    expect(
+      markedLine(promisedState(state, [improve], world), world, FIXTURE.rome)?.advance,
+    ).not.toBe('citizenRolls');
   });
 
   test('says what the realm lacks to start one, and that one study runs at a time', () => {

@@ -307,7 +307,7 @@ function hireRefusalText(
     const gold = state.factions[city.owner]?.stores.gold ?? 0;
     return `Needs ${whole(guardGoldOf(city.owner) - gold)} more gold`;
   }
-  return reasonText(state, why).replace(/\b\d{4,}\b/g, (n) => whole(Number(n)));
+  return reasonText(state, why);
 }
 
 function withGold(state: State, city: DeepReadonly<City>): State {
