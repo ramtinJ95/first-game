@@ -19,7 +19,7 @@ const holdings = (state: GameState) =>
 
 let state = romeOnTwoFronts();
 console.log(`Day ${state.day}. ${holdings(state)}.\n`);
-for (const war of warRoomOf(state, []).wars) {
+for (const war of warRoomOf(state, [], world).wars) {
   console.log(`## Rome against ${war.name}: ${war.summary}\n`);
   for (const fact of war.facts) console.log(`- ${fact}`);
   console.log('\n| Rome offers | Terms | Answer |');
@@ -35,7 +35,7 @@ for (const war of warRoomOf(state, []).wars) {
   );
 }
 
-const buy = warRoomOf(state, [])
+const buy = warRoomOf(state, [], world)
   .wars.find((war) => war.enemy === carthage)
   ?.choices.find((choice) => choice.answer.accepts);
 if (!buy) throw new Error('Carthage takes no terms Rome can meet');
@@ -54,7 +54,7 @@ for (const event of answered.events) {
   if (event.kind === 'peaceRefused') console.log(`Day ${state.day}: Carthage refuses.`);
 }
 state = answered.state;
-const room = warRoomOf(state, []);
+const room = warRoomOf(state, [], world);
 console.log(`Rome is at war with ${room.wars.map((war) => war.name).join(', ') || 'no one'}.`);
 for (const truce of room.truces) console.log(truce.text);
 console.log(`${holdings(state)}.`);

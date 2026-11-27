@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { whole } from '../app/names.ts';
-  import { peaceAnswer, termsText, type PeaceAnswer } from '../sim/ai/peace.ts';
+  import { reasonText, whole } from '../app/names.ts';
+  import { termsText, type PeaceAnswer } from '../sim/ai/peace.ts';
   import { GOLD_PER_POINT } from '../sim/peace/terms.ts';
   import { peaceForecast } from '../sim/peace/forecast.ts';
   import type { DeepReadonly } from '../sim/deep-readonly.ts';
@@ -25,6 +25,8 @@
     peaceVerdict,
     truceText,
     warRoomOf,
+    promisedAnswer,
+    promisedFor,
     type WarRow,
   } from './war-room.ts';
 
@@ -48,7 +50,7 @@
 
   type Payer = 'nobody' | 'us' | 'them';
 
-  const room = $derived(warRoomOf(game, pending));
+  const room = $derived(warRoomOf(game, pending, world));
   const waitingDay = $derived(afterWaiting(game, pending, world));
   /**
    * What the men in training do to each field-army threat, reckoned while the game is paused, in
@@ -102,7 +104,9 @@
 
   const draft = $derived(shown && written(shown));
   const draftAnswer = $derived(
-    shown && draft ? peaceAnswer(game, shown.enemy, game.player, draft) : undefined,
+    shown && draft
+      ? promisedAnswer(game, promisedFor(game, pending, world, shown.enemy), shown.enemy, draft)
+      : undefined,
   );
   const payerCities = $derived.by(() => {
     const by = shown && payerOf(shown, payer);
@@ -228,7 +232,9 @@
           {/if}
           <p data-testid="peace-truce">{war.theirOffer.truce}</p>
           {#if war.theirOffer.problem}
-            <p class="bad">These terms cannot be met: {war.theirOffer.problem}.</p>
+            <p class="bad">
+              These terms cannot be met: {reasonText(game, war.theirOffer.problem)}.
+            </p>
           {/if}
           {#if war.theirOffer.answered}
             <p data-testid="peace-answered">{war.theirOffer.answered}</p>
