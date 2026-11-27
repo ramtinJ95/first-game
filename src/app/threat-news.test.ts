@@ -193,6 +193,20 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
     expect(threatNewsOfDay(next, next, world, told)).toEqual([]);
   });
 
+  test('a run-on climb of a later notice names its own day, not the day the stop named', () => {
+    const climbed = onNoticeFrom91(7000, 112);
+    const punic = climbed.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 100 as Day;
+    const was = shareOf(climbed) - 6;
+    const told = new Set(['threat:carthage:106', `threat-stop:carthage:97:${was}:roma:${was}:121`]);
+    const [line] = threatNewsOfDay(climbed, climbed, world, told);
+    expect(line?.pause).toBeUndefined();
+    expect(line?.text).toMatch(
+      /The game ran on: it may declare from Year 1, day 130\. See At peace in Wars\.$/,
+    );
+  });
+
   test('a stop kept before stops stored the day they named still stops the game for a climb', () => {
     const climbed = onNoticeFrom91(7000, 106);
     const told = new Set([
