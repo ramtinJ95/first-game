@@ -82,7 +82,7 @@ export interface ElephantFrame {
  * layers it returns: the fighting man after `below`, the driver after `wall`.
  */
 export function elephantFigure(pose: ElephantPose): ElephantFrame {
-  const body = (p: Vec) => rotate(p, -pose.pitch, PIVOT);
+  const body = (p: Vec) => rotate(p, pose.pitch, PIVOT);
   const legs = {
     foreNear: legOf(body(FORE_TOP), pose.foreNear, FORE, true),
     foreFar: legOf(body(add(FORE_TOP, { x: -4, y: -2 })), pose.foreFar, FORE, true),

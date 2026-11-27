@@ -754,8 +754,8 @@ function elephantPose(motion: Motion, t: number): ElephantPose {
       return {
         ...ELEPHANT_STAND,
         pitch: 8 * k,
-        head: 18 * k,
-        trunk: 0.05,
+        head: 2 * k,
+        trunk: 0.05 + 0.35 * k,
         ears: 0.1,
         tail: -10 * k,
         foreNear: [4 - 70 * knees, 2 + 150 * knees],

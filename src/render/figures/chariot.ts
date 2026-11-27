@@ -52,7 +52,7 @@ function wheelOps(hub: Vec, turned: number, far: boolean): PaintOp[] {
   });
   if (far) return ops;
   for (let i = 0; i < 6; i++) {
-    const out = reach(hub, turned + i * 60, RIM - 3);
+    const out = reach(hub, i * 60 - turned, RIM - 3);
     ops.push({ d: polyline([hub, out]), stroke: 3.4, strokeColour: C.dark });
     ops.push({ d: polyline([hub, out]), stroke: 1.8, strokeColour: wood });
   }
