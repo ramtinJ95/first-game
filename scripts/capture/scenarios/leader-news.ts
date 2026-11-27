@@ -53,7 +53,7 @@ export default defineScenario({
       .scrollIntoViewIfNeeded();
     await shot(
       'leader-news',
-      'Seed 8, the days around a change of lead: Macedon is told once as it takes the lead from Egypt',
+      'Seed 8, the days around a change of lead: Carthage is told once as it takes the lead',
     );
   },
 });
