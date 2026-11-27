@@ -7,6 +7,9 @@ import { executeOrder } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
 import type { GameState } from '../state/game-state.ts';
 import { buildingWorth, construction } from './build.ts';
+import { buildingGain } from '../buildings/gains.ts';
+import { advanceGain } from '../advances/gains.ts';
+import type { Order } from '../orders/orders.ts';
 import { decideOrders } from './decide.ts';
 import { TROOPS } from '../troops.ts';
 import { parseMap, POWERS } from '../map.ts';
@@ -67,6 +70,36 @@ describe('the AI builds', () => {
     expect(construction(tight, f.rome, false)).toEqual([]);
     need(tight.factions[f.rome]).stores.gold += 1 + BUILDINGS.canals.gold;
     expect(construction(tight, f.rome, false)).toHaveLength(1);
+  });
+
+  test('what grows food, with the gold it held for the recruit, while food alone stops that recruit', () => {
+    // With 1,200 men, Rome's food feeds 733 more and its gold 1,236 more; the next recruit is 800.
+    const held = (spare: number) => {
+      const state = buildFixture();
+      need(state.formations[f.hastati]).men = 900;
+      need(state.factions[f.rome]).stores.gold = reserveOf(state, f.rome, 'gold') + spare;
+      return state;
+    };
+    const growsFood = (state: GameState, order: Order | undefined) => {
+      if (order?.kind === 'build') {
+        return buildingGain(state, need(state.cities[order.city]), order.building).daily.food > 0;
+      }
+      if (order?.kind === 'study') return advanceGain(state, f.rome, order.advance).daily.food > 0;
+      return false;
+    };
+    const spending = (state: GameState) =>
+      decideOrders(state, world, f.rome).find(
+        (order) => order.kind === 'build' || order.kind === 'study',
+      );
+
+    const rich = held(TROOPS[mostNeeded(held(0), f.rome)].recruit.gold + BUILDINGS.forum.gold);
+    expect(decideOrders(rich, world, f.rome).some((order) => order.kind === 'recruit')).toBe(false);
+    expect(growsFood(rich, spending(rich))).toBe(true);
+    expectConsistent(rich);
+
+    const canals = held(BUILDINGS.canals.gold);
+    expect(spending(canals)).toMatchObject({ kind: 'build', building: 'canals' });
+    expectConsistent(canals);
   });
 
   test('nothing while its gold is falling', () => {
