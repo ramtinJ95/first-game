@@ -85,8 +85,8 @@ interface BuildingRow {
  * recruits train in `trainingShare` of the days. Carthage's Cothon has ships gather on a shore
  * within `reachKm` in `gatherShare` of the days, and convoys within that reach sail
  * `sailShare` times as fast. Macedon's Royal stables train cavalry in `cavalryShare` of the
- * days. Egypt's Great granary stores `storeDays` more days of the city's food and grows
- * `harvestShare` more of it. Persia's Royal road has its owner's armies march `marchShare`
+ * days. Egypt's Great granary stores `storeDays` more days of the city's food, grows
+ * `harvestShare` more of it, and sells grain for `goldShare` more of the city's gold. Persia's Royal road has its owner's armies march `marchShare`
  * times as fast in the city's province, the land nearer it than any other city.
  */
 export const BUILDINGS = {
@@ -177,7 +177,7 @@ export const BUILDINGS = {
   },
   colonia: {
     name: 'Colonia',
-    gold: 2500,
+    gold: 1200,
     days: 60,
     needs: { people: 0 },
     power: 'rome',
@@ -187,7 +187,7 @@ export const BUILDINGS = {
   },
   cothon: {
     name: 'Cothon',
-    gold: 3500,
+    gold: 1350,
     days: 90,
     needs: { people: 0 },
     power: 'carthage',
@@ -211,14 +211,15 @@ export const BUILDINGS = {
     power: 'egypt',
     storeDays: 90,
     harvestShare: 0.25,
+    goldShare: 0.15,
   },
   royalRoad: {
     name: 'Royal road',
-    gold: 2000,
+    gold: 330,
     days: 90,
     needs: { people: 0 },
     power: 'persia',
-    marchShare: 1.5,
+    marchShare: 1.25,
   },
 } as const satisfies Record<BuildingKind, BuildingRow & { readonly [effect: string]: unknown }>;
 
@@ -269,7 +270,8 @@ export function goldShareOf(city: Built): number {
     1 +
     (hasBuilt(city, 'forum') ? BUILDINGS.forum.goldShare : 0) +
     (hasBuilt(city, 'lawCourts') ? BUILDINGS.lawCourts.goldShare : 0) +
-    (hasBuilt(city, 'treasuryHall') ? BUILDINGS.treasuryHall.goldShare : 0)
+    (hasBuilt(city, 'treasuryHall') ? BUILDINGS.treasuryHall.goldShare : 0) +
+    (hasBuilt(city, 'greatGranary') ? BUILDINGS.greatGranary.goldShare : 0)
   );
 }
 
