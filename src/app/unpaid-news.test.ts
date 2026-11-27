@@ -112,6 +112,24 @@ describe('the news of an order the treasury could not pay', () => {
     ]);
   });
 
+  test('an offer of peace that asks the player for gold the treasury no longer holds says so', () => {
+    const state = tick(
+      buildFixture(),
+      [{ kind: 'declareWar', faction: FIXTURE.rome, against: FIXTURE.carthage }],
+      world,
+    ).state;
+    setGold(state, 5000);
+    const terms: PeaceTerms = { kind: 'payment', payer: FIXTURE.rome, gold: 2500, cities: [] };
+    expect(
+      newsOf(state, [
+        { kind: 'study', faction: FIXTURE.rome, advance: 'citizenRolls' },
+        { kind: 'offerPeace', faction: FIXTURE.rome, to: FIXTURE.carthage, terms },
+      ]).map((alert) => alert.text),
+    ).toEqual([
+      'The offer of peace to Carthage was not sent: it asks 2,500 gold and the treasury held 2,000 after Citizen rolls.',
+    ]);
+  });
+
   test('tells nothing of an order refused for another reason, or of another power', () => {
     const { state } = withRoute();
     setGold(state, 50_000);
