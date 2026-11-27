@@ -25,11 +25,11 @@ async function load(page: Page, state: GameState) {
 }
 
 /**
- * Seed 8 under the AI, days before Macedon takes the lead from Egypt on day 2642. Played as an
- * idle Persia, at war with no one from here, no fate, offer, or defeat stops the clock.
+ * Seed 8 under the AI, days before Carthage takes the lead on day 1529. Played as an idle
+ * Persia at war with Egypt and Sarmizegetusa, though no fate, offer, or defeat stops the clock.
  */
-const BEFORE_MACEDON_LEADS = 2626;
-const AFTER_THE_LEAD = 2656;
+const BEFORE_CARTHAGE_LEADS = 1513;
+const AFTER_THE_LEAD = 1544;
 
 export default defineScenario({
   name: 'leader-news',
@@ -38,7 +38,7 @@ export default defineScenario({
   async run({ page, shot }) {
     await openGame(page);
     // Rome has fallen by then, so the page plays the world as Persia.
-    const tenYears = playAi(newGame(map, { seed: 8, player: 'rome' }), BEFORE_MACEDON_LEADS - 1);
+    const tenYears = playAi(newGame(map, { seed: 8, player: 'rome' }), BEFORE_CARTHAGE_LEADS - 1);
     tenYears.player = 'persia' as FactionId;
     await load(page, tenYears);
     await page.getByRole('button', { name: 'Speed 3', exact: true }).click();
