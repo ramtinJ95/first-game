@@ -61,36 +61,30 @@ function stand(state: GameState, power: string, troops: Troops, dx: number, dy: 
 /** Carthage, Egypt, and Persia at rest outside Pella, each in its new figure and the troop it stood in for. */
 function beside(): GameState {
   const state = newGame(map, { seed: 1, player: 'macedon' });
-  stand(
-    state,
-    'carthage',
+  const pairs: readonly [string, Troops][] = [
     [
-      ['warElephants', 1500],
-      ['heavyCavalry', 800],
+      'carthage',
+      [
+        ['warElephants', 600],
+        ['heavyCavalry', 600],
+      ],
     ],
-    -30,
-    -30,
-  );
-  stand(
-    state,
-    'egypt',
     [
-      ['chariots', 1500],
-      ['lightCavalry', 800],
+      'egypt',
+      [
+        ['chariots', 600],
+        ['lightCavalry', 600],
+      ],
     ],
-    30,
-    -30,
-  );
-  stand(
-    state,
-    'persia',
     [
-      ['cataphracts', 1500],
-      ['heavyCavalry', 800],
+      'persia',
+      [
+        ['cataphracts', 600],
+        ['heavyCavalry', 600],
+      ],
     ],
-    90,
-    -30,
-  );
+  ];
+  pairs.forEach(([power, troops], i) => stand(state, power, troops, -60 + 80 * i, -30));
   return state;
 }
 
@@ -177,14 +171,13 @@ export default defineScenario({
     const march = onTheMarch();
     await loadSave(page, march);
     await camera(page).jumpTo({ x: pella.x + 10, y: pella.y - 60 }, 4);
-    await page.getByRole('button', { name: 'Speed 2', exact: true }).click();
     await resume(page);
     await untilDay(page, march.day + 1, 0, 60_000);
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(500);
     await pause(page);
     await shot(
       'figures-new-fighting',
-      "North of Pella: Persia's cataphracts fight Egypt's chariots, and Carthage's war elephants fight Macedon's phalangites, after a day on the march",
+      "North of Pella: the first day of battle after a day on the march: Persia's cataphracts fight Egypt's chariots, and Carthage's war elephants fight Macedon's phalangites",
     );
 
     await openGame(page);
