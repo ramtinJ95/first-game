@@ -32,13 +32,14 @@ import {
 import { ALERT_KINDS } from './alert-kinds.generated.ts';
 import { cityDanger } from './city-danger.ts';
 import { importantBattle } from './battle-importance.ts';
+import { declarationNews } from './threat-news.ts';
 export { ALERT_KINDS };
 export type AlertKind = (typeof ALERT_KINDS)[number];
 
 /**
  * Decision points: an important battle, an own city besieged/in danger/lost, a weak
- * offensive siege, the first enemy near the player's land, or an advance finished with
- * nothing else studied. The Game menu sets each.
+ * offensive siege, the first enemy near the player's land, a war warning, a declaration of
+ * war on the player, or an advance finished with nothing else studied. The Game menu sets each.
  */
 export const PAUSE_KINDS = [
   'battle',
@@ -46,6 +47,7 @@ export const PAUSE_KINDS = [
   'sighted',
   'ownCity',
   'warThreat',
+  'declared',
   'advance',
 ] as const;
 export type PauseKind = (typeof PAUSE_KINDS)[number];
@@ -121,6 +123,7 @@ export function alertsOfDay(
   events: readonly DeepReadonly<DayEvent>[],
   occupied: Occupied = new Map(),
   remembered?: Set<string>,
+  world?: World,
 ): Alert[] {
   const player = after.player;
   // The day played, which the rules also stamp on what happened in it, such as a city's fall.
@@ -152,7 +155,7 @@ export function alertsOfDay(
   }
 
   for (const event of events) {
-    let alert = eventAlert(before, after, event);
+    let alert = eventAlert(before, after, event, world);
     if (
       alert &&
       (event.kind === 'armyRetreated' || event.kind === 'armyDestroyed') &&
@@ -600,6 +603,7 @@ function eventAlert(
   before: State,
   after: State,
   event: DeepReadonly<DayEvent>,
+  world: World | undefined,
 ): Omit<Alert, 'day'> | undefined {
   const player = after.player;
   switch (event.kind) {
@@ -758,10 +762,13 @@ function eventAlert(
     }
     case 'warDeclared':
       if (event.against === player) {
+        const declared = world ? declarationNews(before, after, world, event.by) : undefined;
         return {
           kind: 'warDeclared',
           tone: 'bad',
-          text: `${factionName(after, event.by)} declared war on you`,
+          text: declared?.text ?? `${factionName(after, event.by)} declared war on you`,
+          pause: { kind: 'declared' },
+          ...(declared?.at && { focus: { at: declared.at } }),
         };
       }
       if (event.by === player) {

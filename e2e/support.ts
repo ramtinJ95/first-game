@@ -707,6 +707,25 @@ export function carthageNearsWar(): GameState {
   return state;
 }
 
+/**
+ * `carthageNearsWar` with 8,000 Carthaginians on day 100, on notice since day 60, and every other
+ * great power bound by a truce with Rome: Carthage declares war on Rome on the next day played.
+ */
+export function carthageDeclaresWar(): GameState {
+  const state = carthageNearsWar();
+  state.day = 100 as Day;
+  for (const truce of Object.values(state.truces)) truce.endsOn = (state.day + 365) as Day;
+  for (const power of Object.values(state.factions))
+    if (power.kind === 'greatPower' && power.id !== rome && power.id !== carthage)
+      state.truces[warKey(power.id, rome)] = { since: state.day, endsOn: (state.day + 365) as Day };
+  const punic = state.factions[carthage];
+  const spearmen = state.formations[armyOf(state, carthage).formations[0] as FormationId];
+  if (!punic || !spearmen) throw new Error('no Carthage or Carthaginian army');
+  punic.noticeSince = 60 as Day;
+  spearmen.men = 8000;
+  return state;
+}
+
 /** The day `carthageWarnsAgain` remembers Carthage's last stop, Year 1, day 250. */
 export const CARTHAGE_STOPPED_ON = 250;
 
