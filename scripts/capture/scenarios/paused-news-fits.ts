@@ -2,6 +2,7 @@ import { expect, type Page } from '@playwright/test';
 import {
   armyOf,
   carthage,
+  carthageDeclaresWar,
   carthageNearsWar,
   dropSave,
   fiveFleetsOnRoma,
@@ -130,6 +131,15 @@ function carthageStillNearWarTraining(): GameState {
 function battleTomorrow(): GameState {
   const state = startGame();
   outnumberedAt(state, 'roma', 1500);
+  return state;
+}
+
+/** Carthage declares war as in `carthageDeclaresWar` on a Rome without the manpower for a troop: the declaration's longest advice. */
+function carthageDeclaresOnFewMen(): GameState {
+  const state = carthageDeclaresWar();
+  const stores = state.factions[rome]?.stores;
+  if (!stores) throw new Error('no Roman stores');
+  stores.manpower = 300;
   return state;
 }
 
@@ -437,6 +447,12 @@ const STOPS: readonly {
     atPeaceNote:
       'You hold no more cities than at the start, so Carthage needs 14% less of the strength to declare war on you: 1.5% for each year of the game, to at most 15%. Holding more cities than at the start ends it.',
   },
+  {
+    name: 'a declaration of war, to a realm that can raise no men',
+    make: carthageDeclaresOnFewMen,
+    line: /Carthage declared war on you, .*First march your armies to Roma; you can raise no men now: Skirmishers need 500 men/,
+    shot: 'war-declared',
+  },
   { name: 'a city in danger', make: alone(ownCityInDangerTomorrow), line: /is in danger/ },
   { name: 'fleets sighted', make: alone(fiveFleetsOnRoma), line: /sail|march/ },
   { name: 'a weak siege', make: alone(weakSiegeOfMediolanum), line: /Too few|too weak/ },
@@ -513,7 +529,7 @@ async function stopOn(
 export default defineScenario({
   name: 'paused-news-fits',
   title:
-    'News that stops the game is read whole in the corner at 1280 × 720 and 1024 × 720: the war warnings and a reminder, a city in danger, fleets sighted, a weak siege, a battle, and an advance finished with nothing else studied',
+    'News that stops the game is read whole in the corner at 1280 × 720 and 1024 × 720: the war warnings and a reminder, a declaration of war, a city in danger, fleets sighted, a weak siege, a battle, and an advance finished with nothing else studied',
   async run({ page, shot }) {
     await openGame(page, { pauses: true });
     for (const width of [1280, 1024]) {

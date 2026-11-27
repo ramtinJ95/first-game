@@ -41,7 +41,9 @@ function cautiousRomeWithItsWarnings(): string {
       chronicle.unshift(
         ...threatFadedNewsOfDay(before, after, world, told),
         ...threatNewsOfDay(before, after, world, told),
-        ...alertsOfDay(before, after, events).filter((alert) => alert.kind === 'warDeclared'),
+        ...alertsOfDay(before, after, events, undefined, undefined, world).filter(
+          (alert) => alert.kind === 'warDeclared',
+        ),
       );
       if (after.day === DAYS) state = after;
     },

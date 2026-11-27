@@ -74,6 +74,7 @@
   "truce-bought": 10.5,
   "unpaid-order": 37,
   "war-answered": 60,
+  "war-declared": 22,
   "war-loop": 20.1,
   "war-threat": 9.2,
   "war-warning-pause": 12.2,
