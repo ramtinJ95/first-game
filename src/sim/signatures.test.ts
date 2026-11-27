@@ -138,8 +138,9 @@ describe("each great power's own building", () => {
     const before = holding('egypt');
     const after = holding('egypt');
     finish(after, f.carthago, 'greatGranary');
+    const people = need(before.cities[f.carthago]).population;
     const gold = (s: GameState) => need(dailyBalances(s).get(power('egypt'))).gold;
-    expect(gold(after)).toBeGreaterThan(gold(before) * 1.01);
+    expect(gold(after) - gold(before)).toBeCloseTo(people * 0.00042 * 0.15);
   });
 
   test("a Royal road speeds its owner's armies in its province, and no one else's", () => {
