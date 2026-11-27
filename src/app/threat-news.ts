@@ -638,6 +638,7 @@ function ranOnText(
     from: string;
     stop: Stop;
     climb: Stop | undefined;
+    named: number;
   }[],
 ): string {
   const [one, ...others] = spared;
@@ -646,7 +647,7 @@ function ranOnText(
   if (others.length > 0)
     return `${listed(spared.map((w) => w.name))} could soon declare war on you, with ${listed(spared.map((w) => share(w.threat.readiness)))} of the strength each needs. The game ran on: ${spared.some((w) => w.climb) ? 'none may declare before the day its last stop named' : `none stands ${THREAT_SPARE_RISE} points above its last stop`}. See At peace in Wars.`;
   if (one.climb)
-    return `${one.name} has climbed to ${share(one.threat.readiness)} ${near(state, one.threat)}, from ${one.climb.share}% at its last stop on ${dateText(one.climb.day)}. The game ran on: it may declare ${one.from}, as that stop said. See At peace in Wars.`;
+    return `${one.name} has climbed to ${share(one.threat.readiness)} ${near(state, one.threat)}, from ${one.climb.share}% at its last stop on ${dateText(one.climb.day)}. The game ran on: it may declare ${one.from}${one.climb.named === one.named ? ', as that stop said' : ''}. See At peace in Wars.`;
   const rise = points(one.threat.readiness) - one.stop.share;
   const higher = rise > 0 ? `only ${rise} ${rise === 1 ? 'point' : 'points'} higher` : 'no higher';
   return `${one.name} could soon declare war on you: ${share(one.threat.readiness)} of the strength it needs ${near(state, one.threat)}, ${one.from}. The game ran on: its stop on ${dateText(one.stop.day)} was at ${one.stop.share}%, and it stands ${higher}. See At peace in Wars.`;
