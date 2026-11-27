@@ -6,6 +6,7 @@ import { guardGoldOf } from '../sim/guards.ts';
 import type { Order } from '../sim/orders/orders.ts';
 import { expectConsistent } from '../sim/references.ts';
 import type { GameState } from '../sim/state/game-state.ts';
+import type { PeaceTerms } from '../sim/state/peace.ts';
 import { tick } from '../sim/tick.ts';
 import { openTrade } from '../sim/trade/orders.ts';
 import { improvementCost } from '../sim/trade/routes.ts';
@@ -77,6 +78,38 @@ describe('the news of an order the treasury could not pay', () => {
       `Guards at Roma were not hired: they cost ${whole(guardGoldOf(FIXTURE.rome))} gold and the treasury held 100 after the route from Roma to Capua.`,
     ]);
     expect(news[0]?.focus?.at).toEqual(roma.position);
+  });
+
+  test('a peace whose gold the treasury lacks names the peace and its whole price, refunds aside', () => {
+    let state = tick(
+      buildFixture(),
+      [{ kind: 'declareWar', faction: FIXTURE.rome, against: FIXTURE.carthage }],
+      world,
+    ).state;
+    const terms: PeaceTerms = {
+      kind: 'payment',
+      payer: FIXTURE.rome,
+      gold: 1200,
+      cities: [FIXTURE.capua],
+    };
+    const offered = tick(
+      state,
+      [{ kind: 'offerPeace', faction: FIXTURE.carthage, to: FIXTURE.rome, terms }],
+      world,
+    );
+    expect(offered.rejected).toEqual([]);
+    state = offered.state;
+    const capua = state.cities[FIXTURE.capua];
+    if (!capua) throw new Error('expected Capua');
+    capua.construction = { building: 'forum', daysLeft: 30 };
+    setGold(state, 100);
+    expect(
+      newsOf(state, [
+        { kind: 'acceptPeace', faction: FIXTURE.rome, from: FIXTURE.carthage, terms },
+      ]).map((alert) => alert.text),
+    ).toEqual([
+      'The peace with Carthage was not made: it costs 1,200 gold and the treasury held 100.',
+    ]);
   });
 
   test('tells nothing of an order refused for another reason, or of another power', () => {

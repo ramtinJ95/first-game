@@ -68,14 +68,25 @@ const AMPLE_GOLD = 1e12;
 
 /**
  * The gold a refused order would have paid had its faction held AMPLE_GOLD, or undefined
- * when it is refused even then, so gold was not what it lacked.
+ * when it is refused even then, so gold was not what it lacked. The price is the lowest the
+ * treasury fell, since an order may pay and then take some back, as a peace that cedes a city
+ * refunds the building under way there.
  */
 function priceWithGold(state: GameState, order: Order, world: World): number | undefined {
   const trial = JSON.parse(JSON.stringify(state)) as GameState;
-  const payer = trial.factions[order.faction];
-  if (!payer) return undefined;
-  payer.stores.gold = AMPLE_GOLD;
+  const stores = trial.factions[order.faction]?.stores;
+  if (!stores) return undefined;
+  let gold = AMPLE_GOLD;
+  let lowest = AMPLE_GOLD;
+  Object.defineProperty(stores, 'gold', {
+    enumerable: true,
+    get: () => gold,
+    set: (next: number) => {
+      gold = next;
+      lowest = Math.min(lowest, next);
+    },
+  });
   if (executeOrder(trial, order, world)) return undefined;
-  const cost = AMPLE_GOLD - payer.stores.gold;
+  const cost = AMPLE_GOLD - lowest;
   return cost > 0 ? cost : undefined;
 }

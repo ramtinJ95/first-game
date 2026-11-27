@@ -71,6 +71,12 @@ function paidOf(states: readonly State[], order: Order): Paid {
         failed: 'was not opened',
         city: order.from,
       };
+    case 'acceptPeace':
+      return {
+        name: `the peace with ${states[0]?.factions[order.from]?.name ?? order.from}`,
+        many: false,
+        failed: 'was not made',
+      };
     default:
       return { name: 'An order', many: false, failed: 'was not carried out' };
   }
