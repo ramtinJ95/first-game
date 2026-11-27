@@ -30,6 +30,24 @@ describe('reasonText', () => {
   });
 });
 
+describe('reasonText amounts', () => {
+  it('writes amounts with the thousands comma the news uses', () => {
+    const state = buildFixture();
+    expect(reasonText(state, 'Rome has 2014 gold, not the 2500 the terms ask')).toBe(
+      'Rome has 2,014 gold, not the 2,500 the terms ask',
+    );
+    expect(reasonText(state, 'citizenRolls costs 12000 gold, but rome has 900')).toBe(
+      'CitizenRolls costs 12,000 gold, but Rome has 900',
+    );
+    expect(reasonText(state, 'Rome has -1200 gold. It needs 12000.')).toBe(
+      'Rome has -1,200 gold. It needs 12,000.',
+    );
+    expect(reasonText(state, 'route tradeRoute-1234 holds 2500.5 gold')).toBe(
+      'Route tradeRoute-1234 holds 2500.5 gold',
+    );
+  });
+});
+
 describe('dateText', () => {
   it('counts days within years of 365 days', () => {
     expect(dateText(1)).toBe('Year 1, day 1');

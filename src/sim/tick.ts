@@ -1,4 +1,5 @@
-import { recordEvents, type DayEvent } from './events.ts';
+import { emit, recordEvents, type DayEvent } from './events.ts';
+import type { FactionId } from './ids.ts';
 import { executeOrder, type Order, type RejectedOrder } from './orders/orders.ts';
 import type { GameState } from './state/game-state.ts';
 import { SYSTEMS, type System } from './systems.ts';
@@ -35,11 +36,66 @@ export function tick(
   const rejected: RejectedOrder[] = [];
   const events = recordEvents(next, () => {
     lapseInvitationsBeforeOrders(next, orders, world);
+    const paid = new Map<FactionId, Order[]>();
     for (const order of orders) {
+      const held = next.factions[order.faction]?.stores.gold;
       const rejection = executeOrder(next, order, world);
-      if (rejection) rejected.push(rejection);
+      const spent = paid.get(order.faction) ?? [];
+      if (rejection) {
+        rejected.push(rejection);
+        const cost = held === undefined ? undefined : priceWithGold(next, order, world);
+        if (held !== undefined && cost !== undefined) {
+          emit(next, {
+            kind: 'orderUnpaid',
+            faction: order.faction,
+            order,
+            cost,
+            held,
+            paidBefore: spent,
+          });
+        }
+      } else if (held !== undefined && (next.factions[order.faction]?.stores.gold ?? held) < held) {
+        paid.set(order.faction, [...spent, order]);
+      }
     }
     for (const system of systems) system(next, world);
   });
   return { state: next, rejected, events };
+}
+
+/** Far more gold than any order costs, so an order refused with it lacked something else. */
+const AMPLE_GOLD = 1e12;
+
+/**
+ * The gold a refused order would have paid had its faction held AMPLE_GOLD, or undefined
+ * when it is refused even then, so gold was not what it lacked. The price is the lowest the
+ * treasury fell, since an order may pay and then take some back, as a peace that cedes a city
+ * refunds the building under way there.
+ */
+function priceWithGold(state: GameState, order: Order, world: World): number | undefined {
+  const trial = JSON.parse(JSON.stringify(state)) as GameState;
+  const stores = trial.factions[order.faction]?.stores;
+  if (!stores) return undefined;
+  let gold = AMPLE_GOLD;
+  let lowest = AMPLE_GOLD;
+  Object.defineProperty(stores, 'gold', {
+    enumerable: true,
+    get: () => gold,
+    set: (next: number) => {
+      gold = next;
+      lowest = Math.min(lowest, next);
+    },
+  });
+  if (executeOrder(trial, order, world)) return undefined;
+  const cost = Math.max(AMPLE_GOLD - lowest, goldOffered(order));
+  return cost > 0 ? cost : undefined;
+}
+
+/** The gold an offer of peace promises from its sender's treasury, which it holds but pays only on acceptance. */
+function goldOffered(order: Order): number {
+  return order.kind === 'offerPeace' &&
+    order.terms.kind === 'payment' &&
+    order.terms.payer === order.faction
+    ? order.terms.gold
+    : 0;
 }

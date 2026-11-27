@@ -61,14 +61,14 @@ describe('the wars panel', () => {
 
   test('warns only about battles and sieges in this war, including a battle with no siege', () => {
     let state = warOn(226);
-    expect(warRoomOf(state, []).wars[0]?.volatile).toBe(false);
+    expect(warRoomOf(state, [], world).wars[0]?.volatile).toBe(false);
     const roman = state.armies[f.romanArmy];
     const punic = state.armies[f.punicArmy];
     if (!roman || !punic || roman.activity.kind !== 'idle') throw new Error('fixture');
     punic.activity = { kind: 'idle', position: { ...roman.activity.position } };
     state = tick(state, [], world).state;
     expect(Object.keys(state.battles)).toHaveLength(1);
-    expect(warRoomOf(state, []).wars[0]?.volatile).toBe(true);
+    expect(warRoomOf(state, [], world).wars[0]?.volatile).toBe(true);
     expectConsistent(state);
   });
 
@@ -92,7 +92,7 @@ describe('the wars panel', () => {
   test('lists each war with how it stands, from what the player can see', () => {
     const state = warOn(201);
     changeCityOwner(state, f.capua, f.carthage);
-    const [war] = warRoomOf(state, []).wars;
+    const [war] = warRoomOf(state, [], world).wars;
     expect(war?.summary).toBe('The war goes against you (-15)');
     expect(war?.facts).toEqual([
       'You declared it on Year 1, day 1, 200 days ago.',
@@ -103,7 +103,7 @@ describe('the wars panel', () => {
   test('says what the enemy would answer to each ready choice, by the rule the AI answers with', () => {
     const state = warOn(201);
     changeCityOwner(state, f.capua, f.carthage);
-    const [war] = warRoomOf(state, []).wars;
+    const [war] = warRoomOf(state, [], world).wars;
     expect(war?.choices.map((choice) => [choice.label, choice.answer.verdict])).toEqual([
       [
         'Peace as things stand',
@@ -127,7 +127,7 @@ describe('the wars panel', () => {
       to: f.rome,
       terms: { kind: 'asThingsStand' },
     });
-    const [war] = warRoomOf(state, []).wars;
+    const [war] = warRoomOf(state, [], world).wars;
     expect(war?.theirOffer).toEqual({
       terms: { kind: 'asThingsStand' },
       text: 'Carthage offers peace as things stand.',
@@ -145,9 +145,77 @@ describe('the wars panel', () => {
       to: f.carthage,
       terms: { kind: 'payment', payer: f.rome, gold: 300, cities: [] },
     };
-    expect(warRoomOf(state, [queued]).wars[0]?.ourOffer).toBe(
+    expect(warRoomOf(state, [queued], world).wars[0]?.ourOffer).toBe(
       'You offer Carthage peace: you give 300 gold. Carthage hears it with the next day.',
     );
+  });
+
+  test("a demand for gold counts the gold promised to today's orders, so a peace it lets the player accept is paid", () => {
+    const base = warOn(201);
+    changeCityOwner(base, f.capua, f.carthage);
+    const terms: PeaceTerms = { kind: 'payment', payer: f.rome, gold: 2500, cities: [] };
+    const study: Order = { kind: 'study', faction: f.rome, advance: 'citizenRolls' };
+    const accept: Order = { kind: 'acceptPeace', faction: f.rome, from: f.carthage, terms };
+    for (const gold of [5000, 5500, 5499]) {
+      const state = structuredClone(base);
+      const rome = state.factions[f.rome];
+      if (!rome) throw new Error('fixture');
+      rome.stores.gold = gold;
+      run(state, { kind: 'offerPeace', faction: f.carthage, to: f.rome, terms });
+      const offer = warRoomOf(state, [study], world).wars[0]?.theirOffer;
+      const result = tick(state, [study, accept], world);
+      expect(result.rejected.length === 0).toBe(offer?.problem === undefined);
+      expectConsistent(result.state);
+    }
+    const state = structuredClone(base);
+    const rome = state.factions[f.rome];
+    if (!rome) throw new Error('fixture');
+    rome.stores.gold = 5000;
+    run(state, { kind: 'offerPeace', faction: f.carthage, to: f.rome, terms });
+    expect(warRoomOf(state, [], world).wars[0]?.theirOffer?.problem).toBeUndefined();
+    expect(warRoomOf(state, [study], world).wars[0]?.theirOffer?.problem).toBe(
+      'Rome has 2000 gold, not the 2500 the terms ask, once the orders given today are paid',
+    );
+    expect(warRoomOf(state, [study], world).wars[0]?.theirOffer?.funds).toBe(
+      "You hold 5,000 gold. 3,000 of it is promised to today's orders. You need 500 gold more to pay the 2,500 asked.",
+    );
+    expect(
+      warRoomOf(state, [study], world).wars[0]?.choices.filter(
+        (choice) =>
+          choice.terms.kind === 'payment' &&
+          choice.terms.payer === f.rome &&
+          choice.terms.gold > 2000 &&
+          choice.answer.problem === undefined,
+      ),
+    ).toEqual([]);
+  });
+
+  test('gold a waiting order gives back makes a demand payable, and the suggestions count the gold promised', () => {
+    const state = warOn(201);
+    changeCityOwner(state, f.capua, f.carthage);
+    const rome = state.factions[f.rome];
+    if (!rome) throw new Error('fixture');
+    rome.stores.gold = 3000;
+    const terms: PeaceTerms = { kind: 'payment', payer: f.rome, gold: 2500, cities: [] };
+    run(state, { kind: 'offerPeace', faction: f.carthage, to: f.rome, terms });
+    rome.stores.gold = 1000;
+    rome.study = { advance: 'clemency', daysLeft: 10, paid: 3000 };
+    const cancel: Order = { kind: 'cancelStudy', faction: f.rome };
+    expect(warRoomOf(state, [], world).wars[0]?.theirOffer?.problem).toBeDefined();
+    expect(warRoomOf(state, [cancel], world).wars[0]?.theirOffer?.problem).toBeUndefined();
+    const accept: Order = { kind: 'acceptPeace', faction: f.rome, from: f.carthage, terms };
+    expect(tick(state, [cancel, accept], world).rejected).toEqual([]);
+
+    const rich = warOn(201);
+    changeCityOwner(rich, f.capua, f.carthage);
+    const purse = rich.factions[f.rome];
+    if (!purse) throw new Error('fixture');
+    purse.stores.gold = 3500;
+    const study: Order = { kind: 'study', faction: f.rome, advance: 'citizenRolls' };
+    for (const choice of warRoomOf(rich, [study], world).wars[0]?.choices ?? []) {
+      if (choice.terms.kind === 'payment' && choice.terms.payer === f.rome)
+        expect(choice.terms.gold).toBeLessThanOrEqual(500);
+    }
   });
 
   test('a demand above what the enemy would take offers the cheaper terms as a counter', () => {
@@ -162,7 +230,7 @@ describe('the wars panel', () => {
       to: f.rome,
       terms: { kind: 'payment', payer: f.rome, gold: 3000, cities: [] },
     });
-    const offer = warRoomOf(state, []).wars[0]?.theirOffer;
+    const offer = warRoomOf(state, [], world).wars[0]?.theirOffer;
     expect(offer?.counter?.terms).toEqual({
       kind: 'payment',
       payer: f.rome,
@@ -184,9 +252,12 @@ describe('the wars panel', () => {
       to: f.rome,
       terms: { kind: 'payment', payer: f.rome, gold: 1700, cities: [] },
     });
-    expect(warRoomOf(atFloor, []).wars[0]?.theirOffer?.counter).toBeUndefined();
-    const refused = warRoomOf(state, [{ kind: 'refusePeace', faction: f.rome, from: f.carthage }])
-      .wars[0]?.theirOffer?.answered;
+    expect(warRoomOf(atFloor, [], world).wars[0]?.theirOffer?.counter).toBeUndefined();
+    const refused = warRoomOf(
+      state,
+      [{ kind: 'refusePeace', faction: f.rome, from: f.carthage }],
+      world,
+    ).wars[0]?.theirOffer?.answered;
     expect(refused).toBe('You refuse. Carthage hears it with the next day.');
     expectConsistent(state);
     expectConsistent(atFloor);
@@ -250,7 +321,7 @@ describe('the wars panel', () => {
       terms: { kind: 'asThingsStand' },
     });
     state.day = 301 as Day;
-    expect(warRoomOf(state, [])).toEqual({
+    expect(warRoomOf(state, [], world)).toEqual({
       wars: [],
       truces: [
         {
@@ -273,13 +344,13 @@ describe('the wars panel', () => {
     expect(peaceVerdict(state, answer)).toBe(
       'Carthage will not talk of peace before Year 3, day 215.',
     );
-    expect(warRoomOf(state, []).wars[0]?.facts).toContain(
+    expect(warRoomOf(state, [], world).wars[0]?.facts).toContain(
       'You declared it on Year 3, day 155, 15 days ago.',
     );
     state.wars = {};
     state.truces[warKey(f.rome, f.carthage)] = { since: 3549 as Day, endsOn: 3914 as Day };
     state.day = 3900 as Day;
-    expect(warRoomOf(state, []).truces[0]?.text).toBe(
+    expect(warRoomOf(state, [], world).truces[0]?.text).toBe(
       'Truce with Carthage: 14 days left. Neither side may declare war before Year 11, day 264.',
     );
     expectConsistent(state);
@@ -339,7 +410,9 @@ describe('the truce shown before terms are sent is the truce they buy', () => {
 
   test('a one-click suggestion', () => {
     const state = carthageAhead();
-    const choice = warRoomOf(state, []).wars[0]?.choices.find((c) => c.terms.kind === 'payment');
+    const choice = warRoomOf(state, [], world).wars[0]?.choices.find(
+      (c) => c.terms.kind === 'payment',
+    );
     if (!choice) throw new Error('no paid suggestion');
     expect(choice.answer.accepts).toBe(true);
     expect(choice.truce).toBe(made(sent(state, choice.terms)));
@@ -352,7 +425,7 @@ describe('the truce shown before terms are sent is the truce they buy', () => {
     if (!losses || !carthage) throw new Error('fixture');
     losses.lost = 1000;
     carthage.stores.gold = 5_000;
-    const choice = warRoomOf(state, []).wars[0]?.choices.find(
+    const choice = warRoomOf(state, [], world).wars[0]?.choices.find(
       (c) => c.terms.kind === 'payment' && c.terms.payer === f.carthage,
     );
     if (!choice) throw new Error('no suggestion in which Carthage pays');
@@ -376,7 +449,7 @@ describe('the truce shown before terms are sent is the truce they buy', () => {
       [{ kind: 'offerPeace', faction: f.carthage, to: f.rome, terms: demand }],
       world,
     ).state;
-    const theirs = warRoomOf(offered, []).wars[0]?.theirOffer;
+    const theirs = warRoomOf(offered, [], world).wars[0]?.theirOffer;
     if (!theirs?.counter) throw new Error('no offer with a cheaper counter-offer');
     const accepted = tick(
       offered,

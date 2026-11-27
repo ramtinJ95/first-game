@@ -32,7 +32,7 @@ import { whole } from '../app/names.ts';
 import { startingSkillOf } from '../sim/new-game.ts';
 import { worthBuilding } from '../app/building-hint.ts';
 import { BUILDINGS } from '../sim/buildings/buildings.ts';
-import { paybackBasis } from './buildings-text.ts';
+import { afterWaiting, paybackBasis } from './buildings-text.ts';
 
 type State = DeepReadonly<GameState>;
 
@@ -73,6 +73,18 @@ export interface BranchView {
   readonly rows: readonly AdvanceRowView[];
 }
 
+/**
+ * The state once the player's waiting orders other than a study are paid, so what the panel
+ * offers counts the gold they promise. A study waiting is shown as ordered instead.
+ */
+export function promisedState(state: State, pending: readonly Order[], world: World): State {
+  return afterWaiting(
+    state,
+    pending.filter((order) => order.kind !== 'study'),
+    world,
+  );
+}
+
 /** The three branches with each advance, as the realm stands today and with the orders waiting. */
 export function advancesView(
   state: State,
@@ -84,7 +96,12 @@ export function advancesView(
   const ordered = pending.find(
     (order): order is StudyOrder => order.kind === 'study' && order.faction === faction,
   )?.advance;
-  const suggested = marked(state, world, faction).advance;
+  const promised = promisedState(state, pending, world);
+  const owed = Math.max(
+    0,
+    (state.factions[faction]?.stores.gold ?? 0) - (promised.factions[faction]?.stores.gold ?? 0),
+  );
+  const suggested = marked(promised, world, faction).advance;
   return ADVANCE_BRANCHES.map((branch) => ({
     branch,
     name: BRANCH_NAMES[branch],
@@ -104,7 +121,7 @@ export function advancesView(
           ? undefined
           : ordered
             ? `${ADVANCES[ordered].name} is ordered for the next day`
-            : refusalText(state, faction, kind);
+            : refusalText(promised, faction, kind, owed);
       return {
         kind,
         name,
@@ -350,13 +367,21 @@ function paybackText(state: State, faction: FactionId, kind: AdvanceKind): strin
   return years > 20 ? 'Pays back in over 20 years' : `Pays back in ${years.toFixed(1)} years`;
 }
 
-function refusalText(state: State, faction: FactionId, kind: AdvanceKind): string | undefined {
+function refusalText(
+  state: State,
+  faction: FactionId,
+  kind: AdvanceKind,
+  owed: number,
+): string | undefined {
   const record = state.factions[faction];
   if (!record) return 'Your realm has fallen';
   if (record.defeatedOn !== null) return 'Your realm has fallen';
   if (record.study) return `Studying ${ADVANCES[record.study.advance].name}; one at a time`;
   const gold = studyPrice(state, faction, kind);
-  if (record.stores.gold < gold) return `Needs ${whole(gold - record.stores.gold)} more gold`;
+  if (record.stores.gold < gold) {
+    const promised = owed > 0 ? `, with ${whole(owed)} promised to today's orders` : '';
+    return `Needs ${whole(gold - record.stores.gold)} more gold${promised}`;
+  }
   return undefined;
 }
 

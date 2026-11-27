@@ -9,6 +9,7 @@
     advancesView,
     buildingFirstLine,
     markedLine,
+    promisedState,
     cancelText,
     studyLine,
     ADVANCE_RULE,
@@ -28,8 +29,9 @@
 
   const branches = $derived(advancesView(game, world, game.player, pending));
   const line = $derived(studyLine(game, game.player));
-  const first = $derived(buildingFirstLine(game, world, game.player));
-  const mark = $derived(markedLine(game, world, game.player));
+  const promised = $derived(promisedState(game, pending, world));
+  const first = $derived(buildingFirstLine(promised, world, game.player));
+  const mark = $derived(markedLine(promised, world, game.player));
   let root: HTMLElement | undefined = $state();
 
   /** Brings the marked advance's card into view, wherever its branch sits in the panel. */

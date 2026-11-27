@@ -348,12 +348,10 @@ export function buildingReasonText(state: State, reason: string): string {
   return reasonText(
     state,
     reason.replace(new RegExp(`\\ba (${kinds})\\b`, 'g'), '$1').replace(/\bcity (?=[a-z])/g, ''),
-  )
-    .replace(new RegExp(`\\b(${kinds})\\b`, 'gi'), (kind) => {
-      const found = name(kind);
-      return found in BUILDINGS ? BUILDINGS[found as BuildingKind].name : kind;
-    })
-    .replace(/\b\d{4,}\b/g, (n) => whole(Number(n)));
+  ).replace(new RegExp(`\\b(${kinds})\\b`, 'gi'), (kind) => {
+    const found = name(kind);
+    return found in BUILDINGS ? BUILDINGS[found as BuildingKind].name : kind;
+  });
 }
 
 const SHARE_WORDS: Readonly<Record<number, string>> = {
