@@ -151,19 +151,23 @@ export function promisedFor(
   );
 }
 
-/** Why the terms cannot be met once the orders waiting are paid, when they can be met today. */
+/**
+ * Why the terms cannot be met once the orders waiting are paid, which may cost gold or give it
+ * back. A reason that differs from today's says it counts those orders.
+ */
 function promisedProblem(
   state: State,
   promised: State,
   enemy: FactionId,
   terms: DeepReadonly<PeaceTerms>,
 ): string | undefined {
-  if (termsProblem(state, [state.player, enemy], terms)) return undefined;
   const problem = termsProblem(promised, [state.player, enemy], terms);
-  return problem && `${problem}, once the orders given today are paid`;
+  return problem === undefined || problem === termsProblem(state, [state.player, enemy], terms)
+    ? problem
+    : `${problem}, once the orders given today are paid`;
 }
 
-/** The enemy's answer to the terms, which cannot be met when the orders waiting leave too little gold. */
+/** The enemy's answer to the terms, with their gold checked once the orders waiting are paid. */
 export function promisedAnswer(
   state: State,
   promised: State,
@@ -171,9 +175,17 @@ export function promisedAnswer(
   terms: DeepReadonly<PeaceTerms>,
 ): PeaceAnswer | undefined {
   const answer = peaceAnswer(state, enemy, state.player, terms);
-  const problem = answer && promisedProblem(state, promised, enemy, terms);
-  if (!answer || !problem) return answer;
-  return { ...answer, accepts: false, problem, verdict: `These terms cannot be met: ${problem}.` };
+  if (!answer) return answer;
+  const problem = promisedProblem(state, promised, enemy, terms);
+  if (problem === answer.problem) return answer;
+  if (problem)
+    return {
+      ...answer,
+      accepts: false,
+      problem,
+      verdict: `These terms cannot be met: ${problem}.`,
+    };
+  return peaceAnswer(promised, enemy, state.player, terms) ?? answer;
 }
 
 export function peaceChoices(
@@ -190,7 +202,7 @@ export function peaceChoices(
   if (wish < 0) {
     options.push({
       label: `The least ${name} takes`,
-      terms: paymentBetween(state, player, enemy, -wish, Number.POSITIVE_INFINITY, 'least'),
+      terms: paymentBetween(promised, player, enemy, -wish, Number.POSITIVE_INFINITY, 'least'),
     });
   } else if (wish > 0) {
     options.push({
@@ -308,9 +320,7 @@ export function warRoomOf(state: State, pending: readonly Order[], world: World)
                   text: `${name} offers ${peaceText(state, offer.terms, player)}.`,
                   funds: peaceFundsText(state, offer.terms, promised),
                   change: offer.change,
-                  problem:
-                    termsProblem(state, [player, enemy], offer.terms) ??
-                    promisedProblem(state, promised, enemy, offer.terms),
+                  problem: promisedProblem(state, promised, enemy, offer.terms),
                   refusing: `Refuse, and the war goes on. ${name} makes no new offer for ${OFFER_GAP_DAYS} days.`,
                   truce: truceText(state, enemy, offer.terms),
                   answered:

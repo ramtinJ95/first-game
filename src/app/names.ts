@@ -122,7 +122,7 @@ export function reasonText(state: DeepReadonly<GameState>, reason: string): stri
         : undefined;
       return faction?.name ?? word;
     })
-    .replace(/(?<![\w.,-])\d{4,}(?![\d.])/g, (amount) => whole(Number(amount)))
+    .replace(/(?<![\w.,-])-?\d{4,}(?!\d|\.\d)/g, (amount) => whole(Number(amount)))
     .replace(/^./, (first) => first.toUpperCase());
 }
 
