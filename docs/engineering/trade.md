@@ -60,7 +60,8 @@ rolls or captures.
 
 AI factions and minors consider trade monthly, staggered by faction id. They choose
 the highest return per gold, then the greater income, then city id and land before
-sea. They retain at least 600 gold or their army reserve, plus the next recruit's price, and project their
+sea. They retain at least 600 gold or their army reserve, plus the next recruit's price (for a power held by food, the price of
+the food it saves for: [Faction AI](faction-ai.md)), and project their
 earlier orders before spending. They make no investment on a declaration-of-war day.
 Incoming invitations are accepted or refused by explicit orders whenever that faction
 is under AI control, including the player faction in an all-AI simulation. A human

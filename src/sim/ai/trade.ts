@@ -97,12 +97,16 @@ export function bestTrade(
   return best?.order;
 }
 
-/** Monthly, staggered by faction id. Preserve the army's reserve and its next recruit. */
+/**
+ * Monthly, staggered by faction id. Preserve the army's reserve and its next recruit, or the
+ * `saving` gold of the food it buys before that recruit can come.
+ */
 export function trading(
   current: DeepReadonly<GameState>,
   world: World,
   faction: FactionId,
   prior: readonly Order[] = [],
+  saving?: number,
 ): Order[] {
   let state = current;
   // This runs only for factions decideAll controls. A passive human is skipped,
@@ -127,6 +131,6 @@ export function trading(
   state = afterSpending(current, prior, world);
   if (Object.values(state.tradeRoutes).some((r) => r.owner === faction && r.status === 'offered'))
     return [];
-  const order = bestTrade(state, world, faction, tradeReserve(state, faction));
+  const order = bestTrade(state, world, faction, tradeReserve(state, faction, saving));
   return order ? [order] : [];
 }
