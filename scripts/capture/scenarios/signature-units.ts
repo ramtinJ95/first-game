@@ -170,7 +170,7 @@ export default defineScenario({
 
     const march = onTheMarch();
     await loadSave(page, march);
-    await camera(page).jumpTo({ x: pella.x + 10, y: pella.y - 60 }, 4);
+    await camera(page).jumpTo({ x: pella.x + 10, y: pella.y - 110 }, 4);
     await resume(page);
     await untilDay(page, march.day + 1, 0, 60_000);
     await page.waitForTimeout(500);
