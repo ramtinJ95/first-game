@@ -12,6 +12,7 @@ export const PAUSE_LABELS: Record<PauseKind, string> = {
   sighted: 'An enemy army first nears your land in a war',
   ownCity: 'Your city is besieged, in danger, or falls',
   warThreat: 'A great power at peace with you could soon declare war on you',
+  declared: 'A power declares war on you',
   advance: 'An advance is finished and nothing else is being studied',
 };
 
@@ -28,6 +29,7 @@ export const ALL_PAUSES: PauseSettings = {
   sighted: true,
   ownCity: true,
   warThreat: true,
+  declared: true,
   advance: true,
 };
 

@@ -65,24 +65,38 @@ const STOP = 'threat-stop:';
 
 /**
  * The last warning of the power that stopped the game in this peace: its day, shown share and
- * front, and the highest share its word on the wars holding the power back has since covered.
+ * front, the highest share told since without a stop, by its word on the wars holding the power
+ * back or by a climb that ran the game on, and the first day it said the power may declare.
+ * A stop kept before it stored that day has none, and a climb above it stops the game.
  */
 interface Stop {
   readonly day: number;
   readonly share: number;
   readonly front: string;
   readonly covered: number;
+  readonly named: number | undefined;
 }
 
 function stopOf(remembered: ReadonlySet<string>, faction: string): Stop | undefined {
   const prefix = `${STOP}${faction}:`;
   for (const key of remembered) {
     if (!key.startsWith(prefix)) continue;
-    const [day = '', share = '', front = '', covered = share] = key.slice(prefix.length).split(':');
-    return { day: Number(day), share: Number(share), front, covered: Number(covered) };
+    const [day = '', share = '', front = '', covered = share, named] = key
+      .slice(prefix.length)
+      .split(':');
+    return {
+      day: Number(day),
+      share: Number(share),
+      front,
+      covered: Number(covered),
+      named: named === undefined ? undefined : Number(named),
+    };
   }
   return undefined;
 }
+
+const stopKey = (faction: string, stop: Stop) =>
+  `${STOP}${faction}:${stop.day}:${stop.share}:${stop.front}:${stop.covered}${stop.named === undefined ? '' : `:${stop.named}`}`;
 
 function forgetStop(remembered: Set<string>, faction: string) {
   for (const prefix of [`${STOP}${faction}:`, `${HELD}${faction}:`])
@@ -131,13 +145,13 @@ function heldCovers(
   return held.enemies.some((enemy) => !areAtWar(state, power, enemy as FactionId));
 }
 
-/** The power's last stop, with `share` the climb its word on the wars holding the power back covered. */
+/** The power's last stop, with `share` a climb told since without a stop. */
 function coverStop(remembered: Set<string>, faction: string, share: number) {
   const stop = stopOf(remembered, faction);
   if (!stop) return;
   const prefix = `${STOP}${faction}:`;
   for (const key of remembered) if (key.startsWith(prefix)) remembered.delete(key);
-  remembered.add(`${prefix}${stop.day}:${stop.share}:${stop.front}:${share}`);
+  remembered.add(stopKey(faction, { ...stop, covered: share }));
 }
 
 /** The share a warning shows, in whole points of at most 100. */
@@ -211,6 +225,8 @@ export function threatNewsOfDay(
     spared: Stop | undefined;
     /** For a climb, the stop it stands THREAT_SPARE_RISE points or more above. */
     climb: Stop | undefined;
+    /** The first day the power may declare on its notice. */
+    named: number;
   }[] = [];
   const bands: { power: FactionId; city: CityId; men: number; threat: Threat; from: string }[] = [];
   const ahead: {
@@ -252,10 +268,17 @@ export function threatNewsOfDay(
     if (before.day - power.noticeSince + 1 < THREAT_STAND_DAYS) continue;
     const told = last !== undefined && last >= power.noticeSince;
     const stop = stopOf(remembered, power.id);
+    // Before the day its stop named, the power may not declare, so a climb the player can still answer in time runs the game on.
+    const runsOn = (threat: Threat) =>
+      stop?.named !== undefined &&
+      before.day < stop.named &&
+      dayToCome(before, power.noticeSince) !== undefined &&
+      points(threat.readiness) < 100;
     const climbing = (threat: Threat | undefined) =>
       climbs && told && stopping && stop !== undefined && threat !== undefined
         ? points(threat.readiness) - stop.share >= THREAT_SPARE_RISE &&
-          points(threat.readiness) > stop.covered
+          points(threat.readiness) > stop.covered &&
+          (!runsOn(threat) || points(threat.readiness) - stop.covered >= THREAT_SPARE_RISE)
         : false;
     const due =
       told && before.day - Math.max(last, power.noticeSince + NOTICE_DAYS) >= THREAT_REMIND_DAYS;
@@ -268,6 +291,8 @@ export function threatNewsOfDay(
     }
     const reminder = told;
     const climb = !due && climbing(threat) ? stop : undefined;
+    const ranOn = climb !== undefined && runsOn(threat);
+    if (ranOn) coverStop(remembered, power.id, points(threat.readiness));
     forget(remembered, power.id);
     remembered.add(`${prefixOf(power.id)}${before.day}`);
     warned.push({
@@ -278,15 +303,18 @@ export function threatNewsOfDay(
       by: dayToCome(before, power.noticeSince),
       told: reminder ? last : undefined,
       climb,
+      named: power.noticeSince + NOTICE_DAYS,
       // A reminder says war may now come any day, so it stops the game as its warning did.
-      spared: reminder
-        ? undefined
-        : sparedBy(
-            remembered,
-            power.id,
-            threat,
-            Math.max(before.day, power.noticeSince + NOTICE_DAYS) + THREAT_REMIND_DAYS,
-          ),
+      spared: ranOn
+        ? climb
+        : reminder
+          ? undefined
+          : sparedBy(
+              remembered,
+              power.id,
+              threat,
+              Math.max(before.day, power.noticeSince + NOTICE_DAYS) + THREAT_REMIND_DAYS,
+            ),
     });
   }
   const [first, ...others] = warned;
@@ -302,8 +330,15 @@ export function threatNewsOfDay(
   if (stops && stopping)
     for (const w of warned) {
       forgetStop(remembered, w.power);
+      const shown = points(w.threat.readiness);
       remembered.add(
-        `${STOP}${w.power}:${before.day}:${points(w.threat.readiness)}:${frontOf(w.threat)}`,
+        stopKey(w.power, {
+          day: before.day,
+          share: shown,
+          front: frontOf(w.threat),
+          covered: shown,
+          named: w.named,
+        }),
       );
       const freedTo = freedShare(after, world, w.power, w.threat);
       if (freedTo !== undefined)
@@ -602,16 +637,47 @@ function ranOnText(
     threat: Threat;
     from: string;
     stop: Stop;
+    climb: Stop | undefined;
+    named: number;
   }[],
 ): string {
   const [one, ...others] = spared;
   if (!one) return '';
   // Each power's day of war and stop would not fit the corner, so the At peace rows give them.
   if (others.length > 0)
-    return `${listed(spared.map((w) => w.name))} could soon declare war on you, with ${listed(spared.map((w) => share(w.threat.readiness)))} of the strength each needs. The game ran on: none stands ${THREAT_SPARE_RISE} points above its last stop. See At peace in Wars.`;
+    return `${listed(spared.map((w) => w.name))} could soon declare war on you, with ${listed(spared.map((w) => share(w.threat.readiness)))} of the strength each needs. The game ran on: ${spared.some((w) => w.climb) ? 'none may declare before the day its last stop named' : `none stands ${THREAT_SPARE_RISE} points above its last stop`}. See At peace in Wars.`;
+  if (one.climb)
+    return `${one.name} has climbed to ${share(one.threat.readiness)} ${near(state, one.threat)}, from ${one.climb.share}% at its last stop on ${dateText(one.climb.day)}. The game ran on: it may declare ${one.from}${one.climb.named === one.named ? ', as that stop said' : ''}. See At peace in Wars.`;
   const rise = points(one.threat.readiness) - one.stop.share;
   const higher = rise > 0 ? `only ${rise} ${rise === 1 ? 'point' : 'points'} higher` : 'no higher';
   return `${one.name} could soon declare war on you: ${share(one.threat.readiness)} of the strength it needs ${near(state, one.threat)}, ${one.from}. The game ran on: its stop on ${dateText(one.stop.day)} was at ${one.stop.share}%, and it stands ${higher}. See At peace in Wars.`;
+}
+
+/**
+ * A great power's declaration of war on the player in a line that stops the game: the forces it
+ * weighed the day it declared, in its warnings' words, and what the player can do first. Its
+ * place is the city it weighed, or none for one that weighed the field armies.
+ */
+export function declarationNews(
+  before: State,
+  after: State,
+  world: World,
+  power: FactionId,
+): { text: string; at: MapPoint | undefined } {
+  const name = factionName(after, power);
+  const threat = readinessOf(before, world, power);
+  if (!threat) return { text: `${name} declared war on you.`, at: undefined };
+  const front = threat.pressed ? undefined : after.cities[threat.front];
+  const march = front ? `march your armies to ${front.name}` : undefined;
+  const advice = orderAdvice(after, after.factions[after.player]?.stores, undefined);
+  const first =
+    advice.kind !== 'none'
+      ? `First ${march ? `${march}, or ` : ''}raise men: ${advice.text}.`
+      : `${march ? `First ${march}; you` : 'You'} can raise no men now${advice.text === '' ? ': no city of yours may recruit' : `: ${advice.text}`}.`;
+  return {
+    text: `${name} declared war on you, its armies ready ${weighed(before, threat)}. ${first}`,
+    at: front?.position,
+  };
 }
 
 /** The share staying home takes off the strength a power needs, in whole points, 0 when it takes off none. */

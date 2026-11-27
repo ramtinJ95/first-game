@@ -28,7 +28,7 @@ import { decideOrders } from '../sim/ai/decide.ts';
 import { warReadiness } from '../sim/ai/war.ts';
 import { areAtWar } from '../sim/wars.ts';
 import { ALL_PAUSES, stopsOfDay } from './pauses.ts';
-import type { Alert } from './alerts.ts';
+import { alertsOfDay, type Alert } from './alerts.ts';
 import {
   GUARDS_AHEAD_DAYS,
   THREAT_SPARE_DAYS,
@@ -161,8 +161,85 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
         `^Carthage has climbed to ${now}% near Roma, from ${now - 8}% at its last stop on Year 1, day 70`,
       ),
     );
-    expect([...told]).toContain(`threat-stop:carthage:100:${now}:roma`);
+    expect([...told]).toContain(`threat-stop:carthage:100:${now}:roma:${now}:90`);
     expect(threatNewsOfDay(after, after, world, told)).toEqual([]);
+  });
+
+  /** Carthage of `men` on day `day`, on notice since day 91, so it may first declare on day 121. */
+  function onNoticeFrom91(men: number, day: number): GameState {
+    const state = game(men, 'empty', day);
+    const punic = state.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 91 as Day;
+    return state;
+  }
+
+  test("a climb before the day its last stop named runs the game on in a line, as round fifteen's Macedon on day 227 should have", () => {
+    const told = new Set<string>();
+    const stopped = onNoticeFrom91(6500, 97);
+    const [stop] = threatNewsOfDay(stopped, stopped, world, told);
+    expect(stop?.pause).toEqual({ kind: 'warThreat' });
+    expect(stop?.text).toContain('may declare from Year 1, day 121');
+    const climbed = onNoticeFrom91(7000, 106);
+    expect(shareOf(climbed) - shareOf(stopped)).toBeGreaterThanOrEqual(6);
+    const news = threatNewsOfDay(climbed, climbed, world, told);
+    expect(news.map((alert) => [alert.text, alert.pause])).toEqual([
+      [
+        `Carthage has climbed to ${shareOf(climbed)}% near Roma, from ${shareOf(stopped)}% at its last stop on Year 1, day 97. The game ran on: it may declare from Year 1, day 121, as that stop said. See At peace in Wars.`,
+        undefined,
+      ],
+    ]);
+    const next = onNoticeFrom91(7000, 107);
+    expect(threatNewsOfDay(next, next, world, told)).toEqual([]);
+  });
+
+  test('a run-on climb of a later notice names its own day, not the day the stop named', () => {
+    const climbed = onNoticeFrom91(7000, 112);
+    const punic = climbed.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 100 as Day;
+    const was = shareOf(climbed) - 6;
+    const told = new Set(['threat:carthage:106', `threat-stop:carthage:97:${was}:roma:${was}:121`]);
+    const [line] = threatNewsOfDay(climbed, climbed, world, told);
+    expect(line?.pause).toBeUndefined();
+    expect(line?.text).toMatch(
+      /The game ran on: it may declare from Year 1, day 130\. See At peace in Wars\.$/,
+    );
+  });
+
+  test('a stop kept before stops stored the day they named still stops the game for a climb', () => {
+    const climbed = onNoticeFrom91(7000, 106);
+    const told = new Set([
+      'threat:carthage:97',
+      `threat-stop:carthage:97:${shareOf(climbed) - 6}:roma`,
+    ]);
+    const [climb] = threatNewsOfDay(climbed, climbed, world, told);
+    expect(climb?.pause).toEqual({ kind: 'warThreat' });
+  });
+
+  test('a climb to 100% before the named day still stops the game', () => {
+    const told = new Set<string>();
+    const stopped = onNoticeFrom91(6500, 97);
+    threatNewsOfDay(stopped, stopped, world, told);
+    const full = onNoticeFrom91(8000, 106);
+    expect(shareOf(full)).toBe(100);
+    const [climb] = threatNewsOfDay(full, full, world, told);
+    expect(climb?.pause).toEqual({ kind: 'warThreat' });
+    expect(climb?.text).toMatch(
+      /^Carthage has climbed to 100% near Roma, from \d+% at its last stop on Year 1, day 97, and may declare from Year 1, day 121\./,
+    );
+  });
+
+  test('a climb on or after the named day, when it may declare any day now, still stops the game', () => {
+    const told = new Set<string>();
+    const stopped = onNoticeFrom91(6500, 97);
+    threatNewsOfDay(stopped, stopped, world, told);
+    const climbed = onNoticeFrom91(7000, 121);
+    const [climb] = threatNewsOfDay(climbed, climbed, world, told);
+    expect(climb?.pause).toEqual({ kind: 'warThreat' });
+    expect(climb?.text).toMatch(
+      /^Carthage has climbed to \d+% near Roma, from \d+% at its last stop on Year 1, day 97, and may declare any day now\./,
+    );
   });
 
   test('does not stop the game for a climb under 6 points', () => {
@@ -1456,6 +1533,46 @@ describe('a war warning stops the game', () => {
   test('the Game menu setting turns the stop off', () => {
     const news = newsOf(game(5300, 'full'), new Set());
     expect(stopsOfDay(news, { ...ALL_PAUSES, warThreat: false }, new Set()).stop).toBe(false);
+  });
+});
+
+describe('a declaration of war on the player stops the game', () => {
+  /** The news of the day Carthage, on notice since day 60 in `state`, declares war on Rome by the AI's own orders. */
+  function declared(state: GameState) {
+    const punic = state.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 60 as Day;
+    const orders = decideOrders(state, world, carthage);
+    expect(orders).toContainEqual(expect.objectContaining({ kind: 'declareWar', against: rome }));
+    const { state: after, events } = tick(state, orders, world);
+    expectConsistent(after);
+    return alertsOfDay(state, after, events, undefined, undefined, world).filter(
+      (alert) => alert.kind === 'warDeclared',
+    );
+  }
+
+  test('names the city whose forces it weighed and what to do first, and stops the game', () => {
+    const news = declared(game(8000, 'full', 100));
+    expect(news.map((alert) => alert.text)).toEqual([
+      'Carthage declared war on you, its armies ready against your forces near Roma. First march your armies to Roma, or raise men: Skirmishers cost 900 gold and train in 10 days.',
+    ]);
+    expect(news[0]?.pause).toEqual({ kind: 'declared' });
+    expect(stopsOfDay(news, ALL_PAUSES, new Set()).stop).toBe(true);
+  });
+
+  test('a power that weighed the field armies is told so, with the men to raise', () => {
+    const state = game(20_000, 'full', 100);
+    const roma = state.cities['roma' as CityId];
+    if (!roma) throw new Error('no Roma');
+    roma.garrison = 80_000;
+    expect(declared(state).map((alert) => alert.text)).toEqual([
+      'Carthage declared war on you, its armies ready against all your armies in the field. First raise men: Skirmishers cost 900 gold and train in 10 days.',
+    ]);
+  });
+
+  test('the Game menu setting turns the stop off', () => {
+    const news = declared(game(8000, 'full', 100));
+    expect(stopsOfDay(news, { ...ALL_PAUSES, declared: false }, new Set()).stop).toBe(false);
   });
 });
 

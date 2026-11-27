@@ -97,6 +97,7 @@ const NO_PAUSES: PauseSettings = {
   sighted: false,
   ownCity: false,
   warThreat: false,
+  declared: false,
   advance: false,
 };
 
@@ -265,7 +266,7 @@ const clock = createClock({
     const hint = buildingHintOfDay(before, after, toldOnce);
     const stops = stopsOfDay(
       groupAlerts([
-        ...alertsInSight(alertsOfDay(before, after, events, occupied, toldOnce), saw, sees),
+        ...alertsInSight(alertsOfDay(before, after, events, occupied, toldOnce, world), saw, sees),
         ...sightingsOfDay(before, after, saw, sees, world, toldOnce),
         ...weak.alerts,
         ...shortage.alerts,
