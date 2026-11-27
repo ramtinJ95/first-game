@@ -35,7 +35,7 @@ export function recruitForecast(
   const stores = waiting.factions[game.player]?.stores;
   if (!balance || !stores) throw new Error('Recruit forecast needs the player faction');
   const manFood = foodPerManOf(game, game.player);
-  const manGold = goldPerManOf(game, game.player);
+  const manGold = goldPerManOf(waiting, game.player);
   const cost = troop ? TROOPS[troop].recruit : { men: 0, gold: 0 };
   const schedule = Object.values(waiting.cities)
     .filter((city) => city.owner === game.player)

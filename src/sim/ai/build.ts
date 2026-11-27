@@ -14,7 +14,13 @@ import { UNREST_DAYS } from '../cities.ts';
 import type { FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import { CONVOY_KM_PER_DAY, MARCH_KM_PER_DAY } from '../march.ts';
-import { menOf, OUTPUT_PER_PERSON, UNREST_OUTPUT, UPKEEP_PER_MAN } from '../systems/economy.ts';
+import {
+  goldPerManOf,
+  menOf,
+  OUTPUT_PER_PERSON,
+  UNREST_OUTPUT,
+  UPKEEP_PER_MAN,
+} from '../systems/economy.ts';
 import { TROOPS } from '../troops.ts';
 import { areAtWar } from '../wars.ts';
 import { mostNeeded } from './budget.ts';
@@ -47,8 +53,10 @@ export const CROSSINGS_A_YEAR = 2;
 export const ROAD_KM = 200;
 /** The formations of cavalry a city with Royal stables trains a year, by which the AI prices them. */
 export const CAVALRY_A_YEAR = 3;
-/** The gold a day one man under arms costs, food at FOOD_PRICE: what a day of his service saved is worth. */
-const MAN_DAY = UPKEEP_PER_MAN.gold + UPKEEP_PER_MAN.food * FOOD_PRICE;
+/** The gold a day one man under arms of the faction costs, food at FOOD_PRICE: what a day of his service saved is worth. */
+function manDayOf(state: State, faction: FactionId): number {
+  return goldPerManOf(state, faction) + UPKEEP_PER_MAN.food * FOOD_PRICE;
+}
 
 /**
  * Food counts in a building's worth only while the realm's harvest, after its upkeep,
@@ -76,13 +84,14 @@ export function buildingWorth(state: State, city: CityView, kind: BuildingKind):
   const { gold, food, manpower } = gain.daily;
   const fed = (balanceOf(state, city.owner)?.food ?? 0) / UPKEEP_PER_MAN.food;
   let worth = gold + (fed < FOOD_MARGIN_MEN ? food * FOOD_PRICE : 0) + manpower * MANPOWER_PRICE;
+  const manDay = manDayOf(state, city.owner);
   if (
     (kind === 'towers' || kind === 'outerWalls' || kind === 'stronghold') &&
     onBorder(state, city)
   ) {
-    worth += gain.garrison * MAN_DAY;
+    worth += gain.garrison * manDay;
   }
-  worth += (savedManDays(state, city, kind) / 365) * MAN_DAY;
+  worth += (savedManDays(state, city, kind) / 365) * manDay;
   const target =
     kind === 'temple'
       ? templeTarget(state, city)

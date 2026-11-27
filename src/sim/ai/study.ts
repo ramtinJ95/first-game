@@ -15,6 +15,7 @@ import type { FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import {
   foodPerManOf,
+  goldPerManOf,
   menOf,
   OUTPUT_PER_PERSON,
   UNREST_OUTPUT,
@@ -57,7 +58,7 @@ export function spareFoodMen(state: State, faction: FactionId): number {
 export function advanceWorth(state: State, faction: FactionId, kind: AdvanceKind): number {
   const { gold, food, manpower } = advanceGain(state, faction, kind).daily;
   const fed = spareFoodMen(state, faction);
-  const manDay = UPKEEP_PER_MAN.gold + foodPerManOf(state, faction) * FOOD_PRICE;
+  const manDay = goldPerManOf(state, faction) + foodPerManOf(state, faction) * FOOD_PRICE;
   let worth = gold + (fed < FOOD_MARGIN_MEN ? food * FOOD_PRICE : 0) + manpower * MANPOWER_PRICE;
   if (kind === 'drillmasters') worth += sharperMen(state, faction) * manDay;
   if (kind === 'siegeEngineers' || kind === 'clemency') {
