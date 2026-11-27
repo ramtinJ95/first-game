@@ -1,4 +1,5 @@
-import { recordEvents, type DayEvent } from './events.ts';
+import { emit, recordEvents, type DayEvent } from './events.ts';
+import type { FactionId } from './ids.ts';
 import { executeOrder, type Order, type RejectedOrder } from './orders/orders.ts';
 import type { GameState } from './state/game-state.ts';
 import { SYSTEMS, type System } from './systems.ts';
@@ -35,11 +36,46 @@ export function tick(
   const rejected: RejectedOrder[] = [];
   const events = recordEvents(next, () => {
     lapseInvitationsBeforeOrders(next, orders, world);
+    const paid = new Map<FactionId, Order[]>();
     for (const order of orders) {
+      const held = next.factions[order.faction]?.stores.gold;
       const rejection = executeOrder(next, order, world);
-      if (rejection) rejected.push(rejection);
+      const spent = paid.get(order.faction) ?? [];
+      if (rejection) {
+        rejected.push(rejection);
+        const cost = held === undefined ? undefined : priceWithGold(next, order, world);
+        if (held !== undefined && cost !== undefined) {
+          emit(next, {
+            kind: 'orderUnpaid',
+            faction: order.faction,
+            order,
+            cost,
+            held,
+            paidBefore: spent,
+          });
+        }
+      } else if (held !== undefined && (next.factions[order.faction]?.stores.gold ?? held) < held) {
+        paid.set(order.faction, [...spent, order]);
+      }
     }
     for (const system of systems) system(next, world);
   });
   return { state: next, rejected, events };
+}
+
+/** Far more gold than any order costs, so an order refused with it lacked something else. */
+const AMPLE_GOLD = 1e12;
+
+/**
+ * The gold a refused order would have paid had its faction held AMPLE_GOLD, or undefined
+ * when it is refused even then, so gold was not what it lacked.
+ */
+function priceWithGold(state: GameState, order: Order, world: World): number | undefined {
+  const trial = JSON.parse(JSON.stringify(state)) as GameState;
+  const payer = trial.factions[order.faction];
+  if (!payer) return undefined;
+  payer.stores.gold = AMPLE_GOLD;
+  if (executeOrder(trial, order, world)) return undefined;
+  const cost = AMPLE_GOLD - payer.stores.gold;
+  return cost > 0 ? cost : undefined;
 }
