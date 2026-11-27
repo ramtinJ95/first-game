@@ -100,6 +100,11 @@ describe('the AI builds', () => {
     const canals = held(BUILDINGS.canals.gold);
     expect(spending(canals)).toMatchObject({ kind: 'build', building: 'canals' });
     expectConsistent(canals);
+
+    const hungry = held(BUILDINGS.canals.gold);
+    need(hungry.factions[f.rome]).stores.food = 100;
+    expect(spending(hungry)).toMatchObject({ kind: 'build', building: 'canals' });
+    expectConsistent(hungry);
   });
 
   test('nothing while its gold is falling', () => {

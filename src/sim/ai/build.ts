@@ -149,8 +149,9 @@ function savedManDays(state: State, city: CityView, kind: BuildingKind): number 
  * and only with gold left over the reserve for its men and the price of the recruit it
  * would raise next, so a building never stops it keeping or growing an army. A ruler
  * that never recruits, `keepsRecruits` false, keeps only the reserve for its men. A power
- * `forFood`, whose next recruit only food stops, builds only what grows food and keeps no
- * gold back for that recruit, since the recruit waits on the food.
+ * `forFood`, whose next recruit only food stops, builds only what grows food, keeps no
+ * gold back for that recruit, since the recruit waits on the food, and builds it however
+ * short of food it is.
  */
 export function construction(
   state: State,
@@ -163,9 +164,12 @@ export function construction(
   if (!record || recruiting) return [];
   const next = keepsRecruits && !forFood ? TROOPS[mostNeeded(state, faction)].recruit.gold : 0;
   const spare = record.stores.gold - reserveOf(state, faction, 'gold') - next;
-  if (spare < CHEAPEST || record.stores.food < reserveOf(state, faction, 'food')) return [];
+  if (spare < CHEAPEST) return [];
   const balance = balanceOf(state, faction);
-  if (!balance || balance.gold < 0 || balance.food < 0) return [];
+  if (!balance || balance.gold < 0) return [];
+  if (!forFood && (balance.food < 0 || record.stores.food < reserveOf(state, faction, 'food'))) {
+    return [];
+  }
   const best = nextBuilding(state, faction, spare, forFood);
   return best ? [{ kind: 'build', faction, city: best.city.id, building: best.kind }] : [];
 }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { bestTrade, trading } from '../ai/trade.ts';
 import { tradeReserve } from '../ai/budget.ts';
+import { savingForFood } from '../ai/study.ts';
 import { decideAll, decideOrders } from '../ai/decide.ts';
 import { changeCityOwner } from '../cities.ts';
 import { makePeace } from '../peace/make-peace.ts';
@@ -274,6 +275,28 @@ describe('trade orders and consent', () => {
       }),
     );
     expectConsistent(state);
+  });
+
+  test('consent lapses when it would spend the gold an inviter held by food saves for food', () => {
+    const { state, payer, route, accept } = invited();
+    const spears = state.formations[f.citizenSpears];
+    if (!spears) throw new Error('missing formation');
+    spears.men = 700;
+    const saving = savingForFood(state, f.carthage);
+    if (saving === undefined) throw new Error('expected Carthage to save for food');
+    payer.stores.gold = route.cost + tradeReserve(state, f.carthage);
+    expect(acceptTrade(state, accept, world)).toBeUndefined();
+    expect(state.tradeRoutes[route.id]).toBeUndefined();
+    expectConsistent(state);
+
+    const kept = invited();
+    const keptSpears = kept.state.formations[f.citizenSpears];
+    if (!keptSpears) throw new Error('missing formation');
+    keptSpears.men = 700;
+    kept.payer.stores.gold = kept.route.cost + tradeReserve(kept.state, f.carthage, saving);
+    expect(acceptTrade(kept.state, kept.accept, world)).toBeUndefined();
+    expect(kept.state.tradeRoutes[kept.route.id]?.status).toBe('running');
+    expectConsistent(kept.state);
   });
 
   test('AI-controlled player gives explicit consent, but a passive human gives no consent', () => {
