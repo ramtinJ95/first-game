@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
+import { buildFixture, FIXTURE, fixtureWorld, growRome } from '../fixture.ts';
 import type { ArmyId, CityId, FactionId, FormationId } from '../ids.ts';
 import { changeCityOwner } from '../cities.ts';
 import { landPath, marchDays, marchPath, MAX_MARCH_DAYS, startMarch } from '../march.ts';
@@ -9,12 +9,19 @@ import { expectConsistent } from '../references.ts';
 import type { Day } from '../state/day.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { MapPoint } from '../state/map-point.ts';
-import { dailyBalances, UPKEEP_PER_MAN } from '../systems/economy.ts';
+import {
+  ADMIN_CITIES,
+  dailyBalances,
+  goldPerManOf,
+  menOf,
+  UPKEEP_PER_MAN,
+} from '../systems/economy.ts';
 import { removeRecord } from '../records.ts';
 import { tick } from '../tick.ts';
+import { TROOPS } from '../troops.ts';
 import { decideAll, decideOrders } from './decide.ts';
 import { createRouter } from './routes.ts';
-import { MARCH_MORALE, MINOR_DEFICIT_DAYS } from './thresholds.ts';
+import { MARCH_MORALE, MIN_BALANCE_SHARE, MINOR_DEFICIT_DAYS, RESERVE_DAYS } from './thresholds.ts';
 
 const world = fixtureWorld();
 const f = FIXTURE;
@@ -119,6 +126,65 @@ describe('a great power', () => {
       if (!rome) throw new Error('no Rome');
       rome.stores = { gold: 100_000, food: 100_000, manpower: 100_000 };
       expect(only(decide(state, f.rome), 'recruit')).toEqual([]);
+    });
+
+    test('a realm past ADMIN_CITIES raises more men than its gold income would pay at the full upkeep', () => {
+      const realm = (men: number) => {
+        const state = buildFixture();
+        growRome(state, 2 * ADMIN_CITIES);
+        for (const city of Object.values(state.cities)) city.population = 40_000;
+        const rome = state.factions[f.rome];
+        if (!rome) throw new Error('no Rome');
+        rome.stores = { gold: 1e9, food: 1e9, manpower: 1e9 };
+        setMen(state, f.hastati, men);
+        return state;
+      };
+      const raises = (men: number) =>
+        only(decideOrders(realm(men), world, f.rome), 'recruit').length > 0;
+      let kept = 0;
+      let refused = 1_000_000;
+      while (refused - kept > 100) {
+        const men = Math.floor((kept + refused) / 2);
+        if (raises(men)) kept = men;
+        else refused = men;
+      }
+      const income = dailyBalances(realm(0)).get(f.rome)?.gold ?? 0;
+      expect(kept).toBeGreaterThan(((1 - MIN_BALANCE_SHARE) * income) / UPKEEP_PER_MAN.gold);
+    });
+
+    test('a realm past ADMIN_CITIES keeps back the reserve its men are paid, not the full upkeep', () => {
+      const realm = (gold: number) => {
+        const state = buildFixture();
+        growRome(state, 2 * ADMIN_CITIES);
+        for (const city of Object.values(state.cities)) city.population = 40_000;
+        const rome = state.factions[f.rome];
+        if (!rome) throw new Error('no Rome');
+        rome.stores = { gold, food: 1e9, manpower: 1e9 };
+        return state;
+      };
+      const [order] = only(decideOrders(realm(1e9), world, f.rome), 'recruit');
+      if (order?.kind !== 'recruit') throw new Error('no recruit');
+      const troop = TROOPS[order.troop].recruit;
+      const state = realm(0);
+      const men = menOf(state, army(state, f.romanArmy)) + troop.men;
+      const reserve = RESERVE_DAYS * men * goldPerManOf(state, f.rome);
+      expect(reserve).toBeLessThan(RESERVE_DAYS * men * UPKEEP_PER_MAN.gold - 2);
+      expect(only(decideOrders(realm(troop.gold + reserve + 1), world, f.rome), 'recruit')).toEqual(
+        [order],
+      );
+      expect(only(decideOrders(realm(troop.gold + reserve - 1), world, f.rome), 'recruit')).toEqual(
+        [],
+      );
+    });
+
+    test("the player's realm is given no army by the AI, however large it grows", () => {
+      const state = richRome();
+      growRome(state, 2 * ADMIN_CITIES);
+      const rome = state.factions[f.rome];
+      if (!rome) throw new Error('no Rome');
+      rome.stores = { gold: 1e9, food: 1e9, manpower: 1e9 };
+      expect(only(decideOrders(state, world, f.rome), 'recruit')).not.toEqual([]);
+      expect(decideAll(state, world).filter((order) => order.faction === f.rome)).toEqual([]);
     });
 
     test('raises nothing when paying would take gold below the reserve', () => {

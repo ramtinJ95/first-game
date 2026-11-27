@@ -4,9 +4,9 @@ import type { GameState } from '../sim/state/game-state.ts';
 import {
   dailyBalances,
   foodPerManOf,
+  goldPerManOf,
   limitsOf,
   GRANARY_DAYS,
-  UPKEEP_PER_MAN,
 } from '../sim/systems/economy.ts';
 import { TROOPS, type Troop } from '../sim/troops.ts';
 import { dateText, whole } from '../app/names.ts';
@@ -35,6 +35,7 @@ export function recruitForecast(
   const stores = waiting.factions[game.player]?.stores;
   if (!balance || !stores) throw new Error('Recruit forecast needs the player faction');
   const manFood = foodPerManOf(game, game.player);
+  const manGold = goldPerManOf(waiting, game.player);
   const cost = troop ? TROOPS[troop].recruit : { men: 0, gold: 0 };
   const schedule = Object.values(waiting.cities)
     .filter((city) => city.owner === game.player)
@@ -50,11 +51,11 @@ export function recruitForecast(
   const training = schedule.reduce((sum, recruit) => sum + recruit.men, 0);
   const upkeep = {
     food: cost.men * manFood,
-    gold: cost.men * UPKEEP_PER_MAN.gold,
+    gold: cost.men * manGold,
   };
   const after = {
     food: balance.food - training * manFood,
-    gold: balance.gold - training * UPKEEP_PER_MAN.gold,
+    gold: balance.gold - training * manGold,
   };
   const limits = limitsOf(waiting).get(game.player);
   if (!limits) throw new Error('Recruit forecast needs the player stores limits');
@@ -84,7 +85,7 @@ export function recruitForecast(
       stores.gold - cost.gold,
       balance.gold,
       limits.gold,
-      UPKEEP_PER_MAN.gold,
+      manGold,
       0,
       byDay([...schedule, ...atToday(atWork.gold)]),
     ),
@@ -103,7 +104,7 @@ export function recruitForecast(
       stores.gold - (paysOn === undefined ? cost.gold : 0),
       balance.gold,
       limits.gold,
-      UPKEEP_PER_MAN.gold,
+      manGold,
       0,
       byDay([
         ...plan,
@@ -145,7 +146,7 @@ export function recruitForecast(
       stores.gold - BUILDINGS[canalKind].gold - (paysOn === undefined ? cost.gold : 0),
       balance.gold,
       limits.gold,
-      UPKEEP_PER_MAN.gold,
+      manGold,
       0,
       byDay([
         ...plan,
@@ -198,7 +199,7 @@ export function recruitForecast(
         stores.gold - extra,
         balance.gold,
         limits.gold,
-        UPKEEP_PER_MAN.gold,
+        manGold,
         0,
         byDay([...queued, ...atWork.gold]),
         yearly.gold,

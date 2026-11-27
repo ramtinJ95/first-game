@@ -142,6 +142,26 @@ export function foodPerManOf(state: DeepReadonly<GameState>, faction: FactionId)
   return UPKEEP_PER_MAN.food * rationShareOf(state.factions[faction]);
 }
 
+/**
+ * Past ADMIN_CITIES cities each man of a realm is paid the share its cities yield on the common
+ * curve, (ADMIN_CITIES / cities) ** ADMIN_EXPONENT, raised to this power: 12 % less gold at 16
+ * cities, 19 % less at 25. So a large realm keeps armies nearer the size of its lands than its
+ * income alone would pay for. The common curve, not Persia's satrapies, since past its
+ * `evenCities` that curve falls more steeply and would pay a large Persia's men the least.
+ */
+export const PAY_EXPONENT = 0.25;
+
+/** The gold one man under arms of the faction is paid each day. */
+export function goldPerManOf(state: DeepReadonly<GameState>, faction: FactionId): number {
+  return goldPerMan(Object.values(state.cities).filter((city) => city.owner === faction).length);
+}
+
+function goldPerMan(cities: number): number {
+  return (
+    UPKEEP_PER_MAN.gold * Math.min(1, ADMIN_CITIES / cities) ** (ADMIN_EXPONENT * PAY_EXPONENT)
+  );
+}
+
 /** Each faction's income less its upkeep for one day, with the state as it stands. */
 export function dailyBalances(
   state: DeepReadonly<GameState>,
@@ -158,6 +178,9 @@ export function dailyBalances(
   };
   for (const faction of Object.keys(state.factions) as FactionId[]) of(faction);
   const governed = adminShares(state);
+  const held = new Map<FactionId, number>();
+  for (const city of Object.values(state.cities))
+    held.set(city.owner, (held.get(city.owner) ?? 0) + 1);
   for (const city of Object.values(state.cities)) {
     const balance = of(city.owner);
     const people = city.population * outputShare(city);
@@ -175,7 +198,7 @@ export function dailyBalances(
   for (const army of Object.values(state.armies)) {
     const balance = of(army.owner);
     const men = menOf(state, army);
-    balance.gold -= men * UPKEEP_PER_MAN.gold;
+    balance.gold -= men * goldPerMan(held.get(army.owner) ?? 0);
     balance.food -= men * foodPerManOf(state, army.owner);
   }
   if (includeTrade) for (const [owner, income] of tradeIncome(state)) of(owner).gold += income;

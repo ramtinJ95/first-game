@@ -2,7 +2,7 @@ import type { FactionId } from '../ids.ts';
 import { executeOrder, type Order } from '../orders/orders.ts';
 import type { GameState } from '../state/game-state.ts';
 import type { World } from '../world/world.ts';
-import { UPKEEP_PER_MAN } from '../systems/economy.ts';
+import { goldPerManOf, UPKEEP_PER_MAN } from '../systems/economy.ts';
 import { SHARED_TROOPS, TROOPS, troopsFor, type Troop } from '../troops.ts';
 import {
   besieged,
@@ -45,8 +45,9 @@ export function recruitment(
   const armed = menUnderArms(state, faction);
   const after = armed + menInTraining(state, faction) + men;
   for (const store of ['gold', 'food'] as const) {
-    const income = balance[store] + armed * UPKEEP_PER_MAN[store];
-    if (income - after * UPKEEP_PER_MAN[store] < MIN_BALANCE_SHARE * income) return [];
+    const perMan = store === 'gold' ? goldPerManOf(state, faction) : UPKEEP_PER_MAN.food;
+    const income = balance[store] + armed * perMan;
+    if (income - after * perMan < MIN_BALANCE_SHARE * income) return [];
   }
   return [{ kind: 'recruit', faction, city: muster.id, troop }];
 }
