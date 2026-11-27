@@ -165,6 +165,59 @@ describe('a power on notice that climbs, and guards that stop counting', () => {
     expect(threatNewsOfDay(after, after, world, told)).toEqual([]);
   });
 
+  /** Carthage of `men` on day `day`, on notice since day 91, so it may first declare on day 121. */
+  function onNoticeFrom91(men: number, day: number): GameState {
+    const state = game(men, 'empty', day);
+    const punic = state.factions[carthage];
+    if (!punic) throw new Error('no Carthage');
+    punic.noticeSince = 91 as Day;
+    return state;
+  }
+
+  test("a climb before the day its last stop named runs the game on in a line, as round fifteen's Macedon on day 227 should have", () => {
+    const told = new Set<string>();
+    const stopped = onNoticeFrom91(6500, 97);
+    const [stop] = threatNewsOfDay(stopped, stopped, world, told);
+    expect(stop?.pause).toEqual({ kind: 'warThreat' });
+    expect(stop?.text).toContain('may declare from Year 1, day 121');
+    const climbed = onNoticeFrom91(7000, 106);
+    expect(shareOf(climbed) - shareOf(stopped)).toBeGreaterThanOrEqual(6);
+    const news = threatNewsOfDay(climbed, climbed, world, told);
+    expect(news.map((alert) => [alert.text, alert.pause])).toEqual([
+      [
+        `Carthage has climbed to ${shareOf(climbed)}% near Roma, from ${shareOf(stopped)}% at its last stop on Year 1, day 97. The game ran on: it may declare from Year 1, day 121, as that stop said. See At peace in Wars.`,
+        undefined,
+      ],
+    ]);
+    const next = onNoticeFrom91(7000, 107);
+    expect(threatNewsOfDay(next, next, world, told)).toEqual([]);
+  });
+
+  test('a climb to 100% before the named day still stops the game', () => {
+    const told = new Set<string>();
+    const stopped = onNoticeFrom91(6500, 97);
+    threatNewsOfDay(stopped, stopped, world, told);
+    const full = onNoticeFrom91(8000, 106);
+    expect(shareOf(full)).toBe(100);
+    const [climb] = threatNewsOfDay(full, full, world, told);
+    expect(climb?.pause).toEqual({ kind: 'warThreat' });
+    expect(climb?.text).toMatch(
+      /^Carthage has climbed to 100% near Roma, from \d+% at its last stop on Year 1, day 97, and may declare from Year 1, day 121\./,
+    );
+  });
+
+  test('a climb on or after the named day, when it may declare any day now, still stops the game', () => {
+    const told = new Set<string>();
+    const stopped = onNoticeFrom91(6500, 97);
+    threatNewsOfDay(stopped, stopped, world, told);
+    const climbed = onNoticeFrom91(7000, 121);
+    const [climb] = threatNewsOfDay(climbed, climbed, world, told);
+    expect(climb?.pause).toEqual({ kind: 'warThreat' });
+    expect(climb?.text).toMatch(
+      /^Carthage has climbed to \d+% near Roma, from \d+% at its last stop on Year 1, day 97, and may declare any day now\./,
+    );
+  });
+
   test('does not stop the game for a climb under 6 points', () => {
     const { before, after } = standing(5300, 100);
     const told = new Set([
