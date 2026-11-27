@@ -15,13 +15,13 @@ import {
   storms,
   type Context,
 } from './armies.ts';
-import { recruitment } from './budget.ts';
+import { afterSpending, recruitment } from './budget.ts';
 import { construction } from './build.ts';
 import { minorOrders } from './minor.ts';
 import { peaceOrders } from './peace.ts';
 import { createRouter } from './routes.ts';
 import { stances } from './stance.ts';
-import { studies } from './study.ts';
+import { savingForFood, studies } from './study.ts';
 import {
   besieged,
   enemiesOf,
@@ -56,21 +56,26 @@ export function decideOrders(state: State, world: World, faction: FactionId): Or
   }
   const muster = musterCity(context);
   const recruits = recruitment(state, faction, muster);
-  const builds = construction(state, faction, recruits.length > 0);
+  const fated = fates(context);
+  // A city sacked or enslaved today falls into unrest before any building there could start.
+  const settled = afterSpending(state, fated, world);
+  const saving = recruits.length === 0 ? savingForFood(settled, faction) : undefined;
+  const forFood = saving !== undefined;
+  const builds = construction(settled, faction, recruits.length > 0, true, forFood);
   const orders = [
     ...peaceOrders(context),
     ...stances(context),
     ...endOverlongMarches(context),
     ...retreats(context),
-    ...fates(context),
+    ...fated,
     ...storms(context),
     ...movements(context, muster),
     ...recruits,
     ...builds,
-    ...studies(state, faction, recruits.length > 0 || builds.length > 0),
+    ...studies(settled, faction, recruits.length > 0 || builds.length > 0, forFood),
     ...warDeclaration(context),
   ];
-  return withJoins(context, [...orders, ...trading(state, world, faction, orders)]);
+  return withJoins(context, [...orders, ...trading(state, world, faction, orders, saving)]);
 }
 
 /**

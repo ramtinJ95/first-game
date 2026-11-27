@@ -33,23 +33,42 @@ export function recruitment(
   const record = state.factions[faction];
   if (!record || !muster || muster.owner !== faction || muster.unrestDays > 0) return [];
   if (besieged(state, muster)) return [];
-  const troop = mostNeeded(state, faction);
-  const { men, gold } = TROOPS[troop].recruit;
-  const { stores } = record;
-  if (stores.manpower < men) return [];
-  if (stores.gold - gold < reserveOf(state, faction, 'gold', men)) return [];
-  if (stores.food < reserveOf(state, faction, 'food', men)) return [];
+  if (recruitShortfall(state, faction).size > 0) return [];
+  return [{ kind: 'recruit', faction, city: muster.id, troop: mostNeeded(state, faction) }];
+}
 
+/** A store the next formation lacks today, or a daily balance it would bring below MIN_BALANCE_SHARE of the income. */
+type Shortfall = 'manpower' | 'gold' | 'food' | 'goldBalance' | 'foodBalance';
+
+/** What stops the faction's next formation today, by the rules of `recruitment`. */
+export function recruitShortfall(state: State, faction: FactionId): Set<Shortfall> {
+  const short = new Set<Shortfall>();
+  const record = state.factions[faction];
   const balance = balanceOf(state, faction);
-  if (!balance) return [];
+  if (!record || !balance) return new Set(['manpower', 'gold', 'food']);
+  const { men, gold } = TROOPS[mostNeeded(state, faction)].recruit;
+  const { stores } = record;
+  if (stores.manpower < men) short.add('manpower');
+  if (stores.gold - gold < reserveOf(state, faction, 'gold', men)) short.add('gold');
+  if (stores.food < reserveOf(state, faction, 'food', men)) short.add('food');
   const armed = menUnderArms(state, faction);
   const after = armed + menInTraining(state, faction) + men;
   for (const store of ['gold', 'food'] as const) {
     const perMan = store === 'gold' ? goldPerManOf(state, faction) : UPKEEP_PER_MAN.food;
     const income = balance[store] + armed * perMan;
-    if (income - after * perMan < MIN_BALANCE_SHARE * income) return [];
+    if (income - after * perMan < MIN_BALANCE_SHARE * income) short.add(`${store}Balance`);
   }
-  return [{ kind: 'recruit', faction, city: muster.id, troop }];
+  return short;
+}
+
+/**
+ * Whether the faction's harvest, and not its gold, holds its army: its daily food would not
+ * feed the next formation, and its daily gold would pay it. Gold and men in store come with
+ * time; the harvest grows only by what the gold buys.
+ */
+export function heldByFood(state: State, faction: FactionId): boolean {
+  const short = recruitShortfall(state, faction);
+  return short.has('foodBalance') && !short.has('goldBalance');
 }
 
 /** The share of its men a faction wants in each troop it may raise. */
@@ -92,12 +111,13 @@ export function mostNeeded(state: State, faction: FactionId): Troop {
   return best;
 }
 
-/** Trade waits behind the military reserve and the next formation's purchase. */
-export function tradeReserve(state: State, faction: FactionId): number {
+/** Trade waits behind the military reserve and the next purchase: the next formation's, or `saving`. */
+export function tradeReserve(state: State, faction: FactionId, saving?: number): number {
   const next =
-    state.factions[faction]?.kind === 'greatPower'
+    saving ??
+    (state.factions[faction]?.kind === 'greatPower'
       ? TROOPS[mostNeeded(state, faction)].recruit.gold
-      : Math.min(...SHARED_TROOPS.map((troop) => TROOPS[troop].recruit.gold));
+      : Math.min(...SHARED_TROOPS.map((troop) => TROOPS[troop].recruit.gold)));
   return Math.max(600, reserveOf(state, faction, 'gold')) + next;
 }
 

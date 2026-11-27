@@ -148,22 +148,29 @@ function savedManDays(state: State, city: CityView, kind: BuildingKind): number 
  * great work. A first level it can start comes before any second level or great work. It builds only while its gold and food balances are not falling
  * and only with gold left over the reserve for its men and the price of the recruit it
  * would raise next, so a building never stops it keeping or growing an army. A ruler
- * that never recruits, `keepsRecruits` false, keeps only the reserve for its men.
+ * that never recruits, `keepsRecruits` false, keeps only the reserve for its men. A power
+ * `forFood`, whose next recruit only food stops, builds only what grows food, keeps no
+ * gold back for that recruit, since the recruit waits on the food, and builds it however
+ * short of food it is.
  */
 export function construction(
   state: State,
   faction: FactionId,
   recruiting: boolean,
   keepsRecruits = true,
+  forFood = false,
 ): Order[] {
   const record = state.factions[faction];
   if (!record || recruiting) return [];
-  const next = keepsRecruits ? TROOPS[mostNeeded(state, faction)].recruit.gold : 0;
+  const next = keepsRecruits && !forFood ? TROOPS[mostNeeded(state, faction)].recruit.gold : 0;
   const spare = record.stores.gold - reserveOf(state, faction, 'gold') - next;
-  if (spare < CHEAPEST || record.stores.food < reserveOf(state, faction, 'food')) return [];
+  if (spare < CHEAPEST) return [];
   const balance = balanceOf(state, faction);
-  if (!balance || balance.gold < 0 || balance.food < 0) return [];
-  const best = nextBuilding(state, faction, spare);
+  if (!balance || balance.gold < 0) return [];
+  if (!forFood && (balance.food < 0 || record.stores.food < reserveOf(state, faction, 'food'))) {
+    return [];
+  }
+  const best = nextBuilding(state, faction, spare, forFood);
   return best ? [{ kind: 'build', faction, city: best.city.id, building: best.kind }] : [];
 }
 
@@ -171,12 +178,13 @@ export function construction(
  * The building the power starts next with `spare` gold: the one that pays back its gold
  * soonest among those its cities can start, if within its payback limit, a first level before
  * any second level or great work. With no `spare`, the one it would start with gold enough,
- * however little it holds today.
+ * however little it holds today. With `forFood`, only a building that grows food.
  */
 export function nextBuilding(
   state: State,
   faction: FactionId,
   spare = Infinity,
+  forFood = false,
 ): { city: CityView; kind: BuildingKind; payback: number } | undefined {
   let best: { city: CityView; kind: BuildingKind; payback: number; first: boolean } | undefined;
   for (const city of sorted(state.cities)) {
@@ -184,6 +192,7 @@ export function nextBuilding(
     for (const kind of BUILDING_KINDS) {
       const { gold } = BUILDINGS[kind];
       if (gold > spare || buildBarrier(state, city, kind)) continue;
+      if (forFood && buildingGain(state, city, kind).daily.food <= 0) continue;
       const worth = buildingWorth(state, city, kind);
       if (worth <= 0) continue;
       const payback = gold / worth / 365;

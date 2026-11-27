@@ -25,11 +25,11 @@ async function load(page: Page, state: GameState) {
 }
 
 /**
- * Seed 8 under the AI, days before Carthage takes the lead on day 1529. Played as an idle
- * Persia at war with Egypt and Sarmizegetusa, though no fate, offer, or defeat stops the clock.
+ * Seed 8 under the AI, days before Carthage takes the lead on day 1376. Played as an idle
+ * Persia at peace, so no fate, offer, or defeat stops the clock.
  */
-const BEFORE_CARTHAGE_LEADS = 1513;
-const AFTER_THE_LEAD = 1544;
+const BEFORE_CARTHAGE_LEADS = 1360;
+const AFTER_THE_LEAD = 1391;
 
 export default defineScenario({
   name: 'leader-news',

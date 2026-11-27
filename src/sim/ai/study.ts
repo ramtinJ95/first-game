@@ -5,6 +5,7 @@ import {
   hasStudied,
   type AdvanceKind,
 } from '../advances/advances.ts';
+import { BUILDINGS } from '../buildings/buildings.ts';
 import { UNREST_DAYS } from '../cities.ts';
 import { startingSkillOf } from '../new-game.ts';
 import { GENERAL_EFFECT } from '../systems/battles.ts';
@@ -14,6 +15,7 @@ import { studyPrice, studyRefusal } from '../advances/study.ts';
 import type { FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import {
+  ADMIN_CITIES,
   foodPerManOf,
   goldPerManOf,
   menOf,
@@ -22,7 +24,7 @@ import {
   UPKEEP_PER_MAN,
 } from '../systems/economy.ts';
 import { TROOPS } from '../troops.ts';
-import { mostNeeded } from './budget.ts';
+import { heldByFood, mostNeeded } from './budget.ts';
 import {
   CONQUESTS_A_YEAR,
   FOOD_MARGIN_MEN,
@@ -141,12 +143,14 @@ export function bestStudy(
   faction: FactionId,
   spare: number,
   years = STUDY_PAYBACK_YEARS,
+  forFood = false,
 ): { advance: AdvanceKind; payback: number } | undefined {
   let best: { advance: AdvanceKind; payback: number } | undefined;
   if (spare < CHEAPEST) return undefined;
   for (const advance of ADVANCE_KINDS) {
     if (studyPrice(state, faction, advance) > spare || studyRefusal(state, faction, advance))
       continue;
+    if (forFood && !growsFood(state, faction, advance)) continue;
     const payback = studyPayback(state, faction, advance);
     if (payback === undefined || payback > Math.min(years, STUDY_PAYBACK_YEARS)) continue;
     if (!best || payback < best.payback) best = { advance, payback };
@@ -161,16 +165,51 @@ export function bestStudy(
  * growing an army. It studies only an advance that pays back no later than the building it
  * would start next with gold enough (`nextBuilding`), so an advance never puts off a building
  * that would pay sooner, as slow advances bought on days a building was out of reach did.
+ * A power `forFood` weighs only what grows food and keeps no gold back for the recruit, as
+ * `construction` does.
  */
-export function studies(state: State, faction: FactionId, busy: boolean): Order[] {
+export function studies(state: State, faction: FactionId, busy: boolean, forFood = false): Order[] {
   const record = state.factions[faction];
   if (!record || busy || record.study || record.kind !== 'greatPower') return [];
-  const next = TROOPS[mostNeeded(state, faction)].recruit.gold;
+  const next = forFood ? 0 : TROOPS[mostNeeded(state, faction)].recruit.gold;
   const spare = record.stores.gold - reserveOf(state, faction, 'gold') - next;
-  const best = bestStudy(state, faction, spare);
+  const best = bestStudy(state, faction, spare, STUDY_PAYBACK_YEARS, forFood);
   if (!best) return [];
   // The soonest advance is the one to beat, so the costlier reckoning of buildings waits for one.
-  const building = nextBuilding(state, faction);
+  const building = nextBuilding(state, faction, Infinity, forFood);
   if (building && building.payback < best.payback) return [];
   return [{ kind: 'study', faction, advance: best.advance }];
+}
+
+function growsFood(state: State, faction: FactionId, advance: AdvanceKind): boolean {
+  return advanceGain(state, faction, advance).daily.food > 0;
+}
+
+/**
+ * The gold the power saves for food while food alone holds its army (`heldByFood`): the
+ * price of the building or advance it has yet to start that grows food within its payback
+ * and pays back soonest, whatever it costs. A power with nothing left that grows food, or
+ * past ADMIN_CITIES, saves nothing and spends as before: a realm that large pays each man
+ * less gold, and one that turned all its gold into food led the world too often.
+ */
+export function savingForFood(state: State, faction: FactionId): number | undefined {
+  const record = state.factions[faction];
+  if (!record || record.kind !== 'greatPower' || !heldByFood(state, faction)) return undefined;
+  if (sorted(state.cities).filter((city) => city.owner === faction).length > ADMIN_CITIES) {
+    return undefined;
+  }
+  const building = nextBuilding(state, faction, Infinity, true);
+  let best: { gold: number; payback: number } | undefined = building && {
+    gold: BUILDINGS[building.kind].gold,
+    payback: building.payback,
+  };
+  for (const advance of ADVANCE_KINDS) {
+    if (hasStudied(record, advance) || record.study?.advance === advance) continue;
+    if (!growsFood(state, faction, advance)) continue;
+    const payback = studyPayback(state, faction, advance);
+    if (payback === undefined || payback > STUDY_PAYBACK_YEARS) continue;
+    if (!best || payback < best.payback)
+      best = { gold: studyPrice(state, faction, advance), payback };
+  }
+  return best?.gold;
 }
