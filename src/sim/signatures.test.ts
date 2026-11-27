@@ -134,6 +134,14 @@ describe("each great power's own building", () => {
     expect(food(after) - food(before)).toBeCloseTo(people * 0.0006 * 0.25);
   });
 
+  test("a Great granary sells grain for more of its city's gold", () => {
+    const before = holding('egypt');
+    const after = holding('egypt');
+    finish(after, f.carthago, 'greatGranary');
+    const gold = (s: GameState) => need(dailyBalances(s).get(power('egypt'))).gold;
+    expect(gold(after)).toBeGreaterThan(gold(before) * 1.01);
+  });
+
   test("a Royal road speeds its owner's armies in its province, and no one else's", () => {
     const marched = (owner: FactionId, road: boolean, holder: PowerId = 'persia') => {
       const state = holding('persia', f.roma);
@@ -151,9 +159,9 @@ describe("each great power's own building", () => {
       return distance(from, (army.activity as { position: MapPoint }).position);
     };
     expect(marched(power('persia'), false)).toBeCloseTo(25);
-    expect(marched(power('persia'), true)).toBeCloseTo(25 * 1.5);
+    expect(marched(power('persia'), true)).toBeCloseTo(25 * 1.25);
     expect(marched(f.rome, true)).toBeCloseTo(25);
-    expect(marched(f.rome, true, 'rome')).toBeCloseTo(25 * 1.5);
+    expect(marched(f.rome, true, 'rome')).toBeCloseTo(25 * 1.25);
   });
 
   test('a forecast of a march or a crossing takes the days the movement takes, roads and Cothons counted', () => {
@@ -175,6 +183,8 @@ describe("each great power's own building", () => {
       const from = { x: 2511.3, y: 2345.8 };
       const waypoints = [
         { x: 2511.3, y: 2380.8 },
+        { x: 2560, y: 2420.8 },
+        { x: 2511.3, y: 2345.8 },
         { x: 2560, y: 2420.8 },
         { x: 2900, y: 2500 },
       ];

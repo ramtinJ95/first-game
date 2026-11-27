@@ -249,7 +249,11 @@ function line(state: State, city: DeepReadonly<City>, kind: BuildingKind): Build
 function signatureEffect(kind: BuildingKind, gain: BuildingGain, city: CityId): string {
   const part = (share: number) => SHARE_WORDS[share] ?? `${Math.round(share * 100)}% of`;
   const faster = (share: number) =>
-    share === 1.5 ? 'half again as fast' : `${share.toFixed(2)} times as fast`;
+    share === 1.5
+      ? 'half again as fast'
+      : share === 1.25
+        ? 'a quarter faster'
+        : `${share.toFixed(2)} times as fast`;
   if (kind === 'colonia') {
     const { reachKm, unrestShare, trainingShare } = BUILDINGS.colonia;
     return `cities you take within ${reachKm} km start ${part(unrestShare)} the unrest, and recruits here train in ${part(trainingShare)} the days`;

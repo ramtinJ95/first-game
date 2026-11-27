@@ -22,8 +22,8 @@ const BUILDING_TEXT: Readonly<Record<PowerId, string>> = {
   rome: `cities taken within ${BUILDINGS.colonia.reachKm} km start half the unrest, and its recruits train sooner`,
   carthage: `ships gather on a shore within ${BUILDINGS.cothon.reachKm} km in half the days, and convoys there sail half again as fast`,
   macedon: 'cavalry trains in half the days',
-  egypt: `${BUILDINGS.greatGranary.storeDays} more days of the city's food in store, and a quarter more harvest`,
-  persia: 'armies march half again as fast in its province',
+  egypt: `${BUILDINGS.greatGranary.storeDays} more days of the city's food in store, a quarter more harvest, and grain sold for more gold`,
+  persia: 'armies march a quarter faster in its province',
 };
 
 /** The power's standing bonus in one line, as the start screen and the Overview say it. */

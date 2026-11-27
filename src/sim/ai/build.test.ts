@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { BUILDINGS } from '../buildings/buildings.ts';
+import { BUILDINGS, SIGNATURE_BUILDINGS } from '../buildings/buildings.ts';
 import { buildFixture, FIXTURE, fixtureWorld } from '../fixture.ts';
 import { executeOrder } from '../orders/orders.ts';
 import { expectConsistent } from '../references.ts';
@@ -7,6 +9,8 @@ import type { GameState } from '../state/game-state.ts';
 import { buildingWorth, construction } from './build.ts';
 import { decideOrders } from './decide.ts';
 import { TROOPS } from '../troops.ts';
+import { parseMap, POWERS } from '../map.ts';
+import { newGame } from '../new-game.ts';
 import { mostNeeded } from './budget.ts';
 import { reserveOf } from './situation.ts';
 
@@ -81,4 +85,18 @@ describe('the AI builds', () => {
     expect(buildingWorth(state, capua, 'temple')).toBeLessThan(before);
     expect(buildingWorth(state, capua, 'temple')).toBe(0);
   });
+});
+
+test("each great power's own building pays back within 5 years in its best homeland city on day 1", () => {
+  const map = parseMap(
+    JSON.parse(readFileSync(resolve(import.meta.dirname, '../../../data/map/map.json'), 'utf8')),
+  );
+  for (const power of POWERS) {
+    const kind = SIGNATURE_BUILDINGS[power];
+    const state = newGame(map, { seed: 1, player: power });
+    const years = Object.values(state.cities)
+      .filter((city) => (city.owner as string) === power)
+      .map((city) => BUILDINGS[kind].gold / buildingWorth(state, city, kind) / 365);
+    expect(Math.min(...years), kind).toBeLessThanOrEqual(5);
+  }
 });
