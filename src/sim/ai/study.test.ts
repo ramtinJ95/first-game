@@ -2,11 +2,17 @@ import { describe, expect, test } from 'vitest';
 import { ADVANCES, ADVANCE_KINDS, GROWING_ADVANCES } from '../advances/advances.ts';
 import { buildRefusal } from '../buildings/build.ts';
 import { buildFixture, FIXTURE, fixtureWorld, growRome } from '../fixture.ts';
-import { afterSpending } from './budget.ts';
+import { afterSpending, heldByFood } from './budget.ts';
 import type { Day } from '../state/day.ts';
 import type { GameState } from '../state/game-state.ts';
 import { nextBuilding } from './build.ts';
-import { advanceWorth, studies, studyPayback, STUDY_PAYBACK_YEARS } from './study.ts';
+import {
+  advanceWorth,
+  savingForFood,
+  studies,
+  studyPayback,
+  STUDY_PAYBACK_YEARS,
+} from './study.ts';
 
 function rome(state: GameState) {
   const record = state.factions[FIXTURE.rome];
@@ -28,6 +34,20 @@ function rich(): GameState {
 }
 
 describe('the AI studies', () => {
+  test('a realm held by food saves for food up to eight cities, and past them spends as before', () => {
+    const held = (cities: number) => {
+      const state = buildFixture();
+      growRome(state, cities);
+      const hastati = state.formations[FIXTURE.hastati];
+      if (!hastati) throw new Error('expected the hastati');
+      hastati.men = 4750;
+      expect(heldByFood(state, FIXTURE.rome)).toBe(true);
+      return savingForFood(state, FIXTURE.rome);
+    };
+    expect(held(8)).toBeGreaterThan(0);
+    expect(held(9)).toBeUndefined();
+  });
+
   test('the advance that pays back soonest in its realm, within the years it allows, when no building would start', () => {
     const state = busy(rich());
     const [order] = studies(state, FIXTURE.rome, false);

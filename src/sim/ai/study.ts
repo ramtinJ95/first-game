@@ -15,6 +15,7 @@ import { studyPrice, studyRefusal } from '../advances/study.ts';
 import type { FactionId } from '../ids.ts';
 import type { Order } from '../orders/orders.ts';
 import {
+  ADMIN_CITIES,
   foodPerManOf,
   goldPerManOf,
   menOf,
@@ -187,12 +188,16 @@ function growsFood(state: State, faction: FactionId, advance: AdvanceKind): bool
 /**
  * The gold the power saves for food while food alone holds its army (`heldByFood`): the
  * price of the building or advance it has yet to start that grows food within its payback
- * and pays back soonest, whatever it costs. A power with nothing left that grows food saves
- * nothing and spends as before.
+ * and pays back soonest, whatever it costs. A power with nothing left that grows food, or
+ * past ADMIN_CITIES, saves nothing and spends as before: a realm that large pays each man
+ * less gold, and one that turned all its gold into food led the world too often.
  */
 export function savingForFood(state: State, faction: FactionId): number | undefined {
   const record = state.factions[faction];
   if (!record || record.kind !== 'greatPower' || !heldByFood(state, faction)) return undefined;
+  if (sorted(state.cities).filter((city) => city.owner === faction).length > ADMIN_CITIES) {
+    return undefined;
+  }
   const building = nextBuilding(state, faction, Infinity, true);
   let best: { gold: number; payback: number } | undefined = building && {
     gold: BUILDINGS[building.kind].gold,
